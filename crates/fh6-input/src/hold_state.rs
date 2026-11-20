@@ -1,81 +1,96 @@
-use fh6_core::config::sanitize_toggle_mask;
+//! The one hold-to-toggle state machine (OSD open/close), shared by every caller.
+//!
+//! Default: hold View (`0x0020`) for 400 ms. The mask and time come from config
+//! (`OsdToggleMask`, `OsdHoldMs`). A/B/X/Y are stripped from both the configured mask and the
+//! pressed buttons, so the gearbox buttons can never open the OSD. A tap shorter than the hold
+//! time does nothing (the game gets it). A hold fires once and re-arms on release.
+use fh6_core::config::{default_osd_hold_ms, default_osd_toggle_mask, sanitize_toggle_mask, MASK_MANUAL_LOCK};
+use fh6_core::AppConfig;
 
-#[derive(Debug, Clone, Copy)]
+/// Which buttons to hold, and for how long.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HoldConfig {
+    /// Buttons that must all be held. A/B/X/Y bits are ignored.
     pub toggle_mask: u16,
+    /// Hold time in milliseconds.
     pub hold_ms: u64,
 }
 
 impl Default for HoldConfig {
     fn default() -> Self {
         Self {
-            toggle_mask: 0x0020,
-            hold_ms: 400,
+            toggle_mask: default_osd_toggle_mask(),
+            hold_ms: u64::from(default_osd_hold_ms()),
         }
     }
 }
 
-#[derive(Debug, Default)]
-pub struct OSDToggleHoldState {
+impl HoldConfig {
+    /// The OSD toggle settings from config.
+    pub fn from_config(cfg: &AppConfig) -> Self {
+        Self {
+            toggle_mask: cfg.osd_toggle_mask,
+            hold_ms: u64::from(cfg.osd_hold_ms),
+        }
+    }
+}
+
+/// Hold-to-toggle detector. Feed it the pressed buttons and a monotonic time in ms.
+#[derive(Debug, Clone)]
+pub struct HoldToggle {
     target_mask: u16,
     hold_ms: u64,
     hold_start: Option<u64>,
     armed: bool,
 }
 
-impl OSDToggleHoldState {
-    const ABXY_MASK: u16 = 0xF000;
+impl Default for HoldToggle {
+    fn default() -> Self {
+        Self::new(HoldConfig::default())
+    }
+}
 
+impl HoldToggle {
+    /// A detector for `config`, with A/B/X/Y stripped from its mask.
     pub fn new(config: HoldConfig) -> Self {
-        let mask = sanitize_toggle_mask(config.toggle_mask);
         Self {
-            target_mask: mask,
+            target_mask: sanitize_toggle_mask(config.toggle_mask),
             hold_ms: config.hold_ms,
             hold_start: None,
             armed: true,
         }
     }
 
-    fn sanitize_pressed(mask: u16) -> u16 {
-        mask & !Self::ABXY_MASK
+    /// The effective (sanitised) mask.
+    pub fn mask(&self) -> u16 {
+        self.target_mask
     }
 
-    pub fn update(&mut self, pressed_mask: u16, now_ms: u64) -> Option<()> {
-        let mask = Self::sanitize_pressed(pressed_mask);
-
-        let full = (mask & self.target_mask) == self.target_mask;
-
-        if full {
-            if self.armed {
-                if self.hold_start.is_none() {
-                    self.hold_start = Some(now_ms);
-                } else if let Some(start) = self.hold_start {
-                    if now_ms.saturating_sub(start) >= self.hold_ms {
-                        // fire once
-                        self.hold_start = None;
-                        self.armed = false;
-                        return Some(());
-                    }
-                }
-            }
-            // still held, do not re-arm
-        } else {
-            // not fully pressed
-            if self.hold_start.is_some() {
-                // released before threshold -> tap, no event
-                self.hold_start = None;
-            }
+    /// Returns true exactly once per hold, when the mask has been held for `hold_ms`.
+    pub fn update(&mut self, pressed_mask: u16, now_ms: u64) -> bool {
+        let pressed = pressed_mask & !MASK_MANUAL_LOCK;
+        let full = (pressed & self.target_mask) == self.target_mask;
+        if !full {
+            // Released (or never fully pressed): a short tap fires nothing.
+            self.hold_start = None;
             self.armed = true;
+            return false;
         }
-
-        None
+        if !self.armed {
+            return false;
+        }
+        let start = *self.hold_start.get_or_insert(now_ms);
+        if now_ms.saturating_sub(start) >= self.hold_ms {
+            self.hold_start = None;
+            self.armed = false;
+            return true;
+        }
+        false
     }
 
+    /// Applies new settings (for example after a config hot reload) and resets the timer.
     pub fn set_config(&mut self, config: HoldConfig) {
-        self.target_mask = sanitize_toggle_mask(config.toggle_mask);
-        self.hold_ms = config.hold_ms;
-        self.hold_start = None;
-        self.armed = true;
+        *self = Self::new(config);
     }
 }
 
@@ -83,68 +98,92 @@ impl OSDToggleHoldState {
 mod tests {
     use super::*;
 
+    fn view_400() -> HoldToggle {
+        HoldToggle::new(HoldConfig {
+            toggle_mask: 0x0020,
+            hold_ms: 400,
+        })
+    }
+
     #[test]
     fn hold_fires_at_threshold() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x0020, hold_ms: 400 });
-        assert_eq!(s.update(0x0020, 0), None);
-        assert_eq!(s.update(0x0020, 399), None);
-        assert_eq!(s.update(0x0020, 400), Some(()));
+        let mut s = view_400();
+        assert!(!s.update(0x0020, 0));
+        assert!(!s.update(0x0020, 399));
+        assert!(s.update(0x0020, 400));
     }
 
     #[test]
     fn tap_below_threshold_ignored() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x0020, hold_ms: 400 });
+        let mut s = view_400();
         s.update(0x0020, 0);
         s.update(0x0020, 200);
-        // release
         s.update(0x0000, 300);
-        // no event should have fired
-        assert_eq!(s.update(0x0020, 400), None);
+        assert!(!s.update(0x0020, 400), "the timer restarted on the new press");
     }
 
     #[test]
     fn no_refire_while_held() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x0020, hold_ms: 400 });
+        let mut s = view_400();
         s.update(0x0020, 0);
-        assert_eq!(s.update(0x0020, 500), Some(()));
-        // still held
-        assert_eq!(s.update(0x0020, 600), None);
+        assert!(s.update(0x0020, 500));
+        assert!(!s.update(0x0020, 600));
+        assert!(!s.update(0x0020, 5000));
     }
 
     #[test]
     fn refire_after_release() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x0020, hold_ms: 400 });
+        let mut s = view_400();
         s.update(0x0020, 0);
-        assert_eq!(s.update(0x0020, 500), Some(()));
-        // release
+        assert!(s.update(0x0020, 500));
         s.update(0x0000, 600);
         s.update(0x0020, 700);
-        assert_eq!(s.update(0x0020, 1100), Some(()));
+        assert!(s.update(0x0020, 1100));
     }
 
     #[test]
     fn partial_combo_does_not_fire() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x0030, hold_ms: 400 });
+        let mut s = HoldToggle::new(HoldConfig {
+            toggle_mask: 0x0030,
+            hold_ms: 400,
+        });
         s.update(0x0010, 0);
-        assert_eq!(s.update(0x0010, 500), None);
+        assert!(!s.update(0x0010, 500));
     }
 
     #[test]
-    fn zero_mask_falls_back_to_default() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0, hold_ms: 400 });
-        // sanitize 0 -> 0x0020
-        s.update(0, 0);
-        assert_eq!(s.update(0, 500), None);
+    fn zero_mask_falls_back_to_view() {
+        let mut s = HoldToggle::new(HoldConfig {
+            toggle_mask: 0,
+            hold_ms: 400,
+        });
+        assert_eq!(s.mask(), 0x0020);
         s.update(0x0020, 600);
-        assert_eq!(s.update(0x0020, 1000), Some(()));
+        assert!(s.update(0x0020, 1000));
     }
 
     #[test]
-    fn abxy_bits_rejected_in_mask() {
-        let mut s = OSDToggleHoldState::new(HoldConfig { toggle_mask: 0x1000, hold_ms: 400 });
-        // sanitize strips ABXY, falls back to 0x0020
-        s.update(0x1000, 0);
-        // should not fire for 0x1000 alone
-        assert_eq!(s.update(0x1000, 500), None);
+    fn abxy_never_fires() {
+        let mut s = HoldToggle::new(HoldConfig {
+            toggle_mask: 0x1000,
+            hold_ms: 400,
+        });
+        assert_eq!(s.mask(), 0x0020, "A stripped from the mask");
+        s.update(0xF000, 0);
+        assert!(!s.update(0xF000, 5000), "holding A/B/X/Y alone never fires");
+    }
+
+    #[test]
+    fn config_values_are_used() {
+        let cfg = AppConfig {
+            osd_toggle_mask: 0x0100 | 0x1000,
+            osd_hold_ms: 250,
+            ..AppConfig::default()
+        };
+        let hc = HoldConfig::from_config(&cfg);
+        let mut s = HoldToggle::new(hc);
+        assert_eq!(s.mask(), 0x0100);
+        s.update(0x0100, 0);
+        assert!(s.update(0x0100, 250));
     }
 }
