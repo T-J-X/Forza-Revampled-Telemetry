@@ -1,0 +1,95 @@
+# PROGRESS.md: status, backlog and decisions
+
+Read this first and update it last on every task. The decision log is append-only.
+
+## Current phase
+**Phase 1: clean Rust repository.** ◐ in progress (2026-11-20)
+- [x] The workspace is flattened to the repo root; only the Rust project remains.
+- [x] Hardcoded paths are fixed: `car_brands.json` is embedded, and `preview-export` writes to `mockups/`.
+- [x] New AGENTS.md, SKILLS.md, README.md, .gitignore, this tracker, and the `fh6-hmi-design-rules` project skill.
+- [ ] Fresh git history pushed to the new GitHub repo.
+
+Phases 2 onwards are to be agreed with TJX. Pick from the backlog below.
+
+## State of the code (baseline 2026-11-20)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ passes, with 50 warnings (mostly unused dependencies) |
+| `cargo test --workspace --exclude fh6-app` + `cargo test -p fh6-app --bins` | ✅ 103 passed, 0 failed |
+| `cargo test --workspace` | ❌ `crates/fh6-app/tests/steam_launcher_tests.rs` doesn't compile (E0277, `&str` vs `str`) |
+| `cargo clippy --workspace -- -D warnings` | ❌ 1 error: a collapsible `if` in `fh6-core` |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+
+What exists:
+- 7 crates and 4 tools.
+- 29 `ClusterTheme` styles, all registered and rendering in `preview-export`.
+- OSD with 4 tabs, a live dyno preview and the hold-to-toggle on View `0x0020` / 400 ms.
+- The OEM domed scrim and the Bézier-cowl ambient wash.
+- The camera INI/XML patcher.
+- The UDP engine with ports 8000 / 5500 / 5607.
+- XInput tracker with the A/B/X/Y lock.
+- Single-instance guard, tray, process watcher and `/api/state` widget server.
+
+## Known defects
+1. `crates/fh6-app/tests/steam_launcher_tests.rs` doesn't compile: `assert_eq!` compares `&&str` with `&str`.
+2. Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`.
+3. `FH6TelemetryData` has no `torque` field, so `GlyphDotMatrix` derives torque from power and RPM. Decide whether to add the field (check the packet layout first) or drop torque from the design.
+4. 50 compiler warnings, mostly unused dependencies such as `windows`, `tracing`, `thiserror` and `byteorder`.
+5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.
+6. `fh6-render::pool::PaintPool` is a cache stub with no real paint objects.
+7. `assets/*.png` duplicates `assets/textures/4k/`. Pick one location when `AssetCache` is wired up.
+
+## Backlog (not yet scheduled)
+**Pre-05A: Liquid Glass OSD and cockpit optics**
+- 60/40 OSD: the live dyno on the left and a glass control panel (alpha 22..36, 1 px rim `#FFFFFF`→`#38BDF8`) on the right.
+- Low bucket seat and FOV kinematics: `Param.y = -0.045`, `DefaultOffsetFromSteeringWheelY = -0.035`, and an FOV slider from 45° to 110°, applied through `camera_patcher` without restarting the game.
+- Per-camera cluster routing: Cam 3 gets its cluster plus the scrim; Cam 4 gets its cluster with the scrim at 0%; the chase cams get a floating HUD. Routing swaps automatically on RB.
+- A contoured binnacle ambient wash with inverse-square falloff, alpha 12..35 at night.
+- A per-cluster scaler (0.70× to 1.40×) with optical centre lock, plus typography presets.
+
+**P5: mockups and contact sheet**
+- Keep `preview-export` working: 29 clusters × 4 states, the 0/50/100% scrim, the OSD and the `index.html` gallery.
+- Add the in-cockpit compositor (Phase 8 spec P8-4), using `assets/reference/cockpit_with_wheel.jpg`.
+
+**P6: gates, benchmark, deploy**
+- P6-1: golden telemetry replay through the decoder; it must match `tests/golden/packets/*.json` field for field.
+- P6-2: visual regression, pixel-diffed against the approved `mockups/` baselines. Checks: no text clipping, true-black alpha cut-outs.
+- P6-3: `bench-render` over 1,000 frames at 4K; mean must be under 1.8 ms and P99 under 2.4 ms.
+- P6-4: a Rust deploy script with SHA256 parity to the two deploy targets in AGENTS.md. It is held for TJX's explicit GO.
+
+**P7: launcher, remapper, Game Bar**
+- P7-1: `FH6_WheelDash.exe` (standalone, tray, process watcher) and `FH6_SteamLauncher.exe` (wraps the game launch with `--auto-exit`).
+- P7-2: hold-View remapper in OSD tab 3 (200 to 1000 ms in 50 ms steps). A tap under 200 ms passes through to the game. A/B/X/Y can never be selected.
+- P7-3: Xbox Guide button (`XInputGetStateEx`, ordinal 100, `0x0400`) and a Game Bar companion over a loopback HTTP control server.
+
+**Phase 8: materials and shaders**
+Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
+- no full-canvas fills
+- every gauge reacts to live telemetry
+- the OSD dyno renders the selected cluster
+- `AssetCache` blitting
+- Liquid Glass optics (P8-1)
+- reactive sci-fi kinematics (P8-2)
+- motorsport rebuilds (P8-3)
+
+**Gates G1 to G5**
+- G1: a scan for forbidden patterns.
+- G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output.
+- G3: matrix integrity.
+- G4: OSD dispatch. A test exists (`crates/fh6-osd/tests/g4_dispatch.rs`).
+- G5: robustness against NaN, Inf and zero-size inputs.
+
+## Open questions for TJX
+1. Which Figma file is the master: `ZW8mpHivoqjl8p7eLlvdBi` or `FsEcAnDwfFf340i8zwbBup`?
+2. What is Phase 2: fixing the known defects and making clippy green, Pre-05A, or Phase 8 cluster quality?
+
+## Decision log (append only)
+| Date | Decision | Why |
+|---|---|---|
+| 2026-11-20 | The repo starts fresh as a Rust-only workspace at the root, with new git history | A clean base for Claude Code work and a new GitHub repo |
+| 2026-11-20 | Claude Code does the work; specs and this tracker replace the old task cards | One tracker and one set of rules |
+| 2026-11-20 | `car_brands.json` is embedded with `include_str!` | Removes a hardcoded absolute path; rendering never depends on the working directory |
+| 2026-11-20 | `preview-export` writes to `mockups/`, which is gitignored | Keeps about 150 MB of 4K PNGs out of git; they can be regenerated at any time |
+| 2026-11-20 | Runtime data moved to `data/`; reference photos to `assets/reference/` | A clear layout. At runtime the app still reads `config.json` from its working directory |
+| 2026-11-20 | `fh6-render::pool::FigmaGdiPool` renamed to `PaintPool` | Neutral naming; it was only used inside its own file |
+| 2026-11-20 | MCPs: context7 plus Figma only | Enough for crate docs and design tokens |

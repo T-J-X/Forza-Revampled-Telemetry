@@ -1,0 +1,15 @@
+[package]
+name = "fh6-osd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fh6-core = { path = "../fh6-core" }
+fh6-render = { path = "../fh6-render" }
+fh6-clusters = { path = "../fh6-clusters" }
+tiny-skia.workspace = true
+tracing.workspace = true
+ttf-parser = "0.20"
+ab_glyph = "0.2"

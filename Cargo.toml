@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fh6-core",
+    "crates/fh6-render",
+    "crates/fh6-clusters",
+    "crates/fh6-osd",
+    "crates/fh6-input",
+    "crates/fh6-win",
+    "crates/fh6-app",
+    "tools/preview-export",
+    "tools/mock-udp",
+    "tools/parity-dump",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["TJX <TJX@Ngage.com>"]
+license = "MIT"
+
+[workspace.dependencies]
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tiny-skia = "0.11"
+arc-swap = "1.7"
+byteorder = "1.5"
+png = "0.17"
+windows = "0.58"

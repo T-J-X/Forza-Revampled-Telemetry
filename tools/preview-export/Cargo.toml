@@ -1,0 +1,18 @@
+[package]
+name = "preview-export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "preview-export"
+path = "src/main.rs"
+
+[dependencies]
+fh6-core = { path = "../../crates/fh6-core" }
+fh6-render = { path = "../../crates/fh6-render" }
+fh6-clusters = { path = "../../crates/fh6-clusters" }
+fh6-osd = { path = "../../crates/fh6-osd" }
+tiny-skia.workspace = true
+png.workspace = true

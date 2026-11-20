@@ -1,0 +1,31 @@
+{
+  "Accel": 255,
+  "Acceleration": [
+    0.0,
+    0.0,
+    1.0
+  ],
+  "BoostPSI": 16.799999237060547,
+  "Brake": 0,
+  "CarOrdinal": 4122,
+  "Clutch": 0,
+  "CurrentEngineRpm": 7600.0,
+  "DrivetrainType": 1,
+  "EngineIdleRpm": 900.0,
+  "EngineMaxRpm": 8000.0,
+  "Gear": 4,
+  "Handbrake": 0,
+  "IsRaceOn": 1,
+  "PowerHP": 429.1269836425781,
+  "PowerWatts": 320000.0,
+  "SpeedKMH": 151.1999969482422,
+  "SpeedMPH": 93.95132446289062,
+  "SpeedMS": 42.0,
+  "Steer": 0,
+  "TimestampMS": 6800,
+  "Velocity": [
+    0.0,
+    0.0,
+    42.0
+  ]
+}

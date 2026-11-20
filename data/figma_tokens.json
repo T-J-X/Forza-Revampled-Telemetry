@@ -1,0 +1,239 @@
+{
+  "$schema": "https://figma-hmi-tokens.local/v2/schema.json",
+  "meta": {
+    "project": "FH6_WheelDash",
+    "version": "2.0.0",
+    "targetDisplay": "55-inch LG C1 4K WOLED",
+    "targetResolution": { "width": 3840, "height": 2160 },
+    "baseLogicalResolution": { "width": 1920, "height": 1080 },
+    "dpiScale": 2.0,
+    "spatialGridUnitPx": 8,
+    "glanceabilityTargetMs": 150,
+    "figmaFileKey": "ZW8mpHivoqjl8p7eLlvdBi",
+    "figmaFileUrl": "https://www.figma.com/design/ZW8mpHivoqjl8p7eLlvdBi"
+  },
+  "typography": {
+    "primaryFontStack": ["Bahnschrift", "Bahnschrift SemiCondensed", "Segoe UI"],
+    "monospaceFontStack": ["Consolas", "Bahnschrift", "Segoe UI"],
+    "installedHostFonts": ["Bahnschrift", "Bahnschrift SemiCondensed", "Bahnschrift Light", "Consolas", "Segoe UI"],
+    "opticalCapHeightRatio": 0.72,
+    "tabularPitchFactor": 0.62,
+    "tiers": {
+      "tier1_HeroGear": { "sizePt": 76.0, "weight": "Bold", "trackingPx": -1.5, "lineHeightRatio": 0.72 },
+      "tier1_HeroSpeed": { "sizePt": 54.0, "weight": "Bold", "trackingPx": -1.0, "tabular": true },
+      "tier2_PrimaryMetric": { "sizePt": 24.0, "weight": "SemiBold", "trackingPx": 0.0, "tabular": true },
+      "tier2_SecondaryMetric": { "sizePt": 16.0, "weight": "SemiBold", "trackingPx": 0.2, "tabular": true },
+      "tier3_MicroLabel": { "sizePt": 9.5, "weight": "Bold", "trackingPx": 2.2, "uppercase": true, "alpha": 145 }
+    }
+  },
+  "sharedSemantics": {
+    "revStages": {
+      "stage0_Normal": "#00E5FF",
+      "stage1_OptimalGreen": "#00E676",
+      "stage2_PowerbandAmber": "#FFB300",
+      "stage3_RedlineCrimson": "#FF1744",
+      "stage4_ShiftStrobeWhite": "#FFFFFF"
+    },
+    "inputs": {
+      "throttleGreen": "#10B981",
+      "brakeCrimson": "#EF4444",
+      "clutchCyan": "#38BDF8",
+      "absAlertYellow": "#FACC15"
+    }
+  },
+  "clusters": {
+    "0_BoschDdu": {
+      "name": "Bosch Motorsport DDU 10 GT3",
+      "anchor4K": { "cx": 1920, "cy": 1690 },
+      "containerLogicalSize": { "width": 640, "height": 284, "cornerRadius": 14, "padding": 16, "gap": 12 },
+      "assetBindings": {
+        "bezelPlate": "assets/bosch_ddu_bezel.png"
+      },
+      "palette": {
+        "bezelFill": "#111317",
+        "bezelStroke": "#2A2E37",
+        "cavityFill": "#06080B",
+        "cardFill": "#0D1015",
+        "cardBorder": "#1E2430",
+        "textPrimary": "#F8FAFC",
+        "textMuted": "#8E9BAE",
+        "gearWellFill": "#141820",
+        "peakHoldTick": "#FF1744"
+      },
+      "layout": {
+        "ledShiftArray": { "count": 16, "yOffset": -120, "pillWidth": 24, "pillHeight": 9, "gap": 6 },
+        "rpmBarRect": { "x": -294, "y": -94, "w": 588, "h": 18 },
+        "leftWingGrid": { "x": -294, "y": -64, "w": 184, "h": 176, "rows": 2, "cols": 2, "cellGap": 8 },
+        "centerHeroBay": { "x": -98, "y": -64, "w": 196, "h": 176, "gearY": -18, "speedY": 58 },
+        "rightWingGrid": { "x": 110, "y": -64, "w": 184, "h": 176, "rows": 2, "cols": 2, "cellGap": 8 }
+      }
+    },
+    "1_Gt7DriftHud": {
+      "name": "Gran Turismo 7 Telemetry Glass",
+      "anchor4K": { "cx": 1920, "cy": 1710 },
+      "containerLogicalSize": { "width": 760, "height": 220, "cornerRadius": 18, "padding": 20, "gap": 16 },
+      "assetBindings": {
+        "glassPlate": "assets/gt7_stadium_glass.png"
+      },
+      "palette": {
+        "stadiumGlassFill": "#D2080B10",
+        "topRimCatchlight": "#88FFFFFF",
+        "borderHairline": "#2EFFFFFF",
+        "rpmTrackUnlit": "#22FFFFFF",
+        "rpmFillClean": "#F1F5F9",
+        "redlineZoneFill": "#FF1E38",
+        "driftAngleAccent": "#00E5FF",
+        "gMeterRing": "#38FFFFFF"
+      },
+      "layout": {
+        "leftTireMatrix": { "x": -356, "y": -80, "w": 170, "h": 160 },
+        "centerTachRibbon": { "x": -170, "y": -80, "w": 340, "h": 42 },
+        "centerGearSpeedBay": { "x": -170, "y": -24, "w": 340, "h": 104 },
+        "rightGMeterAndDrift": { "x": 186, "y": -80, "w": 170, "h": 160, "gCircleRadius": 46 }
+      }
+    },
+    "2_PorscheAnalog": {
+      "name": "Porsche 992 GT3 RS Weissach",
+      "anchor4K": { "cx": 1920, "cy": 1680 },
+      "containerLogicalSize": { "width": 700, "height": 300, "cornerRadius": 24, "padding": 16, "gap": 16 },
+      "assetBindings": {
+        "tachDialPlate": "assets/porsche_tach_dial.png"
+      },
+      "palette": {
+        "dialFaceFill": "#0B0C0E",
+        "titaniumRing": "#4E5663",
+        "tickWhite": "#F1F5F9",
+        "redlineSector": "#E11D48",
+        "needleYellow": "#FACC15",
+        "needleCapFill": "#181A1F",
+        "wingGlassFill": "#D80E1116"
+      },
+      "layout": {
+        "centerTachDial": { "cx": 0, "cy": 0, "outerRadius": 134, "innerHaloRadius": 96, "startAngleDeg": 135, "sweepAngleDeg": 270 },
+        "gearWindow": { "x": -32, "y": 46, "w": 64, "h": 48, "cornerRadius": 8 },
+        "leftWingCard": { "x": -332, "y": -76, "w": 178, "h": 152, "cornerRadius": 16 },
+        "rightWingCard": { "x": 154, "y": -76, "w": 178, "h": 152, "cornerRadius": 16 }
+      }
+    },
+    "3_LiquidGlass": {
+      "name": "Apple CarPlay Ultra Frosted Sapphire",
+      "anchor4K": { "cx": 1920, "cy": 1700 },
+      "containerLogicalSize": { "width": 680, "height": 244, "cornerRadius": 40, "padding": 20, "gap": 16 },
+      "assetBindings": {
+        "causticLensPlate": "assets/liquid_glass_caustic_lens.png"
+      },
+      "palette": {
+        "sapphireTintDay": "#2CDCEEFF",
+        "sapphireTintNight": "#35C8E0FF",
+        "contrastStabilizer": "#20060A10",
+        "specularTopRim": "#D2FFFFFF",
+        "subSurfaceBorder": "#38FFFFFF",
+        "squircleWellFill": "#28080C14",
+        "pillSegmentUnlit": "#26FFFFFF",
+        "pillSegmentLit": "#F8FAFC"
+      },
+      "layout": {
+        "topPillRibbon": { "count": 16, "y": -90, "totalWidth": 576, "pillHeight": 11, "pillRadius": 5.5, "gap": 6 },
+        "centerHeroSquircle": { "x": -108, "y": -58, "w": 216, "h": 152, "cornerRadius": 26 },
+        "leftWingTopBoost": { "x": -308, "y": -58, "w": 178, "h": 70, "cornerRadius": 16 },
+        "leftWingBottomDynamic": { "x": -308, "y": 24, "w": 178, "h": 70, "cornerRadius": 16 },
+        "rightWingPedalCapsules": { "x": 130, "y": -58, "w": 178, "h": 152, "capsuleWidth": 22, "capsuleGap": 18 }
+      }
+    },
+    "4_WindshieldHud": {
+      "name": "Collimated Fighter-Jet HUD + 3D Road-Map",
+      "anchor4K": { "cx": 1920, "cy": 1210 },
+      "containerLogicalSize": { "width": 660, "height": 348, "cornerRadius": 0, "padding": 16, "gap": 12 },
+      "palette": {
+        "collimatedCyan": "#00E5FF",
+        "ghostDoubleReflect": "#1600E5FF",
+        "optimalGreen": "#00E676",
+        "cautionAmber": "#FFB300",
+        "criticalCrimson": "#FF1744",
+        "radarGridHairline": "#2E00E5FF"
+      },
+      "layout": {
+        "chevronRpmArc": { "segments": 20, "y": -146, "width": 540, "height": 28 },
+        "centerVectorReticle": { "x": -114, "y": -96, "w": 228, "h": 118 },
+        "leftPitchLadder": { "x": -260, "y": -96, "w": 116, "h": 118 },
+        "rightPitchLadder": { "x": 144, "y": -96, "w": 116, "h": 118 },
+        "lower3DRoadMap": { "x": -226, "y": 40, "w": 452, "h": 126, "horizonY": 46, "egoY": 150 }
+      }
+    },
+    "5_TeslaAdas": {
+      "name": "Tesla Mind-of-Car 3D Neural Vector Cluster",
+      "anchor4K": { "cx": 1920, "cy": 1680 },
+      "containerLogicalSize": { "width": 700, "height": 292, "cornerRadius": 22, "padding": 20, "gap": 12 },
+      "assetBindings": {
+        "egoCoupeSprite": "assets/adas_ego_coupe.png",
+        "trafficSedanSprite": "assets/adas_traffic_sedan.png",
+        "trafficSuvSprite": "assets/adas_traffic_suv.png"
+      },
+      "palette": {
+        "oledPureBlack": "#000000",
+        "outerHairline": "#26FFFFFF",
+        "powerBarBlue": "#3B82F6",
+        "regenBarGreen": "#10B981",
+        "pathCarpetCyan": "#4000E5FF",
+        "laneLineDefault": "#5894A3B8",
+        "laneLineAlert": "#EF4444",
+        "egoBodyFill": "#E2E8F0",
+        "leadTargetLock": "#38BDF8"
+      },
+      "layout": {
+        "topPowerRegenLine": { "x": -326, "y": -126, "w": 652, "h": 4 },
+        "topLeftSpeedBlock": { "x": -326, "y": -112, "w": 186, "h": 78 },
+        "topCenterPrndStrip": { "x": -94, "y": -112, "w": 188, "h": 28 },
+        "topRightTelemetryPills": { "x": 126, "y": -112, "w": 200, "h": 78 },
+        "perspective3DViewport": { "x": -326, "y": -24, "w": 652, "h": 160, "horizonY": -14, "egoZMeters": 3.2 }
+      }
+    },
+    "6_RetroCyber": {
+      "name": "Quadra V-Tech Vacuum Fluorescent Display",
+      "anchor4K": { "cx": 1920, "cy": 1700 },
+      "containerLogicalSize": { "width": 680, "height": 250, "cornerRadius": 0, "chamferPx": 22, "padding": 18, "gap": 14 },
+      "assetBindings": {
+        "cyberVfdBezel": "assets/cyber_vfd_bezel.png"
+      },
+      "palette": {
+        "armorBezelFill": "#121318",
+        "armorChamferRim": "#343948",
+        "vfdPitchBlack": "#020305",
+        "scanlineOverlay": "#14000000",
+        "vfdPhosphorCyan": "#00F5D4",
+        "vfdCautionYellow": "#FEE440",
+        "vfdRedlineMagenta": "#FF007F",
+        "vfdGhostUnlit": "#1800F5D4"
+      },
+      "layout": {
+        "slantedRpmStaircase": { "segments": 24, "x": -304, "y": -96, "w": 608, "h": 38, "slantDeg": -18 },
+        "leftTelemetryBay": { "x": -304, "y": -38, "w": 176, "h": 134 },
+        "centerOctagonGearAnd7Seg": { "x": -110, "y": -38, "w": 220, "h": 134, "digitWidth": 42, "digitHeight": 72 },
+        "rightBargraphBay": { "x": 128, "y": -38, "w": 176, "h": 134, "barSteps": 16 }
+      }
+    },
+    "7_Gt7HoodPro": {
+      "name": "Gran Turismo 7 Bonnet/Hood Panoramic HUD",
+      "anchor4K": { "cx": 1920, "cy": 1760 },
+      "containerLogicalSize": { "width": 780, "height": 204, "cornerRadius": 20, "padding": 16, "gap": 16 },
+      "assetBindings": {
+        "hoodProPlate": "assets/gt7_hood_pro_plate.png"
+      },
+      "palette": {
+        "backdropShadow": "#7806080C",
+        "sweptArchTrack": "#28FFFFFF",
+        "sweptArchFill": "#F8FAFC",
+        "sweptArchRedline": "#FF1744",
+        "gearPrismBorder": "#64FFFFFF",
+        "shiftDiamondCyan": "#00E5FF"
+      },
+      "layout": {
+        "convergingShiftDiamonds": { "pairs": 5, "y": -84, "spanWidth": 288 },
+        "panoramicRpmArch": { "x": -244, "y": -62, "w": 488, "h": 64 },
+        "centerGearPrism": { "x": -44, "y": -14, "w": 88, "h": 88 },
+        "leftTireMatrix": { "x": -372, "y": -56, "w": 118, "h": 130 },
+        "rightGReticle": { "x": 254, "y": -56, "w": 118, "h": 130 }
+      }
+    }
+  }
+}

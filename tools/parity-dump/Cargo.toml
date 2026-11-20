@@ -1,0 +1,14 @@
+[package]
+name = "parity-dump"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "parity-dump"
+path = "src/main.rs"
+
+[dependencies]
+fh6-core = { path = "../../crates/fh6-core" }
+serde_json.workspace = true

@@ -1,0 +1,28 @@
+# Cargo build output
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# Built binaries and archives never belong in git
+*.exe
+*.zip
+
+# Generated 4K mockups (cargo run --release -p preview-export)
+/mockups/
+
+# Secrets and local environment
+.env
+.env.*
+
+# Editors and OS clutter
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Tooling
+node_modules/
+.claude/settings.local.json
