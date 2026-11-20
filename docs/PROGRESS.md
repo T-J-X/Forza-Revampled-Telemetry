@@ -3,13 +3,35 @@
 Read this first and update it last on every task. The decision log is append-only.
 
 ## Current phase
-**Phase 1: clean Rust repository.** ◐ in progress (2026-11-20)
-- [x] The workspace is flattened to the repo root; only the Rust project remains.
-- [x] Hardcoded paths are fixed: `car_brands.json` is embedded, and `preview-export` writes to `mockups/`.
-- [x] New AGENTS.md, SKILLS.md, README.md, .gitignore, this tracker, and the `fh6-hmi-design-rules` project skill.
-- [ ] Fresh git history pushed to the new GitHub repo.
+The v2 build program is running. See [program/README.md](../program/README.md) for the roadmap, the dependency graph and the conductor protocol.
 
-Phases 2 onwards are to be agreed with TJX. Pick from the backlog below.
+| Phase | Status |
+|---|---|
+| 1 Clean Rust repository | ✅ 2026-11-20 (public: T-J-X/Forza-Revampled-Telemetry) |
+| 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
+| 3 Design system & art direction | ◐ started 2026-11-20 |
+| 4 Engine: a working exe | ◐ started 2026-11-20 |
+| 5–11 | ☐ waiting on dependencies |
+
+## Runtime audit (2026-11-20): why v2 exists
+- **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
+- **Clusters are crude:**
+  - Stroked block digits (`fh6-render/text.rs`), no gradients or blur.
+  - 19 of 30 fill the whole canvas opaque.
+  - Fixed scale, centred on the canvas instead of the binnacle.
+  - `AssetCache` never decodes, so no PNG is ever drawn.
+  - (Phases 5 and 7)
+- **Config:**
+  - Serde renaming breaks `StandardCockpitFOV`-style keys, so FOVs load as 0.
+  - Missing fields become 0 (`cluster_scale` = 0).
+  - Colour fields are never read.
+  - (Phase 4)
+- **Camera patcher:**
+  - Misses `CockpitCam\FOV` and never writes seat height. (Phase 8)
+  - `bind_car_brand` uses lowercase keys and would wipe `car_brands.json`. (Phase 4 safety fix)
+- **Visibility:** nothing hides the overlay in menus or out of focus. (Phase 4)
+- **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
+- **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
 ## State of the code (baseline 2026-11-20)
 | Check | Result |
@@ -87,9 +109,14 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | Date | Decision | Why |
 |---|---|---|
 | 2026-11-20 | The repo starts fresh as a Rust-only workspace at the root, with new git history | A clean base for Claude Code work and a new GitHub repo |
-| 2026-11-20 | Claude Code does the work; specs and this tracker replace the old task cards | One tracker and one set of rules |
+| 2026-11-20 | Claude Code does the work; the `program/` kit and this tracker replace the old task cards | One tracker and one set of rules |
 | 2026-11-20 | `car_brands.json` is embedded with `include_str!` | Removes a hardcoded absolute path; rendering never depends on the working directory |
 | 2026-11-20 | `preview-export` writes to `mockups/`, which is gitignored | Keeps about 150 MB of 4K PNGs out of git; they can be regenerated at any time |
 | 2026-11-20 | Runtime data moved to `data/`; reference photos to `assets/reference/` | A clear layout. At runtime the app still reads `config.json` from its working directory |
 | 2026-11-20 | `fh6-render::pool::FigmaGdiPool` renamed to `PaintPool` | Neutral naming; it was only used inside its own file |
 | 2026-11-20 | MCPs: context7 plus Figma only | Enough for crate docs and design tokens |
+| 2026-11-20 | The v2 program (Phases 2–11) is approved: GPU renderer on wgpu, all 29 clusters rebuilt plus at least 15 next-gen concepts, one chat per cluster, and a fully automatic chain run by a conductor chat | Phase 1 audit: the exe renders nothing and the designs are crude |
+| 2026-11-20 | Real 4K car logos ship in the repo | TJX accepts the trademark risk |
+| 2026-11-20 | Motorsport default font from an OFL pack; users can add their own fonts | TJX's request; the OFL licence is safe for a public repo |
+| 2026-11-20 | The repo is Rust only. Skill eval fixtures (C/Python/shell) and the TS hook plugin are untracked. Blender bpy lives inside the Rust tool `asset-forge` | TJX: "this is all rust", lightweight, 0 ms |
+| 2026-11-20 | Commits are authored by `TJX <TJX@Ngage.com>`, with no co-author trailer | TJX's instruction for the public repo |

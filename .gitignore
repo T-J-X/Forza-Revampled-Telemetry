@@ -26,3 +26,8 @@ desktop.ini
 # Tooling
 node_modules/
 .claude/settings.local.json
+
+# Rust-only repo: skill eval fixtures (C/Python/shell) and the TS hook plugin stay local
+.claude/skills/*/evals/
+.agents/skills/*/evals/
+.claude/skills/prompt-cache-control/

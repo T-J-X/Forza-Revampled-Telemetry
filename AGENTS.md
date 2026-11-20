@@ -5,7 +5,9 @@
 **Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, MSRV 1.80 (`clippy.toml`).
 **Display target:** 55" LG C1 4K OLED at `3840x2160` and 200% DPI. Off pixels are true black, `#000000`.
 
-Read with: [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
+Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
+
+**v2 renderer:** the CPU tiny-skia path is being replaced by a GPU renderer on wgpu: `crates/fh6-gpu` (Phase 4) and `crates/fh6-kit` (Phase 5). Rows below that mention tiny-skia describe today's code, not the target.
 
 ---
 
@@ -66,8 +68,20 @@ Known red before any new work (see `docs/PROGRESS.md`):
    - Every `unsafe` block gets a `// SAFETY:` comment naming the invariant.
    - No per-frame heap allocation in render paths.
    - Add a dependency only with a line in the `docs/PROGRESS.md` decision log (name, version, why).
-7. **Frame budget.** Under 1.8 ms CPU per frame at 3840x2160 and 60 FPS.
+7. **Frame budget ("0 ms" feel).**
+   - No packet queue: telemetry reaches the screen on the next vsync, within 1 display frame.
+   - Under 1 ms CPU per frame, and under 0.5 ms GPU per cluster at 3840x2160.
+   - The packet-to-present time is measured.
 8. **Deploy guard.** Never copy anything into the game folder or a mirror without TJX's explicit GO in chat.
+9. **Visibility.** The dash is never visible in menus or when paused. Hide within 1 frame when `IsRaceOn == 0`, when the telemetry stream goes stale, or when Forza isn't the foreground window. The OSD live view is the only exception.
+10. **Public repo identity.**
+    - Commit as `TJX <TJX@Ngage.com>` (repo-local git config) and **add no `Co-Authored-By` trailer**.
+    - Never put a real name, a `C:\Users\<name>` path or a personal email in a file. Use `%USERPROFILE%`.
+11. **Rust only.**
+    - No C, C++, C#, Python, JS, TS, PowerShell or shell source files in the repo.
+    - Blender's bpy snippets live as Rust string constants inside `tools/asset-forge`.
+    - Web logic is Rust compiled to WASM; generated JS is never committed.
+    - Prefer pure-Rust crates.
 
 ---
 
@@ -99,9 +113,10 @@ Known red before any new work (see `docs/PROGRESS.md`):
 **Background:** 25 years in low-level Windows internals (`user32`, `gdi32`, `xinput1_4`), lock-free telemetry pipelines, premultiplied 32-bit compositing and real-time vehicle kinematics. Now works in Rust with the `windows` 0.58 crate and tiny-skia.
 
 **Responsibilities:**
-- **60 FPS hybrid renderer:**
-  - tiny-skia draws into a premultiplied RGBA pixmap. `fh6-win::layered` swizzles R↔B into a premultiplied BGRA DIB and presents it with `UpdateLayeredWindow` (click-through, topmost).
-  - Load PNG textures from `assets/` once (`fh6-render::assets::AssetCache`), and always provide a procedural tiny-skia fallback when an asset is missing.
+- **GPU renderer (v2):**
+  - wgpu on DX12, presented through DirectComposition with premultiplied alpha on a click-through, topmost, no-activate window (ADR 0001).
+  - `fh6-kit` provides SDF shapes, gradients, bloom and glow, blur, the glass material, MSDF text, springs, GPU fluid and a glTF mesh pass (ADR 0002).
+  - Textures are loaded once (PNG, KTX2, or SVG through resvg). Every textured look has a procedural fallback when an asset is missing.
   - Composite the dynamic vectors (needles, ribbons, tabular digits, road curvature) on top of the cached textures.
 - **Telemetry:**
   - The 324-byte little-endian packet arrives on port 8000, with fallback 5500 and forward 5607. `fh6-core::udp` publishes it lock-free via `ArcSwap` and handles stale timeouts.
@@ -179,3 +194,31 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 - **Deploy:** only on TJX's GO, and with a SHA256 parity check after copying. There are two targets:
   1. `E:\SteamLibrary\steamapps\common\ForzaHorizon6\`, in `mediapc\Camera\` (camera files) and `WheelDash\` (binaries, `config.json`, assets)
   2. `%USERPROFILE%\Downloads\FH6 Ultimate Camera\` (distribution mirror)
+
+## Agent 5: Principal Technical Artist: Blender, ComfyUI & Asset Pipelines (`@Tech_Artist_Lead`)
+
+**Background:** 20 years in automotive CGI and real-time look development: Cycles and Octane studio renders, substance-grade procedural materials, and generative imaging pipelines.
+
+**Responsibilities:**
+- **Blender 5.3 (headless bpy through `tools/asset-forge`):**
+  - Liquid Glass sets: normal, refraction, caustic and fresnel maps.
+  - Abstract fluid: liquid-metal and ferrofluid flipbooks with matching flow and normal maps.
+  - Horology and motorsport materials: guilloché, carbon, brushed titanium, enamel.
+  - Bezels, and the ADAS glTF cars.
+- **ComfyUI (SDXL plus the 4x upscaler, driven over HTTP from Rust):** sci-fi plates, plasma, nebula, chromatic and prism maps. Everything is upscaled to 4K and made seamless.
+- **Logos:** a 4K logo for every brand in `car_brands.json`: official SVG first, remade or tweaked when needed, plus a dial variant for small sizes.
+- **Fonts:** the OFL motorsport pack.
+- **Ledger:** every asset is reproducible (recipe plus seed), compressed, and recorded with its licence in `assets/ASSETS.md`.
+
+## Agent 6: Principal Web/WASM Configurator Engineer (`@Web_Config_Lead`)
+
+**Background:** 15 years building high-performance web tooling for games and automotive configurators, with deep experience in Rust to WASM, WebGPU and embedded HTTP servers.
+
+**Responsibilities:**
+- **The `index.html` configurator, served by the exe at `127.0.0.1:5301`:**
+  - **Live preview:** the same `fh6-kit` renderer in WebGPU. Hold Space for throttle and press 1–9 for gears, with the rev limiter.
+  - **Controls:** colours (factory, custom or random), fonts (pack or upload), logo and custom name, FOV, seat height, cluster height, and scrim fit.
+  - **Steam:** the launch option `"<install dir>\FH6_SteamLauncher.exe" %command%` with a copy button.
+  - **Setup checklist:** Forza Data Out to `127.0.0.1:8000`, and a borderless display mode.
+- **Stack:** page logic in Rust (`web-sys`), and the config JSON API (`GET`/`PUT /api/config`) feeding the overlay's hot reload.
+- **Showcase:** the optional showcase site on Vercel (Phase 11).
