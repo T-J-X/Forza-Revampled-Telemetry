@@ -33,6 +33,8 @@ pub const CAMERA_RING_LEN: usize = 6;
 const SHOULDER_DEBOUNCE_MS: u64 = 150;
 /// Ignore a second L3+R3 chord within this many ms.
 const STUDIO_DEBOUNCE_MS: u64 = 400;
+/// How often an empty controller slot is probed again.
+const EMPTY_SLOT_PROBE_MS: u64 = 1000;
 /// RB only cycles the camera once racing has run this long (the game ignores RB on resume).
 const RESUME_GUARD_MS: f64 = 150.0;
 
@@ -88,6 +90,8 @@ pub struct InputControllerTracker<S: PadSource> {
     prev_buttons: [u16; 4],
     latest_buttons: u16,
     connected: bool,
+    slot_live: [bool; 4],
+    next_probe_ms: [u64; 4],
     hold: HoldToggle,
     guide: GuideEdgeDetector,
     last_shoulder_ms: Option<u64>,
@@ -117,6 +121,8 @@ impl<S: PadSource> InputControllerTracker<S> {
             prev_buttons: [0; 4],
             latest_buttons: 0,
             connected: false,
+            slot_live: [false; 4],
+            next_probe_ms: [0; 4],
             hold: HoldToggle::new(hold),
             guide: GuideEdgeDetector::new(true),
             last_shoulder_ms: None,
@@ -151,8 +157,18 @@ impl<S: PadSource> InputControllerTracker<S> {
         let mut combined = 0u16;
         let mut rising = 0u16;
         let mut connected = false;
+        let now = ctx.now_ms;
         for (slot, prev) in self.prev_buttons.iter_mut().enumerate() {
-            let safe = match self.pad_source.poll_slot(slot) {
+            // XInputGetState on an empty slot is slow; probe empty slots once a second only.
+            let probe_due = self.slot_live[slot] || now >= self.next_probe_ms[slot];
+            let state = if probe_due { self.pad_source.poll_slot(slot) } else { None };
+            if probe_due {
+                self.slot_live[slot] = state.is_some();
+                if state.is_none() {
+                    self.next_probe_ms[slot] = now.saturating_add(EMPTY_SLOT_PROBE_MS);
+                }
+            }
+            let safe = match state {
                 Some(state) => {
                     connected = true;
                     Self::safe_buttons(state.Gamepad.wButtons)
@@ -165,7 +181,6 @@ impl<S: PadSource> InputControllerTracker<S> {
         }
         self.latest_buttons = combined;
         self.connected = connected;
-        let now = ctx.now_ms;
 
         if !ctx.settings_focused && self.hold.update(combined, now) {
             self.is_osd_open = !self.is_osd_open;
@@ -328,6 +343,26 @@ mod tests {
         for now in [0, 500, 1000, 2000] {
             assert!(!t.poll(&mut cam, &driving(now)).osd_toggled);
         }
+    }
+
+    #[test]
+    fn empty_slots_are_probed_once_a_second() {
+        struct CountingPad {
+            calls: [u32; 4],
+        }
+        impl PadSource for CountingPad {
+            fn poll_slot(&mut self, slot: usize) -> Option<XInputState> {
+                self.calls[slot] += 1;
+                (slot == 0).then(XInputState::default)
+            }
+        }
+        let mut t = InputControllerTracker::new(CountingPad { calls: [0; 4] }, HoldConfig::default());
+        let mut cam = 3usize;
+        for i in 0..125u64 {
+            t.poll(&mut cam, &driving(i * 8));
+        }
+        assert_eq!(t.pad_source.calls[0], 125, "a connected pad is read every poll");
+        assert_eq!(t.pad_source.calls[1], 1, "an empty slot is probed once in 1 s");
     }
 
     #[test]

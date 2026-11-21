@@ -15,7 +15,7 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW,
-    GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage, RegisterClassExW,
+    GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage,
     RegisterWindowMessageW, SetForegroundWindow, SetTimer, SetWindowLongPtrW, TrackPopupMenu, TranslateMessage,
     GWLP_USERDATA, IDI_APPLICATION, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, TPM_NONOTIFY, TPM_RETURNCMD,
     TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK,
@@ -77,7 +77,7 @@ pub enum Flow {
 }
 
 /// The event handler. Runs on the message-loop thread.
-pub type AppHandler = Box<dyn FnMut(&WindowCtl, AppEvent) -> Flow>;
+pub type AppHandler = Box<dyn for<'w> FnMut(&WindowCtl<'w>, AppEvent) -> Flow>;
 
 struct WindowState {
     handler: RefCell<AppHandler>,
@@ -125,21 +125,23 @@ fn remove_icon(hwnd: HWND) {
     }
 }
 
-/// Main-thread control over the app window, passed to the handler.
-#[derive(Debug, Clone, Copy)]
-pub struct WindowCtl {
+/// Main-thread control over the app window, passed to the handler. It borrows the window's
+/// state, so it cannot outlive the [`AppWindow`] that owns it.
+#[derive(Clone, Copy)]
+pub struct WindowCtl<'a> {
     hwnd: HWND,
+    state: &'a WindowState,
 }
 
-impl WindowCtl {
+impl std::fmt::Debug for WindowCtl<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WindowCtl").field("hwnd", &self.hwnd).finish_non_exhaustive()
+    }
+}
+
+impl WindowCtl<'_> {
     fn state(&self) -> Option<&WindowState> {
-        // SAFETY: GWLP_USERDATA holds either 0 or the WindowState pointer installed by
-        // AppWindow::create, which stays valid until AppWindow is dropped (after which no
-        // WindowCtl exists: they are only handed out by reference during dispatch or by
-        // AppWindow::ctl, which borrows the window).
-        let ptr = unsafe { GetWindowLongPtrW(self.hwnd, GWLP_USERDATA) } as *const WindowState;
-        // SAFETY: see above; a non-null pointer refers to a live WindowState.
-        unsafe { ptr.as_ref() }
+        Some(self.state)
     }
 
     /// Starts (or restarts) timer `id` with the given period.
@@ -228,7 +230,7 @@ fn show_tray_menu(hwnd: HWND, state: &WindowState) -> Option<TrayCommand> {
 }
 
 fn dispatch(hwnd: HWND, state: &WindowState, event: AppEvent) {
-    let ctl = WindowCtl { hwnd };
+    let ctl = WindowCtl { hwnd, state };
     // A re-entrant message (for example during a modal loop) is skipped rather than aliased.
     let flow = match state.handler.try_borrow_mut() {
         Ok(mut handler) => handler(&ctl, event),
@@ -262,7 +264,7 @@ unsafe extern "system" fn app_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
         WM_CLOSE => {
             dispatch(hwnd, state, AppEvent::CloseRequested);
             if !state.destroyed.get() {
-                WindowCtl { hwnd }.quit();
+                WindowCtl { hwnd, state }.quit();
             }
         }
         WM_DESTROY => {
@@ -286,25 +288,18 @@ unsafe extern "system" fn app_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
 }
 
 fn register_class() -> Result<(), WinError> {
-    static ATOM: OnceLock<u16> = OnceLock::new();
-    let atom = *ATOM.get_or_init(|| {
-        // SAFETY: this executable's module handle, valid for the process lifetime.
-        let instance = unsafe { GetModuleHandleW(None) }.unwrap_or_default();
-        let class = WNDCLASSEXW {
-            cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
-            lpfnWndProc: Some(app_wndproc),
-            hInstance: instance.into(),
-            lpszClassName: CLASS_NAME,
-            ..WNDCLASSEXW::default()
-        };
-        // SAFETY: `class` is fully initialised and its strings are static.
-        unsafe { RegisterClassExW(&class) }
-    });
-    if atom == 0 {
-        Err(WinError::last("RegisterClassExW"))
-    } else {
-        Ok(())
-    }
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    // SAFETY: this executable's module handle, valid for the process lifetime.
+    let instance = unsafe { GetModuleHandleW(None) }.unwrap_or_default();
+    let class = WNDCLASSEXW {
+        cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
+        lpfnWndProc: Some(app_wndproc),
+        hInstance: instance.into(),
+        lpszClassName: CLASS_NAME,
+        ..WNDCLASSEXW::default()
+    };
+    // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
+    unsafe { crate::register_class_once(&REGISTERED, &class) }
 }
 
 /// The hidden app window. Lives on the main thread; not `Send`.
@@ -367,8 +362,11 @@ impl AppWindow {
     }
 
     /// Control handle for the main thread.
-    pub fn ctl(&self) -> WindowCtl {
-        WindowCtl { hwnd: self.hwnd }
+    pub fn ctl(&self) -> WindowCtl<'_> {
+        // SAFETY: `state` is the Box pointer installed in `create`; it is freed only in Drop,
+        // and the returned WindowCtl borrows `self`, so it cannot outlive it.
+        let state = unsafe { &*self.state };
+        WindowCtl { hwnd: self.hwnd, state }
     }
 
     /// A `Send` handle other threads use to ask the app to close.

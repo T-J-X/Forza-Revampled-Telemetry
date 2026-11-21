@@ -136,7 +136,8 @@ impl TelemetryReader {
 /// Shared state of the receive threads. Only the UDP threads lock it; readers never do.
 #[derive(Debug, Default)]
 struct ReceiveState {
-    last_timestamp_ms: Option<u32>,
+    /// The last published packet, to recognise the same datagram arriving on the second port.
+    last_data: Option<FH6TelemetryData>,
     last_received: Option<Instant>,
     seq: u64,
     race_resumed_at: Option<Instant>,
@@ -146,8 +147,8 @@ struct ReceiveState {
 impl ReceiveState {
     /// Builds the next frame, or `None` if `data` duplicates the previous packet.
     fn next_frame(&mut self, data: FH6TelemetryData, now: Instant) -> Option<TelemetryFrame> {
-        let duplicate = data.timestamp_ms != 0
-            && self.last_timestamp_ms == Some(data.timestamp_ms)
+        // Same payload (not just the same game timestamp, so a pause flip is never dropped).
+        let duplicate = self.last_data.as_ref() == Some(&data)
             && self
                 .last_received
                 .is_some_and(|t| now.saturating_duration_since(t) < DUPLICATE_WINDOW);
@@ -164,7 +165,7 @@ impl ReceiveState {
             self.race_resumed_at = None;
         }
         self.was_racing = racing;
-        self.last_timestamp_ms = Some(data.timestamp_ms);
+        self.last_data = Some(data.clone());
         self.last_received = Some(now);
         self.seq += 1;
         Some(TelemetryFrame {
@@ -399,6 +400,15 @@ mod tests {
             .next_frame(packet(1, 116), t0 + Duration::from_millis(16))
             .expect("new timestamp is published");
         assert_eq!(next.seq, 2);
+    }
+
+    #[test]
+    fn pause_flip_with_same_timestamp_is_not_dropped() {
+        let mut state = ReceiveState::default();
+        let t0 = Instant::now();
+        assert!(state.next_frame(packet(1, 500), t0).is_some());
+        let paused = state.next_frame(packet(0, 500), t0 + Duration::from_millis(2));
+        assert!(paused.is_some(), "IsRaceOn changed, so it is a new packet");
     }
 
     #[test]

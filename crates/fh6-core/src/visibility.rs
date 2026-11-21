@@ -5,7 +5,9 @@
 //!   stream (no packet for 250 ms), or Forza not being the foreground window.
 //! - Soft hide, a ~120 ms fade-out: only while still racing, when the user hides the overlay.
 //! - Show: a ~120 ms fade-in.
-//! - Bypass (`--demo`, the OSD live dyno) keeps the dash visible regardless.
+//! - Live preview (the OSD live dyno) lifts the race-off and stale rules so the dash animates
+//!   while the game is paused, but never the foreground rule.
+//! - Bypass (`--demo`, `--bench-seconds`, for testing) keeps the dash visible regardless.
 use std::time::Duration;
 
 /// Default fade duration for showing, and for a user-requested hide while racing.
@@ -22,7 +24,9 @@ pub struct VisibilityInputs {
     pub game_foreground: bool,
     /// The user hid the overlay (tray "Hide overlay").
     pub user_hidden: bool,
-    /// Demo mode or the OSD live view: ignore every gate above.
+    /// The OSD live view is open: ignore the race-off and stale rules, keep the focus rule.
+    pub live_preview: bool,
+    /// Test modes (`--demo`, `--bench-seconds`): ignore every gate above.
     pub bypass: bool,
 }
 
@@ -78,12 +82,14 @@ impl VisibilityController {
     pub fn update(&mut self, inputs: VisibilityInputs, dt: Duration) -> Visibility {
         let hard_hide = if inputs.bypass {
             None
+        } else if !inputs.game_foreground {
+            Some(HideReason::NotForeground)
+        } else if inputs.live_preview {
+            None
         } else if !inputs.stream_fresh {
             Some(HideReason::Stale)
         } else if !inputs.race_on {
             Some(HideReason::RaceOff)
-        } else if !inputs.game_foreground {
-            Some(HideReason::NotForeground)
         } else {
             None
         };
@@ -128,6 +134,7 @@ mod tests {
             stream_fresh: true,
             game_foreground: true,
             user_hidden: false,
+            live_preview: false,
             bypass: false,
         }
     }
@@ -207,6 +214,26 @@ mod tests {
         );
         assert!(v.opacity > 0.0 && v.opacity < 1.0, "soft fade, got {}", v.opacity);
         assert_eq!(v.hidden_because, Some(HideReason::User));
+    }
+
+    #[test]
+    fn live_preview_lifts_race_and_stale_but_not_focus() {
+        let mut ctl = VisibilityController::new(Duration::ZERO);
+        let paused = VisibilityInputs {
+            race_on: false,
+            stream_fresh: false,
+            game_foreground: true,
+            live_preview: true,
+            ..VisibilityInputs::default()
+        };
+        assert_eq!(ctl.update(paused, FRAME).opacity, 1.0, "OSD dyno animates while paused");
+        let unfocused = VisibilityInputs {
+            game_foreground: false,
+            ..paused
+        };
+        let v = ctl.update(unfocused, FRAME);
+        assert_eq!(v.opacity, 0.0, "never over other apps");
+        assert_eq!(v.hidden_because, Some(HideReason::NotForeground));
     }
 
     #[test]

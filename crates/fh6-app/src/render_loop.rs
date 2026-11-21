@@ -190,9 +190,18 @@ pub fn cluster_input(data: &FH6TelemetryData, cfg: &AppConfig, camera: usize, si
     }
 }
 
-struct Loop {
-    setup_gpu: GpuContext,
+/// The device and swapchain. `None` while they are being recreated after a loss.
+struct Gpu {
+    ctx: GpuContext,
     surface: OverlaySurface,
+}
+
+struct Loop {
+    gpu: Option<Gpu>,
+    /// Last known adapter, present mode and size, for the summary.
+    adapter: String,
+    present_mode: String,
+    size: (u32, u32),
     batch: QuadBatch,
     stats: FrameStats,
     scratch: Vec<f32>,
@@ -200,6 +209,68 @@ struct Loop {
     frames: u64,
     packets: u64,
     fps_window: (Instant, u64),
+    lost_since: Option<Instant>,
+}
+
+impl Loop {
+    fn adopt(&mut self, gpu: Gpu) {
+        self.adapter = gpu.ctx.adapter_summary().to_string();
+        self.present_mode = format!("{:?}", gpu.surface.present_mode());
+        self.size = gpu.surface.size();
+        self.gpu = Some(gpu);
+        self.lost_since = None;
+    }
+
+    /// Drops the device and swapchain so the window has no composition target left (it then
+    /// shows nothing), and schedules a recreation.
+    fn lose_gpu(&mut self, why: &str) {
+        tracing::warn!(why, "dropping the GPU device; it is recreated in 1 s");
+        self.gpu = None;
+        self.lost_since = Some(Instant::now());
+    }
+
+    /// Recreates the device after a loss, at most once a second.
+    fn try_recreate(&mut self, window: &OverlayHandle) {
+        let Some(since) = self.lost_since else { return };
+        if since.elapsed() < Duration::from_secs(1) {
+            return;
+        }
+        match OverlaySurface::create(window.clone(), self.size.0, self.size.1) {
+            Ok((ctx, surface)) => {
+                tracing::info!("GPU device and overlay surface recreated");
+                self.adopt(Gpu { ctx, surface });
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "recreating the GPU device failed; retrying");
+                self.lost_since = Some(Instant::now());
+            }
+        }
+    }
+
+    /// Renders the current batch and handles loss. `None` when nothing was presented.
+    fn render(&mut self, opacity: f32) -> Option<FrameOutcome> {
+        let gpu = self.gpu.as_mut()?;
+        let result = gpu.surface.render(&gpu.ctx, opacity, &self.batch);
+        let failed = gpu.ctx.has_failed();
+        match result {
+            Ok(outcome) if !failed => Some(outcome),
+            Ok(_) => {
+                self.lose_gpu("wgpu reported an error");
+                None
+            }
+            Err(GpuError::SurfaceLost) => {
+                self.lose_gpu("surface lost");
+                None
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "frame not presented");
+                if failed {
+                    self.lose_gpu("wgpu reported an error");
+                }
+                None
+            }
+        }
+    }
 }
 
 fn run(setup: RenderSetup) -> RenderSummary {
@@ -218,9 +289,12 @@ fn run(setup: RenderSetup) -> RenderSummary {
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
         .unwrap_or(FALLBACK_REFRESH);
+    let measure_vblank = options.stats || options.bench.is_some();
     let mut lp = Loop {
-        setup_gpu: gpu,
-        surface,
+        gpu: None,
+        adapter: String::new(),
+        present_mode: String::new(),
+        size: (1, 1),
         batch: QuadBatch::new(),
         stats: FrameStats::default(),
         scratch: Vec::with_capacity(SAMPLE_CAPACITY),
@@ -249,14 +323,15 @@ fn run(setup: RenderSetup) -> RenderSummary {
         frames: 0,
         packets: 0,
         fps_window: (Instant::now(), 0),
+        lost_since: None,
     };
+    lp.adopt(Gpu { ctx: gpu, surface });
     let mut visibility = VisibilityController::default();
     let mut dyno = LiveDynoGenerator::new();
     let mut last_seq = 0u64;
     let mut last_tick = Instant::now();
     let mut blank_presented = false;
     let mut keep_ticking = false;
-    let mut lost_since: Option<Instant> = None;
     let start = Instant::now();
     let mut measured_from = start;
     let mut warmed_up = options.bench.is_none();
@@ -280,38 +355,36 @@ fn run(setup: RenderSetup) -> RenderSummary {
             }
         }
 
-        thread::park_timeout(if keep_ticking { refresh } else { IDLE_WAIT });
+        let waiting_for_gpu = lp.lost_since.is_some();
+        thread::park_timeout(if keep_ticking && !waiting_for_gpu {
+            refresh
+        } else {
+            IDLE_WAIT
+        });
         let wake = Instant::now();
         let dt = wake - last_tick;
         last_tick = wake;
 
         if let Some((w, h)) = control.take_resize() {
-            lp.surface.resize(&lp.setup_gpu, w, h);
+            lp.size = (w.max(1), h.max(1));
+            if let Some(gpu) = lp.gpu.as_mut() {
+                gpu.surface.resize(&gpu.ctx, w, h);
+            }
         }
-        if let Some(since) = lost_since {
-            if since.elapsed() < Duration::from_secs(1) {
-                continue;
-            }
-            match OverlaySurface::create(window.clone(), lp.surface.size().0, lp.surface.size().1) {
-                Ok((gpu, surface)) => {
-                    tracing::info!("overlay surface recreated");
-                    lp.setup_gpu = gpu;
-                    lp.surface = surface;
-                    lost_since = None;
-                }
-                Err(err) => {
-                    tracing::warn!(error = %err, "recreating the overlay surface failed");
-                    lost_since = Some(Instant::now());
-                    continue;
-                }
-            }
+        lp.try_recreate(&window);
+        if lp.gpu.is_none() {
+            // Nothing is on screen while the device is gone: the window has no content.
+            blank_presented = true;
+            keep_ticking = false;
+            continue;
         }
 
         let cfg = config.current();
         let frame = telemetry.latest();
         let fresh = !frame.is_stale(wake);
-        let bypass = options.demo || options.bench.is_some() || cfg.demo_mode || input.osd_open();
-        let synthetic = bypass && !fresh;
+        let bypass = options.demo || options.bench.is_some();
+        let live_preview = input.osd_open();
+        let synthetic = (bypass || live_preview) && !fresh;
         let synth_data;
         let data = if synthetic {
             synth_data = dyno.tick(dt.as_secs_f32());
@@ -325,6 +398,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 stream_fresh: fresh,
                 game_foreground: foreground.is_game_foreground(),
                 user_hidden: control.user_hidden(),
+                live_preview,
                 bypass,
             },
             dt,
@@ -337,10 +411,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
                 lp.batch.clear();
-                match lp.surface.render(&lp.setup_gpu, 0.0, &lp.batch) {
-                    Ok(FrameOutcome::Presented { .. }) => blank_presented = true,
-                    Ok(FrameOutcome::Skipped) => {}
-                    Err(err) => handle_error(err, &mut lost_since),
+                if let Some(FrameOutcome::Presented { .. }) = lp.render(0.0) {
+                    blank_presented = true;
                 }
                 tracing::debug!(reason = ?vis.hidden_because, "overlay hidden");
             }
@@ -356,27 +428,27 @@ fn run(setup: RenderSetup) -> RenderSummary {
 
         let build_start = Instant::now();
         lp.batch.clear();
-        let input_frame = cluster_input(data, &cfg, input.camera_index(), lp.surface.size());
+        let input_frame = cluster_input(data, &cfg, input.camera_index(), lp.size);
         test_cluster::build(&mut lp.batch, &input_frame);
         if options.stats {
-            let line_h = (lp.surface.size().1 as f32 / REF_H * 34.0).max(10.0);
+            let line_h = (lp.size.1 as f32 / REF_H * 34.0).max(10.0);
             test_cluster::build_stats(&mut lp.batch, [line_h * 2.0, line_h * 2.0], line_h, &lp.stat_lines);
         }
         let built = build_start.elapsed();
 
-        match lp.surface.render(&lp.setup_gpu, vis.opacity, &lp.batch) {
-            Ok(FrameOutcome::Presented { timings, at }) => {
-                lp.frames += 1;
-                lp.stats.cpu_frame.record(built + timings.cpu());
-                lp.stats.acquire_wait.record(timings.acquire_wait);
-                lp.stats.build.record(built);
-                lp.stats.encode_submit.record(timings.encode_submit);
-                lp.stats.present.record(timings.present);
-                if new_packet {
-                    lp.packets += 1;
-                    if let Some(received) = frame.received_at {
-                        let to_present = at.saturating_duration_since(received);
-                        lp.stats.receive_to_present.record(to_present);
+        if let Some(FrameOutcome::Presented { timings, at }) = lp.render(vis.opacity) {
+            lp.frames += 1;
+            lp.stats.cpu_frame.record(built + timings.cpu());
+            lp.stats.acquire_wait.record(timings.acquire_wait);
+            lp.stats.build.record(built);
+            lp.stats.encode_submit.record(timings.encode_submit);
+            lp.stats.present.record(timings.present);
+            if new_packet {
+                lp.packets += 1;
+                if let Some(received) = frame.received_at {
+                    let to_present = at.saturating_duration_since(received);
+                    lp.stats.receive_to_present.record(to_present);
+                    if measure_vblank {
                         if let Some(timing) = fh6_win::system::composition_timing() {
                             lp.stats.receive_to_vblank.record(to_present + timing.until_next_vblank);
                             lp.stats.vsync_checked += 1;
@@ -386,20 +458,18 @@ fn run(setup: RenderSetup) -> RenderSummary {
                         }
                     }
                 }
-                if options.stats && lp.frames.is_multiple_of(30) {
-                    refresh_stat_lines(&mut lp);
-                }
             }
-            Ok(FrameOutcome::Skipped) => {}
-            Err(err) => handle_error(err, &mut lost_since),
+            if options.stats && lp.frames.is_multiple_of(30) {
+                refresh_stat_lines(&mut lp);
+            }
         }
     }
 
     let measured = measured_from.elapsed();
     let summary = RenderSummary {
-        adapter: lp.setup_gpu.adapter_summary().to_string(),
-        present_mode: format!("{:?}", lp.surface.present_mode()),
-        size: lp.surface.size(),
+        adapter: lp.adapter.clone(),
+        present_mode: lp.present_mode.clone(),
+        size: lp.size,
         measured,
         frames: lp.frames,
         packets: lp.packets,
@@ -429,16 +499,6 @@ fn refresh_stat_lines(lp: &mut Loop) {
     if elapsed >= 1.0 {
         lp.stat_lines[3].value = (lp.frames - frames_then) as f32 / elapsed;
         lp.fps_window = (Instant::now(), lp.frames);
-    }
-}
-
-fn handle_error(err: GpuError, lost_since: &mut Option<Instant>) {
-    match err {
-        GpuError::SurfaceLost => {
-            tracing::warn!("overlay surface lost; recreating");
-            *lost_since = Some(Instant::now());
-        }
-        other => tracing::warn!(error = %other, "frame not presented"),
     }
 }
 

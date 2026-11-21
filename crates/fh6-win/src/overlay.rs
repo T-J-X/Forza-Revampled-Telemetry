@@ -14,7 +14,7 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, SetWindowPos,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, PostQuitMessage, SetLayeredWindowAttributes, SetWindowPos,
     ShowWindow, HTTRANSPARENT, HWND_TOPMOST, LWA_ALPHA, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     SW_SHOWNOACTIVATE, WM_CLOSE, WM_MOUSEACTIVATE, WM_NCHITTEST, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
@@ -41,26 +41,19 @@ unsafe extern "system" fn overlay_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, 
 }
 
 fn register_class() -> Result<(), WinError> {
-    static ATOM: OnceLock<u16> = OnceLock::new();
-    let atom = *ATOM.get_or_init(|| {
-        // SAFETY: GetModuleHandleW(None) returns this executable's module, valid for the
-        // process lifetime.
-        let instance = unsafe { GetModuleHandleW(None) }.unwrap_or_default();
-        let class = WNDCLASSEXW {
-            cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
-            lpfnWndProc: Some(overlay_wndproc),
-            hInstance: instance.into(),
-            lpszClassName: CLASS_NAME,
-            ..WNDCLASSEXW::default()
-        };
-        // SAFETY: `class` is fully initialised and its strings are static.
-        unsafe { RegisterClassExW(&class) }
-    });
-    if atom == 0 {
-        Err(WinError::last("RegisterClassExW"))
-    } else {
-        Ok(())
-    }
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    // SAFETY: GetModuleHandleW(None) returns this executable's module, valid for the
+    // process lifetime.
+    let instance = unsafe { GetModuleHandleW(None) }.unwrap_or_default();
+    let class = WNDCLASSEXW {
+        cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
+        lpfnWndProc: Some(overlay_wndproc),
+        hInstance: instance.into(),
+        lpszClassName: CLASS_NAME,
+        ..WNDCLASSEXW::default()
+    };
+    // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
+    unsafe { crate::register_class_once(&REGISTERED, &class) }
 }
 
 /// Keeps the window alive for surfaces: see [`OverlayHandle`].

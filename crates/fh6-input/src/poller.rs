@@ -183,8 +183,10 @@ fn run(
             tracing::debug!(camera, "camera ring advanced");
         }
         if events.osd_toggled {
-            shared.set_osd_open(tracker.is_osd_open);
-            tracing::info!(open = tracker.is_osd_open, "OSD toggled by hold");
+            // Flip the shared state itself, so a tray toggle since this poll began is not lost.
+            let open = shared.toggle_osd();
+            tracker.is_osd_open = open;
+            tracing::info!(open, "OSD toggled by hold");
         }
         if events.guide_pressed && cfg.guide_button_opens_widget {
             tracing::info!("Guide pressed");

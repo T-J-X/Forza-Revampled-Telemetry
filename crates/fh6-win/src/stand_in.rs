@@ -6,11 +6,11 @@ use crate::WinError;
 use std::sync::OnceLock;
 use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{CreateSolidBrush, HBRUSH};
+use windows::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, HBRUSH, HGDIOBJ};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostQuitMessage, RegisterClassExW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostQuitMessage,
     SetForegroundWindow, TranslateMessage, MSG, WINDOW_EX_STYLE, WM_DESTROY, WM_KEYDOWN, WNDCLASSEXW, WS_POPUP,
     WS_VISIBLE,
 };
@@ -42,26 +42,29 @@ unsafe extern "system" fn stand_in_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM,
 /// # Errors
 /// [`WinError`] if the window cannot be created.
 pub fn run_stand_in_window(rect: MonitorRect, rgb: [u8; 3], title: &str) -> Result<(), WinError> {
-    static ATOM: OnceLock<u16> = OnceLock::new();
+    static REGISTERED: OnceLock<()> = OnceLock::new();
     let colour = COLORREF(u32::from(rgb[0]) | (u32::from(rgb[1]) << 8) | (u32::from(rgb[2]) << 16));
-    let atom = *ATOM.get_or_init(|| {
-        // SAFETY: a solid brush owned by the window class for the process lifetime; the module
-        // handle is this executable's.
-        unsafe {
-            let brush: HBRUSH = CreateSolidBrush(colour);
-            let class = WNDCLASSEXW {
-                cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
-                lpfnWndProc: Some(stand_in_wndproc),
-                hInstance: GetModuleHandleW(None).unwrap_or_default().into(),
-                hbrBackground: brush,
-                lpszClassName: CLASS_NAME,
-                ..WNDCLASSEXW::default()
-            };
-            RegisterClassExW(&class)
+    if REGISTERED.get().is_none() {
+        // SAFETY: the brush becomes the class background for the process lifetime (or is
+        // deleted below if registration fails); the module handle is this executable's.
+        let brush: HBRUSH = unsafe { CreateSolidBrush(colour) };
+        let class = WNDCLASSEXW {
+            cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
+            lpfnWndProc: Some(stand_in_wndproc),
+            // SAFETY: this executable's module handle.
+            hInstance: unsafe { GetModuleHandleW(None) }.unwrap_or_default().into(),
+            hbrBackground: brush,
+            lpszClassName: CLASS_NAME,
+            ..WNDCLASSEXW::default()
+        };
+        // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
+        if let Err(err) = unsafe { crate::register_class_once(&REGISTERED, &class) } {
+            // SAFETY: the brush was created above and is owned by nobody else.
+            unsafe {
+                let _ = DeleteObject(HGDIOBJ(brush.0));
+            }
+            return Err(err);
         }
-    });
-    if atom == 0 {
-        return Err(WinError::last("RegisterClassExW"));
     }
     let title = HSTRING::from(title);
     // SAFETY: registered class; `title` outlives the call.

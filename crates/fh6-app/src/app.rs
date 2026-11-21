@@ -151,6 +151,8 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         stats: args.stats,
         bench: args.bench_seconds.map(Duration::from_secs),
     };
+    // Before the render thread: if this fails, nothing is running yet that would need stopping.
+    let quit_listener = spawn_quit_listener(app_window.close_handle())?;
     let (render_join, render_thread) = render_loop::spawn(RenderSetup {
         gpu,
         surface,
@@ -166,7 +168,6 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
     .map_err(io_err("starting the render thread"))?;
     let _ = waker.0.set(render_thread.clone());
 
-    let quit_listener = spawn_quit_listener(app_window.close_handle())?;
 
     let ctl = app_window.ctl();
     ctl.set_timer(TIMER_FOREGROUND, FOREGROUND_POLL);
@@ -338,6 +339,13 @@ impl Handler {
             tracing::info!(?wanted, "telemetry ports changed; restarting the engine");
             self.engine.shutdown();
             self.engine = start_engine(wanted, self.reader.clone(), &self.waker);
+        } else if self.engine.bound_ports().is_empty() {
+            // The port was busy at start (a previous instance still exiting, another tool):
+            // keep retrying once a second.
+            match self.engine.start() {
+                Ok(()) => tracing::info!(ports = ?self.engine.bound_ports(), "telemetry engine started on retry"),
+                Err(err) => tracing::debug!(error = %err, "telemetry port still busy"),
+            }
         }
 
         let frame = self.reader.latest();

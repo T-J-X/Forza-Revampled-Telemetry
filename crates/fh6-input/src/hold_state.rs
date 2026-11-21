@@ -88,9 +88,16 @@ impl HoldToggle {
         false
     }
 
-    /// Applies new settings (for example after a config hot reload) and resets the timer.
+    /// Applies new settings (for example after a config hot reload). A new mask needs a full
+    /// release before it can fire, so a button still held across the change never re-fires.
     pub fn set_config(&mut self, config: HoldConfig) {
-        *self = Self::new(config);
+        let mask = sanitize_toggle_mask(config.toggle_mask);
+        self.hold_ms = config.hold_ms;
+        if mask != self.target_mask {
+            self.target_mask = mask;
+            self.hold_start = None;
+            self.armed = false;
+        }
     }
 }
 
@@ -171,6 +178,26 @@ mod tests {
         assert_eq!(s.mask(), 0x0020, "A stripped from the mask");
         s.update(0xF000, 0);
         assert!(!s.update(0xF000, 5000), "holding A/B/X/Y alone never fires");
+    }
+
+    #[test]
+    fn config_change_while_held_does_not_refire() {
+        let mut s = view_400();
+        s.update(0x0020, 0);
+        assert!(s.update(0x0020, 400));
+        s.set_config(HoldConfig {
+            toggle_mask: 0x0020,
+            hold_ms: 300,
+        });
+        assert!(!s.update(0x0020, 2000), "same mask, still held: no second fire");
+        s.set_config(HoldConfig {
+            toggle_mask: 0x0010 | 0x0020,
+            hold_ms: 300,
+        });
+        assert!(!s.update(0x0030, 3000), "new mask needs a release first");
+        s.update(0, 3100);
+        s.update(0x0030, 3200);
+        assert!(s.update(0x0030, 3500));
     }
 
     #[test]

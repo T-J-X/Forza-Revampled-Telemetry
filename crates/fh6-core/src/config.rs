@@ -369,12 +369,11 @@ impl AppConfig {
     /// # Errors
     /// Returns the I/O error if the temp file cannot be written or renamed.
     pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        let path = path.as_ref();
-        let json = serde_json::to_string_pretty(self).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, json)?;
-        // `rename` replaces the destination atomically on NTFS (MoveFileEx with REPLACE_EXISTING).
-        fs::rename(tmp, path)
+        // A/B/X/Y are stripped from every saved mask, not only on load (manual gearbox lock).
+        let mut clean = self.clone();
+        clean.osd_toggle_mask = sanitize_toggle_mask(clean.osd_toggle_mask);
+        let json = serde_json::to_string_pretty(&clean).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        crate::atomic_file::write_atomically(path.as_ref(), json.as_bytes())
     }
 
     fn apply_migrations(&mut self) {

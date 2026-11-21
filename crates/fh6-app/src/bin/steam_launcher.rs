@@ -94,10 +94,12 @@ fn main() -> ExitCode {
             }
             signal_overlay_quit();
             match status {
+                // Crash codes such as 0xC0000005 are negative or above 255: report failure,
+                // never success.
                 Ok(status) => status
                     .code()
                     .and_then(|c| u8::try_from(c).ok())
-                    .map_or(ExitCode::SUCCESS, ExitCode::from),
+                    .map_or(ExitCode::FAILURE, ExitCode::from),
                 Err(err) => {
                     tracing::error!(error = %err, "waiting for the game failed");
                     ExitCode::FAILURE

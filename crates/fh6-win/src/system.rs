@@ -143,8 +143,12 @@ pub fn composition_timing() -> Option<CompositionTiming> {
         return None;
     }
     let now = u64::try_from(now).ok()?;
-    let since_last = now.saturating_sub(info.qpcVBlank) % period;
-    let until_next = period - since_last;
+    // DWM may report the upcoming vblank (in the future) or a past one.
+    let until_next = if info.qpcVBlank > now {
+        (info.qpcVBlank - now) % period
+    } else {
+        period - (now - info.qpcVBlank) % period
+    };
     let to_duration = |ticks: u64| Duration::from_secs_f64(ticks as f64 / freq as f64);
     Some(CompositionTiming {
         refresh_period: to_duration(period),

@@ -61,13 +61,15 @@ pub fn capture_screen(x: i32, y: i32, width: u32, height: u32) -> Result<Screens
         } else {
             0
         };
+        // Read the error before the cleanup calls below can overwrite the thread's last error.
+        let dib_error = (blit.is_ok() && lines != h).then(|| WinError::last("GetDIBits"));
         let _ = DeleteObject(HGDIOBJ(bitmap.0));
         let _ = DeleteDC(mem);
         ReleaseDC(None, screen);
 
         blit.map_err(|e| WinError::call("BitBlt", e))?;
-        if lines != h {
-            return Err(WinError::last("GetDIBits"));
+        if let Some(err) = dib_error {
+            return Err(err);
         }
         for px in bgra.chunks_exact_mut(4) {
             px.swap(0, 2);

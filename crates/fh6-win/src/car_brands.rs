@@ -174,12 +174,8 @@ pub fn bind_car_brand(path: &Path, car: CarBinding<'_>) -> Result<BindOutcome, B
         });
     }
 
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, out.as_bytes()).map_err(io_err("writing", &tmp))?;
-    if let Err(err) = fs::rename(&tmp, path) {
-        let _ = fs::remove_file(&tmp);
-        return Err(io_err("replacing", path)(err));
-    }
+    // Unique temp file + fsync + rename: a crash leaves the old or the new file, never neither.
+    fh6_core::atomic_file::write_atomically(path, out.as_bytes()).map_err(io_err("replacing", path))?;
     Ok(BindOutcome {
         ordinal,
         brand_key,
@@ -240,7 +236,16 @@ mod tests {
         }
         let keys: Vec<&String> = after.as_object().expect("root").keys().collect();
         assert_eq!(keys, ["Version", "TotalCars", "BrandPalettes", "Cars"], "key order kept");
-        assert!(!path.with_extension("json.tmp").exists());
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let leftovers = fs::read_dir(path.parent().expect("temp dir"))
+            .expect("list temp dir")
+            .filter_map(Result::ok)
+            .filter(|e| {
+                let f = e.file_name().to_string_lossy().into_owned();
+                f.contains(&name) && f.ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(leftovers, 0, "no temp file left behind");
         fs::remove_file(path).ok();
     }
 

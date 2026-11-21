@@ -1,6 +1,8 @@
 //! Instance, adapter, device and queue.
 use crate::block_on::block_on;
 use crate::GpuError;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// What the chosen adapter is, for logs and perf reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +35,8 @@ pub struct GpuContext {
     /// Its queue.
     pub queue: wgpu::Queue,
     summary: AdapterSummary,
+    /// Set by wgpu's uncaptured-error and device-lost callbacks (which would otherwise panic).
+    failed: Arc<AtomicBool>,
 }
 
 /// The instance every surface and device is made from: DX12 only, with swapchains created on a
@@ -89,6 +93,25 @@ impl GpuContext {
             memory_hints: wgpu::MemoryHints::Performance,
             ..Default::default()
         }))?;
+        let failed = Arc::new(AtomicBool::new(false));
+        {
+            let failed = Arc::clone(&failed);
+            device.on_uncaptured_error(Arc::new(move |err| {
+                tracing::error!(error = %err, "GPU error");
+                failed.store(true, Ordering::Relaxed);
+            }));
+        }
+        {
+            let failed = Arc::clone(&failed);
+            device.set_device_lost_callback(move |reason, message| {
+                if reason == wgpu::DeviceLostReason::Destroyed {
+                    tracing::debug!(%message, "GPU device destroyed");
+                } else {
+                    tracing::error!(?reason, %message, "GPU device lost");
+                    failed.store(true, Ordering::Relaxed);
+                }
+            });
+        }
         tracing::info!(adapter = %summary, "GPU device ready");
         Ok(Self {
             instance,
@@ -96,11 +119,18 @@ impl GpuContext {
             device,
             queue,
             summary,
+            failed,
         })
     }
 
     /// The adapter in use.
     pub fn adapter_summary(&self) -> &AdapterSummary {
         &self.summary
+    }
+
+    /// True once wgpu reported an uncaptured error or lost the device. The caller should drop
+    /// this context (and its surfaces) and create a new one.
+    pub fn has_failed(&self) -> bool {
+        self.failed.load(Ordering::Relaxed)
     }
 }

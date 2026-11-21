@@ -1,5 +1,6 @@
 //! fh6-core: Core data models, telemetry parser, config, and state machines for FH6 WheelDash.
 
+pub mod atomic_file;
 pub mod cars;
 pub mod config;
 pub mod config_watch;

@@ -113,7 +113,7 @@ mod imp {
                     return Err(XInputError::MissingExport { dll });
                 };
                 // GetProcAddress takes an ordinal as a PCSTR whose high bits are zero.
-                let ordinal = PCSTR(GET_STATE_EX_ORDINAL as *const u8);
+                let ordinal = PCSTR(std::ptr::without_provenance(GET_STATE_EX_ORDINAL));
                 // SAFETY: `module` is valid; an ordinal below 0x10000 is a documented form of
                 // `lpProcName`.
                 let get_state_ex = unsafe { GetProcAddress(module, ordinal) };
@@ -155,6 +155,8 @@ mod imp {
             // SAFETY: `f` is a live export of the still-loaded module (freed only in Drop) and
             // `buf` is a valid, writable, correctly aligned XINPUT_STATE-prefixed buffer.
             let rc = unsafe { f(slot, &mut buf) };
+            // Manual gearbox lock at the source: A/B/X/Y never leave this function.
+            buf.state.Gamepad.wButtons &= !fh6_core::config::MASK_MANUAL_LOCK;
             (rc == ERROR_SUCCESS).then_some(buf.state)
         }
     }
