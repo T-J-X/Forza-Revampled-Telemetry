@@ -184,6 +184,15 @@ fn scenario_night_tunnel(t: f32, ordinal: i32) -> [u8; PACKET_SIZE] {
     )
 }
 
+/// Racing for 4 s, then paused in the menu (`IsRaceOn = 0`) for 4 s, repeating.
+/// Exercises the overlay's hide-on-pause rule.
+fn scenario_menu_pause(t: f32, ordinal: i32) -> [u8; PACKET_SIZE] {
+    let mut pkt = scenario_bmw_m4_cs(t, ordinal);
+    let racing = (t % 8.0) < 4.0;
+    pkt[0..4].copy_from_slice(&i32::from(racing).to_le_bytes());
+    pkt
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut scenario = "bmw_m4_cs";
@@ -194,6 +203,7 @@ fn main() {
     let mut duration: f32 = 10.0;
     let mut rate_hz: f32 = 60.0;
     let mut once = false;
+    let mut race_on: Option<i32> = None;
     let mut ordinal: i32 = 4122;
     let mut i = 1;
     while i < args.len() {
@@ -230,6 +240,10 @@ fn main() {
                 ordinal = args[i + 1].parse().unwrap_or(ordinal);
                 i += 1;
             }
+            "--race-on" if i + 1 < args.len() => {
+                race_on = args[i + 1].parse().ok();
+                i += 1;
+            }
             "--once" => {
                 once = true;
             }
@@ -262,11 +276,15 @@ fn main() {
             "camera_sync" => scenario_camera_sync(t, ordinal),
             "watchdog_drop" => scenario_watchdog_drop(t, ordinal),
             "night_tunnel" => scenario_night_tunnel(t, ordinal),
+            "menu_pause" => scenario_menu_pause(t, ordinal),
             _ => scenario_bmw_m4_cs(t, ordinal),
         };
         // build with timestamp
         let mut pkt_mut = pkt;
         pkt_mut[4..8].copy_from_slice(&ts_ms.to_le_bytes());
+        if let Some(flag) = race_on {
+            pkt_mut[0..4].copy_from_slice(&flag.to_le_bytes());
+        }
         let _ = send_packet(&sock, &pkt_mut, ip, port);
         if fallback_port != port {
             let _ = send_packet(&sock, &pkt_mut, ip, fallback_port);

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "FH6_WheelDash"
@@ -15,23 +16,11 @@ path = "src/bin/steam_launcher.rs"
 
 [dependencies]
 fh6-core = { path = "../fh6-core" }
-fh6-render = { path = "../fh6-render" }
-fh6-clusters = { path = "../fh6-clusters" }
 fh6-osd = { path = "../fh6-osd" }
 fh6-input = { path = "../fh6-input" }
 fh6-win = { path = "../fh6-win" }
+fh6-gpu = { path = "../fh6-gpu" }
 tracing.workspace = true
+tracing-subscriber.workspace = true
 serde_json = { workspace = true }
-
-[target.'cfg(windows)'.dependencies.windows]
-workspace = true
-features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_System_Threading",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Diagnostics_ToolHelp",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Input_XboxController",
-]
+thiserror.workspace = true

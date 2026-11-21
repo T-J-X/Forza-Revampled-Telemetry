@@ -1,1 +1,17 @@
+//! fh6-app: the `FH6_WheelDash` overlay and the `FH6_SteamLauncher` wrapper.
+//!
+//! All Win32 and GPU `unsafe` lives in fh6-win, fh6-input and fh6-gpu; this crate wires
+//! their safe APIs together.
+
+#[cfg(windows)]
+pub mod app;
+pub mod args;
+pub mod latency;
+pub mod launcher;
+pub mod logging;
+pub mod perf_report;
+pub mod process_watcher;
 pub mod remapper;
+#[cfg(windows)]
+pub mod render_loop;
+pub mod widget_server;

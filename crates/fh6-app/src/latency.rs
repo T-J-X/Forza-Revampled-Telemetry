@@ -1,0 +1,150 @@
+//! Frame-time and latency statistics with no allocation after startup.
+use std::time::Duration;
+
+/// How many recent samples each series keeps (about 2 minutes at 60 Hz).
+pub const SAMPLE_CAPACITY: usize = 8192;
+
+/// A ring of the most recent samples, in milliseconds.
+#[derive(Debug, Clone)]
+pub struct SampleRing {
+    samples: Box<[f32]>,
+    len: usize,
+    next: usize,
+    total: u64,
+}
+
+impl Default for SampleRing {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Percentiles of one series.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Percentiles {
+    /// Samples currently held.
+    pub count: usize,
+    /// Samples ever recorded.
+    pub total: u64,
+    /// Median, ms.
+    pub p50: f32,
+    /// 99th percentile, ms.
+    pub p99: f32,
+    /// Maximum, ms.
+    pub max: f32,
+}
+
+impl SampleRing {
+    /// An empty ring of [`SAMPLE_CAPACITY`] (allocated once here).
+    pub fn new() -> Self {
+        Self {
+            samples: vec![0.0; SAMPLE_CAPACITY].into_boxed_slice(),
+            len: 0,
+            next: 0,
+            total: 0,
+        }
+    }
+
+    /// Records one sample.
+    pub fn record(&mut self, value: Duration) {
+        self.samples[self.next] = value.as_secs_f32() * 1000.0;
+        self.next = (self.next + 1) % self.samples.len();
+        self.len = (self.len + 1).min(self.samples.len());
+        self.total += 1;
+    }
+
+    /// Forgets every sample.
+    pub fn clear(&mut self) {
+        self.len = 0;
+        self.next = 0;
+        self.total = 0;
+    }
+
+    /// Percentiles over the held samples. `scratch` must have [`SAMPLE_CAPACITY`] capacity
+    /// so no allocation happens.
+    pub fn percentiles(&self, scratch: &mut Vec<f32>) -> Percentiles {
+        if self.len == 0 {
+            return Percentiles::default();
+        }
+        scratch.clear();
+        scratch.extend_from_slice(&self.samples[..self.len]);
+        let rank = |p: f32| (((self.len - 1) as f32) * p).round() as usize;
+        let pick = |s: &mut Vec<f32>, k: usize| *s.select_nth_unstable_by(k, f32::total_cmp).1;
+        let p50 = pick(scratch, rank(0.50));
+        let p99 = pick(scratch, rank(0.99));
+        let max = pick(scratch, self.len - 1);
+        Percentiles {
+            count: self.len,
+            total: self.total,
+            p50,
+            p99,
+            max,
+        }
+    }
+}
+
+/// Every series the render loop measures.
+#[derive(Debug, Clone, Default)]
+pub struct FrameStats {
+    /// Packet receive to the return of `present`, for frames that showed a new packet.
+    pub receive_to_present: SampleRing,
+    /// Packet receive to the first vblank after `present` (estimated on-screen time).
+    pub receive_to_vblank: SampleRing,
+    /// CPU time per presented frame (build + upload + record + submit + present).
+    pub cpu_frame: SampleRing,
+    /// Time blocked on the swapchain's frame-latency wait.
+    pub acquire_wait: SampleRing,
+}
+
+impl FrameStats {
+    /// Clears every series (after warm-up).
+    pub fn clear(&mut self) {
+        self.receive_to_present.clear();
+        self.receive_to_vblank.clear();
+        self.cpu_frame.clear();
+        self.acquire_wait.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percentiles_of_a_ramp() {
+        let mut ring = SampleRing::new();
+        for ms in 1..=100u64 {
+            ring.record(Duration::from_millis(ms));
+        }
+        let mut scratch = Vec::with_capacity(SAMPLE_CAPACITY);
+        let p = ring.percentiles(&mut scratch);
+        assert_eq!(p.count, 100);
+        assert!((p.p50 - 51.0).abs() < 0.01, "{p:?}");
+        assert!((p.p99 - 99.0).abs() < 0.01, "{p:?}");
+        assert!((p.max - 100.0).abs() < 0.01, "{p:?}");
+    }
+
+    #[test]
+    fn ring_keeps_only_recent_samples_without_growing() {
+        let mut ring = SampleRing::new();
+        let mut scratch = Vec::with_capacity(SAMPLE_CAPACITY);
+        let cap = scratch.capacity();
+        for _ in 0..SAMPLE_CAPACITY {
+            ring.record(Duration::from_millis(100));
+        }
+        for _ in 0..SAMPLE_CAPACITY {
+            ring.record(Duration::from_millis(1));
+        }
+        let p = ring.percentiles(&mut scratch);
+        assert_eq!(p.count, SAMPLE_CAPACITY);
+        assert_eq!(p.total, 2 * SAMPLE_CAPACITY as u64);
+        assert!((p.max - 1.0).abs() < 0.01, "old samples were overwritten");
+        assert_eq!(scratch.capacity(), cap, "scratch never reallocates");
+    }
+
+    #[test]
+    fn empty_ring_is_zero() {
+        let mut scratch = Vec::new();
+        assert_eq!(SampleRing::new().percentiles(&mut scratch), Percentiles::default());
+    }
+}

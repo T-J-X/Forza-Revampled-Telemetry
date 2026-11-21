@@ -10,4 +10,3 @@ name = "mock-udp"
 path = "src/main.rs"
 
 [dependencies]
-fh6-core = { path = "../../crates/fh6-core" }

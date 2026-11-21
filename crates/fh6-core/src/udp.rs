@@ -107,7 +107,21 @@ impl std::fmt::Debug for TelemetryReader {
     }
 }
 
+impl Default for TelemetryReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TelemetryReader {
+    /// A reader holding the empty frame. Hand it to [`TelemetryEngine::with_reader`] so a
+    /// restarted engine (new ports) keeps publishing where existing readers look.
+    pub fn new() -> Self {
+        Self {
+            latest: Arc::new(ArcSwap::from_pointee(TelemetryFrame::empty())),
+        }
+    }
+
     /// The newest frame. One atomic increment; no lock, no allocation.
     pub fn latest(&self) -> Arc<TelemetryFrame> {
         self.latest.load_full()
@@ -184,11 +198,14 @@ impl std::fmt::Debug for TelemetryEngine {
 impl TelemetryEngine {
     /// An engine for the given ports. Nothing is bound until [`TelemetryEngine::start`].
     pub fn new(ports: TelemetryPorts) -> Self {
+        Self::with_reader(ports, TelemetryReader::new())
+    }
+
+    /// An engine that publishes into an existing reader.
+    pub fn with_reader(ports: TelemetryPorts, reader: TelemetryReader) -> Self {
         Self {
             ports,
-            reader: TelemetryReader {
-                latest: Arc::new(ArcSwap::from_pointee(TelemetryFrame::empty())),
-            },
+            reader,
             notify: None,
             running: Arc::new(AtomicBool::new(false)),
             threads: Vec::new(),
@@ -271,6 +288,11 @@ impl TelemetryEngine {
     /// The ports that were actually bound.
     pub fn bound_ports(&self) -> &[u16] {
         &self.bound
+    }
+
+    /// The ports this engine was configured with.
+    pub fn ports(&self) -> TelemetryPorts {
+        self.ports
     }
 
     /// Stops and joins the receive threads (each wakes within [`RECV_TIMEOUT`]).

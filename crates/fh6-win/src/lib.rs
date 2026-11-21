@@ -1,6 +1,8 @@
 //! fh6-win: the overlay window, monitor and focus tracking, the quit signal, and the game's
 //! camera file patcher. All Win32 `unsafe` lives here (and in fh6-input / fh6-gpu).
 
+#[cfg(windows)]
+pub mod app_window;
 pub mod camera_patcher;
 #[cfg(windows)]
 pub mod capture;
@@ -13,6 +15,8 @@ pub mod monitor;
 pub mod overlay;
 #[cfg(windows)]
 pub mod quit_signal;
+#[cfg(windows)]
+pub mod system;
 
 #[cfg(windows)]
 pub use foreground::{ForegroundReader, ForegroundWatcher};
