@@ -94,6 +94,16 @@ pub struct FrameStats {
     pub cpu_frame: SampleRing,
     /// Time blocked on the swapchain's frame-latency wait.
     pub acquire_wait: SampleRing,
+    /// Building the quad batch.
+    pub build: SampleRing,
+    /// Uploading, recording and submitting.
+    pub encode_submit: SampleRing,
+    /// The `present` call.
+    pub present: SampleRing,
+    /// New packets presented before the first vblank after they arrived.
+    pub vsync_hits: u64,
+    /// New packets checked for a vsync hit (DWM timing available).
+    pub vsync_checked: u64,
 }
 
 impl FrameStats {
@@ -103,7 +113,19 @@ impl FrameStats {
         self.receive_to_vblank.clear();
         self.cpu_frame.clear();
         self.acquire_wait.clear();
+        self.build.clear();
+        self.encode_submit.clear();
+        self.present.clear();
+        self.vsync_hits = 0;
+        self.vsync_checked = 0;
     }
+}
+
+/// True when a packet received `to_present` before `present` returned is shown at the first
+/// vblank after it arrived: it arrived after the last vblank (which was `period - until_next`
+/// before present).
+pub fn caught_next_vsync(to_present: Duration, until_next: Duration, period: Duration) -> bool {
+    to_present < period.saturating_sub(until_next)
 }
 
 #[cfg(test)]
@@ -140,6 +162,15 @@ mod tests {
         assert_eq!(p.total, 2 * SAMPLE_CAPACITY as u64);
         assert!((p.max - 1.0).abs() < 0.01, "old samples were overwritten");
         assert_eq!(scratch.capacity(), cap, "scratch never reallocates");
+    }
+
+    #[test]
+    fn vsync_hit_rule() {
+        let period = Duration::from_micros(8_333);
+        // Present 2 ms before the next vblank: the last vblank was 6.3 ms ago.
+        let until_next = Duration::from_millis(2);
+        assert!(caught_next_vsync(Duration::from_millis(1), until_next, period));
+        assert!(!caught_next_vsync(Duration::from_millis(7), until_next, period));
     }
 
     #[test]

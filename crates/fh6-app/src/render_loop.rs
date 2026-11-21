@@ -1,6 +1,6 @@
 //! The render thread: wakes on every packet (or each vsync while fading), draws the latest
 //! packet only, and presents. No queue, no lock, no readback on this path.
-use crate::latency::{FrameStats, Percentiles, SAMPLE_CAPACITY};
+use crate::latency::{caught_next_vsync, FrameStats, Percentiles, SAMPLE_CAPACITY};
 use fh6_core::telemetry::FH6TelemetryData;
 use fh6_core::{AppConfig, ConfigHandle, TelemetryReader, VisibilityController, VisibilityInputs};
 use fh6_gpu::test_cluster::{self, StatLine, TestClusterInput};
@@ -129,6 +129,16 @@ pub struct RenderSummary {
     pub cpu_frame: Percentiles,
     /// Blocked on the swapchain latency wait.
     pub acquire_wait: Percentiles,
+    /// Building the quad batch.
+    pub build: Percentiles,
+    /// Upload, record, submit.
+    pub encode_submit: Percentiles,
+    /// The `present` call.
+    pub present: Percentiles,
+    /// New packets shown at the first vblank after arrival.
+    pub vsync_hits: u64,
+    /// New packets checked for that.
+    pub vsync_checked: u64,
     /// Display refresh interval reported by DWM.
     pub refresh: Duration,
 }
@@ -357,6 +367,9 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 lp.frames += 1;
                 lp.stats.cpu_frame.record(built + timings.cpu());
                 lp.stats.acquire_wait.record(timings.acquire_wait);
+                lp.stats.build.record(built);
+                lp.stats.encode_submit.record(timings.encode_submit);
+                lp.stats.present.record(timings.present);
                 if new_packet {
                     lp.packets += 1;
                     if let Some(received) = frame.received_at {
@@ -364,10 +377,14 @@ fn run(setup: RenderSetup) -> RenderSummary {
                         lp.stats.receive_to_present.record(to_present);
                         if let Some(timing) = fh6_win::system::composition_timing() {
                             lp.stats.receive_to_vblank.record(to_present + timing.until_next_vblank);
+                            lp.stats.vsync_checked += 1;
+                            if caught_next_vsync(to_present, timing.until_next_vblank, timing.refresh_period) {
+                                lp.stats.vsync_hits += 1;
+                            }
                         }
                     }
                 }
-                if options.stats && lp.frames % 30 == 0 {
+                if options.stats && lp.frames.is_multiple_of(30) {
                     refresh_stat_lines(&mut lp);
                 }
             }
@@ -388,6 +405,11 @@ fn run(setup: RenderSetup) -> RenderSummary {
         receive_to_vblank: lp.stats.receive_to_vblank.percentiles(&mut lp.scratch),
         cpu_frame: lp.stats.cpu_frame.percentiles(&mut lp.scratch),
         acquire_wait: lp.stats.acquire_wait.percentiles(&mut lp.scratch),
+        build: lp.stats.build.percentiles(&mut lp.scratch),
+        encode_submit: lp.stats.encode_submit.percentiles(&mut lp.scratch),
+        present: lp.stats.present.percentiles(&mut lp.scratch),
+        vsync_hits: lp.stats.vsync_hits,
+        vsync_checked: lp.stats.vsync_checked,
         refresh,
     };
     tracing::info!(frames = summary.frames, packets = summary.packets, "render loop stopped");

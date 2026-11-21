@@ -178,17 +178,20 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         "FH6 WheelDash running"
     );
     let code = app_window.run();
+    tracing::info!(code, "message loop ended; shutting down");
 
     // Shutdown order: render thread (drops the surface and its window handle) before the
     // window; the window before the hook and the shared overlay.
     control.stop();
     render_thread.unpark();
     let summary = render_join.join().ok();
+    tracing::info!("render thread joined");
     quit_listener.stop();
     drop(app_window);
     drop(foreground);
     drop(poller);
     drop(overlay);
+    tracing::info!("windows closed");
     if let (Some(seconds), Some(summary)) = (args.bench_seconds, summary.as_ref()) {
         write_bench(&args.bench_out, seconds, summary, &args);
     }

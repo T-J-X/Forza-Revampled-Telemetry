@@ -14,9 +14,9 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW, SetLayeredWindowAttributes, SetWindowPos,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, SetWindowPos,
     ShowWindow, HTTRANSPARENT, HWND_TOPMOST, LWA_ALPHA, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SW_SHOWNOACTIVATE, WM_MOUSEACTIVATE, WM_NCHITTEST, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    SW_SHOWNOACTIVATE, WM_CLOSE, WM_MOUSEACTIVATE, WM_NCHITTEST, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
@@ -27,6 +27,14 @@ unsafe extern "system" fn overlay_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, 
         // Belt and braces with WS_EX_TRANSPARENT: never claim a hit test.
         WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        // Only the app may destroy this window (after the GPU surface is gone). A WM_CLOSE from
+        // outside (taskkill) becomes a clean app quit instead of destroying it under a live
+        // swapchain: WM_QUIT ends the message loop and the normal shutdown order runs.
+        WM_CLOSE => {
+            // SAFETY: posts WM_QUIT to this (the window's own) thread's queue.
+            unsafe { PostQuitMessage(0) };
+            LRESULT(0)
+        }
         // SAFETY: forwarding the unmodified message to the default procedure.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }

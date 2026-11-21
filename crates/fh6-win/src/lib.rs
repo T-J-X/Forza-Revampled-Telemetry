@@ -16,6 +16,8 @@ pub mod overlay;
 #[cfg(windows)]
 pub mod quit_signal;
 #[cfg(windows)]
+pub mod stand_in;
+#[cfg(windows)]
 pub mod system;
 
 #[cfg(windows)]

@@ -14,6 +14,7 @@ members = [
     "tools/parity-dump",
     "tools/bench-render",
     "tools/screen-capture",
+    "tools/stand-in-game",
 ]
 
 [workspace.package]

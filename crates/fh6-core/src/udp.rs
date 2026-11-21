@@ -229,7 +229,7 @@ impl TelemetryEngine {
         if self.running.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        let primary = bind(self.ports.primary).map_err(|source| {
+        let primary = bind(self.ports.primary, self.ports.all_interfaces).map_err(|source| {
             self.running.store(false, Ordering::SeqCst);
             UdpError::Bind {
                 port: self.ports.primary,
@@ -238,7 +238,7 @@ impl TelemetryEngine {
         })?;
         let mut sockets = vec![(self.ports.primary, primary)];
         if let Some(port) = self.ports.fallback {
-            match bind(port) {
+            match bind(port, self.ports.all_interfaces) {
                 Ok(sock) => sockets.push((port, sock)),
                 Err(err) => tracing::warn!(port, error = %err, "fallback telemetry port not bound"),
             }
@@ -310,8 +310,10 @@ impl Drop for TelemetryEngine {
     }
 }
 
-fn bind(port: u16) -> io::Result<UdpSocket> {
-    let sock = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port))?;
+fn bind(port: u16, all_interfaces: bool) -> io::Result<UdpSocket> {
+    // Loopback by default: Forza's Data Out targets 127.0.0.1 and loopback needs no firewall rule.
+    let ip = if all_interfaces { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
+    let sock = UdpSocket::bind(SocketAddrV4::new(ip, port))?;
     sock.set_read_timeout(Some(RECV_TIMEOUT))?;
     Ok(sock)
 }
@@ -439,6 +441,7 @@ mod tests {
             primary: port,
             fallback: None,
             forward: None,
+            all_interfaces: false,
         })
         .with_notify(notify);
         engine.start().expect("engine starts");

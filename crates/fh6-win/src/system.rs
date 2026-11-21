@@ -88,7 +88,7 @@ pub fn running_process_names() -> Vec<String> {
 /// True if a process with this executable name (case-insensitive) is running.
 pub fn is_process_running(exe_name: &str) -> bool {
     let wanted = exe_name.to_ascii_lowercase();
-    running_process_names().iter().any(|n| *n == wanted)
+    running_process_names().contains(&wanted)
 }
 
 /// Opens a file, folder or URL with its default handler.

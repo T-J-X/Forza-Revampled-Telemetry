@@ -126,6 +126,9 @@ pub struct AppConfig {
     pub udp_port: i32,
     pub fallback_port: i32,
     pub forward_port: i32,
+    /// Listen for telemetry on all network interfaces (Forza running on another PC). Off by
+    /// default: loopback needs no firewall rule.
+    pub udp_listen_all_interfaces: bool,
 
     // Brand & theme
     pub color_mode: String,
@@ -241,6 +244,7 @@ impl Default for AppConfig {
             udp_port: i32::from(DEFAULT_UDP_PORT),
             fallback_port: i32::from(DEFAULT_FALLBACK_PORT),
             forward_port: i32::from(DEFAULT_FORWARD_PORT),
+            udp_listen_all_interfaces: false,
             color_mode: "AutoBrand".to_string(),
             custom_brand_key: "DEFAULT".to_string(),
             primary_hex: "#00D2FF".to_string(),
@@ -293,6 +297,8 @@ pub struct TelemetryPorts {
     pub fallback: Option<u16>,
     /// Where each received packet is re-sent on 127.0.0.1, if enabled and not a listening port.
     pub forward: Option<u16>,
+    /// Listen on every interface (Forza on another PC) instead of loopback only.
+    pub all_interfaces: bool,
 }
 
 impl AppConfig {
@@ -314,6 +320,7 @@ impl AppConfig {
             primary,
             fallback,
             forward,
+            all_interfaces: self.udp_listen_all_interfaces,
         }
     }
 
@@ -618,7 +625,8 @@ mod tests {
             TelemetryPorts {
                 primary: 8000,
                 fallback: None,
-                forward: None
+                forward: None,
+                all_interfaces: false
             }
         );
         let ports = AppConfig::default().telemetry_ports();

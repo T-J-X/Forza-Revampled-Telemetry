@@ -194,8 +194,8 @@ mod tests {
     #[test]
     fn stack_str_formats_without_heap() {
         let mut s = StackStr::<16>::new();
-        write!(s, "{:5.2}", 3.14159).expect("fits");
-        assert_eq!(s.as_str(), " 3.14");
+        write!(s, "{:5.2}", 1.23456).expect("fits");
+        assert_eq!(s.as_str(), " 1.23");
         let mut tiny = StackStr::<2>::new();
         assert!(write!(tiny, "123").is_err(), "overflow is an error, not a panic");
     }
