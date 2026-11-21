@@ -57,7 +57,7 @@ program/             this build program: roadmap, per-phase MASTER_PROMPT / AGEN
 - Display: LG C1 55" 4K OLED at 3840x2160.
 - **Blender 5.3:** `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe`. Run headless with `blender.exe -b -P script.py`.
 - **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. It has no models until Phase 6 installs them.
-- **Figma:** the Figma MCP tools (`use_figma`, `create_new_file`, `get_screenshot`, …). The master file key is recorded in `docs/design/FIGMA.md` from Phase 3.
+- **Figma:** the **Figma desktop app is open** on this machine, and the Figma MCP tools (`use_figma`, `create_new_file`, `get_screenshot`, …) are connected. Load `figma:figma-use` before the first `use_figma` call. Use real Figma; HTML boards are only a fallback. The master file key is recorded in `docs/design/FIGMA.md` from Phase 3.
 - **context7 MCP** for crate docs; the **built-in browser** for viewing `mockups/index.html` and HTML boards.
 
 ## 5. How a chat works

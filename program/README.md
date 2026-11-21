@@ -8,19 +8,19 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 
 ## Roadmap
 
-| Phase | Name | Depends on | Runs alongside | Status |
-|---|---|---|---|---|
-| 1 | Clean Rust repo | none | none | ✅ done |
-| 2 | Program kit (this folder) | 1 | none | ✅ done |
-| 3 | Design system & art direction | 2 | 4 | ☐ |
-| 4 | Engine: a working exe | 2 | 3 | ☐ |
-| 5 | GPU render kit (wgpu) | 4 | 3, 6 | ☐ |
-| 6 | Assets, logos & fonts | 3 | 5 | ☐ |
-| 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | ☐ |
-| 8 | Cockpit fit: dash blocker, camera, seat, FOV | 4, 5 | 7, 9 | ☐ |
-| 9 | Liquid Glass OSD | 5, 3 | 7, 8 | ☐ |
-| 10 | Configurator (`index.html`) & release | 7 (pattern-setters at least), 8, 9 | the rest of 7 | ☐ |
-| 11 | Showcase site on Vercel (optional) | 10 | none | ☐ |
+| Phase | Name | Depends on | Runs alongside | Effort | Status |
+|---|---|---|---|---|---|
+| 1 | Clean Rust repo | none | none | n/a | ✅ done |
+| 2 | Program kit (this folder) | 1 | none | n/a | ✅ done |
+| 3 | Design system & art direction | 2 | 4 | xhigh | ◐ running |
+| 4 | Engine: a working exe | 2 | 3 | xhigh | ◐ running |
+| 5 | GPU render kit (wgpu) | 4 | 3, 6 | xhigh | ☐ |
+| 6 | Assets, logos & fonts | 3 | 5 | high | ☐ |
+| 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | setup high; pattern-setters (★) xhigh; other clusters high | ☐ |
+| 8 | Cockpit fit: dash blocker, camera, seat, FOV | 4, 5 | 7, 9 | high | ☐ |
+| 9 | Liquid Glass OSD | 5, 3 | 7, 8 | high | ☐ |
+| 10 | Configurator (`index.html`) & release | 7 (pattern-setters at least), 8, 9 | the rest of 7 | high | ☐ |
+| 11 | Showcase site on Vercel (optional) | 10 | none | medium | ☐ |
 
 ```
 2 ─┬─> 3 ──────────┬─> 6 ─┐
@@ -59,3 +59,6 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 - **Visibility:** hidden within 1 frame when `IsRaceOn == 0` (menus, pause) or when Forza isn't the foreground window.
 - **OLED:** off pixels are `#000000` (transparent in the overlay). Never fill the whole screen.
 - **Fonts:** a motorsport type default; users can add their own fonts.
+
+## Reasoning effort (Opus)
+The conductor sets each chat's effort when it starts it (see the roadmap's Effort column). The rule: **xhigh** where a wrong call is expensive or the work sets the pattern for everything after it (design language, GPU engine, render kit, pattern-setter clusters); **high** for substantial work that follows an established pattern; **medium** for mostly mechanical or low-risk work (showcase site, simple fix-up rounds). A chat that is clearly struggling at its level gets raised one step on its retry round.
