@@ -5,7 +5,11 @@
 //! make every mouse event fall through to the game, and `WS_EX_NOACTIVATE` keeps focus there.
 use crate::monitor::MonitorRect;
 use crate::WinError;
-use std::sync::OnceLock;
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle,
+};
+use std::num::NonZeroIsize;
+use std::sync::{Arc, OnceLock};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -51,11 +55,42 @@ fn register_class() -> Result<(), WinError> {
     }
 }
 
+/// Keeps the window alive for surfaces: see [`OverlayHandle`].
+#[derive(Debug)]
+struct HandleToken {
+    hwnd: NonZeroIsize,
+}
+
+/// A `Send + Sync` handle to the overlay window, for creating the GPU surface on the render
+/// thread. While any handle exists, dropping the [`OverlayWindow`] leaves the `HWND` alive
+/// (it is reclaimed at process exit) instead of destroying it, so a surface can never outlive
+/// its window. Drop every handle (join the render thread) before dropping the window.
+#[derive(Debug, Clone)]
+pub struct OverlayHandle {
+    token: Arc<HandleToken>,
+}
+
+impl HasWindowHandle for OverlayHandle {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        let raw = RawWindowHandle::Win32(Win32WindowHandle::new(self.token.hwnd));
+        // SAFETY: the HWND is a live window: OverlayWindow never destroys it while this
+        // handle (a clone of its token) exists, and the borrow is tied to `&self`.
+        Ok(unsafe { WindowHandle::borrow_raw(raw) })
+    }
+}
+
+impl HasDisplayHandle for OverlayHandle {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        Ok(DisplayHandle::windows())
+    }
+}
+
 /// The overlay window. Owned by the thread that created it (it runs that thread's message
 /// loop); it is not `Send`.
 #[derive(Debug)]
 pub struct OverlayWindow {
     hwnd: HWND,
+    token: Arc<HandleToken>,
 }
 
 impl OverlayWindow {
@@ -88,12 +123,18 @@ impl OverlayWindow {
                 height,
                 None,
                 None,
-                instance,
+                Some(instance.into()),
                 None,
             )
         }
         .map_err(|e| WinError::call("CreateWindowExW", e))?;
-        let window = Self { hwnd };
+        let Some(raw) = NonZeroIsize::new(hwnd.0 as isize) else {
+            return Err(WinError::last("CreateWindowExW"));
+        };
+        let window = Self {
+            hwnd,
+            token: Arc::new(HandleToken { hwnd: raw }),
+        };
         // A layered window is invisible until its attributes are set; 255 = fully opaque
         // layer, with per-pixel alpha coming from the composition swapchain.
         // SAFETY: `hwnd` was just created on this thread.
@@ -111,6 +152,13 @@ impl OverlayWindow {
         self.hwnd.0 as isize
     }
 
+    /// A `Send + Sync` handle for creating the GPU surface. See [`OverlayHandle`].
+    pub fn surface_handle(&self) -> OverlayHandle {
+        OverlayHandle {
+            token: Arc::clone(&self.token),
+        }
+    }
+
     /// Moves and resizes the window to `rect` (another monitor, a resolution change).
     ///
     /// # Errors
@@ -120,7 +168,7 @@ impl OverlayWindow {
         unsafe {
             SetWindowPos(
                 self.hwnd,
-                HWND_TOPMOST,
+                Some(HWND_TOPMOST),
                 rect.x,
                 rect.y,
                 i32::try_from(rect.width).unwrap_or(i32::MAX),
@@ -135,15 +183,21 @@ impl OverlayWindow {
     pub fn reassert_topmost(&self) {
         // SAFETY: valid window owned by this thread; position and size are unchanged.
         unsafe {
-            let _ = SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            let _ = SetWindowPos(self.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
     }
 }
 
 impl Drop for OverlayWindow {
     fn drop(&mut self) {
+        if Arc::strong_count(&self.token) > 1 {
+            // A surface may still present to this HWND; leaving it alive until process exit
+            // is safe, destroying it is not.
+            tracing::warn!("overlay window dropped while a surface handle is alive; not destroying it");
+            return;
+        }
         // SAFETY: the window was created by this object on this thread (OverlayWindow is
-        // not Send) and is destroyed exactly once.
+        // not Send), no surface handle remains, and it is destroyed exactly once.
         unsafe {
             let _ = DestroyWindow(self.hwnd);
         }

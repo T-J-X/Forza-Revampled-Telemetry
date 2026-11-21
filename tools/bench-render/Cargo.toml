@@ -1,9 +1,10 @@
-[workspace]
-
 [package]
 name = "bench-render"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Renders the GPU test cluster offscreen at 3840x2160 and reports CPU and GPU frame times"
 
 [dependencies]
-fh6-win = { path = "../../crates/fh6-win" }
+fh6-gpu = { path = "../../crates/fh6-gpu" }

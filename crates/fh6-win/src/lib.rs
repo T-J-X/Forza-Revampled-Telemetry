@@ -2,6 +2,8 @@
 //! camera file patcher. All Win32 `unsafe` lives here (and in fh6-input / fh6-gpu).
 
 pub mod camera_patcher;
+#[cfg(windows)]
+pub mod capture;
 pub mod car_brands;
 #[cfg(windows)]
 pub mod foreground;
@@ -17,7 +19,7 @@ pub use foreground::{ForegroundReader, ForegroundWatcher};
 #[cfg(windows)]
 pub use monitor::MonitorRect;
 #[cfg(windows)]
-pub use overlay::OverlayWindow;
+pub use overlay::{OverlayHandle, OverlayWindow};
 #[cfg(windows)]
 pub use quit_signal::QuitSignal;
 
@@ -42,7 +44,7 @@ impl WinError {
     /// Captures `GetLastError` after a call that signals failure by its return value.
     #[cfg(windows)]
     pub(crate) fn last(call: &'static str) -> Self {
-        Self::call(call, windows::core::Error::from_win32())
+        Self::call(call, windows::core::Error::from_thread())
     }
 
     /// The Win32 function that failed.

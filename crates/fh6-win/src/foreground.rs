@@ -8,7 +8,7 @@ use crate::WinError;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use windows::core::PWSTR;
-use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND};
+use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
@@ -167,7 +167,7 @@ impl ForegroundWatcher {
             SetWinEventHook(
                 EVENT_SYSTEM_FOREGROUND,
                 EVENT_SYSTEM_FOREGROUND,
-                HMODULE::default(),
+                None,
                 Some(on_foreground_event),
                 0,
                 0,
