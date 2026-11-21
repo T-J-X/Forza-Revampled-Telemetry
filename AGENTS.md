@@ -19,16 +19,19 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `crates/fh6-render` | `ClusterRenderer` trait, registry and dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
 | `crates/fh6-clusters` | The 29 cluster implementations, `draw_ext` / `draw_helpers` | fh6-core, fh6-render |
 | `crates/fh6-osd` | Unified OSD (4 tabs, live dyno preview, config binding, hold toggle) | fh6-core, fh6-render, fh6-clusters |
-| `crates/fh6-input` | XInput dynamic loading, button tracker, hold-vs-tap state machine, Guide edge detection | fh6-core, `windows` |
-| `crates/fh6-win` | Layered window (`UpdateLayeredWindow`), `SendInput`, camera INI/XML patcher | fh6-core, `windows` |
-| `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: single instance, tray, process watcher, remapper, widget server | all crates |
+| `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle`, Guide edge detection | fh6-core, `windows` |
+| `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher, `car_brands.json` binding | fh6-core, `windows`, raw-window-handle |
+| `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, instanced quad + seven-segment pipeline, Phase 4 test cluster (ADR 0001) | wgpu, bytemuck |
+| `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, remapper, status server (no `unsafe`) | all crates |
 | `tools/preview-export` | Headless 4K PNG mockups → `mockups/` | core, render, clusters, osd |
-| `tools/mock-udp` | Synthetic telemetry sender (`--scenario`, `--port`, `--duration`, `--rate-hz`) | fh6-core |
+| `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
-| `tools/bench-render` | Layered-window blit benchmark (its own `[workspace]`) | fh6-win |
+| `tools/bench-render` | Offscreen GPU benchmark of the test cluster at 3840x2160 | fh6-gpu |
+| `tools/screen-capture` | DPI-aware desktop or region screenshot to PNG | fh6-win |
+| `tools/stand-in-game` | Solid, focusable full-screen window (`fh6-stand-in.exe`) for focus and screenshot checks | fh6-win |
 
 Rules for the layers:
-- Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`) never calls Win32. Only `fh6-win`, `fh6-input` and `fh6-app` touch the `windows` crate.
+- Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
 - Runtime data lives in `data/`: `config.json`, `car_profiles.json`, `fh6_car_ordinals.json`, `forza_ordinals_masterlist.json`, `figma_tokens.json`, `CameraPhysics.xml`, `CameraSettings.ini`.
 - Textures live in `assets/`. Reference photos live in `assets/reference/`. Specs live in `docs/specs/`.
 
@@ -46,10 +49,7 @@ cargo run -p fh6-app --bin FH6_WheelDash
 cargo run --release --manifest-path tools/bench-render/Cargo.toml
 ```
 
-Known red before any new work (see `docs/PROGRESS.md`):
-- `crates/fh6-app/tests/steam_launcher_tests.rs` does not compile.
-- `cargo clippy -D warnings` fails on one collapsible `if` in `fh6-core`.
-- Do not count either as a regression. Fix them when a task touches them.
+Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Check, test, clippy `-D warnings`, fmt and parity are all green.
 
 ---
 

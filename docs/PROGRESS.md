@@ -10,7 +10,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 1 Clean Rust repository | ✅ 2026-11-20 (public: T-J-X/Forza-Revampled-Telemetry) |
 | 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
 | 3 Design system & art direction | ◐ started 2026-11-20 |
-| 4 Engine: a working exe | ◐ started 2026-11-20 |
+| 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
 | 5–11 | ☐ waiting on dependencies |
 
 ## Runtime audit (2026-11-20): why v2 exists
@@ -33,6 +33,24 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after Phase 4, 2026-11-21)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings |
+| `cargo test --workspace` | ✅ 167 passed, 0 failed (the launcher test compiles again) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean (whole workspace formatted once in Phase 4) |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+
+What Phase 4 added:
+- `FH6_WheelDash.exe` is a real overlay. It runs on a wgpu 30 DX12 DirectComposition swapchain (premultiplied alpha, Mailbox, frame latency 1) on a click-through, topmost, no-activate window (ADR 0001).
+- A render thread wakes per packet and draws a GPU test cluster at the cockpit/bonnet anchor.
+- Hide rules: hidden within one frame on `IsRaceOn == 0`, a stale stream or focus loss.
+- Real XInput, tray, single instance, hot-reloaded config, `--auto-exit` and the Steam launcher.
+- Latency stats (`--stats`, `--bench-seconds`); numbers are in `docs/perf/engine.md`.
+- New crate `crates/fh6-gpu`.
+- New tools: `tools/screen-capture` and `tools/stand-in-game`. `tools/bench-render` is now a real GPU benchmark in the workspace.
+
 ## State of the code (baseline 2026-11-20)
 | Check | Result |
 |---|---|
@@ -53,10 +71,12 @@ What exists:
 - Single-instance guard, tray, process watcher and `/api/state` widget server.
 
 ## Known defects
-1. `crates/fh6-app/tests/steam_launcher_tests.rs` doesn't compile: `assert_eq!` compares `&&str` with `&str`.
-2. Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`.
+1. ~~`crates/fh6-app/tests/steam_launcher_tests.rs` doesn't compile~~ Fixed in Phase 4.
+2. ~~Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`~~ Fixed in Phase 4; the whole workspace is clippy-clean.
 3. `FH6TelemetryData` has no `torque` field, so `GlyphDotMatrix` derives torque from power and RPM. Decide whether to add the field (check the packet layout first) or drop torque from the design.
-4. 50 compiler warnings, mostly unused dependencies such as `windows`, `tracing`, `thiserror` and `byteorder`.
+4. ~~50 compiler warnings~~ Fixed in Phase 4.
+8. Nine `TODO(phase-7)` comments in `fh6-clusters` (and one in `fh6-osd/src/render.rs`) mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
+9. The OSD is not drawn yet. The hold toggle (View 400 ms) and the tray's "Open OSD" only switch the live-view bypass on and off (Phase 9). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
 5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.
 6. `fh6-render::pool::PaintPool` is a cache stub with no real paint objects.
 7. `assets/*.png` duplicates `assets/textures/4k/`. Pick one location when `AssetCache` is wired up.
@@ -120,3 +140,21 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-20 | Motorsport default font from an OFL pack; users can add their own fonts | TJX's request; the OFL licence is safe for a public repo |
 | 2026-11-20 | The repo is Rust only. Skill eval fixtures (C/Python/shell) and the TS hook plugin are untracked. Blender bpy lives inside the Rust tool `asset-forge` | TJX: "this is all rust", lightweight, 0 ms |
 | 2026-11-20 | Commits are authored by `TJX <TJX@Ngage.com>`, with no co-author trailer | TJX's instruction for the public repo |
+| 2026-11-21 | Phase 4: overlay presented with wgpu 30 on DX12 through a DirectComposition swapchain (`Dx12SwapchainKind::DxgiFromVisual`), premultiplied alpha, Mailbox, frame latency 1 | ADR 0001: the only transparent Windows route with no CPU copy |
+| 2026-11-21 | New dependency `wgpu` 30.0.2 (default features off; `dx12`, `wgsl`, `std`, `parking_lot`) | The GPU renderer for v2; pure Rust (no C build) |
+| 2026-11-21 | New dependency `bytemuck` 1.21 (`derive`) | Casts instance arrays to bytes for buffer uploads without `unsafe`; already in wgpu's tree |
+| 2026-11-21 | New dependency `raw-window-handle` 0.6 (fh6-win) | Hands the overlay HWND to wgpu through a lifetime-safe `OverlayHandle` |
+| 2026-11-21 | New dependency `tracing-subscriber` 0.3 (`fmt`, `env-filter`; fh6-app) | Logs to stderr or `--log <file>` with `RUST_LOG` filtering |
+| 2026-11-21 | `serde_json` gains `preserve_order` (pulls `indexmap`) via fh6-win | `bind_car_brand` rewrites `car_brands.json` without reordering its keys |
+| 2026-11-21 | Workspace moves from `windows` 0.58 to 0.62 | `wgpu-hal` 30 uses 0.62; with 0.58 in the workspace Cargo put `gpu-allocator` on 0.58 and wgpu failed to build |
+| 2026-11-21 | MSRV raised to 1.87 (`clippy.toml`, `workspace.package.rust-version`) | wgpu 30 requires it |
+| 2026-11-21 | `tools/bench-render` joins the workspace (its own `[workspace]` removed) and benchmarks the GPU path offscreen | One lockfile and target dir; the old tiny-skia stub measured nothing |
+| 2026-11-21 | New tools `tools/screen-capture` (DPI-aware GDI capture to PNG) and `tools/stand-in-game` (solid focusable window) | Repeatable manual checks and screenshots without capturing personal desktop content |
+| 2026-11-21 | Telemetry binds 127.0.0.1 by default; `UdpListenAllInterfaces: true` listens on every interface | Forza's Data Out targets 127.0.0.1; loopback needs no firewall rule |
+| 2026-11-21 | All Win32 `unsafe` lives in fh6-win (tray/app window, single instance, process list, shell, DWM timing moved out of fh6-app); fh6-app has no `unsafe` | Phase 4 AGENTS rule |
+| 2026-11-21 | XInput DLLs load with `LoadLibraryExW(LOAD_LIBRARY_SEARCH_SYSTEM32)` | Stricter than `LoadLibraryW`: a planted DLL in the working folder is never loaded |
+| 2026-11-21 | One hold-toggle implementation: `fh6_input::HoldToggle` (config mask/ms, A/B/X/Y stripped); the tracker's View+Menu 350 ms and the OSD's own timer were removed | Phase 4 requirement; one behaviour everywhere |
+| 2026-11-21 | Tray "Open configurator" opens `config.json` (hot-reloaded) until Phase 10 | An honest, working action now; the web configurator replaces it |
+| 2026-11-21 | Whole workspace run through `cargo fmt --all` once | `fmt --check` is a gate; the tree had drift from before v2 |
+| 2026-11-21 | Per-frame wgpu internals (`Queue::write_buffer` staging, `create_view`, the command encoder) allocate inside wgpu; our frame code allocates nothing | Accepted for Phase 4 (CPU p50 well under budget); Phase 5 moves to a persistent mapped staging ring (ADR 0001 action 6) |
+| 2026-11-21 | Visibility: `--demo`/`--bench-seconds` bypass every rule; the OSD live view lifts only the race-off and stale rules, never the foreground rule; `DemoMode` in config.json no longer bypasses anything | AGENTS directive 9 (never visible in menus or over other apps); review finding |
