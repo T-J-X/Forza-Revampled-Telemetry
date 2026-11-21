@@ -82,7 +82,8 @@ fn render_accretion_spiral(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32,
 }
 
 fn render_doppler_beaming(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, yaw_rate: f32, rpm_ratio: f32) {
-    let speed = sanitize(0.0, 0.0, 0.0);
+    // TODO(phase-7): meant to scale the Doppler blueshift/redshift from vehicle speed; it is a hardcoded 0 and never used.
+    let _speed = sanitize(0.0, 0.0, 0.0);
     // Approaching side blueshift #38BDF8, receding redshift #EF4444
     let r_blue = 56; let g_blue = 189; let b_blue = 248;
     let r_red = 239; let g_red = 68; let b_red = 68;

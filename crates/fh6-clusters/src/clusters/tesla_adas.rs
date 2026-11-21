@@ -77,6 +77,7 @@ fn render_stage_backdrop(pixmap: &mut PixmapMut, cx: f32, stage_cy: f32, scale: 
     fill_rect(pixmap, cx - stage_w * 0.5, stage_cy - stage_h * 0.5, stage_w, stage_h, rgba(6, 11, 22, 235));
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_adas_road_mesh(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -119,6 +120,7 @@ fn render_adas_road_mesh(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_dashed_lanes(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -163,6 +165,7 @@ fn render_dashed_lanes(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_carpet(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -203,6 +206,7 @@ fn render_carpet(
     stroke_polyline(pixmap, &right, 1.6 * scale, rgba(c_r, c_g, c_b, 255), false);
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_ego_vehicle(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -226,6 +230,7 @@ fn render_ego_vehicle(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_traffic_fleet(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -262,6 +267,7 @@ fn render_traffic_fleet(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 fn render_ultrasonic_radar_arcs(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -311,7 +317,7 @@ fn render_fsd_brackets(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32) {
 fn sanitize_all(data: &FH6TelemetryData) -> (f32, f32, f32, f32, f32) {
     let speed = sanitize_finite(data.speed_ms, 0.0, 0.0, 250.0);
     let kappa = sanitize_finite(data.yaw_curvature(), 0.0, -0.055, 0.055);
-    let beta = sanitize_finite(data.car_slip_angle_rad(), 0.0, -0.7854, 0.7854);
+    let beta = sanitize_finite(data.car_slip_angle_rad(), 0.0, -std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_4);
     let brake = sanitize_finite(data.brake_pct(), 0.0, 0.0, 1.0);
     let rpm = sanitize_finite(data.normalized_rpm(), 0.0, 0.0, 1.2);
     (speed, kappa, beta, brake, rpm)

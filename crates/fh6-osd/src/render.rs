@@ -5,12 +5,11 @@ use crate::model::{get_row_label, get_row_value, UnifiedOsdState, TAB_NAMES};
 use fh6_core::config::AppConfig;
 use fh6_core::telemetry::FH6TelemetryData;
 use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
-use fh6_clusters::clusters;
 
 #[derive(Debug)]
 pub(crate) struct DeckLayout {
-    pub stage_x: f32,
-    pub stage_w: f32,
+    pub _stage_x: f32,
+    pub _stage_w: f32,
     pub deck_x: f32,
     pub deck_w: f32,
     pub card_x: f32,
@@ -22,8 +21,9 @@ pub(crate) struct DeckLayout {
     pub pill_w: f32,
     pub pill_h: f32,
     pub watermark: Rect,
-    pub body_rows: Rect,
+    pub _body_rows: Rect,
     pub footer: Rect,
+    #[cfg_attr(not(test), expect(dead_code, reason = "OSD renderer rebuilt in Phase 9"))]
     pub gutter: Rect,
 }
 
@@ -31,7 +31,8 @@ pub(crate) fn deck_layout(canvas_w: u32, canvas_h: u32) -> DeckLayout {
     let w = canvas_w as f32;
     let h = canvas_h as f32;
     let base_w = 3840.0;
-    let base_h = 2160.0;
+    // TODO(phase-7): base_h was likely meant to make `s` height-aware (min of w/base_w and h/base_h) for non-16:9 canvases.
+    let _base_h = 2160.0;
     let s = (w / base_w).max(0.25);
     let deck_x = (0.60 * w).round();
     let deck_w = (w - deck_x).max(0.0);
@@ -56,8 +57,8 @@ pub(crate) fn deck_layout(canvas_w: u32, canvas_h: u32) -> DeckLayout {
     let gutter_h = body_h;
     let gutter = Rect::from_xywh((card_x + 16.0 * s).max(card_x), (card_y + header_h + 16.0 * s).max(card_y), gutter_w, gutter_h).unwrap_or_else(|| Rect::from_xywh(card_x, card_y, 0.0, 0.0).unwrap());
     DeckLayout {
-        stage_x: 0.0,
-        stage_w: 2304.0,
+        _stage_x: 0.0,
+        _stage_w: 2304.0,
         deck_x,
         deck_w,
         card_x,
@@ -69,7 +70,7 @@ pub(crate) fn deck_layout(canvas_w: u32, canvas_h: u32) -> DeckLayout {
         pill_w,
         pill_h,
         watermark,
-        body_rows,
+        _body_rows: body_rows,
         footer,
         gutter,
     }
@@ -201,10 +202,10 @@ impl OsdRenderer {
         let steps = h as u32;
         for i in 0..steps {
             let t = i as f32 / steps as f32;
-            let r = (top.red() as f32 * (1.0 - t) + bottom.red() as f32 * t) as u8;
-            let g = (top.green() as f32 * (1.0 - t) + bottom.green() as f32 * t) as u8;
-            let b = (top.blue() as f32 * (1.0 - t) + bottom.blue() as f32 * t) as u8;
-            let a = (top.alpha() as f32 * (1.0 - t) + bottom.alpha() as f32 * t) as u8;
+            let r = (top.red() * (1.0 - t) + bottom.red() * t) as u8;
+            let g = (top.green() * (1.0 - t) + bottom.green() * t) as u8;
+            let b = (top.blue() * (1.0 - t) + bottom.blue() * t) as u8;
+            let a = (top.alpha() * (1.0 - t) + bottom.alpha() * t) as u8;
             let mut p = Paint::default();
             p.set_color(Color::from_rgba8(r,g,b,a));
             if let Some(rect) = Rect::from_xywh(x, y + i as f32, w, 1.0) {
@@ -267,6 +268,7 @@ impl OsdRenderer {
         let text_color = if is_active { Color::from_rgba8(255,255,255,255) } else { Color::from_rgba8(175,192,214,210) };
         self.draw_simple_text(pixmap, x+16.0, y+14.0, name, text_color, 1.4);
     }
+    #[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
     fn render_row_item_liquid(&self, pixmap: &mut PixmapMut, x: f32, y: f32, w: f32, h: f32, label: &str, val: &str, is_sel: bool) {
         if is_sel {
             let mut bg = Paint::default();
@@ -309,6 +311,7 @@ impl OsdRenderer {
         }
     }
 
+    #[expect(dead_code, reason = "OSD renderer rebuilt in Phase 9")]
     fn render_tab_item(&self, pixmap: &mut PixmapMut, x: f32, y: f32, w: f32, h: f32, name: &str, is_active: bool) {
         let mut bg_paint = Paint::default();
         bg_paint.anti_alias = true;
@@ -350,6 +353,7 @@ impl OsdRenderer {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[expect(dead_code, reason = "OSD renderer rebuilt in Phase 9")]
     fn render_row_item(
         &self,
         pixmap: &mut PixmapMut,
@@ -425,6 +429,7 @@ impl OsdRenderer {
         crate::text::draw(pixmap, text, x, y, &style, crate::text::Align::Left);
     }
 
+    #[expect(dead_code, reason = "OSD renderer rebuilt in Phase 9")]
     fn draw_vector_char(&self, pixmap: &mut PixmapMut, x: f32, y: f32, ch: char, paint: &Paint, scale: f32) {
         let stroke = Stroke {
             width: (1.2 * scale).max(1.0),

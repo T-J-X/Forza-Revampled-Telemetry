@@ -40,7 +40,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     }
 }
 
-fn render_tach_dial(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, rpm: f32) {
+// TODO(phase-7): `_rpm` was meant to light the dial ticks or the sequential shift ring up to the current RPM.
+fn render_tach_dial(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, _rpm: f32) {
     let r = 140.0 * scale;
     // Major ticks 1000 RPM
     for i in 0..=9 {

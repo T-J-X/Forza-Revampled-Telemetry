@@ -138,7 +138,7 @@ fn render_active_aero_drs_and_downforce_vectors(pixmap: &mut PixmapMut, cx: f32,
     draw_text(pixmap, right_x - 40.0*scale, right_y, &format!("{:.0}HP", hp), Color::from_rgba8(56,189,248,255), scale*0.8);
     // Tire thermal pills
     let tires = [(-1.0,-1.0),(1.0,-1.0),(-1.0,1.0),(1.0,1.0)];
-    for (_i,(sx,sy)) in tires.iter().enumerate() {
+    for (sx,sy) in tires.iter() {
         let tx = right_x + sx * 30.0*scale;
         let ty = right_y + sy * 30.0*scale;
         let temp = (data.normalized_suspension_travel_fl + data.normalized_suspension_travel_fr + data.normalized_suspension_travel_rl + data.normalized_suspension_travel_rr)/4.0;

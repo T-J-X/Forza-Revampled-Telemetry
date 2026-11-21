@@ -20,7 +20,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     let cx = bounds.x() + bounds.width()*0.5;
     let cy = bounds.y() + bounds.height()*0.5;
     let scale = 1.0;
-    let rpm_ratio = sanitize(data.normalized_rpm(), 0.0, 1.2);
+    // TODO(phase-7): meant to drive an RPM or shift cue on the HMD (computed but never used).
+    let _rpm_ratio = sanitize(data.normalized_rpm(), 0.0, 1.2);
     let _power_watts = data.power_watts;
     let _pw = _power_watts;
     

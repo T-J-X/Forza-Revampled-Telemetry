@@ -181,8 +181,10 @@ pub fn stroke_round_rect(
         let mut paint = Paint::default();
         paint.set_color(color);
         paint.anti_alias = true;
-        let mut stroke = Stroke::default();
-        stroke.width = width;
+        let stroke = Stroke {
+            width,
+            ..Stroke::default()
+        };
         pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
     }
 }
@@ -198,6 +200,7 @@ pub fn stroke_circle(
     stroke_arc_deg(pixmap, cx, cy, r, r, 0.0, 360.0, width, color);
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn stroke_arc_deg(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -245,6 +248,7 @@ pub fn draw_ruby_jewel_bearing(pixmap: &mut PixmapMut, cx: f32, cy: f32, r: f32)
     fill_round_rect(pixmap, cx - r * 0.3, cy - r * 0.4, r * 0.35, r * 0.35, r * 0.17, Color::from_rgba8(255, 255, 255, 200));
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_gear_wheel(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -279,6 +283,7 @@ pub fn draw_gear_wheel(
     fill_round_rect(pixmap, cx - root_r * 0.4, cy - root_r * 0.4, root_r * 0.8, root_r * 0.8, root_r * 0.4, Color::from_rgba8(6, 8, 12, 255));
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_guilloche_ring(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -307,6 +312,7 @@ pub fn draw_guilloche_ring(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_tick_ring(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -348,6 +354,7 @@ pub fn draw_tick_ring(
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_tapered_needle(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -416,6 +423,7 @@ pub fn draw_tapered_needle(
     );
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_7seg_ghost_and_active(pixmap: &mut PixmapMut, x: f32, y: f32, w: f32, h: f32, text: &str, ghost_rgba: Color, active_rgba: Color, glow_rgba: Color) {
     // Ghost wireframe 888 behind digits
     let _ = ghost_rgba;
@@ -474,6 +482,7 @@ pub fn apply_crt_scanline_attenuation(pixmap: &mut PixmapMut, rect_x: f32, rect_
     }
 }
 
+#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
 pub fn draw_chevron_arrow(pixmap: &mut PixmapMut, cx: f32, cy: f32, w: f32, h: f32, dir_left: bool, thickness: f32, fill_rgba: Color, glow_rgba: Color) {
     let pts = if dir_left {
         vec![

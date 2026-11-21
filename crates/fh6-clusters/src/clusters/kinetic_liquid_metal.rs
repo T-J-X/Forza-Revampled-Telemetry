@@ -41,7 +41,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     }
 }
 
-fn render_liquid_metal_arc(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, rpm_ratio: f32, _theta: f32) {
+// TODO(phase-7): `_rpm_ratio` was meant to set the liquid-metal arc sweep (the arc is always a fixed 180 degrees).
+fn render_liquid_metal_arc(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, _rpm_ratio: f32, _theta: f32) {
     let radius = 120.0 * scale;
     let r = 200; let g = 200; let b = 220; let a = 180;
     let (pr, pg, pb, pa) = premultiply(r, g, b, a);
@@ -55,7 +56,8 @@ fn render_liquid_metal_arc(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32,
 }
 
 fn render_liquid_metal_slosh(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, theta_slosh: f32, rpm_ratio: f32) {
-    let level = 0.5 + 0.5 * rpm_ratio;
+    // TODO(phase-7): meant to set the slosh fluid fill height from RPM (y only uses theta_slosh and the ripple).
+    let _level = 0.5 + 0.5 * rpm_ratio;
     let omega = rpm_ratio * 0.08;
     let r = 220; let g = 220; let b = 240; let a = 200;
     let (pr, pg, pb, pa) = premultiply(r, g, b, a);

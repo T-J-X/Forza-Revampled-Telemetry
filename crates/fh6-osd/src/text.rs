@@ -23,7 +23,7 @@ struct FontFace {
     face: Face<'static>,
     glyph_cache: HashMap<u16, Option<tiny_skia::Path>>,
     units_per_em: f32,
-    is_variable: bool,
+    _is_variable: bool,
 }
 
 impl FontFace {
@@ -31,7 +31,7 @@ impl FontFace {
         let face = Face::parse(data, 0).expect("parse font");
         let units_per_em = face.units_per_em() as f32;
         let is_variable = face.is_variable();
-        Self { name, face, glyph_cache: HashMap::new(), units_per_em, is_variable }
+        Self { name, face, glyph_cache: HashMap::new(), units_per_em, _is_variable: is_variable }
     }
 
     fn scale_for_size(&self, size_px: f32) -> f32 {
@@ -308,7 +308,7 @@ mod tests {
                 draw(&mut pm, &ch.to_string(), 100.0, 200.0, &style, Align::Left);
             }
             // get xMin from font
-            let (face_idx, gid, scale, x_min) = {
+            let (_face_idx, _gid, scale, x_min) = {
                 let mut g = cache_lock().lock().unwrap();
                 let (face_idx, gid) = g.find_glyph(ch).expect("glyph");
                 let scale = g.faces[face_idx].scale_for_size(style.size_px);

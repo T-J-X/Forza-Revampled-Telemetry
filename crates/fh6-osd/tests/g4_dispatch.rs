@@ -5,8 +5,10 @@ use tiny_skia::{Pixmap, Rect};
 
 #[test]
 fn g4_dyno_dispatch_uses_selected_theme_and_telemetry() {
-    let mut config = AppConfig::default();
-    config.cockpit_hud_style_typed = ClusterTheme::BoschDdu;
+    let config = AppConfig {
+        cockpit_hud_style_typed: ClusterTheme::BoschDdu,
+        ..Default::default()
+    };
     let telemetry = FH6TelemetryData::default();
     let state = UnifiedOsdState::default();
 

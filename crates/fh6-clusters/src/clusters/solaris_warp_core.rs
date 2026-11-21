@@ -1,4 +1,4 @@
-use tiny_skia::{Color, PixmapMut, Rect, PathBuilder, Stroke, Transform};
+use tiny_skia::{Color, PixmapMut, Rect};
 use fh6_core::{AppConfig, FH6TelemetryData};
 use fh6_render::text::{draw_text, draw_glitch_text};
 use crate::draw_ext::*;
@@ -67,7 +67,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
             let b = (b1 as f32 + (b2 as f32 - b1 as f32) * u).round() as u8;
             (r, g, b)
         };
-        let a = (180 + (norm_rpm * 75.0) as u8).min(255);
+        // norm_rpm reaches 1.2, so saturate instead of overflowing u8 (a debug-build panic before).
+        let a = 180u8.saturating_add((norm_rpm * 75.0) as u8);
         let (rp, gp, bp, ap) = premultiply(r_c, g_c, b_c, a);
         let color = Color::from_rgba8(rp, gp, bp, ap);
         // Draw ellipse as stroked ring
@@ -81,7 +82,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
         let r_beam = 12.0 * scale * (1.0 + norm_rpm);
         let r_beam_r = r_beam;
         let r_beam_g = r_beam * 0.7;
-        let r_beam_b = r_beam * 0.7;
+        // TODO(phase-7): meant to drive a second beam ellipse radius (the beam ring only uses r_beam_r and r_beam_g).
+        let _r_beam_b = r_beam * 0.7;
         let r_beam_a = 200;
         let (rp, gp, bp, ap) = premultiply(6, 182, 212, r_beam_a);
         let beam_color = Color::from_rgba8(rp, gp, bp, ap);

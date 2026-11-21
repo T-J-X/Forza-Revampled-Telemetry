@@ -193,7 +193,7 @@ fn render_spatial_typography_and_widgets(pixmap: &mut PixmapMut, cx: f32, cy: f3
     for (i, (val, col)) in rings.iter().enumerate() {
         let r = 40.0 * scale + i as f32 * 12.0 * scale;
         let mut pb = PathBuilder::new();
-        let start = -1.5708;
+        let start = -std::f32::consts::FRAC_PI_2;
         let end = start + 2.0 * std::f32::consts::PI * val;
         let steps = 40;
         for j in 0..=steps {

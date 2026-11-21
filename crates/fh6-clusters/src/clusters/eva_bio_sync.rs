@@ -40,7 +40,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     }
 }
 
-fn render_magi_matrix(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, data: &FH6TelemetryData, rpm_ratio: f32) {
+// TODO(phase-7): `_data` and `_rpm_ratio` were meant to drive the MAGI node states (the hex nodes are static).
+fn render_magi_matrix(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, _data: &FH6TelemetryData, _rpm_ratio: f32) {
     let names = ["MELCHIOR", "BALTHASAR", "CASPER"];
     let r = 255; let g = 176; let b = 32; let a = 255;
     let (pr, pg, pb, pa) = premultiply(r, g, b, a);

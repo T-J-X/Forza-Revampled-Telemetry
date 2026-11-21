@@ -156,12 +156,11 @@ fn main() {
         ensure_dir(&theme_dir);
         ensure_dir(&thumb_theme_dir);
 
-        let cfg = {
-            let mut c = AppConfig::default();
-            c.current_camera_index = 3;
-            c.cockpit_hud_style_typed = theme;
-            c.custom_driver_name = "ØG『死』ŦJ乂".to_string();
-            c
+        let cfg = AppConfig {
+            current_camera_index: 3,
+            cockpit_hud_style_typed: theme,
+            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
+            ..Default::default()
         };
 
         for &(state_name, state_idx) in &state_defs {
@@ -193,12 +192,11 @@ fn main() {
 
     // Scrims
     {
-        let base_cfg = {
-            let mut c = AppConfig::default();
-            c.ambient_glow_enabled = true;
-            c.ambient_glow_intensity = 0.25;
-            c.ambient_cowl_feather = 0.40;
-            c
+        let base_cfg = AppConfig {
+            ambient_glow_enabled: true,
+            ambient_glow_intensity: 0.25,
+            ambient_cowl_feather: 0.40,
+            ..Default::default()
         };
 
         // 0%
@@ -257,11 +255,15 @@ fn main() {
 
     // Unified OSD
     {
-        let mut osd_cfg = AppConfig::default();
-        osd_cfg.custom_driver_name = "ØG『死』ŦJ乂".to_string();
-        let mut state = UnifiedOsdState::default();
-        state.is_open = true;
-        state.current_tab = 0;
+        let osd_cfg = AppConfig {
+            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
+            ..Default::default()
+        };
+        let state = UnifiedOsdState {
+            is_open: true,
+            current_tab: 0,
+            ..Default::default()
+        };
         let telem = dyno_telemetry(8.0);
         let pix = render_unified_osd_4k(&state, &osd_cfg, Some(&telem));
         save_png(&pix, &out_root.join("UnifiedOsd_4K.png"));
@@ -325,7 +327,7 @@ const themes = [
     for (i, theme) in all_themes.iter().enumerate() {
         let name = theme.to_string();
         html.push_str(&format!("\"{}\",", name));
-        if i % 5 == 4 { html.push_str("\n"); }
+        if i % 5 == 4 { html.push('\n'); }
     }
     html.push_str(r#"];
 const states = ["01_idle","02_mid_cruise","03_redline_strobe","04_drift_braking"];

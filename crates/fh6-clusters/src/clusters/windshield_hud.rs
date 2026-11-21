@@ -15,14 +15,14 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     bg.set_color(Color::from_rgba8(6, 8, 12, 255));
     pixmap.fill_rect(bounds, &bg, Transform::identity(), None);
 
-    let _trail = TRAIL_BUFFER.get_or_init(|| WorldMapTrailBuffer::new());
+    let _trail = TRAIL_BUFFER.get_or_init(WorldMapTrailBuffer::new);
 
     let norm_rpm = sanitize_finite(data.normalized_rpm(), 0.0, 0.0, 1.2);
     let speed_ms = sanitize_finite(data.speed_ms, 0.0, 0.0, 250.0);
     let brake_pct = sanitize_finite(data.brake_pct(), 0.0, 0.0, 1.0);
     let _v_safe = speed_ms.max(0.5);
     let kappa = sanitize_finite(data.yaw_curvature(), 0.0, -0.055, 0.055);
-    let beta = sanitize_finite(data.car_slip_angle_rad(), 0.0, -0.7854, 0.7854);
+    let beta = sanitize_finite(data.car_slip_angle_rad(), 0.0, -std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_4);
 
     // Collimated backdrop with RPM modulation
     let backdrop_alpha = (92.0 + norm_rpm * 60.0) as u8;

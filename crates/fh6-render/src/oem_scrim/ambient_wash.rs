@@ -217,7 +217,7 @@ mod tests {
         let a = pix.data()[idx + 3];
         let r = pix.data()[idx];
         
-        assert!(a >= 12 && a <= 35, "cavity alpha must be within 12..=35, got {}", a);
+        assert!((12..=35).contains(&a), "cavity alpha must be within 12..=35, got {}", a);
         assert!(r <= a, "premultiplied R channel ({}) must be <= alpha ({})", r, a);
     }
 

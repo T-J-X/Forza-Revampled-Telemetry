@@ -442,8 +442,7 @@ pub fn render_cluster(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
+    use fh6_core::ClusterTheme;
     use tiny_skia::Pixmap;
 
     fn make_pixmap() -> tiny_skia::Pixmap {

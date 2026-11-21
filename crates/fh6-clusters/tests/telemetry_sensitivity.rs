@@ -53,7 +53,8 @@ fn fnv1a_hash(bytes: &[u8]) -> u64 {
     h
 }
 
-fn base_telemetry() -> FH6TelemetryData {
+// TODO(phase-7): meant as the `..base_telemetry()` base for the regimes below, which leave engine_max_rpm at 0 (normalized_rpm then falls back to power_watts).
+fn _base_telemetry() -> FH6TelemetryData {
     FH6TelemetryData {
         engine_max_rpm: 9000.0,
         engine_idle_rpm: 850.0,

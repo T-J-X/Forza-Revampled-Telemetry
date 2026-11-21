@@ -67,7 +67,7 @@ pub fn dpad_typematic_steps(hold_ms: u64) -> i32 {
         return 1 + ((hold_ms - 280) / 65) as i32;
     }
     // After 900ms, switch to 25ms repeat
-    let steps_up_to_900 = 1 + ((900 - 280) / 65) as i32;
+    let steps_up_to_900: i32 = 1 + (900 - 280) / 65;
     let extra = (hold_ms - 900) / 25;
     steps_up_to_900 + extra as i32
 }
@@ -493,9 +493,11 @@ mod tests {
     #[test]
     fn test_adjust_values() {
         let mut state = UnifiedOsdState::new();
-        let mut config = AppConfig::default();
-        config.fov_degrees = 65;
-        config.oem_dash_opaque_pct = 50;
+        let mut config = AppConfig {
+            fov_degrees: 65,
+            oem_dash_opaque_pct: 50,
+            ..Default::default()
+        };
 
         // Tab 0, Row 0: FOV
         state.selected_row = 0;
@@ -522,10 +524,12 @@ mod tests {
 
     #[test]
     fn test_modal_rb_gate_and_bonnet_scrim_override() {
-        let mut cfg = AppConfig::default();
-        cfg.active_camera_view = fh6_core::config::CameraViewMode::Bonnet;
-        cfg.bonnet_hud_style_typed = fh6_core::theme::ClusterTheme::Gt7HoodPro;
-        cfg.oem_dash_opaque_pct = 100;
+        let cfg = AppConfig {
+            active_camera_view: fh6_core::config::CameraViewMode::Bonnet,
+            bonnet_hud_style_typed: fh6_core::theme::ClusterTheme::Gt7HoodPro,
+            oem_dash_opaque_pct: 100,
+            ..Default::default()
+        };
         let (theme, scrim) = cfg.effective_cluster_and_scrim();
         assert_eq!(theme, fh6_core::theme::ClusterTheme::Gt7HoodPro);
         assert_eq!(scrim, 0.0);

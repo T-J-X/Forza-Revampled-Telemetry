@@ -25,8 +25,8 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     let _power_watts = data.power_watts;
     let _pw = _power_watts;
     
-    let n = ((rpm / 1200.0).clamp(1.0, 6.0)) as f32;
-    let m = ((v_kmh / 40.0).clamp(1.0, 6.0)) as f32;
+    let n = (rpm / 1200.0).clamp(1.0, 6.0);
+    let m = (v_kmh / 40.0).clamp(1.0, 6.0);
     
     render_chladni_field(pixmap, cx, cy, scale, n, m);
     render_telemetry(pixmap, cx, cy, scale, data);
@@ -43,7 +43,7 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
 }
 
 fn render_chladni_field(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, n: f32, m: f32) {
-    let L = 260.0 * scale;
+    let l = 260.0 * scale;
     let r = 56; let g = 189; let b = 248; let a = 200;
     let (pr, pg, pb, pa) = premultiply(r, g, b, a);
     let col = Color::from_rgba8(pr, pg, pb, pa);
@@ -55,8 +55,8 @@ fn render_chladni_field(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, n:
             let term2 = (m * std::f32::consts::PI * nx).cos() * (n * std::f32::consts::PI * ny).cos();
             let val = term1 - term2;
             if val.abs() < 0.1 {
-                let x = cx + nx * L * 0.5;
-                let y = cy + ny * L * 0.5;
+                let x = cx + nx * l * 0.5;
+                let y = cy + ny * l * 0.5;
                 fill_rect_xywh(pixmap, x-1.0, y-1.0, 2.0, 2.0, col);
             }
         }

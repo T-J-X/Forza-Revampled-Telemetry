@@ -161,7 +161,7 @@ fn render_dot_matrix_speed_and_op1_synthesizer_graphs(pixmap: &mut PixmapMut, cx
         (cx - 200.0*scale, cy + 200.0*scale, format!("{:.0}", hp)),
         (cx - 200.0*scale, cy + 240.0*scale, format!("{:.0}", torque)),
         (cx + 200.0*scale, cy + 200.0*scale, format!("{:.1}", boost)),
-        (cx + 200.0*scale, cy + 240.0*scale, format!("RPM")),
+        (cx + 200.0*scale, cy + 240.0*scale, "RPM".to_string()),
     ];
     for (mx, my, txt) in modules.iter() {
         draw_text(pixmap, *mx, *my, txt, Color::from_rgba8(255,255,255,200), scale*0.7);

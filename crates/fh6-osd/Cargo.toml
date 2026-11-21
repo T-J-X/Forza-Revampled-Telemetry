@@ -12,4 +12,3 @@ fh6-clusters = { path = "../fh6-clusters" }
 tiny-skia.workspace = true
 tracing.workspace = true
 ttf-parser = "0.20"
-ab_glyph = "0.2"
