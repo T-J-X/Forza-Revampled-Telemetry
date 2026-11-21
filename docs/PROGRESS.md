@@ -9,7 +9,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 |---|---|
 | 1 Clean Rust repository | ✅ 2026-11-20 (public: T-J-X/Forza-Revampled-Telemetry) |
 | 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
-| 3 Design system & art direction | ✅ 2026-11-21 on branch `claude/phase-3-design-system-449d2f` (PR T-J-X/Forza-Revampled-Telemetry#1), awaiting conductor merge. Handover: [program/phases/03-design-system/HANDOVER.md](../program/phases/03-design-system/HANDOVER.md). Figma library and render placement are blocked by the Starter plan's MCP cap (docs/design/FIGMA.md). |
+| 3 Design system & art direction | ◐ 2026-11-21: all repo deliverables done on branch `claude/phase-3-design-system-449d2f` (PR T-J-X/Forza-Revampled-Telemetry#1), awaiting conductor review. Open: Figma library and render placement (blocked: Starter MCP cap, desktop MCP unavailable) and the "clearly better than references" bar (final verdict "matches"). Handover: [program/phases/03-design-system/HANDOVER.md](../program/phases/03-design-system/HANDOVER.md). |
 | 4 Engine: a working exe | ◐ started 2026-11-20 |
 | 5–11 | ☐ waiting on dependencies |
 

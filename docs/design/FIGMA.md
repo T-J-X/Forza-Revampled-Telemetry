@@ -50,7 +50,14 @@ Text styles bind `fontSize` to the Dimensions variables and use `leadingTrim: CA
 | ADAS & HUD | `8:34` | `8:35` | `8:36` | `8:37` | `8:38` |
 
 ## Blocked: what is left in Figma, and how to finish it
-Phase 3 hit the Starter plan's Figma MCP call cap ("You've reached the Figma MCP tool call limit on the Starter plan"), after the foundations and the page-2 skeleton. Still to do, in order:
+Both Figma routes failed after the foundations and the page-2 skeleton were built (checked again on 2026-11-21 after merging `main`, which added the `figma-desktop` entry to `.mcp.json`):
+
+| Route | Tool / endpoint | Exact result |
+|---|---|---|
+| Remote Figma MCP | `use_figma`, `get_metadata` (server `mcp__864313e7-…`) | `You've reached the Figma MCP tool call limit on the Starter plan. Upgrade your plan for more tool calls` (every call since the cap, including a re-check after the merge) |
+| Figma desktop local MCP | `figma-desktop` → `http://127.0.0.1:3845/mcp` | No `figma-desktop` tools in this session (`ToolSearch "figma-desktop"`: *No matching deferred tools found*; MCP config changes load at session start), and nothing listening: `curl http://127.0.0.1:3845/mcp` → connection failed (HTTP 000). Figma's desktop MCP server must be switched on in the desktop app's preferences, and Figma documents it for Dev or Full seats; this account has a View seat on a Starter team. |
+
+The HTML boards therefore stay the source of truth. Still to do, in order:
 1. **Place the renders:** each hero PNG `docs/design/heroes/<family>/<state>.png` as an image fill (scale FILL) on the frame ID above; each template PNG `docs/design/families/<family>-template.png` on its template frame (scale FIT). With MCP access this is `upload_assets` with `nodeIds` (28 + 7 uploads); by hand, drag each PNG onto its frame.
 2. **Finish the component library on `0:1`** from [COMPONENTS.md](COMPONENTS.md), binding the variables and styles above.
 3. **Page `1:5`:** the OSD and configurator direction frames (`docs/design/directions/*.png`), the scrim-fit frames (`docs/design/scrim/*.png`), and one Section per catalog row for Phase 7.
