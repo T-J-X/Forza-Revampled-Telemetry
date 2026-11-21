@@ -1,5 +1,5 @@
+use crate::car_brands::{BindCarBrandError, BindOutcome, CarBinding};
 use fh6_core::config::AppConfig;
-use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -159,65 +159,13 @@ impl CameraPatcher {
         f.write_all(out.as_bytes())
     }
 
-    pub fn bind_car_brand<P: AsRef<Path>>(
-        path: P,
-        car_ordinal: i32,
-        brand_key: &str,
-        model_name: &str,
-        manufacturer: &str,
-    ) -> io::Result<String> {
-        if car_ordinal <= 0 {
-            return Ok("Invalid CarOrdinal (must be > 0).".into());
-        }
-        if brand_key.is_empty() {
-            return Ok("Selected brand key cannot be null or empty.".into());
-        }
-        let path = path.as_ref();
-        if !path.exists() {
-            return Ok("car_brands.json was not found.".into());
-        }
-        let raw = fs::read_to_string(path)?;
-        let mut db: CarDatabase =
-            serde_json::from_str(&raw).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let ord = car_ordinal.to_string();
-        let entry = CarEntry {
-            brand_key: brand_key.to_string(),
-            model_name: if model_name.is_empty() {
-                format!("Car {}", ord)
-            } else {
-                model_name.to_string()
-            },
-            manufacturer: if manufacturer.is_empty() {
-                brand_key.to_string()
-            } else {
-                manufacturer.to_string()
-            },
-        };
-        db.cars.insert(ord, entry);
-        db.total_cars = db.cars.len() as u64;
-        let ser = serde_json::to_string(&db).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let tmp = path.with_extension("tmp");
-        fs::write(&tmp, ser)?;
-        fs::rename(&tmp, path)?;
-        Ok(format!(
-            "Successfully bound CarOrdinal {} to brand {}.",
-            car_ordinal, brand_key
-        ))
+    /// Binds a car ordinal to a brand in `car_brands.json`. See [`crate::car_brands`].
+    ///
+    /// # Errors
+    /// See [`BindCarBrandError`]; the file is untouched on error.
+    pub fn bind_car_brand(path: impl AsRef<Path>, car: CarBinding<'_>) -> Result<BindOutcome, BindCarBrandError> {
+        crate::car_brands::bind_car_brand(path.as_ref(), car)
     }
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-struct CarDatabase {
-    #[serde(default)]
-    cars: HashMap<String, CarEntry>,
-    #[serde(default)]
-    total_cars: u64,
-}
-#[derive(serde::Deserialize, serde::Serialize)]
-struct CarEntry {
-    brand_key: String,
-    model_name: String,
-    manufacturer: String,
 }
 
 fn fmt_fov_int(v: f32) -> String {
@@ -314,14 +262,6 @@ mod tests {
         CameraPatcher::patch_camera_physics(&p, &cfg()).unwrap();
         let s = std::fs::read_to_string(&p).unwrap();
         assert!(s.contains("Param.x=\"1.234000\""));
-        std::fs::remove_file(p).ok();
-    }
-    #[test]
-    fn bind() {
-        let p = tmp_path("bind");
-        std::fs::write(&p, "{\"cars\":{},\"total_cars\":0}").unwrap();
-        let m = CameraPatcher::bind_car_brand(&p, 1, "BMW", "", "").unwrap();
-        assert!(m.contains("1"));
         std::fs::remove_file(p).ok();
     }
 }

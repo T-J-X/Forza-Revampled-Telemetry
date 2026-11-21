@@ -1,0 +1,151 @@
+//! The overlay window: transparent, click-through, topmost, never activated (ADR 0001).
+//!
+//! The window has no GDI surface (`WS_EX_NOREDIRECTIONBITMAP`); its only content is the
+//! DirectComposition visual that wgpu creates for it. `WS_EX_LAYERED | WS_EX_TRANSPARENT`
+//! make every mouse event fall through to the game, and `WS_EX_NOACTIVATE` keeps focus there.
+use crate::monitor::MonitorRect;
+use crate::WinError;
+use std::sync::OnceLock;
+use windows::core::{w, PCWSTR};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW, SetLayeredWindowAttributes, SetWindowPos,
+    ShowWindow, HTTRANSPARENT, HWND_TOPMOST, LWA_ALPHA, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SW_SHOWNOACTIVATE, WM_MOUSEACTIVATE, WM_NCHITTEST, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+};
+
+const CLASS_NAME: PCWSTR = w!("FH6WheelDashOverlay");
+
+unsafe extern "system" fn overlay_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    match msg {
+        // Belt and braces with WS_EX_TRANSPARENT: never claim a hit test.
+        WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        // SAFETY: forwarding the unmodified message to the default procedure.
+        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+fn register_class() -> Result<(), WinError> {
+    static ATOM: OnceLock<u16> = OnceLock::new();
+    let atom = *ATOM.get_or_init(|| {
+        // SAFETY: GetModuleHandleW(None) returns this executable's module, valid for the
+        // process lifetime.
+        let instance = unsafe { GetModuleHandleW(None) }.unwrap_or_default();
+        let class = WNDCLASSEXW {
+            cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
+            lpfnWndProc: Some(overlay_wndproc),
+            hInstance: instance.into(),
+            lpszClassName: CLASS_NAME,
+            ..WNDCLASSEXW::default()
+        };
+        // SAFETY: `class` is fully initialised and its strings are static.
+        unsafe { RegisterClassExW(&class) }
+    });
+    if atom == 0 {
+        Err(WinError::last("RegisterClassExW"))
+    } else {
+        Ok(())
+    }
+}
+
+/// The overlay window. Owned by the thread that created it (it runs that thread's message
+/// loop); it is not `Send`.
+#[derive(Debug)]
+pub struct OverlayWindow {
+    hwnd: HWND,
+}
+
+impl OverlayWindow {
+    /// Creates the window over `rect` and shows it without activating it.
+    ///
+    /// # Errors
+    /// [`WinError`] if the class cannot be registered or the window cannot be created.
+    pub fn create(rect: MonitorRect) -> Result<Self, WinError> {
+        register_class()?;
+        let ex_style = WS_EX_NOREDIRECTIONBITMAP
+            | WS_EX_LAYERED
+            | WS_EX_TRANSPARENT
+            | WS_EX_TOPMOST
+            | WS_EX_TOOLWINDOW
+            | WS_EX_NOACTIVATE;
+        let width = i32::try_from(rect.width).unwrap_or(i32::MAX);
+        let height = i32::try_from(rect.height).unwrap_or(i32::MAX);
+        // SAFETY: the class is registered above; the title is a static string; no parent,
+        // menu or creation parameter is passed.
+        let hwnd = unsafe {
+            let instance = GetModuleHandleW(None).unwrap_or_default();
+            CreateWindowExW(
+                ex_style,
+                CLASS_NAME,
+                w!("FH6 WheelDash"),
+                WS_POPUP,
+                rect.x,
+                rect.y,
+                width,
+                height,
+                None,
+                None,
+                instance,
+                None,
+            )
+        }
+        .map_err(|e| WinError::call("CreateWindowExW", e))?;
+        let window = Self { hwnd };
+        // A layered window is invisible until its attributes are set; 255 = fully opaque
+        // layer, with per-pixel alpha coming from the composition swapchain.
+        // SAFETY: `hwnd` was just created on this thread.
+        unsafe { SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA) }
+            .map_err(|e| WinError::call("SetLayeredWindowAttributes", e))?;
+        // SAFETY: valid window; SW_SHOWNOACTIVATE never takes focus from the game.
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+        Ok(window)
+    }
+
+    /// The raw `HWND` value, for creating the GPU surface.
+    pub fn hwnd_raw(&self) -> isize {
+        self.hwnd.0 as isize
+    }
+
+    /// Moves and resizes the window to `rect` (another monitor, a resolution change).
+    ///
+    /// # Errors
+    /// [`WinError`] if `SetWindowPos` fails.
+    pub fn set_bounds(&self, rect: MonitorRect) -> Result<(), WinError> {
+        // SAFETY: valid window owned by this thread.
+        unsafe {
+            SetWindowPos(
+                self.hwnd,
+                HWND_TOPMOST,
+                rect.x,
+                rect.y,
+                i32::try_from(rect.width).unwrap_or(i32::MAX),
+                i32::try_from(rect.height).unwrap_or(i32::MAX),
+                SWP_NOACTIVATE,
+            )
+        }
+        .map_err(|e| WinError::call("SetWindowPos", e))
+    }
+
+    /// Puts the window back on top of the topmost band (after the game raised itself).
+    pub fn reassert_topmost(&self) {
+        // SAFETY: valid window owned by this thread; position and size are unchanged.
+        unsafe {
+            let _ = SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+}
+
+impl Drop for OverlayWindow {
+    fn drop(&mut self) {
+        // SAFETY: the window was created by this object on this thread (OverlayWindow is
+        // not Send) and is destroyed exactly once.
+        unsafe {
+            let _ = DestroyWindow(self.hwnd);
+        }
+    }
+}
