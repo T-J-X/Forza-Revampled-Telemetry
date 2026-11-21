@@ -157,6 +157,8 @@ pub struct QuadRenderer {
     instances: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     count: u32,
+    /// Last uniforms uploaded; they rarely change, so most frames skip the upload.
+    uploaded_globals: Option<Globals>,
     format: wgpu::TextureFormat,
 }
 
@@ -260,6 +262,7 @@ impl QuadRenderer {
             instances,
             bind_group,
             count: 0,
+            uploaded_globals: None,
             format,
         }
     }
@@ -271,7 +274,10 @@ impl QuadRenderer {
 
     /// Uploads this frame's uniforms and quads.
     pub fn prepare(&mut self, queue: &wgpu::Queue, globals: &Globals, batch: &QuadBatch) {
-        queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(globals));
+        if self.uploaded_globals.as_ref() != Some(globals) {
+            queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(globals));
+            self.uploaded_globals = Some(*globals);
+        }
         let quads = batch.as_slice();
         if !quads.is_empty() {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));

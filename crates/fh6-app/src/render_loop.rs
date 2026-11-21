@@ -347,7 +347,9 @@ fn run(setup: RenderSetup) -> RenderSummary {
             continue;
         }
         blank_presented = false;
-        keep_ticking = vis.animating || synthetic;
+        // While visible, wake every refresh even without packets so a stale stream is hidden
+        // within one frame of the 250 ms trigger (packets and focus changes also unpark).
+        keep_ticking = true;
         if !(new_packet || vis.animating || synthetic) {
             continue;
         }
