@@ -13,8 +13,8 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 | 1 | Clean Rust repo | none | none | n/a | ✅ done |
 | 2 | Program kit (this folder) | 1 | none | n/a | ✅ done |
 | 3 | Design system & art direction | 2 | 4 | xhigh | ◐ running |
-| 4 | Engine: a working exe | 2 | 3 | xhigh | ◐ running |
-| 5 | GPU render kit (wgpu) | 4 | 3, 6 | xhigh | ☐ |
+| 4 | Engine: a working exe | 2 | 3 | xhigh | ✅ merged 2026-11-21 |
+| 5 | GPU render kit (wgpu) | 4 | 3, 6 | xhigh | ◐ running |
 | 6 | Assets, logos & fonts | 3 | 5 | high | ☐ |
 | 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | setup high; pattern-setters (★) xhigh; other clusters high | ☐ |
 | 8 | Cockpit fit: dash blocker, camera, seat, FOV | 4, 5 | 7, 9 | high | ☐ |
