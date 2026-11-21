@@ -235,8 +235,15 @@ mod tests {
             assert_eq!(&after["Cars"][k], v, "car {k} unchanged");
         }
         let keys: Vec<&String> = after.as_object().expect("root").keys().collect();
-        assert_eq!(keys, ["Version", "TotalCars", "BrandPalettes", "Cars"], "key order kept");
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        assert_eq!(
+            keys,
+            ["Version", "TotalCars", "BrandPalettes", "Cars"],
+            "key order kept"
+        );
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let leftovers = fs::read_dir(path.parent().expect("temp dir"))
             .expect("list temp dir")
             .filter_map(Result::ok)

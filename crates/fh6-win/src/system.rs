@@ -73,7 +73,11 @@ pub fn running_process_names() -> Vec<String> {
         let mut names = Vec::new();
         let mut ok = Process32FirstW(snapshot, &mut entry).is_ok();
         while ok {
-            let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+            let len = entry
+                .szExeFile
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(entry.szExeFile.len());
             let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
             if !name.is_empty() {
                 names.push(name.to_ascii_lowercase());

@@ -184,7 +184,15 @@ impl OverlayWindow {
     pub fn reassert_topmost(&self) {
         // SAFETY: valid window owned by this thread; position and size are unchanged.
         unsafe {
-            let _ = SetWindowPos(self.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            let _ = SetWindowPos(
+                self.hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
         }
     }
 }

@@ -573,8 +573,8 @@ mod tests {
 
     #[test]
     fn acronym_keys_round_trip() {
-        let cfg = AppConfig::from_json_str(r#"{"StandardCockpitFOV":71,"ShowBonnetGTWidgets":false}"#)
-            .expect("valid json");
+        let cfg =
+            AppConfig::from_json_str(r#"{"StandardCockpitFOV":71,"ShowBonnetGTWidgets":false}"#).expect("valid json");
         assert_eq!(cfg.standard_cockpit_fov, 71.0);
         assert!(!cfg.show_bonnet_gt_widgets);
         let json = serde_json::to_string(&cfg).expect("serialises");

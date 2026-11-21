@@ -313,7 +313,11 @@ impl Drop for TelemetryEngine {
 
 fn bind(port: u16, all_interfaces: bool) -> io::Result<UdpSocket> {
     // Loopback by default: Forza's Data Out targets 127.0.0.1 and loopback needs no firewall rule.
-    let ip = if all_interfaces { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
+    let ip = if all_interfaces {
+        Ipv4Addr::UNSPECIFIED
+    } else {
+        Ipv4Addr::LOCALHOST
+    };
     let sock = UdpSocket::bind(SocketAddrV4::new(ip, port))?;
     sock.set_read_timeout(Some(RECV_TIMEOUT))?;
     Ok(sock)
@@ -395,7 +399,9 @@ mod tests {
         let mut state = ReceiveState::default();
         let t0 = Instant::now();
         assert!(state.next_frame(packet(1, 100), t0).is_some());
-        assert!(state.next_frame(packet(1, 100), t0 + Duration::from_millis(1)).is_none());
+        assert!(state
+            .next_frame(packet(1, 100), t0 + Duration::from_millis(1))
+            .is_none());
         let next = state
             .next_frame(packet(1, 116), t0 + Duration::from_millis(16))
             .expect("new timestamp is published");
@@ -429,7 +435,10 @@ mod tests {
         let f4 = state.next_frame(packet(1, 4), t4).expect("frame");
         assert_eq!(f4.race_resumed_at, Some(t4));
         assert!(f4.is_driving_active(t4 + Duration::from_millis(10)));
-        assert!(!f4.is_driving_active(t4 + Duration::from_millis(300)), "stale after 250 ms");
+        assert!(
+            !f4.is_driving_active(t4 + Duration::from_millis(300)),
+            "stale after 250 ms"
+        );
     }
 
     #[test]

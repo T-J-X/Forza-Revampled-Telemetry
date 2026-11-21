@@ -30,7 +30,11 @@ fn test_cluster_renders_with_transparent_background() {
     assert_eq!((image.width, image.height), (w, h));
     // OLED rule: everything outside the cluster is fully transparent (0,0,0,0).
     for (x, y) in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1), (20, h / 2)] {
-        assert_eq!(image.pixel(x, y), Some([0, 0, 0, 0]), "pixel ({x},{y}) must be transparent");
+        assert_eq!(
+            image.pixel(x, y),
+            Some([0, 0, 0, 0]),
+            "pixel ({x},{y}) must be transparent"
+        );
     }
     // The cluster covers a bounded area: some pixels, nowhere near the whole frame.
     let covered = image.covered_pixels();
@@ -39,7 +43,10 @@ fn test_cluster_renders_with_transparent_background() {
     assert!(covered < total / 2, "cluster must not fill the screen: {covered}");
     // Premultiplied: no channel exceeds alpha.
     assert!(
-        image.pixels.chunks_exact(4).all(|p| p[0] <= p[3] && p[1] <= p[3] && p[2] <= p[3]),
+        image
+            .pixels
+            .chunks_exact(4)
+            .all(|p| p[0] <= p[3] && p[1] <= p[3] && p[2] <= p[3]),
         "colour exceeds alpha somewhere: not premultiplied"
     );
 }

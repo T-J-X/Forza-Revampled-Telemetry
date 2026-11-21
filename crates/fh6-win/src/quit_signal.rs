@@ -21,7 +21,8 @@ impl QuitSignal {
     /// [`WinError`] if the event cannot be created.
     pub fn create() -> Result<Self, WinError> {
         // SAFETY: default security, auto-reset, initially unsignalled, static name.
-        let handle = unsafe { CreateEventW(None, false, false, EVENT_NAME) }.map_err(|e| WinError::call("CreateEventW", e))?;
+        let handle =
+            unsafe { CreateEventW(None, false, false, EVENT_NAME) }.map_err(|e| WinError::call("CreateEventW", e))?;
         Ok(Self { handle })
     }
 

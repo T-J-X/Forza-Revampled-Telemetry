@@ -45,22 +45,51 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
     );
     let _ = writeln!(out, "| Display refresh (DWM) | {refresh_ms:.3} ms ({hz:.1} Hz) |");
     let _ = writeln!(out, "| Measured span | {secs:.1} s after 2 s warm-up |");
-    let _ = writeln!(out, "| Frames presented | {} ({:.1} fps) |", s.frames, s.frames as f64 / secs);
-    let _ = writeln!(out, "| New packets shown | {} ({:.1} per s) |", s.packets, s.packets as f64 / secs);
+    let _ = writeln!(
+        out,
+        "| Frames presented | {} ({:.1} fps) |",
+        s.frames,
+        s.frames as f64 / secs
+    );
+    let _ = writeln!(
+        out,
+        "| New packets shown | {} ({:.1} per s) |",
+        s.packets,
+        s.packets as f64 / secs
+    );
     let _ = writeln!(
         out,
         "| `--stats` overlay drawn | {} |\n",
         if stats_overlay { "yes" } else { "no" }
     );
 
-    let _ = writeln!(out, "| Series | p50 (ms) | p99 (ms) | max (ms) | samples |\n|---|---|---|---|---|");
-    row(&mut out, "**Packet receive -> `present` returned**", &s.receive_to_present);
-    row(&mut out, "**CPU per frame** (build + upload/record/submit + present)", &s.cpu_frame);
+    let _ = writeln!(
+        out,
+        "| Series | p50 (ms) | p99 (ms) | max (ms) | samples |\n|---|---|---|---|---|"
+    );
+    row(
+        &mut out,
+        "**Packet receive -> `present` returned**",
+        &s.receive_to_present,
+    );
+    row(
+        &mut out,
+        "**CPU per frame** (build + upload/record/submit + present)",
+        &s.cpu_frame,
+    );
     row(&mut out, "  of which: build the quad batch", &s.build);
     row(&mut out, "  of which: upload + record + submit", &s.encode_submit);
     row(&mut out, "  of which: `present` call", &s.present);
-    row(&mut out, "Blocked on the frame-latency wait (not CPU work)", &s.acquire_wait);
-    row(&mut out, "Packet receive -> next vblank after present (est. on screen)", &s.receive_to_vblank);
+    row(
+        &mut out,
+        "Blocked on the frame-latency wait (not CPU work)",
+        &s.acquire_wait,
+    );
+    row(
+        &mut out,
+        "Packet receive -> next vblank after present (est. on screen)",
+        &s.receive_to_vblank,
+    );
 
     let r2p_ok = s.receive_to_present.p99 > 0.0 && f64::from(s.receive_to_present.p99) < refresh_ms;
     let cpu_ok = s.cpu_frame.p99 > 0.0 && s.cpu_frame.p99 < 1.0;
@@ -71,7 +100,12 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
         s.receive_to_present.p99,
         verdict(r2p_ok)
     );
-    let _ = writeln!(out, "- Under 1 ms CPU per frame: p99 {:.3} ms: **{}**", s.cpu_frame.p99, verdict(cpu_ok));
+    let _ = writeln!(
+        out,
+        "- Under 1 ms CPU per frame: p99 {:.3} ms: **{}**",
+        s.cpu_frame.p99,
+        verdict(cpu_ok)
+    );
     let _ = writeln!(
         out,
         "\nIndicative only (derived from DWM timing, not a target): {hit_rate:.1}% of new packets were presented \

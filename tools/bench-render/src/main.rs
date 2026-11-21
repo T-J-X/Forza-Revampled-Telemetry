@@ -76,7 +76,10 @@ fn run() -> Result<(), String> {
 
     let mut total: Vec<Duration> = build.iter().zip(&encode).map(|(a, b)| *a + *b).collect();
     println!("Adapter: {}", ctx.adapter_summary());
-    println!("Target: {width}x{height}, {frames} frames after {WARMUP_FRAMES} warm-up, {} quads/frame", batch.len());
+    println!(
+        "Target: {width}x{height}, {frames} frames after {WARMUP_FRAMES} warm-up, {} quads/frame",
+        batch.len()
+    );
     println!();
     println!("| Stage | p50 (ms) | p99 (ms) | max (ms) |");
     println!("|---|---|---|---|");

@@ -158,8 +158,14 @@ mod tests {
 
     #[test]
     fn errors_are_reported() {
-        assert_eq!(run(&["--bench-seconds"]), Err(ArgsError::MissingValue("--bench-seconds")));
-        assert!(matches!(run(&["--bench-seconds", "0"]), Err(ArgsError::InvalidValue { .. })));
+        assert_eq!(
+            run(&["--bench-seconds"]),
+            Err(ArgsError::MissingValue("--bench-seconds"))
+        );
+        assert!(matches!(
+            run(&["--bench-seconds", "0"]),
+            Err(ArgsError::InvalidValue { .. })
+        ));
         assert_eq!(run(&["--frobnicate"]), Err(ArgsError::Unknown("--frobnicate".into())));
         assert_eq!(run(&["--help"]), Ok(Command::Help));
     }

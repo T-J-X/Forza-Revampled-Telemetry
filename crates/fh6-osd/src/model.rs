@@ -47,10 +47,10 @@ pub const BONNET_STYLES: &[&str] = &[
 pub const SHIFT_PATTERNS: &[&str] = &["Converging", "GT3 F1 Sweep", "Progressive"];
 pub const DRIFT_MODES: &[&str] = &["Column Track", "Subtle Parallax", "Off"];
 pub const TAB_NAMES: &[&str] = &[
-    "\u{300e}\u{8996}\u{300f} VIEW",       // 『視』 VIEW
-    "\u{300e}\u{5100}\u{300f} CLUSTERS",   // 『儀』 CLUSTERS
-    "\u{300e}\u{5149}\u{300f} OPTICS",     // 『光』 OPTICS
-    "\u{300e}\u{8abf}\u{300f} TELEMETRY",  // 『調』 TELEMETRY
+    "\u{300e}\u{8996}\u{300f} VIEW",      // 『視』 VIEW
+    "\u{300e}\u{5100}\u{300f} CLUSTERS",  // 『儀』 CLUSTERS
+    "\u{300e}\u{5149}\u{300f} OPTICS",    // 『光』 OPTICS
+    "\u{300e}\u{8abf}\u{300f} TELEMETRY", // 『調』 TELEMETRY
 ];
 
 /// D-pad typematic stepping for Left/Right holds.
@@ -248,9 +248,27 @@ impl UnifiedOsdState {
                 use fh6_core::config::CameraViewMode;
                 let cur = config.active_camera_view;
                 let next = match cur {
-                    CameraViewMode::Cockpit => if dir > 0 { CameraViewMode::Bonnet } else { CameraViewMode::Chase },
-                    CameraViewMode::Bonnet => if dir > 0 { CameraViewMode::Chase } else { CameraViewMode::Cockpit },
-                    CameraViewMode::Chase => if dir > 0 { CameraViewMode::Cockpit } else { CameraViewMode::Bonnet },
+                    CameraViewMode::Cockpit => {
+                        if dir > 0 {
+                            CameraViewMode::Bonnet
+                        } else {
+                            CameraViewMode::Chase
+                        }
+                    }
+                    CameraViewMode::Bonnet => {
+                        if dir > 0 {
+                            CameraViewMode::Chase
+                        } else {
+                            CameraViewMode::Cockpit
+                        }
+                    }
+                    CameraViewMode::Chase => {
+                        if dir > 0 {
+                            CameraViewMode::Cockpit
+                        } else {
+                            CameraViewMode::Bonnet
+                        }
+                    }
                 };
                 config.active_camera_view = next;
                 // Sync legacy index
@@ -265,19 +283,25 @@ impl UnifiedOsdState {
     }
 
     fn adjust_tab1_row(&mut self, row: usize, dir: i32, config: &mut AppConfig) {
-        use fh6_core::theme::ClusterTheme;
         use fh6_core::config::FontPreset;
+        use fh6_core::theme::ClusterTheme;
         match row {
             0 => {
                 let all = ClusterTheme::all();
-                let idx = all.iter().position(|&t| t == config.cockpit_hud_style_typed).unwrap_or(0);
+                let idx = all
+                    .iter()
+                    .position(|&t| t == config.cockpit_hud_style_typed)
+                    .unwrap_or(0);
                 let len = all.len() as i32;
                 let next = (((idx as i32 + dir) % len + len) % len) as usize;
                 config.cockpit_hud_style_typed = all[next];
             }
             1 => {
                 let all = ClusterTheme::all();
-                let idx = all.iter().position(|&t| t == config.bonnet_hud_style_typed).unwrap_or(0);
+                let idx = all
+                    .iter()
+                    .position(|&t| t == config.bonnet_hud_style_typed)
+                    .unwrap_or(0);
                 let len = all.len() as i32;
                 let next = (((idx as i32 + dir) % len + len) % len) as usize;
                 config.bonnet_hud_style_typed = all[next];
@@ -294,7 +318,12 @@ impl UnifiedOsdState {
                 config.cluster_scale = v.clamp(0.70, 1.40);
             }
             4 => {
-                let variants = [FontPreset::BahnschriftLight, FontPreset::SfPro, FontPreset::Tabular, FontPreset::VfdMono];
+                let variants = [
+                    FontPreset::BahnschriftLight,
+                    FontPreset::SfPro,
+                    FontPreset::Tabular,
+                    FontPreset::VfdMono,
+                ];
                 let idx = variants.iter().position(|&p| p == config.font_preset).unwrap_or(0);
                 let len = variants.len() as i32;
                 let next = (((idx as i32 + dir) % len + len) % len) as usize;
@@ -426,10 +455,18 @@ pub fn get_row_value(tab: usize, row: usize, config: &AppConfig) -> String {
         3 => match row {
             0 => if config.driver_tag_glitch_fx { "ON" } else { "OFF" }.to_string(),
             1 => {
-                if config.speed_unit.is_empty() { "MPH".to_string() } else { config.speed_unit.clone() }
+                if config.speed_unit.is_empty() {
+                    "MPH".to_string()
+                } else {
+                    config.speed_unit.clone()
+                }
             }
             2 => {
-                if config.power_unit.is_empty() { "kW".to_string() } else { config.power_unit.clone() }
+                if config.power_unit.is_empty() {
+                    "kW".to_string()
+                } else {
+                    config.power_unit.clone()
+                }
             }
             3 => format!("{}%", config.shift_start_pct.round() as i32),
             4 => if config.redline_strobe { "ON" } else { "OFF" }.to_string(),

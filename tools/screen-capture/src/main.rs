@@ -28,7 +28,10 @@ fn parse_args() -> Result<Args, String> {
         match arg.as_str() {
             "--out" => out = it.next().map(PathBuf::from),
             "--delay-ms" => {
-                let ms: u64 = it.next().and_then(|v| v.parse().ok()).ok_or("--delay-ms needs a number")?;
+                let ms: u64 = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--delay-ms needs a number")?;
                 delay = Duration::from_millis(ms);
             }
             "--region" => {
@@ -59,11 +62,15 @@ fn parse_args() -> Result<Args, String> {
 fn halve(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Vec<u8>) {
     let (hw, hh) = ((width / 2).max(1), (height / 2).max(1));
     let mut out = Vec::with_capacity((hw * hh * 4) as usize);
-    let at = |x: u32, y: u32, c: usize| u32::from(rgba[((y.min(height - 1) * width + x.min(width - 1)) * 4) as usize + c]);
+    let at =
+        |x: u32, y: u32, c: usize| u32::from(rgba[((y.min(height - 1) * width + x.min(width - 1)) * 4) as usize + c]);
     for y in 0..hh {
         for x in 0..hw {
             for c in 0..4 {
-                let sum = at(2 * x, 2 * y, c) + at(2 * x + 1, 2 * y, c) + at(2 * x, 2 * y + 1, c) + at(2 * x + 1, 2 * y + 1, c);
+                let sum = at(2 * x, 2 * y, c)
+                    + at(2 * x + 1, 2 * y, c)
+                    + at(2 * x, 2 * y + 1, c)
+                    + at(2 * x + 1, 2 * y + 1, c);
                 out.push(u8::try_from(sum / 4).unwrap_or(255));
             }
         }
@@ -97,7 +104,10 @@ fn run() -> Result<(), String> {
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
     writer.write_image_data(&pixels).map_err(|e| e.to_string())?;
-    println!("saved {} ({width}x{height}) from region {x},{y} {w}x{h}", args.out.display());
+    println!(
+        "saved {} ({width}x{height}) from region {x},{y} {w}x{h}",
+        args.out.display()
+    );
     Ok(())
 }
 

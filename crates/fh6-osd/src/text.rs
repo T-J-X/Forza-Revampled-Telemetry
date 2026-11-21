@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{OnceLock, Mutex};
+use std::sync::{Mutex, OnceLock};
 
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 use ttf_parser::{Face, GlyphId, OutlineBuilder};
@@ -31,7 +31,13 @@ impl FontFace {
         let face = Face::parse(data, 0).expect("parse font");
         let units_per_em = face.units_per_em() as f32;
         let is_variable = face.is_variable();
-        Self { name, face, glyph_cache: HashMap::new(), units_per_em, _is_variable: is_variable }
+        Self {
+            name,
+            face,
+            glyph_cache: HashMap::new(),
+            units_per_em,
+            _is_variable: is_variable,
+        }
     }
 
     fn scale_for_size(&self, size_px: f32) -> f32 {
@@ -53,13 +59,25 @@ impl FontFace {
             return cached.clone();
         }
         let mut pb = PathBuilder::new();
-        struct Builder<'a> { pb: &'a mut PathBuilder }
+        struct Builder<'a> {
+            pb: &'a mut PathBuilder,
+        }
         impl OutlineBuilder for Builder<'_> {
-            fn move_to(&mut self, x: f32, y: f32) { self.pb.move_to(x, y); }
-            fn line_to(&mut self, x: f32, y: f32) { self.pb.line_to(x, y); }
-            fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) { self.pb.quad_to(x1, y1, x, y); }
-            fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) { self.pb.cubic_to(x1, y1, x2, y2, x, y); }
-            fn close(&mut self) { self.pb.close(); }
+            fn move_to(&mut self, x: f32, y: f32) {
+                self.pb.move_to(x, y);
+            }
+            fn line_to(&mut self, x: f32, y: f32) {
+                self.pb.line_to(x, y);
+            }
+            fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+                self.pb.quad_to(x1, y1, x, y);
+            }
+            fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+                self.pb.cubic_to(x1, y1, x2, y2, x, y);
+            }
+            fn close(&mut self) {
+                self.pb.close();
+            }
         }
         let mut b = Builder { pb: &mut pb };
         let _ = self.face.outline_glyph(GlyphId(gid), &mut b);
@@ -112,9 +130,17 @@ pub fn resolve_glyph(c: char) -> GlyphResolution {
     let guard = cache_lock().lock().unwrap();
     if let Some((i, gid)) = guard.find_glyph(c) {
         let name = guard.faces[i].name;
-        GlyphResolution { font_name: name, glyph_id: gid as u32, has_outline: gid != 0 }
+        GlyphResolution {
+            font_name: name,
+            glyph_id: gid as u32,
+            has_outline: gid != 0,
+        }
     } else {
-        GlyphResolution { font_name: "fallback", glyph_id: 0, has_outline: false }
+        GlyphResolution {
+            font_name: "fallback",
+            glyph_id: 0,
+            has_outline: false,
+        }
     }
 }
 
@@ -149,7 +175,10 @@ fn draw_glyph(pixmap: &mut PixmapMut, x: f32, y: f32, face_idx: usize, gid: u16,
             let mut stroke_paint = Paint::default();
             stroke_paint.set_color(style.color);
             stroke_paint.anti_alias = true;
-            let stroke = Stroke { width: stroke_width, ..Default::default() };
+            let stroke = Stroke {
+                width: stroke_width,
+                ..Default::default()
+            };
             pixmap.stroke_path(&path, &stroke_paint, &stroke, transform, None);
         }
     }
@@ -220,7 +249,9 @@ mod tests {
         println!("number_of_glyphs {}", face.number_of_glyphs());
         println!("is_variable {}", face.is_variable());
         println!("units_per_em {}", face.units_per_em());
-        let chars = ['『','視','』','儀','光','調','Ø','G','J','死','Ŧ','乂','°','×','·','%','→'];
+        let chars = [
+            '『', '視', '』', '儀', '光', '調', 'Ø', 'G', 'J', '死', 'Ŧ', '乂', '°', '×', '·', '%', '→',
+        ];
         for c in chars {
             let gid = face.glyph_index(c);
             println!("char {} U+{:04X} glyph_index {:?}", c, c as u32, gid);
@@ -229,15 +260,28 @@ mod tests {
 
     fn assert_covered(c: char) -> Result<(), String> {
         let res = resolve_glyph(c);
-        if res.glyph_id == 0 { Err(format!("glyph id zero for '{}'", c)) } else if !res.has_outline { Err(format!("no outline for '{}'", c)) } else { Ok(()) }
+        if res.glyph_id == 0 {
+            Err(format!("glyph id zero for '{}'", c))
+        } else if !res.has_outline {
+            Err(format!("no outline for '{}'", c))
+        } else {
+            Ok(())
+        }
     }
 
     #[test]
     fn test_glyph_coverage() {
-        let chars = ['『','視','』','儀','光','調','Ø','G','死','Ŧ','J','乂'];
-        for c in chars { assert!(assert_covered(c).is_ok(), "must be covered: {}", c); }
-        for c in 0x20u8..=0x7E { let ch = c as char; assert!(assert_covered(ch).is_ok(), "ASCII must be covered: {}", c); }
-        for c in ['°','×','·','%','→'] { assert!(assert_covered(c).is_ok(), "symbol must be covered: {}", c); }
+        let chars = ['『', '視', '』', '儀', '光', '調', 'Ø', 'G', '死', 'Ŧ', 'J', '乂'];
+        for c in chars {
+            assert!(assert_covered(c).is_ok(), "must be covered: {}", c);
+        }
+        for c in 0x20u8..=0x7E {
+            let ch = c as char;
+            assert!(assert_covered(ch).is_ok(), "ASCII must be covered: {}", c);
+        }
+        for c in ['°', '×', '·', '%', '→'] {
+            assert!(assert_covered(c).is_ok(), "symbol must be covered: {}", c);
+        }
     }
 
     #[test]
@@ -250,10 +294,15 @@ mod tests {
 
     #[test]
     fn test_deck_chars_from_bundled_font() {
-        let chars = ['『','視','』','儀','光','調','Ø','G','J','死','Ŧ','乂'];
+        let chars = ['『', '視', '』', '儀', '光', '調', 'Ø', 'G', 'J', '死', 'Ŧ', '乂'];
         for c in chars {
             let res = resolve_glyph(c);
-            assert!(res.font_name == "NotoSansJP" || res.font_name == "NotoSans", "char {} must be from bundled font, got {}", c, res.font_name);
+            assert!(
+                res.font_name == "NotoSansJP" || res.font_name == "NotoSans",
+                "char {} must be from bundled font, got {}",
+                c,
+                res.font_name
+            );
             assert!(res.glyph_id != 0);
             assert!(res.has_outline);
         }
@@ -263,19 +312,45 @@ mod tests {
     fn test_glyph_coverage_direct() {
         static JP: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-Regular.ttf");
         static LATIN: &[u8] = include_bytes!("../assets/fonts/NotoSans-Regular.ttf");
-        let faces = [ttf_parser::Face::parse(JP,0).unwrap(), ttf_parser::Face::parse(LATIN,0).unwrap()];
-        let chars = ['『','視','』','儀','光','調','Ø','G','J','死','Ŧ','乂','°','×','·','%'];
+        let faces = [
+            ttf_parser::Face::parse(JP, 0).unwrap(),
+            ttf_parser::Face::parse(LATIN, 0).unwrap(),
+        ];
+        let chars = [
+            '『', '視', '』', '儀', '光', '調', 'Ø', 'G', 'J', '死', 'Ŧ', '乂', '°', '×', '·', '%',
+        ];
         for c in chars {
             let mut found = false;
             for f in &faces {
                 if let Some(gid) = f.glyph_index(c) {
                     if gid.0 != 0 {
                         let mut pb = tiny_skia::PathBuilder::new();
-                        struct B<'a>{pb:&'a mut tiny_skia::PathBuilder}
-                        impl ttf_parser::OutlineBuilder for B<'_>{fn move_to(&mut self,x:f32,y:f32){self.pb.move_to(x,y);}fn line_to(&mut self,x:f32,y:f32){self.pb.line_to(x,y);}fn quad_to(&mut self,x1:f32,y1:f32,x:f32,y:f32){self.pb.quad_to(x1,y1,x,y);}fn curve_to(&mut self,x1:f32,y1:f32,x2:f32,y2:f32,x:f32,y:f32){self.pb.cubic_to(x1,y1,x2,y2,x,y);}fn close(&mut self){self.pb.close();}}
-                        let mut b = B{pb:&mut pb};
-                        let _ = f.outline_glyph(gid,&mut b);
-                        if pb.finish().is_some() { found = true; break; }
+                        struct B<'a> {
+                            pb: &'a mut tiny_skia::PathBuilder,
+                        }
+                        impl ttf_parser::OutlineBuilder for B<'_> {
+                            fn move_to(&mut self, x: f32, y: f32) {
+                                self.pb.move_to(x, y);
+                            }
+                            fn line_to(&mut self, x: f32, y: f32) {
+                                self.pb.line_to(x, y);
+                            }
+                            fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+                                self.pb.quad_to(x1, y1, x, y);
+                            }
+                            fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+                                self.pb.cubic_to(x1, y1, x2, y2, x, y);
+                            }
+                            fn close(&mut self) {
+                                self.pb.close();
+                            }
+                        }
+                        let mut b = B { pb: &mut pb };
+                        let _ = f.outline_glyph(gid, &mut b);
+                        if pb.finish().is_some() {
+                            found = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -285,11 +360,16 @@ mod tests {
 
     #[test]
     fn test_glyph_renders_ink() {
-        use tiny_skia::{Pixmap, Color};
-        let style = TextStyle { size_px: 64.0, bold: false, letter_spacing_px: 0.0, color: Color::from_rgba8(255,255,255,255) };
-        let chars = ['I','視','Ŧ'];
+        use tiny_skia::{Color, Pixmap};
+        let style = TextStyle {
+            size_px: 64.0,
+            bold: false,
+            letter_spacing_px: 0.0,
+            color: Color::from_rgba8(255, 255, 255, 255),
+        };
+        let chars = ['I', '視', 'Ŧ'];
         for c in chars {
-            let mut p = Pixmap::new(256,256).unwrap();
+            let mut p = Pixmap::new(256, 256).unwrap();
             let mut pm = p.as_mut();
             draw(&mut pm, &c.to_string(), 10.0, 200.0, &style, Align::Left);
             let lit = pm.data_mut().iter().step_by(4).filter(|&&v| v > 0).count();
@@ -299,10 +379,15 @@ mod tests {
 
     #[test]
     fn test_ink_bbox_matches_pen() {
-        use tiny_skia::{Pixmap, Color};
-        let style = TextStyle { size_px: 64.0, bold: false, letter_spacing_px: 0.0, color: Color::from_rgba8(255,255,255,255) };
-        for (ch, expected_face) in [('I',"NotoSansJP"), ('視',"NotoSansJP"), ('Ŧ',"NotoSans")] {
-            let mut pix = Pixmap::new(256,256).unwrap();
+        use tiny_skia::{Color, Pixmap};
+        let style = TextStyle {
+            size_px: 64.0,
+            bold: false,
+            letter_spacing_px: 0.0,
+            color: Color::from_rgba8(255, 255, 255, 255),
+        };
+        for (ch, expected_face) in [('I', "NotoSansJP"), ('視', "NotoSansJP"), ('Ŧ', "NotoSans")] {
+            let mut pix = Pixmap::new(256, 256).unwrap();
             {
                 let mut pm = pix.as_mut();
                 draw(&mut pm, &ch.to_string(), 100.0, 200.0, &style, Align::Left);
@@ -327,30 +412,57 @@ mod tests {
                 let row_start = y * stride;
                 for x in 0..width {
                     let idx = row_start + x * 4 + 3;
-                    if data[idx] > 0 { leftmost = leftmost.min(x); break; }
+                    if data[idx] > 0 {
+                        leftmost = leftmost.min(x);
+                        break;
+                    }
                 }
             }
             let measured = leftmost as f32;
             println!("char {} measured {} expected {}", ch, measured, expected);
-            assert!((measured - expected).abs() <= 1.0, "char {} leftmost {} vs expected {}", ch, measured, expected);
+            assert!(
+                (measured - expected).abs() <= 1.0,
+                "char {} leftmost {} vs expected {}",
+                ch,
+                measured,
+                expected
+            );
             let res = resolve_glyph(ch);
-            if ch != 'I' { assert_eq!(res.font_name, expected_face); }
+            if ch != 'I' {
+                assert_eq!(res.font_name, expected_face);
+            }
         }
     }
 
     #[test]
     fn test_bold_increases_ink() {
-        use tiny_skia::{Pixmap, Color};
-        let style_reg = TextStyle { size_px: 64.0, bold: false, letter_spacing_px: 0.0, color: Color::from_rgba8(255,255,255,255) };
-        let style_bold = TextStyle { size_px: 64.0, bold: true, letter_spacing_px: 0.0, color: Color::from_rgba8(255,255,255,255) };
-        for c in ['I','視','Ŧ'] {
-            let mut p1 = Pixmap::new(256,256).unwrap();
+        use tiny_skia::{Color, Pixmap};
+        let style_reg = TextStyle {
+            size_px: 64.0,
+            bold: false,
+            letter_spacing_px: 0.0,
+            color: Color::from_rgba8(255, 255, 255, 255),
+        };
+        let style_bold = TextStyle {
+            size_px: 64.0,
+            bold: true,
+            letter_spacing_px: 0.0,
+            color: Color::from_rgba8(255, 255, 255, 255),
+        };
+        for c in ['I', '視', 'Ŧ'] {
+            let mut p1 = Pixmap::new(256, 256).unwrap();
             draw(&mut p1.as_mut(), &c.to_string(), 10.0, 200.0, &style_reg, Align::Left);
             let lit1 = p1.data().iter().step_by(4).filter(|&&v| v > 0).count();
-            let mut p2 = Pixmap::new(256,256).unwrap();
+            let mut p2 = Pixmap::new(256, 256).unwrap();
             draw(&mut p2.as_mut(), &c.to_string(), 10.0, 200.0, &style_bold, Align::Left);
             let lit2 = p2.data().iter().step_by(4).filter(|&&v| v > 0).count();
-            assert!(lit2 >= (lit1 as f32 * 1.08) as usize, "bold not larger for {}: {} vs {}", c, lit1, lit2);
+            assert!(
+                lit2 >= (lit1 as f32 * 1.08) as usize,
+                "bold not larger for {}: {} vs {}",
+                c,
+                lit1,
+                lit2
+            );
         }
     }
 }

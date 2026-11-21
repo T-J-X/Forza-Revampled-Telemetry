@@ -10,7 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 fn temp_path(target: &Path) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let name = target.file_name().map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
+    let name = target
+        .file_name()
+        .map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
     target.with_file_name(format!(".{name}.{}.{n}.tmp", std::process::id()))
 }
 

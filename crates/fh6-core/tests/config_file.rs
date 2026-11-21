@@ -39,7 +39,10 @@ fn data_config_loads_real_values() {
     assert_eq!(cfg.driver_seat_height_m, -0.045);
 
     let ports = cfg.telemetry_ports();
-    assert_eq!((ports.primary, ports.fallback, ports.forward), (8000, Some(5500), Some(5607)));
+    assert_eq!(
+        (ports.primary, ports.fallback, ports.forward),
+        (8000, Some(5500), Some(5607))
+    );
 
     // "PrimaryPort" is not a field; it must survive a save.
     assert!(cfg.extra.contains_key("PrimaryPort"));

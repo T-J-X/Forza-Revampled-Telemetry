@@ -56,7 +56,9 @@ pub struct ConfigWatcher {
 
 impl std::fmt::Debug for ConfigWatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConfigWatcher").field("path", &self.path).finish_non_exhaustive()
+        f.debug_struct("ConfigWatcher")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
     }
 }
 

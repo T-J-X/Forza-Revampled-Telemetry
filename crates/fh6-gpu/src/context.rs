@@ -19,7 +19,11 @@ pub struct AdapterSummary {
 
 impl std::fmt::Display for AdapterSummary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({}, {}, {})", self.name, self.backend, self.device_type, self.driver)
+        write!(
+            f,
+            "{} ({}, {}, {})",
+            self.name, self.backend, self.device_type, self.driver
+        )
     }
 }
 
@@ -60,7 +64,10 @@ impl GpuContext {
     }
 
     /// A device able to present to `surface` (made from the same instance).
-    pub(crate) fn from_instance(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>) -> Result<Self, GpuError> {
+    pub(crate) fn from_instance(
+        instance: wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+    ) -> Result<Self, GpuError> {
         let hardware = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: false,

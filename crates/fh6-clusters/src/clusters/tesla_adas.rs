@@ -1,9 +1,9 @@
-use tiny_skia::{Color, PixmapMut, Rect};
+use crate::draw_ext::{fill_polygon, fill_rect_xywh, fill_round_rect, sanitize_finite, stroke_line, stroke_polyline};
 use fh6_core::{AppConfig, FH6TelemetryData};
-use fh6_render::text::{draw_text, draw_glitch_text};
-use crate::draw_ext::{fill_rect_xywh, stroke_line, stroke_polyline, fill_polygon, fill_round_rect, sanitize_finite};
-use std::sync::OnceLock;
+use fh6_render::text::{draw_glitch_text, draw_text};
 use std::collections::HashMap;
+use std::sync::OnceLock;
+use tiny_skia::{Color, PixmapMut, Rect};
 
 static CAR_BRANDS_CACHE: OnceLock<HashMap<i32, (u8, u8, u8)>> = OnceLock::new();
 static ADAS_SPRITE_CACHE: OnceLock<HashMap<String, Vec<u8>>> = OnceLock::new();
@@ -19,7 +19,13 @@ fn clamp_byte(v: f32) -> u8 {
         return 0;
     }
     let i = v.round() as i32;
-    if i < 0 { 0 } else if i > 255 { 255 } else { i as u8 }
+    if i < 0 {
+        0
+    } else if i > 255 {
+        255
+    } else {
+        i as u8
+    }
 }
 
 fn project_to_adas_viewport(
@@ -65,19 +71,45 @@ fn load_adas_sprites() {
 fn draw_driver_tag(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, glitch: bool) {
     let tag = "ØG『死』ŦJ乂";
     if glitch {
-        draw_glitch_text(pixmap, cx - 130.0 * scale, cy - 240.0 * scale, tag, rgba(255, 255, 255, 255), scale, 0, true);
+        draw_glitch_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 240.0 * scale,
+            tag,
+            rgba(255, 255, 255, 255),
+            scale,
+            0,
+            true,
+        );
     } else {
-        draw_text(pixmap, cx - 130.0 * scale, cy - 240.0 * scale, tag, rgba(255, 255, 255, 255), scale);
+        draw_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 240.0 * scale,
+            tag,
+            rgba(255, 255, 255, 255),
+            scale,
+        );
     }
 }
 
 fn render_stage_backdrop(pixmap: &mut PixmapMut, cx: f32, stage_cy: f32, scale: f32) {
     let stage_w = 648.0 * scale;
     let stage_h = 268.0 * scale;
-    fill_rect(pixmap, cx - stage_w * 0.5, stage_cy - stage_h * 0.5, stage_w, stage_h, rgba(6, 11, 22, 235));
+    fill_rect(
+        pixmap,
+        cx - stage_w * 0.5,
+        stage_cy - stage_h * 0.5,
+        stage_w,
+        stage_h,
+        rgba(6, 11, 22, 235),
+    );
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_adas_road_mesh(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -102,8 +134,24 @@ fn render_adas_road_mesh(
         right_pts.push((rx, ry));
     }
     for i in 0..SLICES - 1 {
-        stroke_line(pixmap, left_pts[i].0, left_pts[i].1, left_pts[i + 1].0, left_pts[i + 1].1, 1.2 * scale, rgba(148, 210, 255, 185));
-        stroke_line(pixmap, right_pts[i].0, right_pts[i].1, right_pts[i + 1].0, right_pts[i + 1].1, 1.2 * scale, rgba(148, 210, 255, 185));
+        stroke_line(
+            pixmap,
+            left_pts[i].0,
+            left_pts[i].1,
+            left_pts[i + 1].0,
+            left_pts[i + 1].1,
+            1.2 * scale,
+            rgba(148, 210, 255, 185),
+        );
+        stroke_line(
+            pixmap,
+            right_pts[i].0,
+            right_pts[i].1,
+            right_pts[i + 1].0,
+            right_pts[i + 1].1,
+            1.2 * scale,
+            rgba(148, 210, 255, 185),
+        );
     }
     for i in 0..SLICES - 1 {
         let t = i as f32 / (SLICES as f32 - 1.0);
@@ -120,7 +168,10 @@ fn render_adas_road_mesh(
     }
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_dashed_lanes(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -149,23 +200,50 @@ fn render_dashed_lanes(
         let half_w = 0.065;
         let d_alpha = clamp_byte(235.0 * (1.0 - (z_start - 1.85) / 41.5));
         let pts = [
-            (cx + (fx * (xc_start - 1.82 - half_w)) / (z_start + 3.4), y_horizon + (fy * 1.85) / (z_start + 3.4)),
-            (cx + (fx * (xc_start - 1.82 + half_w)) / (z_start + 3.4), y_horizon + (fy * 1.85) / (z_start + 3.4)),
-            (cx + (fx * (xc_end - 1.82 + half_w)) / (z_end + 3.4), y_horizon + (fy * 1.85) / (z_end + 3.4)),
-            (cx + (fx * (xc_end - 1.82 - half_w)) / (z_end + 3.4), y_horizon + (fy * 1.85) / (z_end + 3.4)),
+            (
+                cx + (fx * (xc_start - 1.82 - half_w)) / (z_start + 3.4),
+                y_horizon + (fy * 1.85) / (z_start + 3.4),
+            ),
+            (
+                cx + (fx * (xc_start - 1.82 + half_w)) / (z_start + 3.4),
+                y_horizon + (fy * 1.85) / (z_start + 3.4),
+            ),
+            (
+                cx + (fx * (xc_end - 1.82 + half_w)) / (z_end + 3.4),
+                y_horizon + (fy * 1.85) / (z_end + 3.4),
+            ),
+            (
+                cx + (fx * (xc_end - 1.82 - half_w)) / (z_end + 3.4),
+                y_horizon + (fy * 1.85) / (z_end + 3.4),
+            ),
         ];
         fill_polygon(pixmap, &pts, rgba(226, 238, 252, d_alpha));
         let pts2 = [
-            (cx + (fx * (xc_start + 1.82 - half_w)) / (z_start + 3.4), y_horizon + (fy * 1.85) / (z_start + 3.4)),
-            (cx + (fx * (xc_start + 1.82 + half_w)) / (z_start + 3.4), y_horizon + (fy * 1.85) / (z_start + 3.4)),
-            (cx + (fx * (xc_end + 1.82 + half_w)) / (z_end + 3.4), y_horizon + (fy * 1.85) / (z_end + 3.4)),
-            (cx + (fx * (xc_end + 1.82 - half_w)) / (z_end + 3.4), y_horizon + (fy * 1.85) / (z_end + 3.4)),
+            (
+                cx + (fx * (xc_start + 1.82 - half_w)) / (z_start + 3.4),
+                y_horizon + (fy * 1.85) / (z_start + 3.4),
+            ),
+            (
+                cx + (fx * (xc_start + 1.82 + half_w)) / (z_start + 3.4),
+                y_horizon + (fy * 1.85) / (z_start + 3.4),
+            ),
+            (
+                cx + (fx * (xc_end + 1.82 + half_w)) / (z_end + 3.4),
+                y_horizon + (fy * 1.85) / (z_end + 3.4),
+            ),
+            (
+                cx + (fx * (xc_end + 1.82 - half_w)) / (z_end + 3.4),
+                y_horizon + (fy * 1.85) / (z_end + 3.4),
+            ),
         ];
         fill_polygon(pixmap, &pts2, rgba(226, 238, 252, d_alpha));
     }
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_carpet(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -206,7 +284,10 @@ fn render_carpet(
     stroke_polyline(pixmap, &right, 1.6 * scale, rgba(c_r, c_g, c_b, 255), false);
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_ego_vehicle(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -223,14 +304,38 @@ fn render_ego_vehicle(
     let (sx, sy) = project_to_adas_viewport(ego_x, 0.0, ego_z, cx, cy, fx, fy, y_horizon);
     let w = 36.0 * scale;
     let h = 18.0 * scale;
-    fill_rect(pixmap, sx - w / 2.0, sy - h / 2.0, w, h, rgba(brand.0, brand.1, brand.2, 255));
+    fill_rect(
+        pixmap,
+        sx - w / 2.0,
+        sy - h / 2.0,
+        w,
+        h,
+        rgba(brand.0, brand.1, brand.2, 255),
+    );
     if brake > 0.05 {
-        fill_rect(pixmap, sx - 8.0 * scale, sy + h / 2.0 - 3.0 * scale, 16.0 * scale, 4.0 * scale, rgba(255, 23, 68, 255));
-        fill_rect(pixmap, sx - 40.0 * scale, sy + 40.0 * scale, 80.0 * scale, 20.0 * scale, rgba(255, 23, 68, 60));
+        fill_rect(
+            pixmap,
+            sx - 8.0 * scale,
+            sy + h / 2.0 - 3.0 * scale,
+            16.0 * scale,
+            4.0 * scale,
+            rgba(255, 23, 68, 255),
+        );
+        fill_rect(
+            pixmap,
+            sx - 40.0 * scale,
+            sy + 40.0 * scale,
+            80.0 * scale,
+            20.0 * scale,
+            rgba(255, 23, 68, 60),
+        );
     }
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_traffic_fleet(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -263,11 +368,21 @@ fn render_traffic_fleet(
             2 => (74, 92, 114),
             _ => (255, 255, 255),
         };
-        fill_rect(pixmap, sx - 18.0 * scale, sy - 10.0 * scale, 36.0 * scale, 20.0 * scale, rgba(col.0, col.1, col.2, 200));
+        fill_rect(
+            pixmap,
+            sx - 18.0 * scale,
+            sy - 10.0 * scale,
+            36.0 * scale,
+            20.0 * scale,
+            rgba(col.0, col.1, col.2, 200),
+        );
     }
 }
 
-#[expect(clippy::too_many_arguments, reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "legacy tiny-skia helper, replaced by the fh6-kit GPU renderer in Phase 5"
+)]
 fn render_ultrasonic_radar_arcs(
     pixmap: &mut PixmapMut,
     cx: f32,
@@ -302,10 +417,39 @@ fn render_ultrasonic_radar_arcs(
 }
 
 fn render_overhead_telemetry(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32, _speed_ms: f32, _gear: &str) {
-    fill_rect(pixmap, cx - 80.0 * scale, cy - 40.0 * scale, 160.0 * scale, 30.0 * scale, rgba(6, 12, 24, 175));
-    fill_rect(pixmap, cx + 80.0 * scale, cy + 10.0 * scale, 50.0 * scale, 24.0 * scale, rgba(56, 189, 248, 120));
-    fill_round_rect(pixmap, cx - 116.0 * scale, cy - 174.0 * scale, 232.0 * scale, 114.0 * scale, 22.0 * scale, rgba(6, 12, 24, 175));
-    fill_rect(pixmap, cx - 88.0 * scale, cy - 142.0 * scale, 176.0 * scale, 50.0 * scale, rgba(0, 0, 0, 0));
+    fill_rect(
+        pixmap,
+        cx - 80.0 * scale,
+        cy - 40.0 * scale,
+        160.0 * scale,
+        30.0 * scale,
+        rgba(6, 12, 24, 175),
+    );
+    fill_rect(
+        pixmap,
+        cx + 80.0 * scale,
+        cy + 10.0 * scale,
+        50.0 * scale,
+        24.0 * scale,
+        rgba(56, 189, 248, 120),
+    );
+    fill_round_rect(
+        pixmap,
+        cx - 116.0 * scale,
+        cy - 174.0 * scale,
+        232.0 * scale,
+        114.0 * scale,
+        22.0 * scale,
+        rgba(6, 12, 24, 175),
+    );
+    fill_rect(
+        pixmap,
+        cx - 88.0 * scale,
+        cy - 142.0 * scale,
+        176.0 * scale,
+        50.0 * scale,
+        rgba(0, 0, 0, 0),
+    );
 }
 
 fn render_fsd_brackets(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32) {
@@ -317,7 +461,12 @@ fn render_fsd_brackets(pixmap: &mut PixmapMut, cx: f32, cy: f32, scale: f32) {
 fn sanitize_all(data: &FH6TelemetryData) -> (f32, f32, f32, f32, f32) {
     let speed = sanitize_finite(data.speed_ms, 0.0, 0.0, 250.0);
     let kappa = sanitize_finite(data.yaw_curvature(), 0.0, -0.055, 0.055);
-    let beta = sanitize_finite(data.car_slip_angle_rad(), 0.0, -std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_4);
+    let beta = sanitize_finite(
+        data.car_slip_angle_rad(),
+        0.0,
+        -std::f32::consts::FRAC_PI_4,
+        std::f32::consts::FRAC_PI_4,
+    );
     let brake = sanitize_finite(data.brake_pct(), 0.0, 0.0, 1.0);
     let rpm = sanitize_finite(data.normalized_rpm(), 0.0, 0.0, 1.2);
     (speed, kappa, beta, brake, rpm)
@@ -330,7 +479,14 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     let cy = bounds.y() + bounds.height() / 2.0;
     let scale = 1.0;
 
-    fill_rect(pixmap, bounds.x(), bounds.y(), bounds.width(), bounds.height(), rgba(6, 8, 12, 255));
+    fill_rect(
+        pixmap,
+        bounds.x(),
+        bounds.y(),
+        bounds.width(),
+        bounds.height(),
+        rgba(6, 8, 12, 255),
+    );
 
     let (speed_ms, kappa, beta, brake_pct, _rpm) = sanitize_all(data);
     let tan_beta = beta.tan();
@@ -346,7 +502,9 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     let ego_z = 3.2;
     let ego_x = 0.5 * kappa * ego_z * ego_z + tan_beta * ego_z * 0.14;
     let brand_col = brands.get(&data.car_ordinal).copied().unwrap_or((236, 242, 249));
-    render_ego_vehicle(pixmap, cx, cy, scale, fx, fy, y_horizon, ego_x, ego_z, brake_pct, brand_col);
+    render_ego_vehicle(
+        pixmap, cx, cy, scale, fx, fy, y_horizon, ego_x, ego_z, brake_pct, brand_col,
+    );
 
     let z_lead = 17.5 + 5.8 * (0.0f32).sin();
     render_carpet(pixmap, cx, scale, fx, fy, y_horizon, kappa, tan_beta, z_lead, brake_pct);

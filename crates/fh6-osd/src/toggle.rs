@@ -116,13 +116,21 @@ mod tests {
 
         handler.apply_toggle(1, &mut is_open);
         assert!(is_open, "OSD opens");
-        assert_eq!(handler.keyboard_injector.sent_keys, vec![VK_ESCAPE], "ESC pauses the race");
+        assert_eq!(
+            handler.keyboard_injector.sent_keys,
+            vec![VK_ESCAPE],
+            "ESC pauses the race"
+        );
 
         handler.apply_toggle(0, &mut is_open);
         assert!(!is_open, "OSD closes");
         handler.apply_toggle(0, &mut is_open);
         assert!(is_open);
-        assert_eq!(handler.keyboard_injector.sent_keys.len(), 1, "no ESC when already paused");
+        assert_eq!(
+            handler.keyboard_injector.sent_keys.len(),
+            1,
+            "no ESC when already paused"
+        );
     }
 
     #[test]

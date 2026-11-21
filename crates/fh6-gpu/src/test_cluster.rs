@@ -94,7 +94,11 @@ pub fn build(batch: &mut QuadBatch, input: &TestClusterInput) {
     ));
 
     // RPM LED bar.
-    let max_rpm = if finite(input.max_rpm) > 500.0 { input.max_rpm } else { 8000.0 };
+    let max_rpm = if finite(input.max_rpm) > 500.0 {
+        input.max_rpm
+    } else {
+        8000.0
+    };
     let frac = (finite(input.rpm) / max_rpm).clamp(0.0, 1.0);
     let lit = (frac * RPM_LEDS as f32).round() as usize;
     let (bar_x, bar_w, gap) = (40.0, PANEL_W - 80.0, 6.0);
@@ -130,7 +134,13 @@ pub fn build(batch: &mut QuadBatch, input: &TestClusterInput) {
     let shown = finite(input.speed).abs().round().min(999.0) as u32;
     let _ = write!(speed, "{shown:>3}");
     let speed_w = speed_style.text_width(speed.as_str());
-    push_text(batch, speed.as_str(), ox + 300.0 * s - speed_w, oy + 100.0 * s, &speed_style);
+    push_text(
+        batch,
+        speed.as_str(),
+        ox + 300.0 * s - speed_w,
+        oy + 100.0 * s,
+        &speed_style,
+    );
 
     // Gear: one large glyph in the centre.
     let gear_style = SegStyle {
@@ -156,10 +166,19 @@ pub fn build(batch: &mut QuadBatch, input: &TestClusterInput) {
     let mut rpm_text = StackStr::<8>::new();
     let _ = write!(rpm_text, "{:>5}", finite(input.rpm).clamp(0.0, 99_999.0).round() as u32);
     let rpm_w = rpm_style.text_width(rpm_text.as_str());
-    push_text(batch, rpm_text.as_str(), ox + 600.0 * s - rpm_w, oy + 228.0 * s, &rpm_style);
+    push_text(
+        batch,
+        rpm_text.as_str(),
+        ox + 600.0 * s - rpm_w,
+        oy + 228.0 * s,
+        &rpm_style,
+    );
 
     // Throttle and brake bars, filling upwards.
-    for (i, (value, color)) in [(input.throttle, THROTTLE), (input.brake, CRIMSON)].into_iter().enumerate() {
+    for (i, (value, color)) in [(input.throttle, THROTTLE), (input.brake, CRIMSON)]
+        .into_iter()
+        .enumerate()
+    {
         let x = 640.0 + i as f32 * 36.0;
         let (top, height) = (100.0, 172.0);
         batch.push(QuadInstance::new(
@@ -212,7 +231,12 @@ pub fn build_stats(batch: &mut QuadBatch, origin: [f32; 2], line_height: f32, li
         let y = origin[1] + row as f32 * line_height * 1.5;
         push_text(batch, line.label, origin[0], y, &label_style);
         let mut text = StackStr::<16>::new();
-        let _ = write!(text, "{:>7.*}", line.decimals, finite(line.value).clamp(-99_999.0, 99_999.0));
+        let _ = write!(
+            text,
+            "{:>7.*}",
+            line.decimals,
+            finite(line.value).clamp(-99_999.0, 99_999.0)
+        );
         push_text(batch, text.as_str(), origin[0] + label_w, y, &value_style);
     }
 }

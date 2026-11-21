@@ -148,7 +148,9 @@ pub struct RenderSummary {
 /// # Errors
 /// Returns the I/O error if the thread cannot be spawned.
 pub fn spawn(setup: RenderSetup) -> io::Result<(JoinHandle<RenderSummary>, Thread)> {
-    let handle = thread::Builder::new().name("fh6-render".into()).spawn(move || run(setup))?;
+    let handle = thread::Builder::new()
+        .name("fh6-render".into())
+        .spawn(move || run(setup))?;
     let thread = handle.thread().clone();
     Ok((handle, thread))
 }
@@ -484,7 +486,11 @@ fn run(setup: RenderSetup) -> RenderSummary {
         vsync_checked: lp.stats.vsync_checked,
         refresh,
     };
-    tracing::info!(frames = summary.frames, packets = summary.packets, "render loop stopped");
+    tracing::info!(
+        frames = summary.frames,
+        packets = summary.packets,
+        "render loop stopped"
+    );
     summary
 }
 

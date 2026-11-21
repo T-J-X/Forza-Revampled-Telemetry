@@ -69,11 +69,7 @@ impl std::fmt::Debug for Shared {
 static ACTIVE: OnceLock<Mutex<Option<Arc<Shared>>>> = OnceLock::new();
 
 fn active() -> Option<Arc<Shared>> {
-    ACTIVE
-        .get()?
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
+    ACTIVE.get()?.lock().unwrap_or_else(PoisonError::into_inner).clone()
 }
 
 /// The file name of the process that owns `pid`, lower-cased.
@@ -107,7 +103,11 @@ fn refresh(shared: &Shared) {
         unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
         if cache.hwnd != raw || cache.pid != pid {
             let is_game = pid != 0 && process_image_name(pid).is_some_and(|n| n == shared.target_exe);
-            *cache = Cache { hwnd: raw, pid, is_game };
+            *cache = Cache {
+                hwnd: raw,
+                pid,
+                is_game,
+            };
         }
         cache.is_game
     };

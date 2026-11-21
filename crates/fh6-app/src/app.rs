@@ -168,7 +168,6 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
     .map_err(io_err("starting the render thread"))?;
     let _ = waker.0.set(render_thread.clone());
 
-
     let ctl = app_window.ctl();
     ctl.set_timer(TIMER_FOREGROUND, FOREGROUND_POLL);
     ctl.set_timer(TIMER_SLOW, SLOW_TICK);
@@ -307,8 +306,12 @@ impl Handler {
     }
 
     fn follow_game_monitor(&mut self) {
-        let Some(hwnd) = self.foreground_reader.game_window() else { return };
-        let Some(rect) = monitor::monitor_rect_for_window(hwnd) else { return };
+        let Some(hwnd) = self.foreground_reader.game_window() else {
+            return;
+        };
+        let Some(rect) = monitor::monitor_rect_for_window(hwnd) else {
+            return;
+        };
         if rect == self.current_rect {
             return;
         }

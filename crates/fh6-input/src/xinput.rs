@@ -124,7 +124,8 @@ mod imp {
                 let (get_state, get_state_ex) = unsafe {
                     (
                         std::mem::transmute::<unsafe extern "system" fn() -> isize, GetStateFn>(get_state),
-                        get_state_ex.map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, GetStateFn>(f)),
+                        get_state_ex
+                            .map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, GetStateFn>(f)),
                     )
                 };
                 tracing::info!(dll, guide = get_state_ex.is_some(), "XInput loaded");

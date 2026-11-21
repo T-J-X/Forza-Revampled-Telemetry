@@ -10,7 +10,11 @@ fn os(args: &[&str]) -> Vec<OsString> {
 #[test]
 fn steam_command_wraps_the_game_with_its_arguments() {
     // Steam replaces %command% with the game executable and its own arguments.
-    let got = plan(os(&[r"E:\SteamLibrary\steamapps\common\ForzaHorizon6\ForzaHorizon6.exe", "+connect", "server"]));
+    let got = plan(os(&[
+        r"E:\SteamLibrary\steamapps\common\ForzaHorizon6\ForzaHorizon6.exe",
+        "+connect",
+        "server",
+    ]));
     assert_eq!(
         got,
         LaunchPlan::WrapGame {
@@ -22,7 +26,11 @@ fn steam_command_wraps_the_game_with_its_arguments() {
 
 #[test]
 fn game_arguments_with_spaces_pass_through_untouched() {
-    let got = plan(os(&[r"C:\Games\Forza Horizon 6\ForzaHorizon6.exe", "-name", "two words"]));
+    let got = plan(os(&[
+        r"C:\Games\Forza Horizon 6\ForzaHorizon6.exe",
+        "-name",
+        "two words",
+    ]));
     let LaunchPlan::WrapGame { game, game_args } = got else {
         panic!("expected WrapGame");
     };

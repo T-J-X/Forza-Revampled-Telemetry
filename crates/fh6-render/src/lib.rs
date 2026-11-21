@@ -37,4 +37,3 @@ pub fn binnacle_center(canvas_w: u32, canvas_h: u32) -> (f32, f32) {
     let cy = canvas_h as f32 * 0.845;
     (cx, cy)
 }
-

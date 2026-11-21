@@ -112,7 +112,6 @@ impl FH6TelemetryData {
     }
 }
 
-
 /// Length of a Forza "Data Out" packet in bytes.
 pub const PACKET_LEN: usize = 324;
 

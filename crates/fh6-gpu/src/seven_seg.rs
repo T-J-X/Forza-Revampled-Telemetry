@@ -77,7 +77,13 @@ impl SegStyle {
     /// Width of `text` when drawn with [`push_text`].
     pub fn text_width(&self, text: &str) -> f32 {
         text.chars()
-            .map(|c| if c == '.' { self.thickness() * 1.8 } else { self.advance() })
+            .map(|c| {
+                if c == '.' {
+                    self.thickness() * 1.8
+                } else {
+                    self.advance()
+                }
+            })
             .sum()
     }
 }
@@ -97,7 +103,11 @@ pub fn push_glyph(batch: &mut QuadBatch, mask: u8, x: f32, y: f32, style: &SegSt
         ));
     }
     if mask != 0 {
-        batch.push(QuadInstance::new(rect, style.color, QuadKind::Segments { thickness, mask }));
+        batch.push(QuadInstance::new(
+            rect,
+            style.color,
+            QuadKind::Segments { thickness, mask },
+        ));
     }
 }
 

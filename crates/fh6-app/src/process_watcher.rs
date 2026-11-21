@@ -29,7 +29,9 @@ impl ProcessWatcher {
 
     /// Feeds the current process list (any case); returns a transition, if any.
     pub fn check<S: AsRef<str>>(&mut self, processes: &[S]) -> Option<GameState> {
-        let found = processes.iter().any(|p| p.as_ref().eq_ignore_ascii_case(&self.target_name));
+        let found = processes
+            .iter()
+            .any(|p| p.as_ref().eq_ignore_ascii_case(&self.target_name));
         let current = if found { GameState::Started } else { GameState::Stopped };
         self.seen_running |= found;
         let changed = current != self.last_state;

@@ -63,7 +63,9 @@ impl QuadInstance {
             QuadKind::RoundedRect { radius, rim } => {
                 [finite_or(radius, 0.0).max(0.0), 0.0, 0.0, finite_or(rim, 0.0).max(0.0)]
             }
-            QuadKind::Segments { thickness, mask } => [finite_or(thickness, 1.0).max(1.0), 1.0, f32::from(mask & 0x7F), 0.0],
+            QuadKind::Segments { thickness, mask } => {
+                [finite_or(thickness, 1.0).max(1.0), 1.0, f32::from(mask & 0x7F), 0.0]
+            }
         };
         Self { rect, color, params }
     }

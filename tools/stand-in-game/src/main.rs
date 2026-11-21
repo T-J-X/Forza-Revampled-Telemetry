@@ -20,7 +20,9 @@ fn parse_rgb(hex: &str) -> Option<[u8; 3]> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let value = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1));
-    let rgb = value("--color").and_then(|v| parse_rgb(v)).unwrap_or([0x10, 0x14, 0x18]);
+    let rgb = value("--color")
+        .and_then(|v| parse_rgb(v))
+        .unwrap_or([0x10, 0x14, 0x18]);
     let title = value("--title").map_or("Stand-in game", String::as_str);
     fh6_win::monitor::enable_per_monitor_dpi_awareness();
     let Some(rect) = fh6_win::monitor::primary_monitor_rect() else {

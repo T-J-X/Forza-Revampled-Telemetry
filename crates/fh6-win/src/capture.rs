@@ -57,7 +57,15 @@ pub fn capture_screen(x: i32, y: i32, width: u32, height: u32) -> Result<Screens
         let mut bgra = vec![0u8; (w as usize) * (h as usize) * 4];
         SelectObject(mem, old);
         let lines = if blit.is_ok() {
-            GetDIBits(mem, bitmap, 0, h as u32, Some(bgra.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS)
+            GetDIBits(
+                mem,
+                bitmap,
+                0,
+                h as u32,
+                Some(bgra.as_mut_ptr().cast()),
+                &mut info,
+                DIB_RGB_COLORS,
+            )
         } else {
             0
         };

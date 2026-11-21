@@ -3,8 +3,8 @@
 //! inverse-square radial glow tinted by the active cluster accent colour.
 //! Uses premultiplied RGBA8 buffers for correct tiny-skia blending.
 
-use tiny_skia::PixmapMut;
 use crate::binnacle_center;
+use tiny_skia::PixmapMut;
 
 /// Maps normalized cowl feather [0.05..1.0] to feather sigma in pixels.
 /// Linear mapping: 0.05 -> 6 px, 1.0 -> 64 px at scale 1.0.
@@ -23,8 +23,8 @@ struct DirtyKey {
     accent_g: u8,
     accent_b: u8,
     intensity_bits: u32,
-    feather_bits:   u32,
-    scale_bits:     u32,
+    feather_bits: u32,
+    scale_bits: u32,
     canvas_w: u32,
     canvas_h: u32,
 }
@@ -43,7 +43,10 @@ impl BinnacleAmbientWash {
         Self {
             dirty_key: None,
             roi_buf: Vec::new(),
-            roi_x: 0, roi_y: 0, roi_w: 0, roi_h: 0,
+            roi_x: 0,
+            roi_y: 0,
+            roi_w: 0,
+            roi_h: 0,
         }
     }
 
@@ -62,8 +65,8 @@ impl BinnacleAmbientWash {
             accent_g: accent.1,
             accent_b: accent.2,
             intensity_bits: intensity.to_bits(),
-            feather_bits:   feather_sigma.to_bits(),
-            scale_bits:     scale.to_bits(),
+            feather_bits: feather_sigma.to_bits(),
+            scale_bits: scale.to_bits(),
             canvas_w,
             canvas_h,
         };
@@ -104,10 +107,10 @@ impl BinnacleAmbientWash {
         let h_arch = 110.0 * scale;
 
         let neck_top = cy + 60.0 * scale;
-        let neck_hw  = 55.0  * scale;
+        let neck_hw = 55.0 * scale;
 
         let i_glow = intensity * 1.0_f32;
-        let k      = 1.0 / (380.0 * scale * 380.0 * scale);
+        let k = 1.0 / (380.0 * scale * 380.0 * scale);
         let two_sigma_sq = 2.0 * feather_sigma * feather_sigma;
 
         let buf_len = (roi_w * roi_h * 4) as usize;
@@ -125,7 +128,7 @@ impl BinnacleAmbientWash {
                 let base = ((py * roi_w + px) * 4) as usize;
 
                 if d_cowl < -feather_sigma || (wy > neck_top && (wx - cx).abs() < neck_hw) {
-                    self.roi_buf[base]     = 0;
+                    self.roi_buf[base] = 0;
                     self.roi_buf[base + 1] = 0;
                     self.roi_buf[base + 2] = 0;
                     self.roi_buf[base + 3] = 0;
@@ -145,7 +148,7 @@ impl BinnacleAmbientWash {
                 let alpha_f = l * 35.0;
 
                 if alpha_f < 2.0 {
-                    self.roi_buf[base]     = 0;
+                    self.roi_buf[base] = 0;
                     self.roi_buf[base + 1] = 0;
                     self.roi_buf[base + 2] = 0;
                     self.roi_buf[base + 3] = 0;
@@ -156,7 +159,7 @@ impl BinnacleAmbientWash {
                     let g = ((accent.1 as u32 * alpha as u32) / 255) as u8;
                     let b = ((accent.2 as u32 * alpha as u32) / 255) as u8;
 
-                    self.roi_buf[base]     = r;
+                    self.roi_buf[base] = r;
                     self.roi_buf[base + 1] = g;
                     self.roi_buf[base + 2] = b;
                     self.roi_buf[base + 3] = alpha;
@@ -171,32 +174,37 @@ impl BinnacleAmbientWash {
 
         for py in 0..self.roi_h {
             let src_row_start = (py * self.roi_w * 4) as usize;
-            let dst_row_start = ((self.roi_y + py) as usize) * stride
-                + (self.roi_x as usize) * 4;
+            let dst_row_start = ((self.roi_y + py) as usize) * stride + (self.roi_x as usize) * 4;
 
             for px in 0..self.roi_w {
                 let s = src_row_start + (px as usize) * 4;
                 let d = dst_row_start + (px as usize) * 4;
-                if d + 3 >= dst.len() { break; }
+                if d + 3 >= dst.len() {
+                    break;
+                }
 
                 let src_a = self.roi_buf[s + 3] as u32;
-                if src_a == 0 { continue; }
+                if src_a == 0 {
+                    continue;
+                }
 
                 let inv_src_a = 255 - src_a;
                 // premultiplied source-over
-                dst[d]   = (self.roi_buf[s]   as u32 + (dst[d]   as u32 * inv_src_a) / 255) as u8;
-                dst[d+1] = (self.roi_buf[s+1] as u32 + (dst[d+1] as u32 * inv_src_a) / 255) as u8;
-                dst[d+2] = (self.roi_buf[s+2] as u32 + (dst[d+2] as u32 * inv_src_a) / 255) as u8;
+                dst[d] = (self.roi_buf[s] as u32 + (dst[d] as u32 * inv_src_a) / 255) as u8;
+                dst[d + 1] = (self.roi_buf[s + 1] as u32 + (dst[d + 1] as u32 * inv_src_a) / 255) as u8;
+                dst[d + 2] = (self.roi_buf[s + 2] as u32 + (dst[d + 2] as u32 * inv_src_a) / 255) as u8;
                 let dst_a = dst[d + 3] as u32;
                 let out_a = src_a + dst_a * inv_src_a / 255;
-                dst[d+3] = out_a as u8;
+                dst[d + 3] = out_a as u8;
             }
         }
     }
 }
 
 impl Default for BinnacleAmbientWash {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -209,14 +217,14 @@ mod tests {
         let mut wash = BinnacleAmbientWash::new();
         let mut pix = Pixmap::new(3840, 2160).unwrap();
         wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-        
+
         // Sample inside the binnacle cavity (cx, cy)
         let cx = 1920;
         let cy = (2160.0 * 0.845) as usize;
         let idx = (cy * 3840 + cx) * 4;
         let a = pix.data()[idx + 3];
         let r = pix.data()[idx];
-        
+
         assert!((12..=35).contains(&a), "cavity alpha must be within 12..=35, got {}", a);
         assert!(r <= a, "premultiplied R channel ({}) must be <= alpha ({})", r, a);
     }
@@ -226,7 +234,7 @@ mod tests {
         let mut wash = BinnacleAmbientWash::new();
         let mut pix = Pixmap::new(3840, 2160).unwrap();
         wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-        
+
         // Top-left corner (well above cowl dome)
         let idx = (10 * 3840 + 10) * 4;
         assert_eq!(pix.data()[idx + 3], 0, "pixel above cowl must have alpha=0");
@@ -237,7 +245,7 @@ mod tests {
         let mut wash = BinnacleAmbientWash::new();
         let mut pix = Pixmap::new(3840, 2160).unwrap();
         wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-        
+
         // Directly below binnacle center in steering neck cutout
         let cx = 1920;
         let ny = (2160.0 * 0.845 + 150.0) as usize;
@@ -253,7 +261,10 @@ mod tests {
         let buf_ptr_1 = wash.roi_buf.as_ptr();
         wash.render(&mut pix.as_mut(), 3840, 2160, (255, 60, 0), 0.8, 12.0, 2.0);
         let buf_ptr_2 = wash.roi_buf.as_ptr();
-        
-        assert_eq!(buf_ptr_1, buf_ptr_2, "dirty-key must prevent unnecessary recompute buffer reallocation");
+
+        assert_eq!(
+            buf_ptr_1, buf_ptr_2,
+            "dirty-key must prevent unnecessary recompute buffer reallocation"
+        );
     }
 }

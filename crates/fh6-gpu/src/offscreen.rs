@@ -116,7 +116,12 @@ impl OffscreenTarget {
     ///
     /// # Errors
     /// [`GpuError::Readback`] if mapping the readback buffer fails.
-    pub fn render_to_image(&mut self, ctx: &GpuContext, opacity: f32, batch: &QuadBatch) -> Result<RgbaImage, GpuError> {
+    pub fn render_to_image(
+        &mut self,
+        ctx: &GpuContext,
+        opacity: f32,
+        batch: &QuadBatch,
+    ) -> Result<RgbaImage, GpuError> {
         self.renderer
             .prepare(&ctx.queue, &Globals::new(self.width, self.height, opacity), batch);
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

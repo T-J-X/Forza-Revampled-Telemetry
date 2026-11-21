@@ -15,11 +15,11 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW,
-    GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage,
-    RegisterWindowMessageW, SetForegroundWindow, SetTimer, SetWindowLongPtrW, TrackPopupMenu, TranslateMessage,
-    GWLP_USERDATA, IDI_APPLICATION, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK,
-    WM_NCDESTROY, WM_NULL, WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW, WS_OVERLAPPED,
+    GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage, RegisterWindowMessageW,
+    SetForegroundWindow, SetTimer, SetWindowLongPtrW, TrackPopupMenu, TranslateMessage, GWLP_USERDATA, IDI_APPLICATION,
+    MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WM_APP,
+    WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK, WM_NCDESTROY, WM_NULL, WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW,
+    WS_OVERLAPPED,
 };
 
 const CLASS_NAME: PCWSTR = w!("FH6WheelDashApp");
@@ -135,7 +135,9 @@ pub struct WindowCtl<'a> {
 
 impl std::fmt::Debug for WindowCtl<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WindowCtl").field("hwnd", &self.hwnd).finish_non_exhaustive()
+        f.debug_struct("WindowCtl")
+            .field("hwnd", &self.hwnd)
+            .finish_non_exhaustive()
     }
 }
 
@@ -204,9 +206,23 @@ fn show_tray_menu(hwnd: HWND, state: &WindowState) -> Option<TrayCommand> {
     // labels are static strings.
     unsafe {
         let menu = CreatePopupMenu().ok()?;
-        let check = if state.overlay_checked.get() { MF_CHECKED } else { MF_STRING };
-        let _ = AppendMenuW(menu, MF_STRING | check, TrayCommand::ToggleOverlay.id(), w!("Overlay visible"));
-        let _ = AppendMenuW(menu, MF_STRING, TrayCommand::OpenConfigurator.id(), w!("Open configurator"));
+        let check = if state.overlay_checked.get() {
+            MF_CHECKED
+        } else {
+            MF_STRING
+        };
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING | check,
+            TrayCommand::ToggleOverlay.id(),
+            w!("Overlay visible"),
+        );
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            TrayCommand::OpenConfigurator.id(),
+            w!("Open configurator"),
+        );
         let _ = AppendMenuW(menu, MF_STRING, TrayCommand::OpenOsd.id(), w!("Open OSD"));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING, TrayCommand::Quit.id(), w!("Quit FH6 WheelDash"));
@@ -310,7 +326,9 @@ pub struct AppWindow {
 
 impl std::fmt::Debug for AppWindow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AppWindow").field("hwnd", &self.hwnd).finish_non_exhaustive()
+        f.debug_struct("AppWindow")
+            .field("hwnd", &self.hwnd)
+            .finish_non_exhaustive()
     }
 }
 

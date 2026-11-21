@@ -161,7 +161,11 @@ impl<S: PadSource> InputControllerTracker<S> {
         for (slot, prev) in self.prev_buttons.iter_mut().enumerate() {
             // XInputGetState on an empty slot is slow; probe empty slots once a second only.
             let probe_due = self.slot_live[slot] || now >= self.next_probe_ms[slot];
-            let state = if probe_due { self.pad_source.poll_slot(slot) } else { None };
+            let state = if probe_due {
+                self.pad_source.poll_slot(slot)
+            } else {
+                None
+            };
             if probe_due {
                 self.slot_live[slot] = state.is_some();
                 if state.is_none() {
@@ -267,7 +271,8 @@ mod tests {
 
     #[test]
     fn rb_rising_edge_advances_camera_ring() {
-        let mut t = InputControllerTracker::new(FakePad::new(&[0, XINPUT_GAMEPAD_RIGHT_SHOULDER]), HoldConfig::default());
+        let mut t =
+            InputControllerTracker::new(FakePad::new(&[0, XINPUT_GAMEPAD_RIGHT_SHOULDER]), HoldConfig::default());
         let mut cam = 3usize;
         t.poll(&mut cam, &driving(0));
         let ev = t.poll(&mut cam, &driving(16));

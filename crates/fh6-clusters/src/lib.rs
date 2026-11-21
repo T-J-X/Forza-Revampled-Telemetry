@@ -1,13 +1,16 @@
 //! fh6-clusters: 18 bespoke motorsport instrument cluster implementations.
 
-use fh6_core::ClusterTheme;
-use fh6_render::ClusterRenderer;
 use fh6_core::config::CameraViewMode;
-use fh6_render::oem_scrim::{ambient_wash::{BinnacleAmbientWash, feather_sigma_px}, scrim::render_oem_scrim};
+use fh6_core::ClusterTheme;
 use fh6_render::binnacle_center;
-use tiny_skia::{Rect, Transform, Pixmap, PixmapPaint};
+use fh6_render::oem_scrim::{
+    ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
+    scrim::render_oem_scrim,
+};
+use fh6_render::ClusterRenderer;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use tiny_skia::{Pixmap, PixmapPaint, Rect, Transform};
 
 pub mod clusters;
 pub mod draw_ext;
@@ -242,107 +245,227 @@ impl ClusterRenderer for LegacyDigitalRenderer {
 
 pub struct ChronoEventHorizonRenderer;
 impl ClusterRenderer for ChronoEventHorizonRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::ChronoEventHorizon }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::ChronoEventHorizon
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::chrono_event_horizon::render(pixmap, bounds, data, config);
     }
 }
 pub struct NeuralCyberSynapseRenderer;
 impl ClusterRenderer for NeuralCyberSynapseRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::NeuralCyberSynapse }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::NeuralCyberSynapse
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::neural_cyber_synapse::render(pixmap, bounds, data, config);
     }
 }
 pub struct Gt7ModularTripodRenderer;
 impl ClusterRenderer for Gt7ModularTripodRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::Gt7ModularTripod }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::Gt7ModularTripod
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::gt7_modular_tripod::render(pixmap, bounds, data, config);
     }
 }
 pub struct ArNavWayfinderRenderer;
 impl ClusterRenderer for ArNavWayfinderRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::ArNavWayfinder }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::ArNavWayfinder
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::ar_nav_wayfinder::render(pixmap, bounds, data, config);
     }
 }
 pub struct SolarisWarpCoreRenderer;
 impl ClusterRenderer for SolarisWarpCoreRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::SolarisWarpCore }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::SolarisWarpCore
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::solaris_warp_core::render(pixmap, bounds, data, config);
     }
 }
 
 pub struct VisionSpatialGlassRenderer;
 impl ClusterRenderer for VisionSpatialGlassRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::VisionSpatialGlass }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::VisionSpatialGlass
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::vision_spatial_glass::render(pixmap, bounds, data, config);
     }
 }
 pub struct GlyphDotMatrixRenderer;
 impl ClusterRenderer for GlyphDotMatrixRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::GlyphDotMatrix }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::GlyphDotMatrix
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::glyph_dot_matrix::render(pixmap, bounds, data, config);
     }
 }
 pub struct AeroPlasmaBladeRenderer;
 impl ClusterRenderer for AeroPlasmaBladeRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::AeroPlasmaBlade }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::AeroPlasmaBlade
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::aero_plasma_blade::render(pixmap, bounds, data, config);
     }
 }
 pub struct CymaticResonanceFieldRenderer;
 impl ClusterRenderer for CymaticResonanceFieldRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::CymaticResonanceField }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::CymaticResonanceField
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::cymatic_resonance_field::render(pixmap, bounds, data, config);
     }
 }
 pub struct KineticLiquidMetalRenderer;
 impl ClusterRenderer for KineticLiquidMetalRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::KineticLiquidMetal }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::KineticLiquidMetal
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::kinetic_liquid_metal::render(pixmap, bounds, data, config);
     }
 }
 pub struct ShibuyaChromaticPrismaRenderer;
 impl ClusterRenderer for ShibuyaChromaticPrismaRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::ShibuyaChromaticPrisma }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::ShibuyaChromaticPrisma
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::shibuya_chromatic_prisma::render(pixmap, bounds, data, config);
     }
 }
 pub struct BugattiTourbillonRenderer;
 impl ClusterRenderer for BugattiTourbillonRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::BugattiTourbillon }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::BugattiTourbillon
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::bugatti_tourbillon::render(pixmap, bounds, data, config);
     }
 }
 pub struct PaganiHorologerieRenderer;
 impl ClusterRenderer for PaganiHorologerieRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::PaganiHorologerie }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::PaganiHorologerie
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::pagani_horologerie::render(pixmap, bounds, data, config);
     }
 }
 pub struct KoenigseggGyroRenderer;
 impl ClusterRenderer for KoenigseggGyroRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::KoenigseggGyro }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::KoenigseggGyro
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::koenigsegg_gyro::render(pixmap, bounds, data, config);
     }
 }
 pub struct LfaV10NurburgringRenderer;
 impl ClusterRenderer for LfaV10NurburgringRenderer {
-    fn theme(&self) -> ClusterTheme { ClusterTheme::LfaV10Nurburgring }
-    fn render(&mut self, pixmap: &mut tiny_skia::PixmapMut, bounds: tiny_skia::Rect, data: &fh6_core::FH6TelemetryData, config: &fh6_core::AppConfig) {
+    fn theme(&self) -> ClusterTheme {
+        ClusterTheme::LfaV10Nurburgring
+    }
+    fn render(
+        &mut self,
+        pixmap: &mut tiny_skia::PixmapMut,
+        bounds: tiny_skia::Rect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    ) {
         clusters::lfa_v10_nurburgring::render(pixmap, bounds, data, config);
     }
 }
@@ -416,7 +539,15 @@ pub fn render_cluster(
             let feather_sigma = feather_sigma_px(feather_norm, scale);
             let wash_mutex = WASH.get_or_init(|| Mutex::new(BinnacleAmbientWash::new()));
             let mut wash = wash_mutex.lock().unwrap();
-            wash.render(pixmap, pixmap.width(), pixmap.height(), accent, intensity, feather_sigma, scale);
+            wash.render(
+                pixmap,
+                pixmap.width(),
+                pixmap.height(),
+                accent,
+                intensity,
+                feather_sigma,
+                scale,
+            );
         }
     }
 
@@ -492,4 +623,3 @@ mod tests {
         assert_eq!(pixmap.data_mut()[idx + 3], 0, "bonnet must not draw wash");
     }
 }
-
