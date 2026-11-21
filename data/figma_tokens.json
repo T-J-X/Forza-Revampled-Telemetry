@@ -2,7 +2,7 @@
   "$schema": "https://figma-hmi-tokens.local/v2/schema.json",
   "meta": {
     "project": "FH6_WheelDash",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "targetDisplay": "55-inch LG C1 4K WOLED",
     "targetResolution": {
       "width": 3840,
@@ -23,7 +23,8 @@
     "figmaNote": "Phase 3 used the HTML-board fallback (docs/design/FIGMA.md). The two legacy keys ZW8mpHivoqjl8p7eLlvdBi and FsEcAnDwfFf340i8zwbBup are not the v2 master.",
     "legacyKeys": "typography.tiers, sharedSemantics and clusters.* are v1 values kept for the current tiny-skia code. New work reads the v3 sections (colorRoles .. accessibility). Phase 7 replaces clusters.* per cluster.",
     "updated": "2026-11-20",
-    "researchBasis": "docs/design/RESEARCH.md §8 principles 1–10"
+    "researchBasis": "docs/design/RESEARCH.md §8 principles 1–10",
+    "critiqueRound": "docs/design/CRITIQUE.md round 1 fixes applied 2026-11-21"
   },
   "typography": {
     "primaryFontStack": [
@@ -203,8 +204,8 @@
       "shift": {
         "from": 1,
         "role": "shift",
-        "defaultHex": "#7C5CFF",
-        "note": "all lights switch to the shift colour and strobe; brands with ShiftFlashHex #FFFFFF strobe white"
+        "defaultHex": "#978DFC",
+        "note": "violet lifted to OKLCH L 0.70 so the shift cue never drops in luminance below the red stage (>= 7:1 on black). Brands whose ShiftFlashHex is white strobe white; a palette validator keeps shift >= 60 deg of hue from primary."
       },
       "unlitAlpha": 22,
       "hysteresisRpm": 120
@@ -336,11 +337,11 @@
       "shift": {
         "rule": "pick from [#FFFFFF, accent, #7C5CFF, #00E5FF] by highest contrast to stage3"
       },
-      "forbidden": "primary hue within 15 deg of warning hue (25 deg) is rejected so red never means two things"
+      "forbidden": "primary hue within 25 deg of the warning hue is rejected so red never means two things; shift must sit >= 60 deg of hue from primary"
     },
     "familyDefaults": {
       "classicAnalog": {
-        "primary": "#FF3B1F",
+        "primary": "#FF7A1A",
         "secondary": "#C9CED6",
         "accent": "#FFC21A",
         "shift": "#FFFFFF"
@@ -349,13 +350,13 @@
         "primary": "#00D2FF",
         "secondary": "#8A96A8",
         "accent": "#FFFFFF",
-        "shift": "#7C5CFF"
+        "shift": "#978DFC"
       },
       "liquidGlass": {
         "primary": "#38BDF8",
         "secondary": "#C7E9FF",
         "accent": "#FFFFFF",
-        "shift": "#FFFFFF"
+        "shift": "#978DFC"
       },
       "sciFi": {
         "primary": "#00F5D4",
@@ -373,13 +374,13 @@
         "primary": "#3B82F6",
         "secondary": "#94A3B8",
         "accent": "#38BDF8",
-        "shift": "#FFFFFF"
+        "shift": "#978DFC"
       },
       "raceDash": {
         "primary": "#00B4FF",
         "secondary": "#9AA3AE",
         "accent": "#FFD60A",
-        "shift": "#2F6BFF"
+        "shift": "#B27CFF"
       }
     }
   },
@@ -572,7 +573,17 @@
       "doc": "Fixed digit cell = advanceEm x font size, digit centred in its cell. Speed is a fixed 3-cell field; unused leading cells draw the ghost glyph in inkGhost.",
       "speedCells": 3,
       "rpmCells": 5,
-      "ghostGlyph": "8"
+      "ghostGlyph": "8",
+      "ghostByFamily": {
+        "classicAnalog": false,
+        "liquidGlass": false,
+        "fluidGenerative": false,
+        "modernDigital": true,
+        "raceDash": true,
+        "sciFi": "segments",
+        "adasHud": false,
+        "doc": "ghost 8s belong to digital and VFD families; analog, glass and fluid faces suppress them"
+      }
     },
     "userFonts": {
       "doc": "A user font replaces display (and optionally text). Layout keeps working because: sizes are cap-height based; digits use fixed cells; labels fit their box by shrinking to 85% then eliding; vertical centring uses cap height, not the em box.",
@@ -600,7 +611,15 @@
         0.55
       ]
     },
-    "tnumCheck": "Phase 6 records per face whether tnum exists; fh6-kit forces fixed MSDF advances either way."
+    "tnumCheck": "Phase 6 records per face whether tnum exists; fh6-kit forces fixed MSDF advances either way.",
+    "keyline": {
+      "doc": "hood view and any glyph over a bright scene: black ring around the strokes (MSDF outer distance), never a box",
+      "innerPx": 6,
+      "outerPx": 18,
+      "gearInnerPx": 8,
+      "gearOuterPx": 24,
+      "alpha": 230
+    }
   },
   "space": {
     "gridPx": 8,
@@ -782,8 +801,9 @@
     "caustic": {
       "asset": "assets/liquid_glass_caustic_lens.png",
       "blend": "screen",
-      "opacity": 0.32,
-      "procedural": "two octaves of animated voronoi edges, 0.05 Hz drift"
+      "opacity": 0.12,
+      "procedural": "two octaves of animated voronoi edges, 0.05 Hz drift",
+      "mask": "edge band only: caustic *= 1 - smoothstep(48, 140, insetDistance); knocked out behind gear and speed; frozen at idle (phase from integrated speed, amplitude 0.3 + 0.7*clamp(|G|/1.2))"
     },
     "fresnel": {
       "ior": 1.52,
@@ -1111,7 +1131,8 @@
       "z2_speed": {
         "rank": 2,
         "capMinPx": 84,
-        "maxDistanceFromGearPx": 420
+        "maxDistanceFromGearPx": 460,
+        "note": "460 px allows a tucked analog satellite (Classic) whose digits sit at its centre"
       },
       "z3_tach": {
         "rank": 3
@@ -1223,7 +1244,9 @@
       "scale": "type.scale.gearHero",
       "reverse": "R in warning role",
       "neutral": "N in inkMuted",
-      "motion": "motion.gearChange"
+      "motion": "motion.gearChange",
+      "minRatioSpeedToGear": 0.4,
+      "maxRatioSpeedToGear": 0.56
     },
     "tabularSpeed": {
       "scale": "type.scale.speedHero",
@@ -1287,15 +1310,15 @@
     "adasRoad": {
       "eye": {
         "x": 0,
-        "y": 1.85,
-        "z": -3.4
+        "y": 3.4,
+        "z": -6
       },
       "nearZ": 0.1,
       "egoZ": 3.2,
       "laneWidthM": 3.6,
       "curvature": "kappa = yawRate / max(v, 3 m/s)",
       "fadeEdgesPx": 120,
-      "verticalFovDeg": 35,
+      "verticalFovDeg": 33,
       "carpet": {
         "segments": 64,
         "nearAlpha": 0.55,
@@ -1307,7 +1330,12 @@
         "nominal": "#38BDF8",
         "assist": "#FFB020",
         "limiter": "#C04BFF"
-      }
+      },
+      "pitchDeg": 8,
+      "note": "Round-1 critique: the v1 eye (0, 1.85, -3.4) sits too low, so the ego roof covers the road ahead. Raised to a Tesla-style chase cam; ego in the bottom 40% of the scene band, lead car fully above the ego roof. AGENTS.md (Design Council 3D) still quotes the old eye and should be updated by the conductor.",
+      "groundFill": "none: the road reads from edge lines, dashes and the carpet; an optional ground is a black dimming pad, never lit colour",
+      "trafficRules": "traffic #8C929C at alpha 178, peak luminance <= 45% of the speed digits; no ambient car in an adjacent lane nearer than egoZ + 6 m; a blind-spot car shows only as the proximity arc plus a ghost body at alpha 0.30",
+      "egoHeading": "path tangent + sign(kappa) * |slip|: the nose points into the bend in a drift (verify signs against tests/golden/packets before coding)"
     },
     "gBall": {
       "ringsG": [
