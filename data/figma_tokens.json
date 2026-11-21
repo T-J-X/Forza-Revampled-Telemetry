@@ -1152,10 +1152,18 @@
       "doc": "GT7 Race Info Only / Lucid Zen"
     },
     "classicDial": {
-      "shiftAtTwelve": true,
-      "sweepDeg": 270,
-      "formula": "angle = 270 + (rpm - shiftRpm) * 270 / maxRpm (screen degrees, 0 = 3 o'clock, clockwise)",
-      "operatingBand": "peak-torque to peak-power rpm, 4% of R, lume green at 35%"
+      "defaultSweep": {
+        "startDeg": 135,
+        "sweepDeg": 270,
+        "doc": "symmetric linear face (0 at 7:30, max at 4:30)"
+      },
+      "trackMode": {
+        "optional": true,
+        "shiftAtTwelve": true,
+        "formula": "angle = 270 + (rpm - shiftRpm) * 270 / maxRpm (screen degrees, 0 = 3 o'clock, clockwise)",
+        "doc": "Porsche-style per-car rotation so the needle stands vertical at the shift rpm; offered as a mode because a linear 270 deg face becomes lopsided when rotated"
+      },
+      "operatingBand": "peak-torque to peak-power rpm from the car profile, 9 px band on the chapter ring, lume green at 35%"
     }
   },
   "states": {
