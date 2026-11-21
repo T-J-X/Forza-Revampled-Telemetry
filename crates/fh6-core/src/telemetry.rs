@@ -112,119 +112,78 @@ impl FH6TelemetryData {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct TelemetryEngine {
-    pub latest: FH6TelemetryData,
-}
+/// Length of a Forza "Data Out" packet in bytes.
+pub const PACKET_LEN: usize = 324;
 
-#[derive(Debug)]
+/// Why a datagram could not be decoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TelemetryError {
+    /// The datagram is not exactly [`PACKET_LEN`] bytes.
+    #[error("invalid telemetry packet length {0} (expected 324)")]
     InvalidLength(usize),
-    Io(std::io::Error),
 }
 
-impl From<std::io::Error> for TelemetryError {
-    fn from(e: std::io::Error) -> Self {
-        TelemetryError::Io(e)
-    }
+fn le_f32(b: &[u8; PACKET_LEN], off: usize) -> f32 {
+    f32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
 }
 
+fn le_i32(b: &[u8; PACKET_LEN], off: usize) -> i32 {
+    i32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+fn le_u32(b: &[u8; PACKET_LEN], off: usize) -> u32 {
+    u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+/// Decodes one 324-byte little-endian packet.
+///
+/// # Errors
+/// [`TelemetryError::InvalidLength`] if `buf` is not exactly 324 bytes.
 pub fn decode(buf: &[u8]) -> Result<FH6TelemetryData, TelemetryError> {
-    if buf.len() != 324 {
-        return Err(TelemetryError::InvalidLength(buf.len()));
-    }
-    // Fixed little-endian offsets of the 324-byte packet.
-    let is_race_on = i32::from_le_bytes(buf[0..4].try_into().unwrap());
-    let timestamp_ms = u32::from_le_bytes(buf[4..8].try_into().unwrap());
-    let engine_max_rpm = f32::from_le_bytes(buf[8..12].try_into().unwrap());
-    let engine_idle_rpm = f32::from_le_bytes(buf[12..16].try_into().unwrap());
-    let current_engine_rpm_raw = f32::from_le_bytes(buf[16..20].try_into().unwrap());
-    let current_engine_rpm = current_engine_rpm_raw.max(0.0);
-    let acceleration_x = f32::from_le_bytes(buf[20..24].try_into().unwrap());
-    let acceleration_y = f32::from_le_bytes(buf[24..28].try_into().unwrap());
-    let acceleration_z = f32::from_le_bytes(buf[28..32].try_into().unwrap());
-    let velocity_x = f32::from_le_bytes(buf[32..36].try_into().unwrap());
-    let velocity_y = f32::from_le_bytes(buf[36..40].try_into().unwrap());
-    let velocity_z = f32::from_le_bytes(buf[40..44].try_into().unwrap());
-    // Use slices for all fields per offset table
-    let angular_velocity_y = f32::from_le_bytes(buf[48..52].try_into().unwrap());
-    let _ = f32::from_le_bytes(buf[52..56].try_into().unwrap()); // unused
-    let yaw = f32::from_le_bytes(buf[56..60].try_into().unwrap());
-    let pitch = f32::from_le_bytes(buf[60..64].try_into().unwrap());
-    let roll = f32::from_le_bytes(buf[64..68].try_into().unwrap());
-    let normalized_suspension_travel_fl = f32::from_le_bytes(buf[68..72].try_into().unwrap());
-    let normalized_suspension_travel_fr = f32::from_le_bytes(buf[72..76].try_into().unwrap());
-    let normalized_suspension_travel_rl = f32::from_le_bytes(buf[76..80].try_into().unwrap());
-    let normalized_suspension_travel_rr = f32::from_le_bytes(buf[80..84].try_into().unwrap());
-    // skip to 164
-    let tire_slip_angle_fl = f32::from_le_bytes(buf[164..168].try_into().unwrap());
-    let tire_slip_angle_fr = f32::from_le_bytes(buf[168..172].try_into().unwrap());
-    let tire_slip_angle_rl = f32::from_le_bytes(buf[172..176].try_into().unwrap());
-    let tire_slip_angle_rr = f32::from_le_bytes(buf[176..180].try_into().unwrap());
-    let suspension_travel_meters_fl = f32::from_le_bytes(buf[196..200].try_into().unwrap());
-    let suspension_travel_meters_fr = f32::from_le_bytes(buf[200..204].try_into().unwrap());
-    let suspension_travel_meters_rl = f32::from_le_bytes(buf[204..208].try_into().unwrap());
-    let suspension_travel_meters_rr = f32::from_le_bytes(buf[208..212].try_into().unwrap());
-    let car_ordinal = i32::from_le_bytes(buf[212..216].try_into().unwrap());
-    let _ = i32::from_le_bytes(buf[216..220].try_into().unwrap()); // unused
-    let drivetrain_type = i32::from_le_bytes(buf[224..228].try_into().unwrap());
-    // skip
-    let position_x = f32::from_le_bytes(buf[244..248].try_into().unwrap());
-    let position_y = f32::from_le_bytes(buf[248..252].try_into().unwrap());
-    let position_z = f32::from_le_bytes(buf[252..256].try_into().unwrap());
-    let speed_ms = f32::from_le_bytes(buf[256..260].try_into().unwrap());
-    let power_watts = f32::from_le_bytes(buf[260..264].try_into().unwrap());
-    let _ = f32::from_le_bytes(buf[264..268].try_into().unwrap()); // unused
-    let boost_psi = f32::from_le_bytes(buf[284..288].try_into().unwrap());
-    let accel = buf[315];
-    let brake = buf[316];
-    let clutch = buf[317];
-    let hand_brake = buf[318];
-    let gear = buf[319];
-    let steer = buf[320] as i8;
-
+    let b: &[u8; PACKET_LEN] = buf.try_into().map_err(|_| TelemetryError::InvalidLength(buf.len()))?;
+    // Fixed little-endian offsets of the 324-byte packet (golden-tested).
     Ok(FH6TelemetryData {
-        is_race_on,
-        timestamp_ms,
-        engine_max_rpm,
-        engine_idle_rpm,
-        current_engine_rpm,
-        acceleration_x,
-        acceleration_y,
-        acceleration_z,
-        velocity_x,
-        velocity_y,
-        velocity_z,
-        angular_velocity_y,
-        yaw,
-        pitch,
-        roll,
-        tire_slip_angle_fl,
-        tire_slip_angle_fr,
-        tire_slip_angle_rl,
-        tire_slip_angle_rr,
-        normalized_suspension_travel_fl,
-        normalized_suspension_travel_fr,
-        normalized_suspension_travel_rl,
-        normalized_suspension_travel_rr,
-        suspension_travel_meters_fl,
-        suspension_travel_meters_fr,
-        suspension_travel_meters_rl,
-        suspension_travel_meters_rr,
-        car_ordinal,
-        drivetrain_type,
-        position_x,
-        position_y,
-        position_z,
-        speed_ms,
-        power_watts,
-        boost_psi,
-        accel,
-        brake,
-        clutch,
-        hand_brake,
-        gear,
-        steer,
+        is_race_on: le_i32(b, 0),
+        timestamp_ms: le_u32(b, 4),
+        engine_max_rpm: le_f32(b, 8),
+        engine_idle_rpm: le_f32(b, 12),
+        current_engine_rpm: le_f32(b, 16).max(0.0),
+        acceleration_x: le_f32(b, 20),
+        acceleration_y: le_f32(b, 24),
+        acceleration_z: le_f32(b, 28),
+        velocity_x: le_f32(b, 32),
+        velocity_y: le_f32(b, 36),
+        velocity_z: le_f32(b, 40),
+        angular_velocity_y: le_f32(b, 48),
+        yaw: le_f32(b, 56),
+        pitch: le_f32(b, 60),
+        roll: le_f32(b, 64),
+        normalized_suspension_travel_fl: le_f32(b, 68),
+        normalized_suspension_travel_fr: le_f32(b, 72),
+        normalized_suspension_travel_rl: le_f32(b, 76),
+        normalized_suspension_travel_rr: le_f32(b, 80),
+        tire_slip_angle_fl: le_f32(b, 164),
+        tire_slip_angle_fr: le_f32(b, 168),
+        tire_slip_angle_rl: le_f32(b, 172),
+        tire_slip_angle_rr: le_f32(b, 176),
+        suspension_travel_meters_fl: le_f32(b, 196),
+        suspension_travel_meters_fr: le_f32(b, 200),
+        suspension_travel_meters_rl: le_f32(b, 204),
+        suspension_travel_meters_rr: le_f32(b, 208),
+        car_ordinal: le_i32(b, 212),
+        drivetrain_type: le_i32(b, 224),
+        position_x: le_f32(b, 244),
+        position_y: le_f32(b, 248),
+        position_z: le_f32(b, 252),
+        speed_ms: le_f32(b, 256),
+        power_watts: le_f32(b, 260),
+        boost_psi: le_f32(b, 284),
+        accel: b[315],
+        brake: b[316],
+        clutch: b[317],
+        hand_brake: b[318],
+        gear: b[319],
+        steer: i8::from_le_bytes([b[320]]),
     })
 }
 
@@ -240,12 +199,22 @@ mod tests {
 
     #[test]
     fn decode_zero_packet_fields() {
-        let buf = vec![0u8; 324];
-        let data = decode(&buf).unwrap();
+        let buf = vec![0u8; PACKET_LEN];
+        let data = decode(&buf).expect("324 zero bytes decode");
         assert_eq!(data.is_race_on, 0);
         assert_eq!(data.timestamp_ms, 0);
         assert_eq!(data.speed_ms, 0.0);
         assert_eq!(data.accel, 0);
         assert_eq!(data.steer, 0);
+    }
+
+    #[test]
+    fn decode_reads_signed_steer_and_negative_rpm_clamped() {
+        let mut buf = [0u8; PACKET_LEN];
+        buf[16..20].copy_from_slice(&(-50.0f32).to_le_bytes());
+        buf[320] = 0x80;
+        let data = decode(&buf).expect("decode");
+        assert_eq!(data.current_engine_rpm, 0.0);
+        assert_eq!(data.steer, -128);
     }
 }

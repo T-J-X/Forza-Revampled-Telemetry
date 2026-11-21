@@ -66,14 +66,7 @@ pub fn draw_glitch_text(
 }
 
 /// Draws 7-segment motorsport digital numbers (0-9, R, N, -).
-pub fn draw_7segment_digits(
-    pixmap: &mut PixmapMut,
-    x: f32,
-    y: f32,
-    digits: &str,
-    color: Color,
-    scale: f32,
-) {
+pub fn draw_7segment_digits(pixmap: &mut PixmapMut, x: f32, y: f32, digits: &str, color: Color, scale: f32) {
     let mut cur_x = x;
     let mut paint = Paint::default();
     paint.set_color(color);
@@ -99,14 +92,7 @@ pub fn draw_gear(pixmap: &mut PixmapMut, x: f32, y: f32, gear: u8, color: Color,
     draw_glyph(pixmap, x, y, ch, &paint, scale);
 }
 
-fn draw_7segment_char(
-    pixmap: &mut PixmapMut,
-    x: f32,
-    y: f32,
-    ch: char,
-    paint: &Paint,
-    scale: f32,
-) {
+fn draw_7segment_char(pixmap: &mut PixmapMut, x: f32, y: f32, ch: char, paint: &Paint, scale: f32) {
     let stroke = Stroke {
         width: (2.0 * scale).max(1.0),
         ..Default::default()

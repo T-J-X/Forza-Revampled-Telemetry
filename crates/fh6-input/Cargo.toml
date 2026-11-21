@@ -4,14 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 fh6-core = { path = "../fh6-core" }
 tracing.workspace = true
+thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.58"
+workspace = true
 features = [
-    "Win32_UI_Input_XboxController",
+    "Win32_Foundation",
     "Win32_System_LibraryLoader",
 ]

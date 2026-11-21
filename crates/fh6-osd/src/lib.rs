@@ -4,8 +4,8 @@ pub mod binding;
 pub mod dyno;
 pub mod model;
 pub mod render;
-pub mod toggle;
 pub mod text;
+pub mod toggle;
 
 pub use model::{
     parse_gamepad_action, OsdNavAction, OsdTab, UnifiedOsdState, BONNET_STYLES, COCKPIT_STYLES, DRIFT_MODES,

@@ -102,9 +102,11 @@ mod tests {
         let mut pixmap = Pixmap::new(1920, 1080).unwrap();
         let mut pixmap_mut = pixmap.as_mut();
         let bounds = Rect::from_xywh(0.0, 0.0, 1920.0, 1080.0).unwrap();
-        let mut cfg = AppConfig::default();
-        cfg.current_camera_index = 4; // hood
-        cfg.oem_dash_opaque_pct = 80;
+        let cfg = AppConfig {
+            current_camera_index: 4, // hood
+            oem_dash_opaque_pct: 80,
+            ..AppConfig::default()
+        };
         render_oem_scrim(&mut pixmap_mut, bounds, 1.0, &cfg);
         // No panic
     }
@@ -114,9 +116,11 @@ mod tests {
         let mut pixmap = Pixmap::new(1920, 1080).unwrap();
         let mut pixmap_mut = pixmap.as_mut();
         let bounds = Rect::from_xywh(0.0, 0.0, 1920.0, 1080.0).unwrap();
-        let mut cfg = AppConfig::default();
-        cfg.current_camera_index = 3;
-        cfg.oem_dash_opaque_pct = 0;
+        let cfg = AppConfig {
+            current_camera_index: 3,
+            oem_dash_opaque_pct: 0,
+            ..AppConfig::default()
+        };
         render_oem_scrim(&mut pixmap_mut, bounds, 1.0, &cfg);
     }
 }

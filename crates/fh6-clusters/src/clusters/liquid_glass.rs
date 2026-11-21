@@ -1,7 +1,7 @@
-use tiny_skia::{Color, Paint, PixmapMut, Rect, Transform, PathBuilder, Stroke};
 use fh6_core::{AppConfig, FH6TelemetryData};
-use fh6_render::text::{draw_text, draw_7segment_digits, draw_gear, draw_glitch_text};
+use fh6_render::text::{draw_7segment_digits, draw_gear, draw_glitch_text, draw_text};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, config: &AppConfig) {
     // Background
@@ -29,7 +29,10 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     let mut bevel = Paint::default();
     bevel.set_color(Color::from_rgba8(255, 255, 255, 80));
     // Simulate rim with stroked rect
-    let stroke = Stroke { width: 2.0 * scale, ..Default::default() };
+    let stroke = Stroke {
+        width: 2.0 * scale,
+        ..Default::default()
+    };
     let mut pb = PathBuilder::new();
     let r = 24.0 * scale;
     let x = panel_rect.x();
@@ -88,7 +91,10 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
             line_pb.move_to(px0, py0);
             line_pb.line_to(px, py);
             if let Some(line_path) = line_pb.finish() {
-                let line_stroke = Stroke { width: 4.0 * scale, ..Default::default() };
+                let line_stroke = Stroke {
+                    width: 4.0 * scale,
+                    ..Default::default()
+                };
                 pixmap.stroke_path(&line_path, &ribbon_paint, &line_stroke, Transform::identity(), None);
             }
         }
@@ -116,16 +122,46 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
         Err(_) => 0,
     };
     if config.driver_tag_glitch_fx {
-        draw_glitch_text(pixmap, cx - 130.0 * scale, cy - 140.0 * scale, tag, Color::from_rgba8(255, 255, 255, 255), scale, time_ms, true);
+        draw_glitch_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 140.0 * scale,
+            tag,
+            Color::from_rgba8(255, 255, 255, 255),
+            scale,
+            time_ms,
+            true,
+        );
     } else {
-        draw_text(pixmap, cx - 130.0 * scale, cy - 140.0 * scale, tag, Color::from_rgba8(255, 255, 255, 255), scale);
+        draw_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 140.0 * scale,
+            tag,
+            Color::from_rgba8(255, 255, 255, 255),
+            scale,
+        );
     }
 
     // Speed
     let speed_kmh = data.speed_kmh();
     let speed_int = speed_kmh.round() as i32;
-    draw_7segment_digits(pixmap, cx - 60.0 * scale, cy + 40.0 * scale, &format!("{:03}", speed_int), Color::from_rgba8(255, 255, 255, 255), scale * 1.2);
+    draw_7segment_digits(
+        pixmap,
+        cx - 60.0 * scale,
+        cy + 40.0 * scale,
+        &format!("{:03}", speed_int),
+        Color::from_rgba8(255, 255, 255, 255),
+        scale * 1.2,
+    );
 
     // Gear
-    draw_gear(pixmap, cx + 100.0 * scale, cy + 10.0 * scale, data.gear, Color::from_rgba8(255, 255, 255, 255), scale * 1.8);
+    draw_gear(
+        pixmap,
+        cx + 100.0 * scale,
+        cy + 10.0 * scale,
+        data.gear,
+        Color::from_rgba8(255, 255, 255, 255),
+        scale * 1.8,
+    );
 }

@@ -2,12 +2,19 @@
 //! Renders 29 clusters × 4 states with 30-frame warm-up, scrims, OSD and interactive HTML gallery.
 //! Output goes to `<workspace root>/mockups/` (gitignored).
 
-use fh6_core::{AppConfig, FH6TelemetryData, ClusterTheme, config::CameraViewMode};
 use fh6_clusters::render_cluster;
-use fh6_osd::{render_unified_osd_4k, model::UnifiedOsdState, dyno::{dyno_telemetry, synthetic_trail}};
-use fh6_render::oem_scrim::{scrim::render_oem_scrim, ambient_wash::{BinnacleAmbientWash, feather_sigma_px}};
-use std::path::{PathBuf, Path};
+use fh6_core::{config::CameraViewMode, AppConfig, ClusterTheme, FH6TelemetryData};
+use fh6_osd::{
+    dyno::{dyno_telemetry, synthetic_trail},
+    model::UnifiedOsdState,
+    render_unified_osd_4k,
+};
+use fh6_render::oem_scrim::{
+    ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
+    scrim::render_oem_scrim,
+};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 const W: u32 = 3840;
 const H: u32 = 2160;
@@ -156,12 +163,11 @@ fn main() {
         ensure_dir(&theme_dir);
         ensure_dir(&thumb_theme_dir);
 
-        let cfg = {
-            let mut c = AppConfig::default();
-            c.current_camera_index = 3;
-            c.cockpit_hud_style_typed = theme;
-            c.custom_driver_name = "ØG『死』ŦJ乂".to_string();
-            c
+        let cfg = AppConfig {
+            current_camera_index: 3,
+            cockpit_hud_style_typed: theme,
+            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
+            ..Default::default()
         };
 
         for &(state_name, state_idx) in &state_defs {
@@ -193,12 +199,11 @@ fn main() {
 
     // Scrims
     {
-        let base_cfg = {
-            let mut c = AppConfig::default();
-            c.ambient_glow_enabled = true;
-            c.ambient_glow_intensity = 0.25;
-            c.ambient_cowl_feather = 0.40;
-            c
+        let base_cfg = AppConfig {
+            ambient_glow_enabled: true,
+            ambient_glow_intensity: 0.25,
+            ambient_cowl_feather: 0.40,
+            ..Default::default()
         };
 
         // 0%
@@ -210,7 +215,7 @@ fn main() {
             let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
             {
                 let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0,0.0,W as f32,H as f32).unwrap();
+                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
                 render_oem_scrim(&mut pm, bounds, 1.0, &cfg0);
             }
             save_png(&pix, &scrim_dir.join("OemScrim_0pct.png"));
@@ -224,11 +229,11 @@ fn main() {
             let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
             {
                 let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0,0.0,W as f32,H as f32).unwrap();
+                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
                 render_oem_scrim(&mut pm, bounds, 1.0, &cfg50);
                 let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                let intensity = cfg50.ambient_glow_intensity.clamp(0.0,1.0);
-                let feather_sigma = feather_sigma_px(cfg50.ambient_cowl_feather.clamp(0.05,1.0),1.0);
+                let intensity = cfg50.ambient_glow_intensity.clamp(0.0, 1.0);
+                let feather_sigma = feather_sigma_px(cfg50.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
                 let mut wash = BinnacleAmbientWash::new();
                 wash.render(&mut pm, W, H, accent, intensity, feather_sigma, 1.0);
             }
@@ -243,11 +248,11 @@ fn main() {
             let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
             {
                 let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0,0.0,W as f32,H as f32).unwrap();
+                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
                 render_oem_scrim(&mut pm, bounds, 1.0, &cfg100);
                 let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                let intensity = cfg100.ambient_glow_intensity.clamp(0.0,1.0);
-                let feather_sigma = feather_sigma_px(cfg100.ambient_cowl_feather.clamp(0.05,1.0),1.0);
+                let intensity = cfg100.ambient_glow_intensity.clamp(0.0, 1.0);
+                let feather_sigma = feather_sigma_px(cfg100.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
                 let mut wash = BinnacleAmbientWash::new();
                 wash.render(&mut pm, W, H, accent, intensity, feather_sigma, 1.0);
             }
@@ -257,11 +262,15 @@ fn main() {
 
     // Unified OSD
     {
-        let mut osd_cfg = AppConfig::default();
-        osd_cfg.custom_driver_name = "ØG『死』ŦJ乂".to_string();
-        let mut state = UnifiedOsdState::default();
-        state.is_open = true;
-        state.current_tab = 0;
+        let osd_cfg = AppConfig {
+            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
+            ..Default::default()
+        };
+        let state = UnifiedOsdState {
+            is_open: true,
+            current_tab: 0,
+            ..Default::default()
+        };
         let telem = dyno_telemetry(8.0);
         let pix = render_unified_osd_4k(&state, &osd_cfg, Some(&telem));
         save_png(&pix, &out_root.join("UnifiedOsd_4K.png"));
@@ -325,7 +334,9 @@ const themes = [
     for (i, theme) in all_themes.iter().enumerate() {
         let name = theme.to_string();
         html.push_str(&format!("\"{}\",", name));
-        if i % 5 == 4 { html.push_str("\n"); }
+        if i % 5 == 4 {
+            html.push('\n');
+        }
     }
     html.push_str(r#"];
 const states = ["01_idle","02_mid_cruise","03_redline_strobe","04_drift_braking"];
@@ -386,15 +397,32 @@ fn verify_export(root: &Path, n: usize, state_defs: &[(&str, usize)]) {
             }
         }
     }
-    let scrim_files = ["Scrim/OemScrim_0pct.png","Scrim/OemScrim_50pct.png","Scrim/OemScrim_100pct.png"];
+    let scrim_files = [
+        "Scrim/OemScrim_0pct.png",
+        "Scrim/OemScrim_50pct.png",
+        "Scrim/OemScrim_100pct.png",
+    ];
     for f in scrim_files {
         let p = root.join(f);
-        if !p.exists() { eprintln!("Missing {}", f); ok = false; }
+        if !p.exists() {
+            eprintln!("Missing {}", f);
+            ok = false;
+        }
     }
-    if !root.join("UnifiedOsd_4K.png").exists() { eprintln!("Missing OSD"); ok = false; }
-    if !root.join("index.html").exists() { eprintln!("Missing index.html"); ok = false; }
+    if !root.join("UnifiedOsd_4K.png").exists() {
+        eprintln!("Missing OSD");
+        ok = false;
+    }
+    if !root.join("index.html").exists() {
+        eprintln!("Missing index.html");
+        ok = false;
+    }
     if ok {
-        println!("Verification: {} clusters, {} PNGs OK, 3 scrims OK, OSD OK, html OK", n, n*4);
+        println!(
+            "Verification: {} clusters, {} PNGs OK, 3 scrims OK, OSD OK, html OK",
+            n,
+            n * 4
+        );
     } else {
         panic!("Verification failed");
     }

@@ -1,0 +1,55 @@
+//! fh6-gpu: the GPU foundation of FH6 WheelDash (ADR 0001).
+//!
+//! - [`GpuContext`]: wgpu instance, adapter, device and queue on DX12, with the DirectComposition
+//!   swapchain mode that gives premultiplied per-pixel alpha.
+//! - [`OverlaySurface`]: the overlay window's swapchain (premultiplied, Mailbox or Fifo, frame
+//!   latency 1), resize-safe.
+//! - [`OffscreenTarget`]: the same rendering into a texture, read back for tests, benches and
+//!   `preview-export`.
+//! - [`QuadRenderer`] and [`QuadBatch`]: the minimal instanced pipeline (rounded rects and
+//!   seven-segment glyphs) used by the Phase 4 [`test_cluster`].
+//!
+//! `wgpu` is re-exported so dependants name the exact version this crate uses.
+
+mod block_on;
+mod context;
+mod offscreen;
+mod quad;
+pub mod seven_seg;
+mod surface;
+pub mod test_cluster;
+
+pub use context::{AdapterSummary, GpuContext};
+pub use offscreen::{OffscreenTarget, RgbaImage};
+pub use quad::{Globals, QuadBatch, QuadInstance, QuadKind, QuadRenderer, MAX_QUADS};
+pub use surface::{FrameOutcome, FrameTimings, OverlaySurface};
+pub use wgpu;
+
+/// Everything that can go wrong in the GPU layer.
+#[derive(Debug, thiserror::Error)]
+pub enum GpuError {
+    /// No DX12 adapter (hardware or WARP) is available.
+    #[error("no compatible GPU adapter: {0}")]
+    NoAdapter(#[from] wgpu::RequestAdapterError),
+    /// The adapter refused to create a device.
+    #[error("creating the GPU device")]
+    Device(#[from] wgpu::RequestDeviceError),
+    /// The window surface could not be created.
+    #[error("creating the window surface")]
+    CreateSurface(#[from] wgpu::CreateSurfaceError),
+    /// The surface cannot present with premultiplied alpha, so the overlay would be opaque.
+    #[error("the surface does not support premultiplied alpha (supported: {0:?})")]
+    NoPremultipliedAlpha(Vec<wgpu::CompositeAlphaMode>),
+    /// The surface offers no usable format.
+    #[error("the surface offers no texture format")]
+    NoSurfaceFormat,
+    /// The surface was lost and must be recreated.
+    #[error("the surface was lost")]
+    SurfaceLost,
+    /// A validation error while acquiring a frame.
+    #[error("surface validation error")]
+    SurfaceValidation,
+    /// Reading back an offscreen frame failed.
+    #[error("reading back the offscreen frame: {0}")]
+    Readback(String),
+}

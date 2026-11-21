@@ -1,7 +1,7 @@
-use tiny_skia::{Color, Paint, PixmapMut, Rect, Transform, PathBuilder, Stroke};
 use fh6_core::{AppConfig, FH6TelemetryData};
-use fh6_render::text::{draw_text, draw_7segment_digits, draw_gear, draw_glitch_text};
+use fh6_render::text::{draw_7segment_digits, draw_gear, draw_glitch_text, draw_text};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, config: &AppConfig) {
     // Background
@@ -27,11 +27,17 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     // Bezel rim
     let mut rim = Paint::default();
     rim.set_color(Color::from_rgba8(80, 80, 100, 200));
-    let rim_stroke = Stroke { width: 3.0 * scale, ..Default::default() };
+    let rim_stroke = Stroke {
+        width: 3.0 * scale,
+        ..Default::default()
+    };
     let mut rim_pb = PathBuilder::new();
     rim_pb.move_to(bezel_rect.x() + 8.0 * scale, bezel_rect.y() + 8.0 * scale);
     rim_pb.line_to(bezel_rect.x() + bezel_w - 8.0 * scale, bezel_rect.y() + 8.0 * scale);
-    rim_pb.line_to(bezel_rect.x() + bezel_w - 8.0 * scale, bezel_rect.y() + bezel_h - 8.0 * scale);
+    rim_pb.line_to(
+        bezel_rect.x() + bezel_w - 8.0 * scale,
+        bezel_rect.y() + bezel_h - 8.0 * scale,
+    );
     rim_pb.line_to(bezel_rect.x() + 8.0 * scale, bezel_rect.y() + bezel_h - 8.0 * scale);
     rim_pb.close();
     if let Some(path) = rim_pb.finish() {
@@ -97,7 +103,10 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
     oct_pb.close();
     let mut oct_paint = Paint::default();
     oct_paint.set_color(Color::from_rgba8(0, 229, 255, 180));
-    let oct_stroke = Stroke { width: 2.0 * scale, ..Default::default() };
+    let oct_stroke = Stroke {
+        width: 2.0 * scale,
+        ..Default::default()
+    };
     if let Some(oct_path) = oct_pb.finish() {
         pixmap.stroke_path(&oct_path, &oct_paint, &oct_stroke, Transform::identity(), None);
     }
@@ -109,16 +118,46 @@ pub fn render(pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, con
         Err(_) => 0,
     };
     if config.driver_tag_glitch_fx {
-        draw_glitch_text(pixmap, cx - 130.0 * scale, cy - 140.0 * scale, tag, Color::from_rgba8(255, 255, 255, 255), scale, time_ms, true);
+        draw_glitch_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 140.0 * scale,
+            tag,
+            Color::from_rgba8(255, 255, 255, 255),
+            scale,
+            time_ms,
+            true,
+        );
     } else {
-        draw_text(pixmap, cx - 130.0 * scale, cy - 140.0 * scale, tag, Color::from_rgba8(255, 255, 255, 255), scale);
+        draw_text(
+            pixmap,
+            cx - 130.0 * scale,
+            cy - 140.0 * scale,
+            tag,
+            Color::from_rgba8(255, 255, 255, 255),
+            scale,
+        );
     }
 
     // 7-segment speed
     let speed_kmh = data.speed_kmh();
     let speed_int = speed_kmh.round() as i32;
-    draw_7segment_digits(pixmap, cx - 60.0 * scale, cy + 40.0 * scale, &format!("{:03}", speed_int), Color::from_rgba8(0, 229, 255, 255), scale * 1.2);
+    draw_7segment_digits(
+        pixmap,
+        cx - 60.0 * scale,
+        cy + 40.0 * scale,
+        &format!("{:03}", speed_int),
+        Color::from_rgba8(0, 229, 255, 255),
+        scale * 1.2,
+    );
 
     // Gear
-    draw_gear(pixmap, cx + 100.0 * scale, cy + 10.0 * scale, data.gear, Color::from_rgba8(255, 255, 255, 255), scale * 1.8);
+    draw_gear(
+        pixmap,
+        cx + 100.0 * scale,
+        cy + 10.0 * scale,
+        data.gear,
+        Color::from_rgba8(255, 255, 255, 255),
+        scale * 1.8,
+    );
 }

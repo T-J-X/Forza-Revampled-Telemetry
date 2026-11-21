@@ -1,11 +1,14 @@
-use crate::xinput::{XInputDynamic, XInputState};
+//! Rising-edge detection for the Guide button.
 
+/// Reports a Guide press once per press.
+#[derive(Debug, Clone, Default)]
 pub struct GuideEdgeDetector {
     prev_pressed: bool,
     enabled: bool,
 }
 
 impl GuideEdgeDetector {
+    /// A detector; when `enabled` is false it never fires.
     pub fn new(enabled: bool) -> Self {
         Self {
             prev_pressed: false,
@@ -13,46 +16,35 @@ impl GuideEdgeDetector {
         }
     }
 
-    pub fn update(&mut self, xinput: &XInputDynamic, state: &XInputState) -> Option<()> {
+    /// Feeds the current Guide state; returns true on the press edge.
+    pub fn update(&mut self, pressed: bool) -> bool {
         if !self.enabled {
             self.prev_pressed = false;
-            return None;
+            return false;
         }
-        let pressed = xinput.guide_button_pressed(state);
         let edge = pressed && !self.prev_pressed;
         self.prev_pressed = pressed;
-        if edge {
-            Some(())
-        } else {
-            None
-        }
+        edge
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xinput::{XInputDynamic, XInputGamepad, XInputState};
 
     #[test]
-    fn guide_edge_triggers_widget_once() {
-        let xinput = XInputDynamic {
-            is_loaded: true,
-            active_dll: "xinput1_4.dll".to_string(),
-            guide_detection_enabled: true,
-            #[cfg(windows)]
-            xinput_get_state_ex: None,
-        };
+    fn guide_edge_triggers_once_per_press() {
         let mut det = GuideEdgeDetector::new(true);
-        let state_release = XInputState { Gamepad: XInputGamepad { wButtons: 0, ..Default::default() } };
-        let state_press = XInputState { Gamepad: XInputGamepad { wButtons: 0x0400, ..Default::default() } };
-        assert_eq!(det.update(&xinput, &state_release), None);
-        assert_eq!(det.update(&xinput, &state_press), Some(()));
-        // hold
-        assert_eq!(det.update(&xinput, &state_press), None);
-        // release
-        assert_eq!(det.update(&xinput, &state_release), None);
-        // press again
-        assert_eq!(det.update(&xinput, &state_press), Some(()));
+        assert!(!det.update(false));
+        assert!(det.update(true));
+        assert!(!det.update(true), "held");
+        assert!(!det.update(false), "released");
+        assert!(det.update(true), "pressed again");
+    }
+
+    #[test]
+    fn disabled_never_fires() {
+        let mut det = GuideEdgeDetector::new(false);
+        assert!(!det.update(true));
     }
 }

@@ -1,5 +1,5 @@
-use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 use fh6_clusters::clusters;
+use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 use tiny_skia::{Pixmap, Rect};
 
 fn make_pixmap() -> Pixmap {
@@ -37,9 +37,13 @@ fn render_cluster(theme: ClusterTheme, data: &FH6TelemetryData, config: &AppConf
         ClusterTheme::VisionSpatialGlass => clusters::vision_spatial_glass::render(&mut pixmap, bounds, data, config),
         ClusterTheme::GlyphDotMatrix => clusters::glyph_dot_matrix::render(&mut pixmap, bounds, data, config),
         ClusterTheme::AeroPlasmaBlade => clusters::aero_plasma_blade::render(&mut pixmap, bounds, data, config),
-        ClusterTheme::CymaticResonanceField => clusters::cymatic_resonance_field::render(&mut pixmap, bounds, data, config),
+        ClusterTheme::CymaticResonanceField => {
+            clusters::cymatic_resonance_field::render(&mut pixmap, bounds, data, config)
+        }
         ClusterTheme::KineticLiquidMetal => clusters::kinetic_liquid_metal::render(&mut pixmap, bounds, data, config),
-        ClusterTheme::ShibuyaChromaticPrisma => clusters::shibuya_chromatic_prisma::render(&mut pixmap, bounds, data, config),
+        ClusterTheme::ShibuyaChromaticPrisma => {
+            clusters::shibuya_chromatic_prisma::render(&mut pixmap, bounds, data, config)
+        }
     }
     pix.data().to_vec()
 }
@@ -53,7 +57,8 @@ fn fnv1a_hash(bytes: &[u8]) -> u64 {
     h
 }
 
-fn base_telemetry() -> FH6TelemetryData {
+// TODO(phase-7): meant as the `..base_telemetry()` base for the regimes below, which leave engine_max_rpm at 0 (normalized_rpm then falls back to power_watts).
+fn _base_telemetry() -> FH6TelemetryData {
     FH6TelemetryData {
         engine_max_rpm: 9000.0,
         engine_idle_rpm: 850.0,
@@ -73,15 +78,54 @@ fn base_telemetry() -> FH6TelemetryData {
 fn telemetry_sensitivity_all_clusters() {
     let config = AppConfig::default();
     let regimes = [
-        ("idle", FH6TelemetryData { current_engine_rpm: 850.0, speed_ms: 0.0, power_watts: 0.0, accel: 0, brake: 0, boost_psi: 0.0, gear: 0, ..Default::default()}),
-        ("mid", FH6TelemetryData { current_engine_rpm: 4500.0, speed_ms: 50.0, power_watts: 250_000.0, accel: 128, brake: 0, boost_psi: 8.0, gear: 3, ..Default::default()}),
-        ("redline", FH6TelemetryData { current_engine_rpm: 8500.0, speed_ms: 80.0, power_watts: 450_000.0, accel: 255, brake: 0, boost_psi: 18.0, gear: 6, ..Default::default()}),
+        (
+            "idle",
+            FH6TelemetryData {
+                current_engine_rpm: 850.0,
+                speed_ms: 0.0,
+                power_watts: 0.0,
+                accel: 0,
+                brake: 0,
+                boost_psi: 0.0,
+                gear: 0,
+                ..Default::default()
+            },
+        ),
+        (
+            "mid",
+            FH6TelemetryData {
+                current_engine_rpm: 4500.0,
+                speed_ms: 50.0,
+                power_watts: 250_000.0,
+                accel: 128,
+                brake: 0,
+                boost_psi: 8.0,
+                gear: 3,
+                ..Default::default()
+            },
+        ),
+        (
+            "redline",
+            FH6TelemetryData {
+                current_engine_rpm: 8500.0,
+                speed_ms: 80.0,
+                power_watts: 450_000.0,
+                accel: 255,
+                brake: 0,
+                boost_psi: 18.0,
+                gear: 6,
+                ..Default::default()
+            },
+        ),
     ];
     for theme in ClusterTheme::all() {
-        let hashes: Vec<u64> = regimes.iter().map(|(_, d)| {
-            let buf = render_cluster(*theme, d, &config);
-            fnv1a_hash(&buf)
-        }).collect();
+        let hashes: Vec<u64> = regimes
+            .iter()
+            .map(|(_, d)| {
+                let buf = render_cluster(*theme, d, &config);
+                fnv1a_hash(&buf)
+            })
+            .collect();
         // determinism check
         let h0a = render_cluster(*theme, &regimes[0].1, &config);
         let h0b = render_cluster(*theme, &regimes[0].1, &config);

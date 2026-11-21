@@ -68,9 +68,11 @@ mod tests {
         let config_path = temp_dir.join(format!("fh6_osd_test_{}.json", std::process::id()));
 
         // Initial config
-        let mut initial = AppConfig::default();
-        initial.fov_degrees = 65;
-        initial.oem_dash_opaque_pct = 50;
+        let initial = AppConfig {
+            fov_degrees: 65,
+            oem_dash_opaque_pct: 50,
+            ..Default::default()
+        };
         initial.save(&config_path).expect("save initial");
 
         let mut binding = OsdConfigBinding::load_from_file(&config_path);
