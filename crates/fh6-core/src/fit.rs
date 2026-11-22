@@ -113,7 +113,11 @@ impl ScrimFit {
     pub fn dome_distance(&self, x: f32, y: f32) -> f32 {
         let (cx, cy) = self.center;
         let (a, b) = self.semi_axes;
-        let n = if y < cy { self.exponent_top } else { self.exponent_bottom };
+        let n = if y < cy {
+            self.exponent_top
+        } else {
+            self.exponent_bottom
+        };
         let u = ((x - cx) / a).abs().max(1e-6);
         let v = ((y - cy) / b).abs().max(1e-6);
         let s = u.powf(n) + v.powf(n);
@@ -318,7 +322,10 @@ mod tests {
             let y = y4k - 1835.0;
             let d_in = s.dome_distance(half - 6.0, y);
             let d_out = s.dome_distance(half + 6.0, y);
-            assert!(d_in < 0.0 && d_out > 0.0, "edge near x={half} at y={y4k}: {d_in} {d_out}");
+            assert!(
+                d_in < 0.0 && d_out > 0.0,
+                "edge near x={half} at y={y4k}: {d_in} {d_out}"
+            );
         }
     }
 

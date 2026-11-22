@@ -515,11 +515,7 @@ impl AppConfig {
     /// Phase 8 keys: the old free-form `ClusterHeightOffsetPx` becomes the per-view heights, and
     /// every scrim and placement value is brought into its range (non-finite → default).
     fn migrate_fit(&mut self, defaults: &AppConfig) {
-        if let Some(old) = self
-            .extra
-            .remove("ClusterHeightOffsetPx")
-            .and_then(|v| v.as_f64())
-        {
+        if let Some(old) = self.extra.remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) {
             let old = old as f32;
             for h in [
                 &mut self.cockpit_height_offset_px,
@@ -535,7 +531,12 @@ impl AppConfig {
             *v = if v.is_finite() { v.clamp(lo, hi) } else { d };
         };
         fix(&mut self.oem_dash_width_scale, defaults.oem_dash_width_scale, 0.5, 1.6);
-        fix(&mut self.oem_dash_height_scale, defaults.oem_dash_height_scale, 0.5, 1.6);
+        fix(
+            &mut self.oem_dash_height_scale,
+            defaults.oem_dash_height_scale,
+            0.5,
+            1.6,
+        );
         fix(&mut self.oem_dash_top_arch, defaults.oem_dash_top_arch, 0.0, 1.0);
         fix(
             &mut self.oem_dash_corner_softness,

@@ -56,7 +56,7 @@ pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};
 pub use renderer::FrameStats;
 pub use scene::{Backdrop, Bloom, LayerOptions, Scene};
-pub use shape::{Axis, Cap, Glow, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit, TickRing};
+pub use shape::{Axis, Cap, Dome, Glow, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit, TickRing};
 pub use text::{Align, Figures, FontId, FontRole, Fonts, TextStyle, VAlign};
 pub use tokens::Tokens;
 pub use wgpu;

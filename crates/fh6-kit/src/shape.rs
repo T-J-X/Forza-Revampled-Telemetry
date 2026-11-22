@@ -150,6 +150,46 @@ pub struct SegmentedBar {
     pub axis: Axis,
 }
 
+/// A superellipse dome `|x/a|^n + |y/b|^n = 1` (separate exponents for the upper and lower
+/// halves) whose filled coverage falls off smoothly across a direction-dependent feather, with
+/// an optional round-topped vertical void cut out below `void_top`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dome {
+    /// Centre.
+    pub center: Vec2,
+    /// Semi-axes (half width, half height) of the opaque core.
+    pub semi_axes: Vec2,
+    /// Exponent of the upper half (2 = ellipse, 4 = squircle).
+    pub exponent_top: f32,
+    /// Exponent of the lower half.
+    pub exponent_bottom: f32,
+    /// Feather above the dome.
+    pub feather_top: f32,
+    /// Feather at the sides.
+    pub feather_side: f32,
+    /// Feather below.
+    pub feather_bottom: f32,
+    /// Half width of the void (0 = none), centred on `center.x`.
+    pub void_half_width: f32,
+    /// Top of the void (y, local units).
+    pub void_top: f32,
+    /// Softness of the void edge.
+    pub void_feather: f32,
+}
+
+impl Dome {
+    /// The bounds including the widest feather.
+    #[must_use]
+    pub fn bounds(&self) -> Rect {
+        let f = self
+            .feather_top
+            .max(self.feather_side)
+            .max(self.feather_bottom)
+            .max(0.0);
+        Rect::from_center_size(self.center, self.semi_axes * 2.0).expand(f)
+    }
+}
+
 /// A shape to fill, stroke, glow or shadow.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shape<'a> {
@@ -225,6 +265,10 @@ pub enum Shape<'a> {
     },
     /// A segmented bar.
     Bar(SegmentedBar),
+    /// A feathered superellipse dome with an optional vertical void (the OEM dash scrim).
+    /// Filled, it is opaque in the core and falls off across the feather (dithered); stroked,
+    /// glowed or shadowed, it uses the signed distance to the core edge.
+    Dome(Dome),
     /// A seven-segment digit in `rect`. Mask bits: a=1 b=2 c=4 d=8 e=16 f=32 g=64.
     SevenSeg {
         /// Cell.
@@ -340,6 +384,7 @@ impl<'a> Shape<'a> {
                 ..
             } => Rect::from_center_size(center, Vec2::splat(size.x.max(size.y) + thickness)),
             Shape::Bar(b) => b.rect,
+            Shape::Dome(d) => d.bounds(),
             Shape::SevenSeg { rect, .. } => rect,
         }
     }
@@ -487,6 +532,7 @@ pub(crate) mod kind {
     pub const GLYPH: u32 = 9;
     pub const SEVENSEG: u32 = 10;
     pub const NINESLICE: u32 = 11;
+    pub const DOME: u32 = 12;
 }
 
 /// Coverage modes (must match `shape.wgsl`).
@@ -624,6 +670,28 @@ pub(crate) fn encode_simple(shape: &Shape<'_>) -> Option<Encoded> {
             kind: kind::SEVENSEG,
             p0: [f(rect.min.x), f(rect.min.y), f(rect.width()), f(rect.height())],
             p1: [f(thickness).max(0.5), f32::from(mask & 0x7F), 0.0, 0.0],
+            ..Default::default()
+        },
+        Shape::Dome(d) => Encoded {
+            kind: kind::DOME,
+            p0: [
+                f(d.center.x),
+                f(d.center.y),
+                f(d.semi_axes.x).max(1.0),
+                f(d.semi_axes.y).max(1.0),
+            ],
+            p1: [
+                f(d.exponent_top).clamp(1.5, 8.0),
+                f(d.exponent_bottom).clamp(1.5, 8.0),
+                f(d.feather_top).max(0.0),
+                f(d.feather_side).max(0.0),
+            ],
+            p2: [
+                f(d.feather_bottom).max(0.0),
+                f(d.void_half_width).max(0.0),
+                f(d.void_top),
+                f(d.void_feather).max(0.0),
+            ],
             ..Default::default()
         },
         Shape::Polyline { .. } | Shape::Polygon { .. } => return None,

@@ -93,15 +93,13 @@ impl ConfigWatcher {
             let profiles = profiles.clone();
             let running = Arc::clone(&running);
             let path = path.clone();
-            thread::Builder::new()
-                .name("fh6-config-watch".into())
-                .spawn(move || {
-                    let files = Watched {
-                        config: &path,
-                        profiles: &profiles_path,
-                    };
-                    watch_loop(files, interval, &handle, &profiles, &running, &*notify);
-                })?
+            thread::Builder::new().name("fh6-config-watch".into()).spawn(move || {
+                let files = Watched {
+                    config: &path,
+                    profiles: &profiles_path,
+                };
+                watch_loop(files, interval, &handle, &profiles, &running, &*notify);
+            })?
         };
         Ok(Self {
             handle,
