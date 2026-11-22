@@ -7,10 +7,13 @@
 //! - `mockups/_thumbs/kit/<Cluster>/<state>.png`: a 960x540 box-downsample of that frame;
 //! - `mockups/index.html`: a script-free gallery with badges computed from the renders (GPU time,
 //!   draw calls, colour budget shares);
-//! - the OEM scrim at 0/50/100% and the Unified OSD (still tiny-skia until Phases 8–9).
+//! - the OEM scrim at 0/50/100% on the kit (`fit::scrims`) and the Unified OSD (tiny-skia until Phase 9).
+//!
+//! `--fit` renders only the Phase 8 cockpit fit review into `mockups/fit/` (see `fit.rs`).
 //!
 //! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
+mod fit;
 mod gallery;
 mod states;
 
@@ -37,6 +40,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 #[derive(Debug)]
 struct Args {
     legacy: bool,
+    fit: bool,
     frames: u32,
     out: Option<PathBuf>,
 }
@@ -44,6 +48,7 @@ struct Args {
 fn parse_args() -> Result<Args> {
     let mut args = Args {
         legacy: false,
+        fit: false,
         frames: 30,
         out: None,
     };
@@ -51,10 +56,11 @@ fn parse_args() -> Result<Args> {
     while let Some(a) = it.next() {
         match a.as_str() {
             "--legacy" => args.legacy = true,
+            "--fit" => args.fit = true,
             "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "-h" | "--help" => {
-                println!("preview-export [--legacy] [--frames N] [--out DIR]");
+                println!("preview-export [--legacy] [--fit] [--frames N] [--out DIR]");
                 std::process::exit(0);
             }
             other => return Err(format!("unknown argument {other:?}").into()),
@@ -114,6 +120,11 @@ fn run() -> Result<()> {
         brand_name: String::new(),
         custom_name: cfg.custom_driver_name.clone(),
     };
+    if args.fit {
+        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames)?;
+        println!("Fit review written to {}", out.join("fit").display());
+        return Ok(());
+    }
     let target = Offscreen::new(&ctx.device, W, H);
     let layout = Layout::from_config(&cfg, &tokens, View::Cockpit, (W, H));
     let fonts = kit.font_choice(None);
@@ -211,7 +222,7 @@ fn run() -> Result<()> {
         }
     }
 
-    legacy::scrims(&out)?;
+    fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
     legacy::osd(&out)?;
     if args.legacy {
         legacy::clusters(&out)?;
@@ -252,13 +263,12 @@ fn verify(out: &Path, renders: &[Render]) -> Result<()> {
     Ok(())
 }
 
-/// The v1 tiny-skia renders kept until their kit rebuilds (scrim: Phase 8, OSD: Phase 9,
+/// The v1 tiny-skia renders kept until their kit rebuilds (OSD: Phase 9,
 /// clusters: Phase 7).
 mod legacy {
     use super::{AppConfig, ClusterTheme, Result, H, W};
     use fh6_clusters::render_cluster;
     use fh6_osd::{dyno::dyno_telemetry, model::UnifiedOsdState, render_unified_osd_4k};
-    use fh6_render::oem_scrim::{ambient_wash::BinnacleAmbientWash, scrim::render_oem_scrim};
     use std::fs;
     use std::path::Path;
 
@@ -271,26 +281,6 @@ mod legacy {
             fs::create_dir_all(dir)?;
         }
         fs::write(path, pix.encode_png()?)?;
-        Ok(())
-    }
-
-    pub fn scrims(out: &Path) -> Result<()> {
-        for pct in [0, 50, 100] {
-            let cfg = AppConfig {
-                ambient_glow_enabled: true,
-                ambient_glow_intensity: 0.25,
-                oem_dash_opaque_pct: pct,
-                ..Default::default()
-            };
-            let mut pix = pixmap()?;
-            {
-                let mut pm = pix.as_mut();
-                render_oem_scrim(&mut pm, &cfg);
-                let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                BinnacleAmbientWash::new().render_for(&mut pm, &cfg, accent);
-            }
-            save(&pix, &out.join(format!("Scrim/OemScrim_{pct}pct.png")))?;
-        }
         Ok(())
     }
 
