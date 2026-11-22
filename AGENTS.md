@@ -7,7 +7,7 @@
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
 
-**v2 renderer:** the CPU tiny-skia path is being replaced by a GPU renderer on wgpu: `crates/fh6-gpu` (Phase 4) and `crates/fh6-kit` (Phase 5). Rows below that mention tiny-skia describe today's code, not the target.
+**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The tiny-skia rows below (scrim, OSD, v1 clusters) are kept until their rebuilds in Phases 7–9.
 
 ---
 
@@ -16,17 +16,20 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | Crate / tool | Owns | May depend on |
 |---|---|---|
 | `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail | std, serde, arc-swap, thiserror |
-| `crates/fh6-render` | `ClusterRenderer` trait, registry and dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
-| `crates/fh6-clusters` | The 29 cluster implementations, `draw_ext` / `draw_helpers` | fh6-core, fh6-render |
+| `crates/fh6-render` | Theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
+| `crates/fh6-clusters` | The cluster registry (`registry::REGISTRY`, contract v2), kit clusters (`kit/`), shared components (`common/`), and the 29 v1 tiny-skia clusters behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
+| `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
 | `crates/fh6-osd` | Unified OSD (4 tabs, live dyno preview, config binding, hold toggle) | fh6-core, fh6-render, fh6-clusters |
 | `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle`, Guide edge detection | fh6-core, `windows` |
 | `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher, `car_brands.json` binding | fh6-core, `windows`, raw-window-handle |
-| `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, instanced quad + seven-segment pipeline, Phase 4 test cluster (ADR 0001) | wgpu, bytemuck |
+| `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
 | `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, remapper, status server (no `unsafe`) | all crates |
-| `tools/preview-export` | Headless 4K PNG mockups → `mockups/` | core, render, clusters, osd |
+| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, scrim and OSD → `mockups/` (`--legacy` adds the v1 clusters) | core, kit, gpu, clusters, render, osd |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
-| `tools/bench-render` | Offscreen GPU benchmark of the test cluster at 3840x2160 | fh6-gpu |
+| `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-gpu, fh6-kit, fh6-clusters |
+| `tools/web-preview` | WebGPU page rendering a kit cluster from a synthetic drivetrain (Rust → WASM); `web-preview-build`, `web-preview-serve` | fh6-kit, fh6-clusters |
+| `tools/wgc-bench` | Windows.Graphics.Capture cost benchmark for the glass refraction source | fh6-win |
 | `tools/screen-capture` | DPI-aware desktop or region screenshot to PNG | fh6-win |
 | `tools/stand-in-game` | Solid, focusable full-screen window (`fh6-stand-in.exe`) for focus and screenshot checks | fh6-win |
 
@@ -46,7 +49,9 @@ cargo run -p parity-dump -- tests/golden/packets
 cargo run -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 10
 cargo run --release -p preview-export
 cargo run -p fh6-app --bin FH6_WheelDash
-cargo run --release --manifest-path tools/bench-render/Cargo.toml
+cargo run --release -p bench-render -- --frames 600
+cargo test -p fh6-clusters --test golden_images
+cargo build -p fh6-kit --target wasm32-unknown-unknown
 ```
 
 Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Check, test, clippy `-D warnings`, fmt and parity are all green.

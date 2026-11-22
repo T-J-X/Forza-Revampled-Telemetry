@@ -1,4 +1,6 @@
-//! fh6-clusters: 18 bespoke motorsport instrument cluster implementations.
+//! fh6-clusters: the cluster registry (contract v2, [`registry::REGISTRY`]), the kit clusters
+//! ([`kit`]), shared components ([`common`]) and the 29 v1 tiny-skia clusters kept as references
+//! for their Phase 7 rebuilds.
 
 use fh6_core::config::CameraViewMode;
 use fh6_core::ClusterTheme;
@@ -7,18 +9,37 @@ use fh6_render::oem_scrim::{
     ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
     scrim::render_oem_scrim,
 };
-use fh6_render::ClusterRenderer;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use tiny_skia::{Pixmap, PixmapPaint, Rect, Transform};
+use tiny_skia::{PixmapMut as LegacyPixmap, Rect as LegacyRect};
 
 pub mod clusters;
+pub mod common;
 pub mod draw_ext;
+pub mod kit;
+pub mod registry;
+
+/// The v1 tiny-skia cluster interface. It is kept only so the 29 v1 clusters stay buildable as
+/// references for their Phase 7 rebuilds; new clusters implement [`fh6_kit::Cluster`] and
+/// register in [`registry::REGISTRY`].
+pub trait LegacyClusterRenderer: Send + Sync {
+    /// The theme this renderer draws.
+    fn theme(&self) -> ClusterTheme;
+    /// Draws one frame into `pixmap`.
+    fn render(
+        &mut self,
+        pixmap: &mut LegacyPixmap,
+        bounds: LegacyRect,
+        data: &fh6_core::FH6TelemetryData,
+        config: &fh6_core::AppConfig,
+    );
+}
 
 static WASH: OnceLock<Mutex<BinnacleAmbientWash>> = OnceLock::new();
 
 pub struct BoschDduRenderer;
-impl ClusterRenderer for BoschDduRenderer {
+impl LegacyClusterRenderer for BoschDduRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::BoschDdu
     }
@@ -33,7 +54,7 @@ impl ClusterRenderer for BoschDduRenderer {
     }
 }
 pub struct Gt7HoodProRenderer;
-impl ClusterRenderer for Gt7HoodProRenderer {
+impl LegacyClusterRenderer for Gt7HoodProRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::Gt7HoodPro
     }
@@ -48,7 +69,7 @@ impl ClusterRenderer for Gt7HoodProRenderer {
     }
 }
 pub struct PorscheAnalogRenderer;
-impl ClusterRenderer for PorscheAnalogRenderer {
+impl LegacyClusterRenderer for PorscheAnalogRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::PorscheAnalog
     }
@@ -63,7 +84,7 @@ impl ClusterRenderer for PorscheAnalogRenderer {
     }
 }
 pub struct DriftGlassRenderer;
-impl ClusterRenderer for DriftGlassRenderer {
+impl LegacyClusterRenderer for DriftGlassRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::DriftGlass
     }
@@ -78,7 +99,7 @@ impl ClusterRenderer for DriftGlassRenderer {
     }
 }
 pub struct LiquidGlassRenderer;
-impl ClusterRenderer for LiquidGlassRenderer {
+impl LegacyClusterRenderer for LiquidGlassRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::LiquidGlass
     }
@@ -93,7 +114,7 @@ impl ClusterRenderer for LiquidGlassRenderer {
     }
 }
 pub struct RetroCyberRenderer;
-impl ClusterRenderer for RetroCyberRenderer {
+impl LegacyClusterRenderer for RetroCyberRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::RetroCyber
     }
@@ -108,7 +129,7 @@ impl ClusterRenderer for RetroCyberRenderer {
     }
 }
 pub struct SynthwaveOutrunRenderer;
-impl ClusterRenderer for SynthwaveOutrunRenderer {
+impl LegacyClusterRenderer for SynthwaveOutrunRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::SynthwaveOutrun
     }
@@ -123,7 +144,7 @@ impl ClusterRenderer for SynthwaveOutrunRenderer {
     }
 }
 pub struct F35HelmetHmdRenderer;
-impl ClusterRenderer for F35HelmetHmdRenderer {
+impl LegacyClusterRenderer for F35HelmetHmdRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::F35HelmetHmd
     }
@@ -138,7 +159,7 @@ impl ClusterRenderer for F35HelmetHmdRenderer {
     }
 }
 pub struct ValkyrieLmp1Renderer;
-impl ClusterRenderer for ValkyrieLmp1Renderer {
+impl LegacyClusterRenderer for ValkyrieLmp1Renderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::ValkyrieLmp1
     }
@@ -153,7 +174,7 @@ impl ClusterRenderer for ValkyrieLmp1Renderer {
     }
 }
 pub struct EvaBioSyncRenderer;
-impl ClusterRenderer for EvaBioSyncRenderer {
+impl LegacyClusterRenderer for EvaBioSyncRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::EvaBioSync
     }
@@ -168,7 +189,7 @@ impl ClusterRenderer for EvaBioSyncRenderer {
     }
 }
 pub struct ChronoMultiverseRenderer;
-impl ClusterRenderer for ChronoMultiverseRenderer {
+impl LegacyClusterRenderer for ChronoMultiverseRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::ChronoMultiverse
     }
@@ -183,7 +204,7 @@ impl ClusterRenderer for ChronoMultiverseRenderer {
     }
 }
 pub struct AmgMbuxSuperscreenRenderer;
-impl ClusterRenderer for AmgMbuxSuperscreenRenderer {
+impl LegacyClusterRenderer for AmgMbuxSuperscreenRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::AmgMbuxSuperscreen
     }
@@ -198,7 +219,7 @@ impl ClusterRenderer for AmgMbuxSuperscreenRenderer {
     }
 }
 pub struct WindshieldHudRenderer;
-impl ClusterRenderer for WindshieldHudRenderer {
+impl LegacyClusterRenderer for WindshieldHudRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::WindshieldHud
     }
@@ -213,7 +234,7 @@ impl ClusterRenderer for WindshieldHudRenderer {
     }
 }
 pub struct TeslaAdasRenderer;
-impl ClusterRenderer for TeslaAdasRenderer {
+impl LegacyClusterRenderer for TeslaAdasRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::TeslaAdas
     }
@@ -228,7 +249,7 @@ impl ClusterRenderer for TeslaAdasRenderer {
     }
 }
 pub struct LegacyDigitalRenderer;
-impl ClusterRenderer for LegacyDigitalRenderer {
+impl LegacyClusterRenderer for LegacyDigitalRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::BoschDdu
     }
@@ -244,7 +265,7 @@ impl ClusterRenderer for LegacyDigitalRenderer {
 }
 
 pub struct ChronoEventHorizonRenderer;
-impl ClusterRenderer for ChronoEventHorizonRenderer {
+impl LegacyClusterRenderer for ChronoEventHorizonRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::ChronoEventHorizon
     }
@@ -259,7 +280,7 @@ impl ClusterRenderer for ChronoEventHorizonRenderer {
     }
 }
 pub struct NeuralCyberSynapseRenderer;
-impl ClusterRenderer for NeuralCyberSynapseRenderer {
+impl LegacyClusterRenderer for NeuralCyberSynapseRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::NeuralCyberSynapse
     }
@@ -274,7 +295,7 @@ impl ClusterRenderer for NeuralCyberSynapseRenderer {
     }
 }
 pub struct Gt7ModularTripodRenderer;
-impl ClusterRenderer for Gt7ModularTripodRenderer {
+impl LegacyClusterRenderer for Gt7ModularTripodRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::Gt7ModularTripod
     }
@@ -289,7 +310,7 @@ impl ClusterRenderer for Gt7ModularTripodRenderer {
     }
 }
 pub struct ArNavWayfinderRenderer;
-impl ClusterRenderer for ArNavWayfinderRenderer {
+impl LegacyClusterRenderer for ArNavWayfinderRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::ArNavWayfinder
     }
@@ -304,7 +325,7 @@ impl ClusterRenderer for ArNavWayfinderRenderer {
     }
 }
 pub struct SolarisWarpCoreRenderer;
-impl ClusterRenderer for SolarisWarpCoreRenderer {
+impl LegacyClusterRenderer for SolarisWarpCoreRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::SolarisWarpCore
     }
@@ -320,7 +341,7 @@ impl ClusterRenderer for SolarisWarpCoreRenderer {
 }
 
 pub struct VisionSpatialGlassRenderer;
-impl ClusterRenderer for VisionSpatialGlassRenderer {
+impl LegacyClusterRenderer for VisionSpatialGlassRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::VisionSpatialGlass
     }
@@ -335,7 +356,7 @@ impl ClusterRenderer for VisionSpatialGlassRenderer {
     }
 }
 pub struct GlyphDotMatrixRenderer;
-impl ClusterRenderer for GlyphDotMatrixRenderer {
+impl LegacyClusterRenderer for GlyphDotMatrixRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::GlyphDotMatrix
     }
@@ -350,7 +371,7 @@ impl ClusterRenderer for GlyphDotMatrixRenderer {
     }
 }
 pub struct AeroPlasmaBladeRenderer;
-impl ClusterRenderer for AeroPlasmaBladeRenderer {
+impl LegacyClusterRenderer for AeroPlasmaBladeRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::AeroPlasmaBlade
     }
@@ -365,7 +386,7 @@ impl ClusterRenderer for AeroPlasmaBladeRenderer {
     }
 }
 pub struct CymaticResonanceFieldRenderer;
-impl ClusterRenderer for CymaticResonanceFieldRenderer {
+impl LegacyClusterRenderer for CymaticResonanceFieldRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::CymaticResonanceField
     }
@@ -380,7 +401,7 @@ impl ClusterRenderer for CymaticResonanceFieldRenderer {
     }
 }
 pub struct KineticLiquidMetalRenderer;
-impl ClusterRenderer for KineticLiquidMetalRenderer {
+impl LegacyClusterRenderer for KineticLiquidMetalRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::KineticLiquidMetal
     }
@@ -395,7 +416,7 @@ impl ClusterRenderer for KineticLiquidMetalRenderer {
     }
 }
 pub struct ShibuyaChromaticPrismaRenderer;
-impl ClusterRenderer for ShibuyaChromaticPrismaRenderer {
+impl LegacyClusterRenderer for ShibuyaChromaticPrismaRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::ShibuyaChromaticPrisma
     }
@@ -410,7 +431,7 @@ impl ClusterRenderer for ShibuyaChromaticPrismaRenderer {
     }
 }
 pub struct BugattiTourbillonRenderer;
-impl ClusterRenderer for BugattiTourbillonRenderer {
+impl LegacyClusterRenderer for BugattiTourbillonRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::BugattiTourbillon
     }
@@ -425,7 +446,7 @@ impl ClusterRenderer for BugattiTourbillonRenderer {
     }
 }
 pub struct PaganiHorologerieRenderer;
-impl ClusterRenderer for PaganiHorologerieRenderer {
+impl LegacyClusterRenderer for PaganiHorologerieRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::PaganiHorologerie
     }
@@ -440,7 +461,7 @@ impl ClusterRenderer for PaganiHorologerieRenderer {
     }
 }
 pub struct KoenigseggGyroRenderer;
-impl ClusterRenderer for KoenigseggGyroRenderer {
+impl LegacyClusterRenderer for KoenigseggGyroRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::KoenigseggGyro
     }
@@ -455,7 +476,7 @@ impl ClusterRenderer for KoenigseggGyroRenderer {
     }
 }
 pub struct LfaV10NurburgringRenderer;
-impl ClusterRenderer for LfaV10NurburgringRenderer {
+impl LegacyClusterRenderer for LfaV10NurburgringRenderer {
     fn theme(&self) -> ClusterTheme {
         ClusterTheme::LfaV10Nurburgring
     }
@@ -470,7 +491,7 @@ impl ClusterRenderer for LfaV10NurburgringRenderer {
     }
 }
 
-pub fn create_cluster(theme: ClusterTheme) -> Option<Box<dyn ClusterRenderer>> {
+pub fn create_cluster(theme: ClusterTheme) -> Option<Box<dyn LegacyClusterRenderer>> {
     match theme {
         ClusterTheme::BoschDdu => Some(Box::new(BoschDduRenderer)),
         ClusterTheme::Gt7HoodPro => Some(Box::new(Gt7HoodProRenderer)),

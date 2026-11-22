@@ -11,7 +11,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
 | 3 Design system & art direction | ✅ merged 2026-11-22 (see `program/phases/03-design-system/HANDOVER.md`; Figma partly blocked by the Starter plan, HTML boards are the reference) |
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
-| 5 GPU render kit | ◐ started 2026-11-21 |
+| 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
 | 6 Assets, logos & fonts | ◐ started 2026-11-22 |
 | 7–11 | ☐ waiting on dependencies |
 
@@ -34,6 +34,23 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **Visibility:** nothing hides the overlay in menus or out of focus. (Phase 4)
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
+
+## State of the code (after Phase 5, 2026-11-22)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings |
+| `cargo test --workspace` | ✅ 282 passed, 0 failed (incl. GPU render tests, golden images, guide examples) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit -p fh6-clusters --target wasm32-unknown-unknown` | ✅ |
+
+What Phase 5 added:
+- `crates/fh6-kit`: the GPU render kit (ADR 0002, author's guide `docs/kit/README.md`): arena-backed `Painter`, one SDF uber-shader (rects, circles, arcs, needles, polylines, polygons, tick rings, chevrons, LED bars, seven-segment, MTSDF glyphs, 9-slice), gradients, images (PNG, KTX2, SVG), blend modes, bloom, layer blur, Liquid Glass with optional world refraction, MTSDF text with kerning and tabular figures, closed-form springs, the palette engine, token binding (v3.2), 2.5D camera, glTF mesh pass, GPU fluid, particles, noise, golden-image helpers.
+- Cluster contract v2 (`fh6_kit::Cluster`, `FrameInput`, `Layout`) and the registry table `fh6_clusters::registry::REGISTRY`; `fh6-render`'s `ClusterRenderer`, `StubRenderer` and `registry.rs` are gone (v1 clusters compile behind `LegacyClusterRenderer`).
+- Two showcase clusters (Liquid Glass and analog samples) drawn live by `FH6_WheelDash` with the car's brand palette.
+- `preview-export` renders on the GPU (real warm-up, box-downsampled thumbnails, measured badges); `bench-render` benchmarks the kit; new `tools/web-preview` (WebGPU page) and `tools/wgc-bench`.
+- Perf: `docs/perf/render-kit.md` (GPU 0.21–0.26 ms per sample cluster at 4K; live CPU p50 0.49–0.58 ms, p99 1.11–1.19 ms).
 
 ## State of the code (after Phase 4, 2026-11-21)
 | Check | Result |
@@ -79,6 +96,9 @@ What exists:
 4. ~~50 compiler warnings~~ Fixed in Phase 4.
 8. Nine `TODO(phase-7)` comments in `fh6-clusters` (and one in `fh6-osd/src/render.rs`) mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
 9. The OSD is not drawn yet. The hold toggle (View 400 ms) and the tray's "Open OSD" only switch the live-view bypass on and off (Phase 9). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
+10. Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).
+11. `fh6-gpu`'s `QuadRenderer` and `test_cluster` are no longer used by the app (only by `fh6-gpu`'s own tests); remove them when nothing needs a quad baseline.
+12. `Camera25` has no pitch; the Phase 3 ADAS chase eye (0, 3.4, −6.0) m with 8° pitch needs a pitch term before TeslaAdas is rebuilt (the eye itself is a public field).
 5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.
 6. `fh6-render::pool::PaintPool` is a cache stub with no real paint objects.
 7. `assets/*.png` duplicates `assets/textures/4k/`. Pick one location when `AssetCache` is wired up.
@@ -177,3 +197,10 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-21 | ADAS chase eye raised to (0, 3.4, −6.0) m with 8° pitch | Critique: the old eye (0, 1.85, −3.4) hid the road behind the ego car |
 | 2026-11-21 | Classic dials default to a symmetric 270° face; shift-at-12 is an optional per-car Track mode | A linear 270° face rotated to put shift at 12 o'clock turns lopsided |
 | 2026-11-21 | Catalog: 29 rebuilds + 19 new concepts, pattern-setters LiquidGlass, Gt7HoodPro, PorscheAnalog, BoschDdu, TeslaAdas, RetroCyber, KineticLiquidMetal (build order in CATALOG.md) | Defaults first, then one pattern-setter per family so helpers exist before siblings |
+| 2026-11-22 | Render kit = one immediate-mode `Painter` over a fixed-capacity arena and one SDF uber-shader; linear premultiplied `Rgba16Float` composition on a work rectangle; layers as segments (bloom, blur, glass backdrop); one upload per frame (ADR 0002) | Premium looks at 0.2–0.3 ms GPU and under 0.05 ms kit CPU; the same code runs natively and in WebGPU |
+| 2026-11-22 | Dependency: `fdsm` 0.8 (pure-Rust msdfgen; pulls `nalgebra` and `image` 0.25 without default features) for MTSDF glyphs; `ttf-parser` 0.25 directly | No C++ msdfgen; crisp text at every user scale |
+| 2026-11-22 | Dependency: `rustybuzz` 0.20 to measure kerning pairs (GPOS and `kern`) once per face | Modern OFL faces only kern through GPOS; layout at draw time stays table lookups |
+| 2026-11-22 | Dependencies: `resvg` 0.50 (no default features; SVG logos), `gltf` 1.4 (`utils` only; ADAS cars), `ktx2` 0.5 + `ruzstd` 0.9 (KTX2 textures, zstd supercompression), `png` (workspace) | Pure Rust; the asset formats Phase 6 delivers |
+| 2026-11-22 | Dependencies (`tools/web-preview`, wasm32 only): `wasm-bindgen` 0.2, `wasm-bindgen-futures` 0.4, `js-sys` 0.3, `web-sys` 0.3; workspace `wgpu` gains the `webgpu` feature (a no-op on native) | The WebGPU preview Phase 10 builds on; `wasm-bindgen-cli` 0.2.130 installed to match |
+| 2026-11-22 | `windows` features for Windows.Graphics.Capture (`Graphics_Capture`, `Graphics_DirectX_Direct3D11`, `Win32_Graphics_Direct3D`, `Win32_Graphics_Direct3D11`, `Win32_Graphics_Dxgi_Common`, `Win32_System_WinRT_Direct3D11`, `Win32_System_WinRT_Graphics_Capture`) | Optional glass refraction source, off by default (`GlassRefraction`) |
+| 2026-11-22 | v2 layouts use only `ClusterScale` (0.70–1.40); `CockpitScale` / `BonnetScale` are v1 authoring multipliers and do not apply to kit clusters | At 1.45 the token envelope runs off the bottom of a 4K screen |

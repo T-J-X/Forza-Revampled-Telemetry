@@ -19,6 +19,8 @@ pub mod quit_signal;
 pub mod stand_in;
 #[cfg(windows)]
 pub mod system;
+#[cfg(windows)]
+pub mod wgc;
 
 #[cfg(windows)]
 pub use foreground::{ForegroundReader, ForegroundWatcher};

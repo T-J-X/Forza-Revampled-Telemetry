@@ -95,7 +95,9 @@ impl GpuContext {
         };
         let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("fh6-gpu device"),
-            required_features: wgpu::Features::empty(),
+            // Optional extras: GPU timestamps (benches) and BC textures (KTX2 assets), when present.
+            required_features: adapter.features()
+                & (wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TEXTURE_COMPRESSION_BC),
             required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
             memory_hints: wgpu::MemoryHints::Performance,
             ..Default::default()

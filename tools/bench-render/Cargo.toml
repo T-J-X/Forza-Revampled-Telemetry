@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Renders the GPU test cluster offscreen at 3840x2160 and reports CPU and GPU frame times"
+description = "Offscreen benchmark of the fh6-kit render kit at 3840x2160 (CPU and GPU per scenario)"
 
 [dependencies]
 fh6-gpu = { path = "../../crates/fh6-gpu" }
+fh6-kit = { path = "../../crates/fh6-kit" }
+fh6-clusters = { path = "../../crates/fh6-clusters" }
+fh6-core = { path = "../../crates/fh6-core" }

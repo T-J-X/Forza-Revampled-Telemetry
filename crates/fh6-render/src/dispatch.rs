@@ -1,7 +1,8 @@
 //! Dispatch logic for camera view routing and theme resolution.
 use fh6_core::{AppConfig, ClusterTheme};
 
-fn style_to_theme(s: &str) -> ClusterTheme {
+/// The theme a config style name selects (unknown names select `BoschDdu`).
+pub fn style_to_theme(s: &str) -> ClusterTheme {
     let name = s.trim().to_lowercase();
     match name.as_str() {
         "boschddu" | "bosch" => ClusterTheme::BoschDdu,

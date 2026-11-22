@@ -1,0 +1,22 @@
+[package]
+name = "web-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Minimal WebGPU page rendering a kit cluster from synthetic telemetry (base for the Phase 10 configurator)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fh6-core = { path = "../../crates/fh6-core" }
+fh6-kit = { path = "../../crates/fh6-kit" }
+fh6-clusters = { path = "../../crates/fh6-clusters" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "KeyboardEvent", "EventTarget", "Performance", "Location", "console", "CssStyleDeclaration"] }
