@@ -13,7 +13,9 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
 | 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
 | 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
-| 7–11 | ☐ waiting on dependencies |
+| 8 Cockpit fit: dash blocker, camera, seat, FOV | ◐ running (own chat) |
+| 9 Controller-first Liquid Glass OSD | ✅ 2026-11-22 (branch `claude/phase-9-osd-1fcc97`, see `program/phases/09-osd/HANDOVER.md`) |
+| 7, 10, 11 | ☐ waiting on dependencies |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -94,8 +96,8 @@ What exists:
 2. ~~Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`~~ Fixed in Phase 4; the whole workspace is clippy-clean.
 3. `FH6TelemetryData` has no `torque` field, so `GlyphDotMatrix` derives torque from power and RPM. Decide whether to add the field (check the packet layout first) or drop torque from the design.
 4. ~~50 compiler warnings~~ Fixed in Phase 4.
-8. Nine `TODO(phase-7)` comments in `fh6-clusters` (and one in `fh6-osd/src/render.rs`) mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
-9. The OSD is not drawn yet. The hold toggle (View 400 ms) and the tray's "Open OSD" only switch the live-view bypass on and off (Phase 9). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
+8. Nine `TODO(phase-7)` comments in `fh6-clusters` mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
+9. ~~The OSD is not drawn yet~~ Fixed in Phase 9 (`docs/design/OSD.md`). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
 10. Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).
 11. `fh6-gpu`'s `QuadRenderer` and `test_cluster` are no longer used by the app (only by `fh6-gpu`'s own tests); remove them when nothing needs a quad baseline.
 12. `Camera25` has no pitch; the Phase 3 ADAS chase eye (0, 3.4, −6.0) m with 8° pitch needs a pitch term before TeslaAdas is rebuilt (the eye itself is a public field).
@@ -123,7 +125,7 @@ What exists:
 
 **P7: launcher, remapper, Game Bar**
 - P7-1: `FH6_WheelDash.exe` (standalone, tray, process watcher) and `FH6_SteamLauncher.exe` (wraps the game launch with `--auto-exit`).
-- P7-2: hold-View remapper in OSD tab 3 (200 to 1000 ms in 50 ms steps). A tap under 200 ms passes through to the game. A/B/X/Y can never be selected.
+- ~~P7-2: hold-View remapper~~ Done in Phase 9 (Controls tab: OSD button remapper, hold time 200–1000 ms; A/B/X/Y never captured).
 - P7-3: Xbox Guide button (`XInputGetStateEx`, ordinal 100, `0x0400`) and a Game Bar companion over a loopback HTTP control server.
 
 **Phase 8: materials and shaders**
@@ -140,7 +142,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 - G1: a scan for forbidden patterns.
 - G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output.
 - G3: matrix integrity.
-- G4: OSD dispatch. A test exists (`crates/fh6-osd/tests/g4_dispatch.rs`).
+- G4: OSD dispatch. The v1 test (`g4_dispatch.rs`) went with the v1 OSD renderer in Phase 9; the OSD now draws the cluster through `fh6_clusters::registry`, covered by `fh6-osd` unit tests (`host`, `model`) and `preview-export`'s OSD states.
 - G5: robustness against NaN, Inf and zero-size inputs.
 
 ## Open questions for TJX
