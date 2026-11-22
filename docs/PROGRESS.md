@@ -12,7 +12,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 3 Design system & art direction | ✅ merged 2026-11-22 (see `program/phases/03-design-system/HANDOVER.md`; Figma partly blocked by the Starter plan, HTML boards are the reference) |
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
 | 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
-| 6 Assets, logos & fonts | ◐ started 2026-11-22 |
+| 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
 | 7–11 | ☐ waiting on dependencies |
 
 ## Runtime audit (2026-11-20): why v2 exists
@@ -204,3 +204,16 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-22 | Dependencies (`tools/web-preview`, wasm32 only): `wasm-bindgen` 0.2, `wasm-bindgen-futures` 0.4, `js-sys` 0.3, `web-sys` 0.3; workspace `wgpu` gains the `webgpu` feature (a no-op on native) | The WebGPU preview Phase 10 builds on; `wasm-bindgen-cli` 0.2.130 installed to match |
 | 2026-11-22 | `windows` features for Windows.Graphics.Capture (`Graphics_Capture`, `Graphics_DirectX_Direct3D11`, `Win32_Graphics_Direct3D`, `Win32_Graphics_Direct3D11`, `Win32_Graphics_Dxgi_Common`, `Win32_System_WinRT_Direct3D11`, `Win32_System_WinRT_Graphics_Capture`) | Optional glass refraction source, off by default (`GlassRefraction`) |
 | 2026-11-22 | v2 layouts use only `ClusterScale` (0.70–1.40); `CockpitScale` / `BonnetScale` are v1 authoring multipliers and do not apply to kit clusters | At 1.45 the token envelope runs off the bottom of a 4K screen |
+| 2026-11-22 | Phase 6: `tools/asset-forge` joins the workspace; bpy recipes are Rust `const &str`, ComfyUI workflows are JSON data; every job is fingerprinted (FNV-1a of recipe + params) in `assets/forge.lock.json`, so `build` is idempotent | Exit criterion; Rust-only repo; Phase 7 chats re-run single jobs |
+| 2026-11-22 | New dependency `image` 0.25 (asset-forge; `png`, `exr` only) | Reads Blender's float EXR passes and PNGs; pure Rust |
+| 2026-11-22 | New dependency `resvg` 0.50 (asset-forge; `text`, `system-fonts`, `memmap-fonts`) | Same SVG rasteriser the kit uses: logos, reticle and decal sheets render identically offline and at runtime |
+| 2026-11-22 | New dependency `ureq` 3.1 (asset-forge; `json`, `native-tls`, `gzip`) | Blocking HTTP for the ComfyUI API, Commons and google/fonts; native-tls uses Windows SChannel so no C crypto build |
+| 2026-11-22 | New dependency `oxipng` 10.1 (asset-forge; `parallel`) | Lossless PNG compression for the repo budget. Its `libdeflater` dependency compiles C at build time; accepted because it is a dev tool, never shipped in the exe |
+| 2026-11-22 | New dependency `ruzstd` 0.9 (asset-forge) | Pure-Rust zstd for KTX2 supercompression (only its Fastest level exists; fine for the budget) |
+| 2026-11-22 | New dependency `ttf-parser` 0.25 (asset-forge) | Reads weights, axes, cap height and `tnum` from the font pack into `fonts.json` |
+| 2026-11-22 | New dev-dependency `ktx2` 0.5 (asset-forge tests) | Reads back our KTX2 writer's output with an independent parser |
+| 2026-11-22 | Data maps (normals, flow, height, refraction, fresnel) ship as KTX2 RGBA8 UNORM with mips + zstd; 16-bit PNG normals ship only for the four glass plates | The kit's PNG path decodes to 8-bit sRGB, which would gamma-bend data; KTX2 UNORM is loaded as-is |
+| 2026-11-22 | Fluid flipbooks: 64 frames, 512 px beauty cells (8×8 atlas, 4096²) plus a packed 256 px data atlas (RG normal.xy, BA flow.xy) | 1024 px cells are 256 MB of VRAM per flipbook uncompressed; 512 holds up at cluster size |
+| 2026-11-22 | ComfyUI plates commit at 2048; the 4K masters stay in gitignored `assets/_masters/` and rebuild by script | Repo budget (~400 MB); the plates are backdrops behind glass and blur |
+| 2026-11-22 | The Liquid Glass lens caustic is traced in Rust over the Blender plate normals instead of Cycles MNEE caustics | MNEE rendered near-black after 7 minutes; the tracer is exact, fast and reproducible |
+| 2026-11-22 | Logos: Commons SVG first (57 brands); Ferrari, Lamborghini and Porsche use their official wordmarks (emblems are not on Commons); 34 brands are remade outlined wordmarks in OFL fonts; mono/dial variants use per-brand modes (silhouette, knockout, ink) and optional crops | 100% coverage with honest licensing; per-brand modes keep internal detail at dial size |
