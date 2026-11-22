@@ -23,6 +23,9 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
+# Temp files from an interrupted atomic save (fh6-core atomic_file)
+*.tmp
+
 # Tooling
 node_modules/
 .claude/settings.local.json

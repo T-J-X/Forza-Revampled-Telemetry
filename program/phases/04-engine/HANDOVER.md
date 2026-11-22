@@ -5,7 +5,7 @@
 ## Exit criteria
 | Criterion (copied from the MASTER_PROMPT) | Met? | Evidence (command output, file, screenshot) |
 |---|---|---|
-| `cargo check --workspace` and `cargo test --workspace` fully green (the launcher test now compiles) | ✅ | `cargo test --workspace`: 167 passed, 0 failed. `crates/fh6-app/tests/steam_launcher_tests.rs` now tests `fh6_app::launcher::plan` (4 tests) |
+| `cargo check --workspace` and `cargo test --workspace` fully green (the launcher test now compiles) | ✅ | `cargo test --workspace`: 182 passed, 0 failed. `crates/fh6-app/tests/steam_launcher_tests.rs` now tests `fh6_app::launcher::plan` (4 tests) |
 | `cargo clippy --workspace -- -D warnings` green | ✅ | `cargo clippy --workspace --all-targets -- -D warnings` exits 0 (stricter than required: all targets) |
 | Exe + `mock-udp`: the overlay shows and updates | ✅ | `docs/handover-shots/01-live-cluster-a.png` → `01-live-cluster-b.png` (84 mph / 3rd / 802 rpm → 97 mph / 4th / 6267 rpm, about 1 s apart), `02-stats.png` |
 | `IsRaceOn = 0`: it hides | ✅ | `03-race-off-hidden.png`: the race-off stream replaced the racing stream mid-race, and the log reads `overlay hidden reason=Some(RaceOff)` at 16:37:29.706 (final code). `04-visible-again.png`: racing again |
@@ -29,8 +29,9 @@
 **`crates/fh6-core`:**
 - `config.rs`: struct-level `#[serde(default)]` with real defaults; renames `StandardCockpitFOV`, `ShowBonnetGTWidgets` and the other acronyms (old spellings accepted as aliases); sanitising (zero ports and scales, the ABXY mask, hold-time bounds); BOM-tolerant load; `resolve_config_path` (beside the exe, then `data/config.json` in a parent); `TelemetryPorts`; new key `UdpListenAllInterfaces` (default false).
 - `config_watch.rs`: `ConfigWatcher` / `ConfigHandle`, polling mtime and size every 250 ms and publishing through `ArcSwap`.
-- `udp.rs`: blocking receive (the old 10 ms sleep loop is gone), ports from config, `TelemetryFrame { data, received_at, seq, race_resumed_at }` through `ArcSwap`, a notify hook (`Thread::unpark`), duplicate drop across the two ports, forwarding to a precomputed address, loopback bind by default.
-- `visibility.rs`: `VisibilityController`. Hard hide on stale > race off > not foreground; a 120 ms fade-out only for a user hide while racing; a 120 ms fade-in; bypass for demo and OSD.
+- `udp.rs`: blocking receive (the old 10 ms sleep loop is gone), ports from config, `TelemetryFrame { data, received_at, seq, race_resumed_at }` through `ArcSwap`, a notify hook (`Thread::unpark`), a source-port lock across 8000/5500 (no doubled or reordered packets), forwarding to a precomputed address, loopback bind by default, and a start that leaves nothing half-running so the app's 1 s retry works.
+- `visibility.rs`: `VisibilityController`. Rule order: `bypass` (only `--demo` / `--bench-seconds`) > not foreground > OSD live view (`live_preview`) > stale > race off. The live view therefore lifts race-off and stale but never the focus rule. Hard hides land on the next frame; a 120 ms fade-out only for a user hide while racing; a 120 ms fade-in.
+- `atomic_file.rs`: unique temp, fsync, rename; orphaned temps from a crashed save are swept by the next save. `config.json`, `car_brands.json` and `car_profiles.json` all save through it.
 - `telemetry.rs`: same offsets, no `unwrap`, `PACKET_LEN`, `thiserror` error; the dead duplicate `TelemetryEngine` stub was removed.
 
 **`crates/fh6-input`:**
@@ -42,7 +43,7 @@
 
 **`crates/fh6-win`:**
 - `overlay.rs`: the overlay window, and `OverlayHandle` (raw-window-handle; keeps the HWND alive while a surface exists). An outside `WM_CLOSE` becomes a clean quit.
-- `app_window.rs`: hidden message window, `Shell_NotifyIconW` tray with menu (Overlay visible, Open configurator, Open OSD, Quit), re-added on `TaskbarCreated`; timers; message loop.
+- `app_window.rs`: hidden message window, `Shell_NotifyIconW` tray with menu (Overlay visible, Open configurator, Open OSD, Quit), re-added on `TaskbarCreated`; timers; message loop. The window state is an `Rc` held by the window and by each message being dispatched, so a handler may even drop its own `AppWindow`; `WindowCtl` calls are no-ops once the window is destroyed.
 - `foreground.rs`: `EVENT_SYSTEM_FOREGROUND` WinEvent hook plus a 10 Hz poll, with the process image name cached per window.
 - `quit_signal.rs`: the `Local\FH6_WheelDash_Quit` event.
 - `system.rs`: single instance, process list, `ShellExecuteW`, DWM timing.
@@ -54,7 +55,7 @@
 
 **`crates/fh6-app` (no `unsafe`):**
 - `app.rs` wires the threads and owns shutdown order.
-- `render_loop.rs`: wake on packet or each refresh while visible; always the latest packet; one transparent frame to hide; anchor and scale from config scaled from 4K; RB camera 4 selects the bonnet anchor; stats; bench.
+- `render_loop.rs`: wake on packet or each refresh while visible; always the latest packet; one transparent frame to hide (retried on the next refresh if the swapchain skipped it); anchor and scale from config scaled from 4K; RB camera 4 selects the bonnet anchor; stats; bench. GPU loss: on any wgpu error or lost device the device and swapchain are dropped (the window shows nothing) and recreated once a second, also while hidden.
 - `latency.rs`: fixed sample rings and allocation-free percentiles.
 - `perf_report.rs`: writes `docs/perf/engine.md`.
 - `args.rs`, `launcher.rs`, `logging.rs`.
@@ -76,7 +77,7 @@
 ## Verification output
 ```
 $ cargo test --workspace
-... 167 passed; 0 failed (sum of all "test result" lines)
+... 182 passed; 0 failed (sum of all "test result" lines)
 
 $ cargo clippy --workspace --all-targets -- -D warnings
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.49s   (exit 0)
@@ -90,7 +91,18 @@ $ cargo run --release -p bench-render -- --frames 1000     (offscreen, 3840x2160
 | Upload + record + submit (CPU)       | p50 0.112 | p99 0.382 ms |
 | Submit to GPU idle (GPU upper bound) | p50 0.084 | p99 2.374 ms |
 ```
-Live overlay numbers (`FH6_WheelDash --bench-seconds 30`, 3840x2160 at 120 Hz) are in `docs/perf/engine.md`.
+Live overlay numbers (`FH6_WheelDash --bench-seconds 30`, 3840x2160 at 120 Hz, final code, quiet machine) are in `docs/perf/engine.md`:
+```
+Packet receive -> present returned   p50 0.452  p99 0.793 ms   (target: under one frame, 8.33 ms)  met
+CPU per frame                        p50 0.411  p99 0.712 ms   (target: under 1 ms)                met
+```
+Smoke run on the final code (stand-in game, `mock-udp --scenario menu_pause`, a second app focused, then the stream stopped), log with `RUST_LOG=info,fh6_app=debug`:
+```
+04:20:02.483 DEBUG overlay hidden reason=Some(RaceOff) blank_presented=true
+04:20:09.533 DEBUG overlay hidden reason=Some(NotForeground) blank_presented=true
+04:20:18.921 INFO render loop stopped frames=418 packets=409
+04:20:19.177 INFO windows closed
+```
 
 ## Visuals
 All screenshots are crops of the cluster area over the stand-in game window (`tools/stand-in-game`). No personal desktop content is in them.
@@ -119,23 +131,32 @@ target/release/screen-capture --region 1300,1560,1240,560 --out shot.png
 - **Loopback bind by default** (`UdpListenAllInterfaces` opts in). Forza targets 127.0.0.1, and binding 0.0.0.0 triggered a Windows Firewall prompt for every new test binary.
 - **XInput via `LoadLibraryExW(LOAD_LIBRARY_SEARCH_SYSTEM32)`** rather than plain `LoadLibraryW`. A DLL-planting guard.
 - **Hidden means one fully transparent frame, then idle.** No `ShowWindow` from the render thread, which avoids cross-thread `SendMessage`. Visible means waking every refresh, so a stale stream hides within one frame of the 250 ms trigger.
-- **Duplicate packets** arriving on both 8000 and 5500 (mock-udp sends to both) are dropped by game timestamp within 50 ms.
-- **The tray's "Open configurator" opens `config.json`** (which hot-reloads) until Phase 10. **"Open OSD"** and the View hold only toggle the OSD live-view bypass; the OSD itself is Phase 9.
+- **Two ports, one stream.** When the same datagram arrives on 8000 and 5500 (mock-udp sends to both), the port that published last owns the stream until it has been silent for 50 ms; the other port's copies are dropped. Comparing payloads instead would drop a paused game's genuine repeats (and their forwards) and let a lagging thread reorder values.
+- **The OSD live view is not a full bypass.** It lifts only race-off and stale, so the dash can animate on the pause screen but never over another app. `DemoMode` in `config.json` lifts nothing (neither visibility nor the RB camera-ring race guard); only `--demo` and `--bench-seconds` bypass.
+- **GPU loss is survivable.** wgpu's default handlers panic; ours set a flag, the render loop drops the device and swapchain (the overlay shows nothing) and recreates them once a second. A failed surface configure is reported as `GpuError::DeviceFailed`, because wgpu panics if an unconfigured surface reaches `get_current_texture`.
+- **The tray's "Open configurator" opens `config.json`** (which hot-reloads) until Phase 10. **"Open OSD"** and the View hold only toggle the OSD live view (`InputShared::osd_open`); the OSD itself is Phase 9.
 - **All Win32 `unsafe` moved into fh6-win** (tray, single instance, process list), so fh6-app contains none.
 - **Non-cockpit cameras use the cockpit anchor for now.** Camera ring index 4 uses the bonnet anchor and scale. Chase-cam routing is Phase 8.
-- **Telemetry for `--demo` and the OSD bypass with no live packets** comes from `fh6_osd::LiveDynoGenerator`.
+- **The dyno feeds `--demo`, the bench and the OSD live view whenever the game is not actually driving** (stale stream, or the paused game's `IsRaceOn = 0` packets): `render_loop::uses_dyno`, data from `fh6_osd::LiveDynoGenerator`.
 - **Screenshots are taken by a Rust tool (`screen-capture`) and cropped**, so no personal desktop content reaches the public repo.
 
+## Code review
+A full review of the phase diff found 2 High, 5 Medium and 10 Low issues; all were fixed in `c02286a`. An adversarial verification workflow (6 skeptic groups, 2 regression lenses) then checked those fixes; its residual findings were fixed in `83e9c65`:
+- **High:** a failed surface configure during GPU recovery still reached `get_current_texture` on an unconfigured surface (a wgpu panic one frame later). Now `DeviceFailed` from `create`/`render`.
+- **Medium:** the OSD live view drew the paused game's frozen packet instead of the dyno; a failed thread spawn left the UDP engine "running" with nothing bound, so the retry logged success forever; `car_profiles.json` deleted the old file before renaming; a handler that dropped its own `AppWindow` freed the state it was running from (now `Rc`, with a test).
+- **Low:** a GPU loss while hidden went unnoticed until unpause; headless contexts swallowed wgpu errors (bench-render and the offscreen readback now fail on them); a skipped blank frame waited 50 ms; payload dedupe dropped a paused game's repeats and mishandled NaN; `DemoMode` still lifted the RB guard; orphaned temp files; stale `WindowCtl` HWND calls; a GDI brush leak in a class-registration race; no test for the save-side A/B/X/Y strip; stale handover text.
+- Verified sound and unchanged: the XInput, hold-toggle, Guide, launcher and status-server fixes; no new per-frame allocation, lock or readback.
+
 ## Known issues / debt
-- **The CPU frame time is close to the 1 ms budget.**
+- **CPU headroom is thin for Phase 5.** On a quiet machine the test cluster takes 0.411 ms p50 / 0.712 ms p99 CPU per frame (budget 1 ms), but the same run with builds compiling in the background read 1.278 ms p99.
   - The bulk is in wgpu's `Queue::write_buffer` and submit, plus the DXGI `present` call. Building the batch costs microseconds.
   - Offscreen, the same work is 0.11 ms p50, so per-frame swapchain overhead dominates.
-  - Phase 5 should use a persistent mapped staging ring and a single encoder for all layers (ADR action 6).
-  - Measurements taken while other heavy processes compile read higher.
+  - Phase 5 should use a persistent mapped staging ring and a single encoder for all layers (ADR action 6), and re-measure with the real clusters.
 - **The next-vsync rate in `engine.md` is indicative only.** It relies on DWM's reported vblank, which can lag on an idle desktop.
 - **Nine `TODO(phase-7)` comments in fh6-clusters** mark computed-but-unused values found by the lint pass (PROGRESS defect 8).
 - **The OSD is not drawn and ESC auto-pause is not wired into the app yet** (Phase 9). The configurator is Phase 10.
 - **Fallback B (readback + `UpdateLayeredWindow`) is not implemented**, as decided in the ADR.
+- **After a GPU recovery the dash reappears without its fade-in**, and the recreate may land on WARP if the hardware adapter is not back yet. Both predate the review and only matter after a device loss.
 - **The widget status page still exists at `127.0.0.1:5301`.** It now uses no script; Phase 10 replaces it.
 
 ## What the next phases must know
@@ -149,7 +170,7 @@ target/release/screen-capture --region 1300,1560,1240,560 --out shot.png
   - The live config with `ConfigHandle::current()`.
   - The controller with the `InputShared` getters.
   - Never allocate, lock or read back in the loop.
-- **Visibility:** `fh6_core::VisibilityController`. Put the OSD live view behind `InputShared::osd_open()`; it is already a bypass.
+- **Visibility:** `fh6_core::VisibilityController`. The OSD live view is `VisibilityInputs::live_preview`, fed from `InputShared::osd_open()`: it lifts race-off and stale only, never the focus rule, and `render_loop::uses_dyno` swaps in the dyno while the game is paused. Do not widen it into `bypass` (that is for `--demo` and the bench).
 - **Phase 8 (cockpit fit):**
   - `camera_patcher.rs` is unchanged apart from `bind_car_brand`, which now takes `CarBinding` and returns `Result<BindOutcome, BindCarBrandError>`.
   - `tools/stand-in-game` gives a neutral background for fitting work, and `tools/screen-capture --region` makes crops.
@@ -159,6 +180,6 @@ target/release/screen-capture --region 1300,1560,1240,560 --out shot.png
   - Telemetry port changes restart the UDP engine live.
 - **Testing:**
   - `--game-process <exe>` points the focus rule at any process.
-  - `--demo` bypasses visibility.
+  - `--demo` bypasses visibility (the `DemoMode` config key does not).
   - `--bench-seconds N --bench-out <file>` writes the perf report.
   - `--log <file>` with `RUST_LOG=info,fh6_app=debug` logs hide reasons.
