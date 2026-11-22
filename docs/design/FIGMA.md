@@ -63,6 +63,8 @@ The HTML boards therefore stay the source of truth. Still to do, in order:
 3. **Page `1:5`:** the OSD and configurator direction frames (`docs/design/directions/*.png`), the scrim-fit frames (`docs/design/scrim/*.png`), and one Section per catalog row for Phase 7.
 4. **Mirror tokens v3.2** into the Palette and Roles variables.
 
+**Phase 9 retry (2026-11-22):** the remote MCP answered `get_metadata` once, then returned the same Starter-plan tool-call limit on the first `use_figma` call, so the OSD page could not be built. Add to the list above: 5. **Page `1:5`, OSD:** the 11 renders in `docs/design/osd/` with the grid, type and navigation tables from [boards/osd/index.html](boards/osd/index.html).
+
 Unblock by upgrading the Figma plan (Professional removes the 3-page and 1-mode limits and raises the MCP cap) or by waiting for the cap to reset; the conductor or the Phase 7 setup chat can then run steps 1–4.
 
 ## HTML boards (authoritative visuals)
@@ -72,6 +74,7 @@ Unblock by upgrading the Figma plan (Professional removes the 3-page and 1-mode 
 | `boards/families/` | 7 template boards | `docs/design/families/<family>-template.png` |
 | `boards/scrim/` | 3 scrim-fit boards over `assets/reference/*.jpg` | `docs/design/scrim/*.png` |
 | `boards/directions/` | OSD and configurator directions | `docs/design/directions/*.png` |
+| `boards/osd/` | Phase 9 OSD: every state, grid, type and navigation | `docs/design/osd/*.png` (real kit renders from `preview-export`, 960×540) |
 | `boards/index.html` | Gallery of everything above | — |
 
 **Render a board to PNG** (headless Edge or Chrome on Windows; fonts load from Google Fonts, so stay online):

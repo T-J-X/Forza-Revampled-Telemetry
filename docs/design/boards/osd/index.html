@@ -23,7 +23,7 @@ code{color:var(--accent)}
 <p>The controller-first Liquid Glass OSD: the real selected cluster live on the left (live dyno while the game is paused, live telemetry when it flows), a glass control panel on the right, five tabs on LB/RB. Extends the Phase 3 direction (<a href="../../OSD_DIRECTION.md" style="color:var(--accent)">OSD_DIRECTION.md</a>). Spec: <a href="../../OSD.md" style="color:var(--accent)">OSD.md</a>.</p>
 </header>
 
-<h2>States (4K renders, GPU 1.18–1.32 ms each)</h2>
+<h2>States (4K renders, GPU 1.28–1.48 ms each)</h2>
 <div class="grid">
 <figure><img src="../../osd/01_cluster_carousel.png" alt="Cluster tab with carousel"><figcaption>Cluster · carousel of live thumbnails, focus echo in the live zone</figcaption></figure>
 <figure><img src="../../osd/02_cluster_hood_view.png" alt="Editing the hood view"><figcaption>Cluster · editing the Hood view (the live view follows)</figcaption></figure>
@@ -44,7 +44,7 @@ code{color:var(--accent)}
 <tr><td>Panel</td><td>x 2380–3700, y 140–2020, radius 56; right-aligned on wider screens. Glass tint alpha 64, frost 0.9, backdrop σ 28, crown sheen 28/255 ending above the tabs, OLED black 0.62 underneath.</td></tr>
 <tr><td>Text edge / value edge</td><td>One left text edge at 2488; every value, slider track and toggle ends at 3552; chevrons in the gutter to 3592.</td></tr>
 <tr><td>Tabs</td><td>Cap 30 (floor 26), y 276; accent underline 6 px on the <code>fast</code> spring, blooming.</td></tr>
-<tr><td>Rows</td><td>116 px (sliders 164, carousel 340, info 124); section headings 18 cap caps +24% tracking, 76 px above. Labels and values 30 cap; help 26 cap.</td></tr>
+<tr><td>Rows</td><td>116 px (sliders 164, carousel 340, info 124); the focused row grows to 148 (sliders 208) when it shows help; section headings 18 cap caps +24% tracking, 76 px above. Labels and values 30 cap; help 26 cap.</td></tr>
 <tr><td>Focus</td><td>White 0.07 lift, 3 px accent inner rim in a bloom layer, glow σ 14. Accent = palette accent unless within 25° of the warning red, then primary, then sapphire.</td></tr>
 <tr><td>Live zone</td><td>"LIVE VIEW" label, cluster name 54 cap, status 26 cap; focus echo: label 18 caps, value 110 cap, slider mirror 720 px, help 26 cap. Feathered black pools behind the echo (0.45) and the cluster (0.35).</td></tr>
 <tr><td>Hint bar</td><td>Keycaps 22 cap in 52 px chips, text 26 cap at y 1896; the gearbox line 22 cap at 1972.</td></tr>
