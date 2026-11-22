@@ -9,8 +9,13 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 |---|---|
 | 1 Clean Rust repository | ✅ 2026-11-20 (public: T-J-X/Forza-Revampled-Telemetry) |
 | 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
+<<<<<<< HEAD
 | 3 Design system & art direction | ◐ started 2026-11-20 |
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
+=======
+| 3 Design system & art direction | ◐ 2026-11-21: all repo deliverables done on branch `claude/phase-3-design-system-449d2f` (PR T-J-X/Forza-Revampled-Telemetry#1), awaiting conductor review. Open: Figma library and render placement (blocked: Starter MCP cap, desktop MCP unavailable) and the "clearly better than references" bar (final verdict "matches"). Handover: [program/phases/03-design-system/HANDOVER.md](../program/phases/03-design-system/HANDOVER.md). |
+| 4 Engine: a working exe | ◐ started 2026-11-20 |
+>>>>>>> claude/phase-3-design-system-449d2f
 | 5–11 | ☐ waiting on dependencies |
 
 ## Runtime audit (2026-11-20): why v2 exists
@@ -122,8 +127,11 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 - G5: robustness against NaN, Inf and zero-size inputs.
 
 ## Open questions for TJX
-1. Which Figma file is the master: `ZW8mpHivoqjl8p7eLlvdBi` or `FsEcAnDwfFf340i8zwbBup`?
+1. ~~Which Figma file is the master?~~ Answered by Phase 3: the new file `0zOEwnJ8dEj1kQ7QwPGEH0` (docs/design/FIGMA.md). Neither legacy key is used.
 2. What is Phase 2: fixing the known defects and making clippy green, Pre-05A, or Phase 8 cluster quality?
+3. Figma is on a Starter plan: 3 pages, 1 variable mode, and an MCP call cap that stopped Phase 3 before the component library and render placement were finished. Upgrade the plan (Professional), or accept the HTML boards as the visual source and finish Figma by hand?
+4. AGENTS.md (Design Council 3D) still quotes the old ADAS eye (0, 1.85 m, −3.4 m). Phase 3 raised it to (0, 3.4 m, −6.0 m) because the old camera hid the road behind the ego car. OK to update AGENTS.md?
+5. Default shift colour: Phase 3 chose violet `#978DFC` (race convention, lifted to ≥ 7:1); brands whose `ShiftFlashHex` is white strobe white. Keep, or default to white?
 
 ## Decision log (append only)
 | Date | Decision | Why |
@@ -140,6 +148,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-20 | Motorsport default font from an OFL pack; users can add their own fonts | TJX's request; the OFL licence is safe for a public repo |
 | 2026-11-20 | The repo is Rust only. Skill eval fixtures (C/Python/shell) and the TS hook plugin are untracked. Blender bpy lives inside the Rust tool `asset-forge` | TJX: "this is all rust", lightweight, 0 ms |
 | 2026-11-20 | Commits are authored by `TJX <TJX@Ngage.com>`, with no co-author trailer | TJX's instruction for the public repo |
+<<<<<<< HEAD
 | 2026-11-21 | Phase 4: overlay presented with wgpu 30 on DX12 through a DirectComposition swapchain (`Dx12SwapchainKind::DxgiFromVisual`), premultiplied alpha, Mailbox, frame latency 1 | ADR 0001: the only transparent Windows route with no CPU copy |
 | 2026-11-21 | New dependency `wgpu` 30.0.2 (default features off; `dx12`, `wgsl`, `std`, `parking_lot`) | The GPU renderer for v2; pure Rust (no C build) |
 | 2026-11-21 | New dependency `bytemuck` 1.21 (`derive`) | Casts instance arrays to bytes for buffer uploads without `unsafe`; already in wgpu's tree |
@@ -161,3 +170,16 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-21 | UDP: the port that published last owns the stream until silent for 50 ms; the other port's copies are dropped (replaces payload/timestamp dedupe) | Payload compare dropped a paused game's genuine repeats and their forwards, and a lagging thread could reorder values; review verification |
 | 2026-11-21 | wgpu errors and device loss set a flag instead of panicking; the render loop drops and recreates the device once a second; a failed surface configure is `GpuError::DeviceFailed` | wgpu's default handlers panic the render thread; an unconfigured surface panics in `get_current_texture` |
 | 2026-11-21 | `AppWindow` state is an `Rc` shared by the window and each dispatched message | A handler dropping its own window freed the state it was running from; safe API must stay sound |
+=======
+| 2026-11-21 | Phase 3: the Figma master is `0zOEwnJ8dEj1kQ7QwPGEH0` (Starter: 3 pages organised with Sections, per-family palettes as variables because only 1 mode is allowed) | Created for v2; the legacy keys were never the v2 master |
+| 2026-11-21 | Phase 3 visuals are pure-SVG HTML boards in `docs/design/boards/`, rendered to PNG with headless Edge; the generator script stays outside the repo | Figma's Starter MCP cap blocked rendering in Figma, and the repo is Rust-only |
+| 2026-11-21 | `data/figma_tokens.json` schema v3 (3.2.0): colour roles, palette modes, OFL type scale, glow, glass, light, motion, layout, states, components, families, accessibility; legacy keys kept; `colors`/`grid` names avoided so `fh6-render::tokens` still parses | One token source for Figma, the kit and every cluster (docs/design/TOKENS.md) |
+| 2026-11-21 | Default fonts: Saira Condensed (display, motorsport default), Titillium Web (labels), plus Barlow Semi Condensed, Michroma, Chakra Petch, Exo 2, B612 Mono per family; all OFL | Research (RESEARCH.md §9); Bahnschrift is a host font, not OFL |
+| 2026-11-21 | Seven families: Classic Analog, Modern Digital 2027, Race Dash (new), Liquid Glass, Sci-Fi, Fluid / Generative, ADAS & HUD; `F35HelmetHmd` moves to ADAS & HUD | Research found a race-dash architecture no other family owns, and aviation HUD shares the ADAS grammar |
+| 2026-11-21 | Limiter strobe 10 Hz, 50% duty, only on a shift strip ≤ 42 px tall; nothing larger flashes above 3 Hz; red washes are steady | WCAG 2.3.1 and the 60/120 Hz frame maths (RESEARCH.md principle 2) |
+| 2026-11-21 | Shift lights fill outside-in on per-car, per-gear thresholds; unlit pods are neutral grey lenses; default shift colour violet `#978DFC` | Race convention; colour only for lit state |
+| 2026-11-21 | Only glance ranks 1–3 may glow; one virtual light per cluster moves with lateral G and drives every rim | Research principles 5 and 6; critique round 1 |
+| 2026-11-21 | ADAS chase eye raised to (0, 3.4, −6.0) m with 8° pitch | Critique: the old eye (0, 1.85, −3.4) hid the road behind the ego car |
+| 2026-11-21 | Classic dials default to a symmetric 270° face; shift-at-12 is an optional per-car Track mode | A linear 270° face rotated to put shift at 12 o'clock turns lopsided |
+| 2026-11-21 | Catalog: 29 rebuilds + 19 new concepts, pattern-setters LiquidGlass, Gt7HoodPro, PorscheAnalog, BoschDdu, TeslaAdas, RetroCyber, KineticLiquidMetal (build order in CATALOG.md) | Defaults first, then one pattern-setter per family so helpers exist before siblings |
+>>>>>>> claude/phase-3-design-system-449d2f
