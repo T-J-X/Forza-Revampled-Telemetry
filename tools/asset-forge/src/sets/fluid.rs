@@ -10,7 +10,8 @@ use crate::procedural as pr;
 use crate::{blender, recipes};
 use serde_json::json;
 
-const CLUSTERS: &str = "fluid / generative family (LiquidMetal, Ferrofluid, MercuryPool concepts), LiquidGlass meniscus orb";
+const CLUSTERS: &str =
+    "fluid / generative family (LiquidMetal, Ferrofluid, MercuryPool concepts), LiquidGlass meniscus orb";
 const FRAMES: usize = 64;
 const CELL: usize = 512;
 const COLS: usize = 8;
@@ -20,8 +21,14 @@ const DATA_CELL: usize = 256;
 /// Builds every fluid job.
 pub fn build(ctx: &mut Ctx) -> Result<()> {
     for (style, note) in [
-        ("mercury_blob", "chrome blob, 3 octaves of looped 4D noise on an icosphere"),
-        ("ferrofluid", "glossy black dome with looped 4D Voronoi spikes (Rosensweig-style)"),
+        (
+            "mercury_blob",
+            "chrome blob, 3 octaves of looped 4D noise on an icosphere",
+        ),
+        (
+            "ferrofluid",
+            "glossy black dome with looped 4D Voronoi spikes (Rosensweig-style)",
+        ),
         ("mercury_pool", "top-down mercury pool surface, looped 4D noise height"),
     ] {
         flipbook(ctx, style, note)?;
@@ -34,7 +41,12 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
 fn flipbook(ctx: &mut Ctx, style: &str, note: &str) -> Result<()> {
     let params = json!({ "style": style, "frames": FRAMES, "cell": CELL, "samples": 96, "seed": 51 });
     let body = format!("{}\n{}", recipes::fluid::FLUID_HELPERS, recipes::fluid::FLIPBOOK);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v2"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v2",
+    ]);
     let job = format!("fluid/{style}");
     ctx.job(&job, &fp, |ctx| {
         let out = ctx.scratch(&format!("fluid_{style}"))?;
@@ -95,7 +107,12 @@ fn matcaps(ctx: &mut Ctx) -> Result<()> {
     ]);
     let params = json!({ "items": items, "size": 1024, "samples": 256, "seed": 52 });
     let body = format!("{}\n{}", recipes::fluid::FLUID_HELPERS, recipes::fluid::MATCAPS);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v1"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v1",
+    ]);
     ctx.job("fluid/matcaps", &fp, |ctx| {
         let out = ctx.scratch("fluid_matcaps")?;
         let mut p = params.clone();
@@ -125,7 +142,10 @@ fn matcaps(ctx: &mut Ctx) -> Result<()> {
 fn maths(ctx: &mut Ctx) -> Result<()> {
     let fp = fingerprint(&[b"fluid-maths-v1", include_bytes!("../procedural.rs")]);
     ctx.job("fluid/maths", &fp, |ctx| {
-        for (i, (n, m)) in [(3.0f32, 5.0f32), (4.0, 7.0), (5.0, 9.0), (2.0, 11.0)].iter().enumerate() {
+        for (i, (n, m)) in [(3.0f32, 5.0f32), (4.0, 7.0), (5.0, 9.0), (2.0, 11.0)]
+            .iter()
+            .enumerate()
+        {
             let c = pr::chladni(2048, *n, *m, 0.035);
             let c = pr::blur(&c, 0.7, false);
             let enc = Img::from_fn(c.w, c.h, 1, |x, y| [img::srgb_encode(c.get(x, y, 0)), 0.0, 0.0, 0.0]);
@@ -149,9 +169,14 @@ fn maths(ctx: &mut Ctx) -> Result<()> {
             "assets/fluid/curl_noise_flow.ktx2",
             &curl,
             Format::Ktx2(Encoding::Linear),
-            Spec::new("fluid", "flow", "rust:procedural::curl_noise (curl of tileable fBm) seed=61", "GPU fluid advection seed, fluid family")
-                .tile()
-                .qa(format!("tile seam score {:.2}", img::tile_seam_score(&curl))),
+            Spec::new(
+                "fluid",
+                "flow",
+                "rust:procedural::curl_noise (curl of tileable fBm) seed=61",
+                "GPU fluid advection seed, fluid family",
+            )
+            .tile()
+            .qa(format!("tile seam score {:.2}", img::tile_seam_score(&curl))),
         )?;
         Ok(())
     })

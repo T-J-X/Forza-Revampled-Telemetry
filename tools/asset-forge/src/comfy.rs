@@ -26,7 +26,10 @@ impl Comfy {
         let py = paths.comfy_dir.join("python_embeded").join("python.exe");
         let main = paths.comfy_dir.join("ComfyUI").join("main.py");
         if !py.is_file() || !main.is_file() {
-            return Err(tool_err("comfyui", format!("portable install not found in {}", paths.comfy_dir.display())));
+            return Err(tool_err(
+                "comfyui",
+                format!("portable install not found in {}", paths.comfy_dir.display()),
+            ));
         }
         let log_path = paths.scratch.join("comfyui.log");
         if let Some(p) = log_path.parent() {
@@ -55,7 +58,10 @@ impl Comfy {
             }
             std::thread::sleep(Duration::from_secs(2));
         }
-        Err(tool_err("comfyui", format!("server did not come up; see {}", log_path.display())))
+        Err(tool_err(
+            "comfyui",
+            format!("server did not come up; see {}", log_path.display()),
+        ))
     }
 
     /// True when `/system_stats` answers.
@@ -90,7 +96,9 @@ impl Comfy {
                     return Err(tool_err("comfyui", format!("prompt {id} failed: {status}")));
                 }
             }
-            let Some(outputs) = entry.get("outputs").and_then(Value::as_object) else { continue };
+            let Some(outputs) = entry.get("outputs").and_then(Value::as_object) else {
+                continue;
+            };
             let mut images = Vec::new();
             for node in outputs.values() {
                 for img in node.get("images").and_then(Value::as_array).into_iter().flatten() {

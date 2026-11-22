@@ -118,10 +118,46 @@ struct Shape {
 }
 
 const SHAPES: &[Shape] = &[
-    Shape { name: "plate_rrect", kind: "rrect", px: (4096, 2048), r: 0.48, bevel: 0.16, thick: 0.2, profile: 0.62, note: "rounded rect 2:1, corner 480 px, bevel 160 px" },
-    Shape { name: "plate_pill", kind: "pill", px: (4096, 1024), r: 0.0, bevel: 0.14, thick: 0.18, profile: 0.6, note: "pill 4:1, bevel 140 px" },
-    Shape { name: "plate_squircle", kind: "squircle", px: (4096, 4096), r: 0.0, bevel: 0.24, thick: 0.28, profile: 0.6, note: "superellipse n=5 (continuous corners), bevel 240 px" },
-    Shape { name: "lens_circle", kind: "circle", px: (4096, 4096), r: 0.0, bevel: 0.34, thick: 0.4, profile: 0.55, note: "round dial lens, bevel 340 px" },
+    Shape {
+        name: "plate_rrect",
+        kind: "rrect",
+        px: (4096, 2048),
+        r: 0.48,
+        bevel: 0.16,
+        thick: 0.2,
+        profile: 0.62,
+        note: "rounded rect 2:1, corner 480 px, bevel 160 px",
+    },
+    Shape {
+        name: "plate_pill",
+        kind: "pill",
+        px: (4096, 1024),
+        r: 0.0,
+        bevel: 0.14,
+        thick: 0.18,
+        profile: 0.6,
+        note: "pill 4:1, bevel 140 px",
+    },
+    Shape {
+        name: "plate_squircle",
+        kind: "squircle",
+        px: (4096, 4096),
+        r: 0.0,
+        bevel: 0.24,
+        thick: 0.28,
+        profile: 0.6,
+        note: "superellipse n=5 (continuous corners), bevel 240 px",
+    },
+    Shape {
+        name: "lens_circle",
+        kind: "circle",
+        px: (4096, 4096),
+        r: 0.0,
+        bevel: 0.34,
+        thick: 0.4,
+        profile: 0.55,
+        note: "round dial lens, bevel 340 px",
+    },
 ];
 
 fn plates(ctx: &mut Ctx) -> Result<()> {
@@ -136,7 +172,12 @@ fn plates(ctx: &mut Ctx) -> Result<()> {
         })
         .collect();
     let params = json!({ "shapes": shapes, "seed": 0 });
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), recipes::glass::PLATES.as_bytes(), params.to_string().as_bytes(), b"post-v3"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        recipes::glass::PLATES.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v3",
+    ]);
     ctx.job("glass/plates", &fp, |ctx| {
         let out = ctx.scratch("glass_plates")?;
         let mut p = params.clone();
@@ -152,14 +193,18 @@ fn plates(ctx: &mut Ctx) -> Result<()> {
                 &format!("{base}_normal.png"),
                 &normal,
                 Format::Png16,
-                Spec::new("glass", "normal", gen.clone(), CLUSTERS).alpha("straight").qa("A = coverage; 16-bit master"),
+                Spec::new("glass", "normal", gen.clone(), CLUSTERS)
+                    .alpha("straight")
+                    .qa("A = coverage; 16-bit master"),
             )?;
             ctx.image(
                 &format!("glass/plates/{}_normal", s.name),
                 &format!("{base}_normal.ktx2"),
                 &normal,
                 Format::Ktx2(Encoding::Normal),
-                Spec::new("glass", "normal", gen.clone(), CLUSTERS).alpha("straight").qa("RGBA8 UNORM + mips; A = coverage"),
+                Spec::new("glass", "normal", gen.clone(), CLUSTERS)
+                    .alpha("straight")
+                    .qa("RGBA8 UNORM + mips; A = coverage"),
             )?;
             let thick_px = s.thick * 1000.0;
             // Offsets and fresnel are smooth: ship them at half size.
@@ -176,14 +221,18 @@ fn plates(ctx: &mut Ctx) -> Result<()> {
                 Format::Ktx2(Encoding::Linear),
                 Spec::new("glass", "offset", gen.clone(), CLUSTERS)
                     .alpha("straight")
-                    .qa(format!("IOR 1.5; RG = offset 0.5-centred, ±{max_px:.0} px at 4K scale 1; B = thickness; A = coverage")),
+                    .qa(format!(
+                        "IOR 1.5; RG = offset 0.5-centred, ±{max_px:.0} px at 4K scale 1; B = thickness; A = coverage"
+                    )),
             )?;
             ctx.image(
                 &format!("glass/plates/{}_fresnel", s.name),
                 &format!("{base}_fresnel.ktx2"),
                 &fresnel(&half_n),
                 Format::Ktx2(Encoding::Linear),
-                Spec::new("glass", "mask", gen, CLUSTERS).alpha("straight").qa("R = Schlick F (F0 0.04), G = rim band, A = coverage"),
+                Spec::new("glass", "mask", gen, CLUSTERS)
+                    .alpha("straight")
+                    .qa("R = Schlick F (F0 0.04), G = rim band, A = coverage"),
             )?;
         }
         Ok(())
@@ -192,7 +241,12 @@ fn plates(ctx: &mut Ctx) -> Result<()> {
 
 fn liquid(ctx: &mut Ctx) -> Result<()> {
     let params = json!({ "seed": 11, "drops": 150 });
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), recipes::glass::LIQUID.as_bytes(), params.to_string().as_bytes(), b"post-v2"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        recipes::glass::LIQUID.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v2",
+    ]);
     ctx.job("glass/liquid", &fp, |ctx| {
         let out = ctx.scratch("glass_liquid")?;
         let mut p = params.clone();
@@ -201,23 +255,47 @@ fn liquid(ctx: &mut Ctx) -> Result<()> {
         let items: [(&str, bool, &str); 4] = [
             ("droplet_single", false, "single droplet sprite, contact-angle rim"),
             ("droplets_tile", true, "seeded droplet scatter, wrapped across edges"),
-            ("meniscus_ring", false, "liquid in a ring channel climbing both walls (radial meniscus)"),
+            (
+                "meniscus_ring",
+                false,
+                "liquid in a ring channel climbing both walls (radial meniscus)",
+            ),
             ("liquid_capsule", false, "capsule blob for ribbon ends"),
         ];
         for (name, tile, note) in items {
             let exr = img::load_exr(&out.join(format!("{name}.exr")))?;
             let (normal, height) = unpack_data(&exr);
             let gen = format!("blender:glass::LIQUID ({note}) seed=11");
-            let mut spec = Spec::new("glass", "normal", gen.clone(), "LiquidGlass ribbon tach, meniscus orb, fluid family").alpha("straight");
+            let mut spec = Spec::new(
+                "glass",
+                "normal",
+                gen.clone(),
+                "LiquidGlass ribbon tach, meniscus orb, fluid family",
+            )
+            .alpha("straight");
             if tile {
-                spec = spec.tile().qa(format!("tile seam score {:.2}", img::tile_seam_score(&normal)));
+                spec = spec
+                    .tile()
+                    .qa(format!("tile seam score {:.2}", img::tile_seam_score(&normal)));
             }
-            ctx.image(&format!("glass/liquid/{name}_normal"), &format!("assets/glass/{name}_normal.ktx2"), &normal, Format::Ktx2(Encoding::Normal), spec.qa("A = coverage"))?;
+            ctx.image(
+                &format!("glass/liquid/{name}_normal"),
+                &format!("assets/glass/{name}_normal.ktx2"),
+                &normal,
+                Format::Ktx2(Encoding::Normal),
+                spec.qa("A = coverage"),
+            )?;
             let mut hspec = Spec::new("glass", "data", gen, "LiquidGlass, fluid family").alpha("none");
             if tile {
                 hspec = hspec.tile();
             }
-            ctx.image(&format!("glass/liquid/{name}_height"), &format!("assets/glass/{name}_height.ktx2"), &height, Format::Ktx2(Encoding::Linear), hspec.qa("R = height 0..1"))?;
+            ctx.image(
+                &format!("glass/liquid/{name}_height"),
+                &format!("assets/glass/{name}_height.ktx2"),
+                &height,
+                Format::Ktx2(Encoding::Linear),
+                hspec.qa("R = height 0..1"),
+            )?;
         }
         Ok(())
     })
@@ -252,7 +330,12 @@ fn lens_caustic(normal: &Img, ior: f32, depth_px: f32, oversample: usize) -> Img
             let fx = px - 0.5 - x0;
             let fy = py - 0.5 - y0;
             let (x0, y0) = (x0 as isize, y0 as isize);
-            for (dx, dy, wgt) in [(0, 0, (1.0 - fx) * (1.0 - fy)), (1, 0, fx * (1.0 - fy)), (0, 1, (1.0 - fx) * fy), (1, 1, fx * fy)] {
+            for (dx, dy, wgt) in [
+                (0, 0, (1.0 - fx) * (1.0 - fy)),
+                (1, 0, fx * (1.0 - fy)),
+                (0, 1, (1.0 - fx) * fy),
+                (1, 1, fx * fy),
+            ] {
                 let (xx, yy) = (x0 + dx, y0 + dy);
                 if xx >= 0 && yy >= 0 && (xx as usize) < w && (yy as usize) < h {
                     acc[yy as usize * w + xx as usize] += wgt;
@@ -261,27 +344,51 @@ fn lens_caustic(normal: &Img, ior: f32, depth_px: f32, oversample: usize) -> Img
         }
     }
     let per = (oversample * oversample) as f32;
-    Img { w, h, c: 1, data: acc.into_iter().map(|a| a / per).collect() }
+    Img {
+        w,
+        h,
+        c: 1,
+        data: acc.into_iter().map(|a| a / per).collect(),
+    }
 }
 
 fn caustic_lens(ctx: &mut Ctx) -> Result<()> {
-    let sources = [("plate_rrect", 2048usize, 1024usize), ("lens_circle", 2048, 2048)];
-    let mut parts: Vec<Vec<u8>> = vec![b"lens-caustic-v3".to_vec()];
+    let sources = [
+        ("plate_rrect", 2048usize, 1024usize),
+        ("plate_squircle", 2048, 2048),
+        ("lens_circle", 2048, 2048),
+    ];
+    let mut parts: Vec<Vec<u8>> = vec![b"lens-caustic-v4".to_vec()];
     for (name, _, _) in sources {
         let p = ctx.abs(&format!("assets/glass/{name}_normal.png"));
-        parts.push(std::fs::metadata(&p).map(|m| m.len().to_le_bytes().to_vec()).unwrap_or_default());
+        parts.push(
+            std::fs::metadata(&p)
+                .map(|m| m.len().to_le_bytes().to_vec())
+                .unwrap_or_default(),
+        );
     }
     let refs: Vec<&[u8]> = parts.iter().map(Vec::as_slice).collect();
     let fp = fingerprint(&refs);
     ctx.job("glass/caustic_lens", &fp, |ctx| {
         for (name, w, h) in sources {
             let src = img::load(&ctx.abs(&format!("assets/glass/{name}_normal.png")))?.resize(w, h, false);
-            let irr = lens_caustic(&src, 1.5, w as f32 * 0.09, 3);
-            let irr = pr::blur(&irr, 2.2, false);
-            // Only light above the unobstructed level is kept: OLED black elsewhere.
-            let tone = Img::from_fn(w, h, 1, |x, y| {
-                let v = (irr.get(x, y, 0) - 1.0).max(0.0);
-                [img::srgb_encode(1.0 - (-1.4 * v).exp()), 0.0, 0.0, 0.0]
+            // Dispersion: red, green and blue are traced with their own IOR (exaggerated crown
+            // glass), so the focused rim splits into spectral fringes like a real lens edge.
+            let mut ch = Vec::with_capacity(3);
+            for ior in [1.47f32, 1.50, 1.535] {
+                let irr = lens_caustic(&src, ior, w as f32 * 0.09, 3);
+                ch.push(pr::blur(&irr, 2.2, false));
+            }
+            // Only light above the unobstructed level is kept: OLED black elsewhere. A slight cool
+            // bias matches the Liquid Glass rim (#FFFFFF -> #38BDF8).
+            let gain = [1.25f32, 1.4, 1.6];
+            let tone = Img::from_fn(w, h, 3, |x, y| {
+                let mut o = [0.0f32; 4];
+                for c in 0..3 {
+                    let v = (ch[c].get(x, y, 0) - 1.0).max(0.0);
+                    o[c] = img::srgb_encode(1.0 - (-gain[c] * v).exp());
+                }
+                o
             });
             let out = name.replace("plate_", "caustic_lens_").replace("lens_circle", "caustic_lens_circle");
             ctx.image(
@@ -292,7 +399,7 @@ fn caustic_lens(ctx: &mut Ctx) -> Result<()> {
                 Spec::new(
                     "glass",
                     "color",
-                    format!("rust:sets::glass::lens_caustic (rays refracted through the Blender {name} normals, IOR 1.5, receiver 9% of width below)"),
+                    format!("rust:sets::glass::lens_caustic (rays refracted through the Blender {name} normals, IOR 1.47/1.50/1.535 per RGB channel for dispersion, receiver 9% of width below)"),
                     CLUSTERS,
                 )
                 .alpha("additive")
@@ -310,13 +417,18 @@ fn caustic_tiles(ctx: &mut Ctx) -> Result<()> {
         let still = pr::caustic(2048, 0.0, 21, 0.22, 3);
         let still = pr::blur(&still, 0.8, true);
         let tone = pr::caustic_tone(&still, 2.4);
-        let enc = Img::from_fn(tone.w, tone.h, 1, |x, y| [img::srgb_encode(tone.get(x, y, 0)), 0.0, 0.0, 0.0]);
+        let enc = Img::from_fn(tone.w, tone.h, 1, |x, y| {
+            [img::srgb_encode(tone.get(x, y, 0)), 0.0, 0.0, 0.0]
+        });
         ctx.image(
             "glass/caustics/caustic_tile",
             "assets/glass/caustic_tile_2k.png",
             &enc,
             Format::Png8,
-            Spec::new("glass", "color", gen, CLUSTERS).alpha("additive").tile().qa(format!("tile seam score {:.2}", img::tile_seam_score(&enc))),
+            Spec::new("glass", "color", gen, CLUSTERS)
+                .alpha("additive")
+                .tile()
+                .qa(format!("tile seam score {:.2}", img::tile_seam_score(&enc))),
         )?;
         let frames: Vec<Img> = (0..64)
             .map(|i| {
@@ -337,8 +449,16 @@ fn caustic_tiles(ctx: &mut Ctx) -> Result<()> {
             Spec::new("glass", "flipbook", gen, CLUSTERS)
                 .alpha("additive")
                 .tile()
-                .flip(Flipbook { cols: 8, rows: 8, frames: 64, fps: 24, cell: 512 })
-                .qa(format!("loop seam score {loop_score:.2}, cell tile seam score {tile_score:.2}")),
+                .flip(Flipbook {
+                    cols: 8,
+                    rows: 8,
+                    frames: 64,
+                    fps: 24,
+                    cell: 512,
+                })
+                .qa(format!(
+                    "loop seam score {loop_score:.2}, cell tile seam score {tile_score:.2}"
+                )),
         )?;
         Ok(())
     })
@@ -361,14 +481,19 @@ fn frost_and_dither(ctx: &mut Ctx) -> Result<()> {
             "assets/glass/frost_micro_normal.ktx2",
             &n,
             Format::Ktx2(Encoding::Normal),
-            Spec::new("glass", "normal", gen, CLUSTERS).tile().qa(format!("tile seam score {:.2}", img::tile_seam_score(&n))),
+            Spec::new("glass", "normal", gen, CLUSTERS)
+                .tile()
+                .qa(format!("tile seam score {:.2}", img::tile_seam_score(&n))),
         )?;
         ctx.image(
             "glass/frost/frost_height",
             "assets/glass/frost_micro_height.png",
             &h,
             Format::Png8,
-            Spec::new("glass", "data", gen, CLUSTERS).tile().space("linear").qa("8-bit PNG, treat as linear"),
+            Spec::new("glass", "data", gen, CLUSTERS)
+                .tile()
+                .space("linear")
+                .qa("8-bit PNG, treat as linear"),
         )?;
         let bn = pr::blue_noise(128, 41);
         ctx.image(
@@ -376,10 +501,15 @@ fn frost_and_dither(ctx: &mut Ctx) -> Result<()> {
             "assets/glass/blue_noise_128.png",
             &bn,
             Format::Png8,
-            Spec::new("glass", "data", "rust:procedural::blue_noise (void-and-cluster, sigma 1.9) seed=41", "every gradient (dither), glass blur")
-                .tile()
-                .space("linear")
-                .qa("rank map; sample with point filtering"),
+            Spec::new(
+                "glass",
+                "data",
+                "rust:procedural::blue_noise (void-and-cluster, sigma 1.9) seed=41",
+                "every gradient (dither), glass blur",
+            )
+            .tile()
+            .space("linear")
+            .qa("rank map; sample with point filtering"),
         )?;
         Ok(())
     })
@@ -394,7 +524,14 @@ fn sheen(ctx: &mut Ctx) -> Result<()> {
             "assets/glass/sheen_arch.png",
             &s,
             Format::Png8,
-            Spec::new("glass", "color", "rust:procedural::sheen_arch (elliptical crown arch)", CLUSTERS).alpha("straight").qa("white; alpha carries the sheen"),
+            Spec::new(
+                "glass",
+                "color",
+                "rust:procedural::sheen_arch (elliptical crown arch)",
+                CLUSTERS,
+            )
+            .alpha("straight")
+            .qa("white; alpha carries the sheen"),
         )
     })
 }

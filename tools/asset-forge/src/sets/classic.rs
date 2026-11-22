@@ -10,12 +10,24 @@ use serde_json::json;
 
 /// (name, normal strength, intended clusters)
 const MATERIALS: &[(&str, f32, &str)] = &[
-    ("brushed_titanium", 2.0, "PorscheAnalog, Classic Analog plates, Race Dash bars"),
+    (
+        "brushed_titanium",
+        2.0,
+        "PorscheAnalog, Classic Analog plates, Race Dash bars",
+    ),
     ("anodised_black", 1.0, "BoschDdu housing, Race Dash, Classic Analog"),
     ("anodised_blue", 1.0, "Race Dash accents, Classic Analog sport dials"),
-    ("guilloche_clous", 5.0, "Classic Analog dials (clous de Paris), horology concepts"),
+    (
+        "guilloche_clous",
+        5.0,
+        "Classic Analog dials (clous de Paris), horology concepts",
+    ),
     ("guilloche_barleycorn", 4.0, "Classic Analog dials (barleycorn)"),
-    ("guilloche_wave", 4.0, "Classic Analog dials (flinqué under blue enamel)"),
+    (
+        "guilloche_wave",
+        4.0,
+        "Classic Analog dials (flinqué under blue enamel)",
+    ),
     ("carbon_twill", 4.0, "BoschDdu, Race Dash carbon, GT7 hood plate"),
     ("carbon_forged", 3.0, "Race Dash, hypercar concepts"),
     ("enamel_white", 1.0, "Classic Analog grand-feu dials"),
@@ -37,7 +49,12 @@ fn materials(ctx: &mut Ctx) -> Result<()> {
     let names: Vec<&str> = MATERIALS.iter().map(|m| m.0).collect();
     let params = json!({ "materials": names, "size": 2048, "samples": 256, "seed": 71 });
     let body = format!("{}\n{}", recipes::classic::EXPR_HELPERS, recipes::classic::MATERIALS);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v2"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v2",
+    ]);
     ctx.job("classic/materials", &fp, |ctx| {
         let out = ctx.scratch("classic_materials")?;
         let mut p = params.clone();
@@ -86,14 +103,29 @@ fn write_material(
             mask(x, y, w),
         ]
     });
-    let lit = Img::from_fn(lit.w, lit.h, c, |x, y| [lit.get(x, y, 0), lit.get(x, y, 1), lit.get(x, y, 2), mask(x, y, w).min(lit.get(x, y, 3))]);
+    let lit = Img::from_fn(lit.w, lit.h, c, |x, y| {
+        [
+            lit.get(x, y, 0),
+            lit.get(x, y, 1),
+            lit.get(x, y, 2),
+            mask(x, y, w).min(lit.get(x, y, 3)),
+        ]
+    });
     let mut normal = img::normal_from_height(&hrm, 0, strength * w as f32 / 512.0, tile).to_channels(4);
-    let rmh = Img::from_fn(w, hrm.h, 4, |x, y| [hrm.get(x, y, 1), hrm.get(x, y, 2), hrm.get(x, y, 0), mask(x, y, w)]);
+    let rmh = Img::from_fn(w, hrm.h, 4, |x, y| {
+        [hrm.get(x, y, 1), hrm.get(x, y, 2), hrm.get(x, y, 0), mask(x, y, w)]
+    });
     for y in 0..normal.h {
         for x in 0..normal.w {
             normal.set(x, y, 3, mask(x, y, w));
         }
     }
+    // Record ids live under the job id so `is_fresh` and stale-file cleanup find them.
+    let id = if name.starts_with("dial_") {
+        format!("classic/dials/{name}")
+    } else {
+        format!("classic/materials/{name}")
+    };
     let alpha = if disc.is_some() { "straight" } else { "none" };
     let mk = |kind: &'static str| {
         let mut s = Spec::new("classic", kind, gen.to_owned(), clusters).alpha(alpha);
@@ -102,22 +134,55 @@ fn write_material(
         }
         s
     };
-    let seam = if tile { format!("tile seam score {:.2}", img::tile_seam_score(&lit)) } else { String::new() };
-    ctx.image(&format!("classic/{name}/albedo"), &format!("assets/classic/{name}_albedo.png"), &albedo, Format::Png8, mk("color").qa("flat albedo (no lighting)"))?;
-    ctx.image(&format!("classic/{name}/lit"), &format!("assets/classic/{name}_lit.png"), &lit, Format::Png8, mk("color").qa(format!("baked studio light; {seam}")))?;
+    let seam = if tile {
+        format!("tile seam score {:.2}", img::tile_seam_score(&lit))
+    } else {
+        String::new()
+    };
+    ctx.image(
+        &format!("{id}/albedo"),
+        &format!("assets/classic/{name}_albedo.png"),
+        &albedo,
+        Format::Png8,
+        mk("color").qa("flat albedo (no lighting)"),
+    )?;
+    ctx.image(
+        &format!("{id}/lit"),
+        &format!("assets/classic/{name}_lit.png"),
+        &lit,
+        Format::Png8,
+        mk("color").qa(format!("baked studio light; {seam}")),
+    )?;
     // Data maps ship smaller than the colour maps: noisy maps compress poorly in KTX2 (zstd).
     let mut normal = normal.resize(w / 2, normal.h / 2, tile);
     img::renormalize(&mut normal);
     let rmh = rmh.resize(w / 4, rmh.h / 4, tile);
-    ctx.image(&format!("classic/{name}/normal"), &format!("assets/classic/{name}_normal.ktx2"), &normal, Format::Ktx2(Encoding::Normal), mk("normal").qa("from height (Sobel at full size), shipped at half size"))?;
-    ctx.image(&format!("classic/{name}/rmh"), &format!("assets/classic/{name}_rmh.ktx2"), &rmh, Format::Ktx2(Encoding::Linear), mk("data").qa("R = roughness, G = metallic, B = height; quarter size"))?;
+    ctx.image(
+        &format!("{id}/normal"),
+        &format!("assets/classic/{name}_normal.ktx2"),
+        &normal,
+        Format::Ktx2(Encoding::Normal),
+        mk("normal").qa("from height (Sobel at full size), shipped at half size"),
+    )?;
+    ctx.image(
+        &format!("{id}/rmh"),
+        &format!("assets/classic/{name}_rmh.ktx2"),
+        &rmh,
+        Format::Ktx2(Encoding::Linear),
+        mk("data").qa("R = roughness, G = metallic, B = height; quarter size"),
+    )?;
     Ok(())
 }
 
 fn dials(ctx: &mut Ctx) -> Result<()> {
     let params = json!({ "dials": DIALS, "size": 2048, "samples": 256, "seed": 72 });
     let body = format!("{}\n{}", recipes::classic::EXPR_HELPERS, recipes::classic::DIALS);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v2"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v2",
+    ]);
     ctx.job("classic/dials", &fp, |ctx| {
         let out = ctx.scratch("classic_dials")?;
         let mut p = params.clone();
@@ -125,7 +190,16 @@ fn dials(ctx: &mut Ctx) -> Result<()> {
         blender::run(&ctx.paths, "classic_dials", &body, &p)?;
         for name in DIALS {
             let gen = format!("blender:classic::DIALS {name} (radial procedural face) seed=72");
-            write_material(ctx, &out, name, 3.0, "PorscheAnalog, Classic Analog family dial faces", &gen, false, Some(0.99))?;
+            write_material(
+                ctx,
+                &out,
+                name,
+                3.0,
+                "PorscheAnalog, Classic Analog family dial faces",
+                &gen,
+                false,
+                Some(0.99),
+            )?;
         }
         Ok(())
     })
@@ -140,7 +214,12 @@ fn bezels(ctx: &mut Ctx) -> Result<()> {
         {"name": "bezel_fluted", "inner": 0.8, "outer": 1.0, "height": 0.06, "style": "fluted", "knurls": 90}
     ]);
     let params = json!({ "bezels": bezels, "size": 2048, "samples": 256, "seed": 73 });
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), recipes::classic::BEZELS.as_bytes(), params.to_string().as_bytes(), b"post-v1"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        recipes::classic::BEZELS.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v1",
+    ]);
     ctx.job("classic/bezels", &fp, |ctx| {
         let out = ctx.scratch("classic_bezels")?;
         let mut p = params.clone();
@@ -158,19 +237,32 @@ fn bezels(ctx: &mut Ctx) -> Result<()> {
                 &format!("assets/classic/{name}_normal.ktx2"),
                 &normal,
                 Format::Ktx2(Encoding::Normal),
-                Spec::new("classic", "normal", gen.clone(), clusters).alpha("straight").qa("A = coverage; outer radius = 98% of half-size"),
+                Spec::new("classic", "normal", gen.clone(), clusters)
+                    .alpha("straight")
+                    .qa("A = coverage; outer radius = 98% of half-size"),
             )?;
             let ao = img::load_exr(&out.join(format!("{name}_ao.exr")))?;
             let ao1 = Img::from_fn(ao.w, ao.h, 2, |x, y| {
                 let a = ao.get(x, y, 3);
-                [if a > 1e-4 { (ao.get(x, y, 0) / a).clamp(0.0, 1.0) } else { 1.0 }, a, 0.0, 0.0]
+                [
+                    if a > 1e-4 {
+                        (ao.get(x, y, 0) / a).clamp(0.0, 1.0)
+                    } else {
+                        1.0
+                    },
+                    a,
+                    0.0,
+                    0.0,
+                ]
             });
             ctx.image(
                 &format!("classic/bezels/{name}_ao"),
                 &format!("assets/classic/{name}_ao.ktx2"),
                 &ao1,
                 Format::Ktx2(Encoding::Linear),
-                Spec::new("classic", "mask", gen.clone(), clusters).alpha("straight").qa("R = ambient occlusion, A = coverage"),
+                Spec::new("classic", "mask", gen.clone(), clusters)
+                    .alpha("straight")
+                    .qa("R = ambient occlusion, A = coverage"),
             )?;
             for fin in ["steel", "blackchrome"] {
                 let lit = img::load(&out.join(format!("{name}_{fin}.png")))?;
@@ -179,7 +271,9 @@ fn bezels(ctx: &mut Ctx) -> Result<()> {
                     &format!("assets/classic/{name}_{fin}.png"),
                     &lit,
                     Format::Png8,
-                    Spec::new("classic", "color", gen.clone(), clusters).alpha("straight").qa(format!("{fin}, baked studio light")),
+                    Spec::new("classic", "color", gen.clone(), clusters)
+                        .alpha("straight")
+                        .qa(format!("{fin}, baked studio light")),
                 )?;
             }
         }

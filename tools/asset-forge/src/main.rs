@@ -76,7 +76,7 @@ fn run(args: &[String]) -> Result<()> {
             Ok(())
         }
         Some("sheet") => {
-            let ledger = ledger::Ledger::load(&paths.assets())?;
+            let mut ledger = ledger::Ledger::load(&paths.assets())?;
             ledger.save()?;
             sheet::write(&paths, &ledger)
         }
@@ -93,9 +93,17 @@ fn doctor(paths: &paths::Paths) -> Result<()> {
         println!("{} {name}: {detail}", if pass { "✓" } else { "✗" });
         ok &= pass;
     };
-    check("repo root", paths.root.join("assets").is_dir(), paths.root.display().to_string());
+    check(
+        "repo root",
+        paths.root.join("assets").is_dir(),
+        paths.root.display().to_string(),
+    );
     match blender::version(&paths.blender) {
-        Ok(v) => check("blender", v.starts_with("Blender 5."), format!("{v} ({})", paths.blender.display())),
+        Ok(v) => check(
+            "blender",
+            v.starts_with("Blender 5."),
+            format!("{v} ({})", paths.blender.display()),
+        ),
         Err(e) => check("blender", false, e.to_string()),
     }
     let py = paths.comfy_dir.join("python_embeded").join("python.exe");
@@ -103,16 +111,28 @@ fn doctor(paths: &paths::Paths) -> Result<()> {
     let models = paths.comfy_models();
     let ckpt = models.join("checkpoints").join(paths::SDXL_CKPT);
     let size = std::fs::metadata(&ckpt).map(|m| m.len()).unwrap_or(0);
-    check("sdxl base 1.0", size == paths::SDXL_BYTES, format!("{} ({size} bytes)", ckpt.display()));
+    check(
+        "sdxl base 1.0",
+        size == paths::SDXL_BYTES,
+        format!("{} ({size} bytes)", ckpt.display()),
+    );
     let up = models.join("upscale_models").join(paths::UPSCALER);
     let size = std::fs::metadata(&up).map(|m| m.len()).unwrap_or(0);
-    check("4x-UltraSharp", size == paths::UPSCALER_BYTES, format!("{} ({size} bytes)", up.display()));
+    check(
+        "4x-UltraSharp",
+        size == paths::UPSCALER_BYTES,
+        format!("{} ({size} bytes)", up.display()),
+    );
     match comfy::Comfy::connect(paths) {
         Ok(c) => {
             let stats = c.stats().unwrap_or_default();
             let dev = stats["devices"][0]["name"].as_str().unwrap_or("?").to_owned();
             let vram = stats["devices"][0]["vram_total"].as_u64().unwrap_or(0) / 1_048_576;
-            check("comfyui api", true, format!("{} up; {dev}, {vram} MB VRAM", paths.comfy_url));
+            check(
+                "comfyui api",
+                true,
+                format!("{} up; {dev}, {vram} MB VRAM", paths.comfy_url),
+            );
         }
         Err(e) => check("comfyui api", false, e.to_string()),
     }

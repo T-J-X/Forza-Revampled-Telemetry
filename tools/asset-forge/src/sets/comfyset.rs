@@ -14,6 +14,8 @@ struct Plate {
     name: &'static str,
     prompt: &'static str,
     tile: bool,
+    /// Mirror the top-left quadrant into a four-fold symmetric plate.
+    mirror4: bool,
     seed: u64,
     /// Output size (longest side); 4096 for hero plates, 2048 where the plate is tiled or blurred.
     size: usize,
@@ -23,19 +25,19 @@ struct Plate {
 const NEGATIVE: &str = "text, letters, watermark, logo, signature, frame, border, vignette, people, face, car, user interface, lowres, blurry, jpeg artifacts, noise, grain, oversaturated";
 
 const PLATES: &[Plate] = &[
-    Plate { set: "glass", name: "caustic_water", prompt: "macro photograph of bright water caustic light patterns projected on a pure black floor, thin luminous white filaments, high contrast, monochrome, crisp", tile: true, seed: 1101, size: 2048, clusters: "LiquidGlass caustic overlay" },
-    Plate { set: "glass", name: "caustic_prism", prompt: "refracted light caustics through cut crystal glass, delicate luminous network with prismatic rainbow fringes, pure black background, elegant, crisp", tile: true, seed: 1102, size: 2048, clusters: "LiquidGlass, chromatic glass concepts" },
-    Plate { set: "fluid", name: "plasma", prompt: "abstract plasma energy field, swirling electric violet and cyan filaments, fluid dynamics simulation, deep black background, ultra detailed, luminous", tile: true, seed: 1201, size: 2048, clusters: "fluid / generative family, plasma concepts" },
-    Plate { set: "fluid", name: "nebula", prompt: "deep space nebula, wisps of magenta and teal glowing gas, fine dust lanes, scattered tiny stars, pure black space, astrophotography, ultra detailed", tile: true, seed: 1202, size: 2048, clusters: "fluid / generative family, space concepts" },
-    Plate { set: "fluid", name: "ferrofluid_macro", prompt: "macro photograph of black ferrofluid spikes rising in a magnetic field, glossy liquid metal, cool blue studio rim light, pure black background, ultra detailed", tile: false, seed: 1203, size: 2048, clusters: "Ferrofluid concept, fluid family" },
-    Plate { set: "fluid", name: "liquid_chrome", prompt: "abstract liquid chrome flowing surface, mercury ripples and folds, mirror reflective silver, soft studio light, dark background, ultra detailed", tile: true, seed: 1204, size: 2048, clusters: "LiquidMetal concepts, fluid family" },
-    Plate { set: "fluid", name: "chromatic_prism", prompt: "abstract chromatic dispersion of white light through a glass prism, spectral rainbow bands fanning out on pure black, minimal, elegant, high contrast", tile: false, seed: 1205, size: 2048, clusters: "Shibuya chromatic concept, sci-fi and fluid families" },
-    Plate { set: "fluid", name: "chladni_sand", prompt: "Chladni figure, fine white sand on a black vibrating metal plate forming a symmetric nodal pattern, top view, high contrast, crisp", tile: false, seed: 1206, size: 2048, clusters: "Chladni / resonance concept" },
-    Plate { set: "scifi", name: "warp_streaks", prompt: "hyperspace warp jump, streaks of blue and violet light converging to a bright white center, radial motion, pure black background, cinematic", tile: false, seed: 1301, size: 2048, clusters: "warp / FUI concepts, sci-fi family" },
-    Plate { set: "scifi", name: "energy_core", prompt: "glowing fusion reactor energy core seen from the front, concentric rings of cyan light around a white hot center, sci-fi, centered, pure black background", tile: false, seed: 1302, size: 2048, clusters: "energy-core FUI concepts, sci-fi family" },
-    Plate { set: "scifi", name: "accretion_disk", prompt: "black hole with a glowing accretion disk, orange and white hot plasma ring, gravitational lensing arc, centered, pure black space, cinematic", tile: false, seed: 1303, size: 2048, clusters: "ChronoEventHorizon concept" },
-    Plate { set: "scifi", name: "holo_interference", prompt: "holographic interference pattern, iridescent cyan and magenta fine moire lines, dark background, abstract, crisp", tile: true, seed: 1304, size: 2048, clusters: "hologram overlays, sci-fi family" },
-    Plate { set: "scifi", name: "synth_sun", prompt: "retro synthwave sunset sun disc with horizontal cut stripes, neon magenta to orange gradient, pure black background, minimal flat graphic", tile: false, seed: 1305, size: 2048, clusters: "SynthwaveOutrun" },
+    Plate { set: "glass", name: "caustic_water", prompt: "macro photograph of bright water caustic light patterns projected on a pure black floor, thin luminous white filaments, high contrast, monochrome, crisp", tile: true, mirror4: false, seed: 1101, size: 2048, clusters: "LiquidGlass caustic overlay" },
+    Plate { set: "glass", name: "caustic_prism", prompt: "refracted light caustics through cut crystal glass, delicate luminous network with prismatic rainbow fringes, pure black background, elegant, crisp", tile: true, mirror4: false, seed: 1102, size: 2048, clusters: "LiquidGlass, chromatic glass concepts" },
+    Plate { set: "fluid", name: "plasma", prompt: "abstract plasma energy field, swirling electric violet and cyan filaments, fluid dynamics simulation, deep black background, ultra detailed, luminous", tile: true, mirror4: false, seed: 1201, size: 2048, clusters: "fluid / generative family, plasma concepts" },
+    Plate { set: "fluid", name: "nebula", prompt: "deep space nebula, wisps of magenta and teal glowing gas, fine dust lanes, scattered tiny stars, pure black space, astrophotography, ultra detailed", tile: true, mirror4: false, seed: 1202, size: 2048, clusters: "fluid / generative family, space concepts" },
+    Plate { set: "fluid", name: "ferrofluid_macro", prompt: "macro photograph of black ferrofluid spikes rising in a magnetic field, glossy liquid metal, cool blue studio rim light, pure black background, ultra detailed", tile: false, mirror4: false, seed: 1203, size: 2048, clusters: "Ferrofluid concept, fluid family" },
+    Plate { set: "fluid", name: "liquid_chrome", prompt: "abstract liquid chrome flowing surface, mercury ripples and folds, mirror reflective silver, soft studio light, dark background, ultra detailed", tile: true, mirror4: false, seed: 1204, size: 2048, clusters: "LiquidMetal concepts, fluid family" },
+    Plate { set: "fluid", name: "chromatic_prism", prompt: "abstract chromatic dispersion of white light through a glass prism, spectral rainbow bands fanning out on pure black, minimal, elegant, high contrast", tile: false, mirror4: false, seed: 1205, size: 2048, clusters: "Shibuya chromatic concept, sci-fi and fluid families" },
+    Plate { set: "fluid", name: "chladni_sand", prompt: "Chladni figure, fine white sand on a black vibrating metal plate forming a symmetric nodal pattern, top view, high contrast, crisp", tile: false, mirror4: true, seed: 1206, size: 2048, clusters: "Chladni / resonance concept" },
+    Plate { set: "scifi", name: "warp_streaks", prompt: "hyperspace warp jump, streaks of blue and violet light converging to a bright white center, radial motion, pure black background, cinematic", tile: false, mirror4: false, seed: 1301, size: 2048, clusters: "warp / FUI concepts, sci-fi family" },
+    Plate { set: "scifi", name: "energy_core", prompt: "glowing fusion reactor energy core seen from the front, concentric rings of cyan light around a white hot center, sci-fi, centered, pure black background", tile: false, mirror4: false, seed: 1302, size: 2048, clusters: "energy-core FUI concepts, sci-fi family" },
+    Plate { set: "scifi", name: "accretion_disk", prompt: "black hole with a glowing accretion disk, orange and white hot plasma ring, gravitational lensing arc, centered, pure black space, cinematic", tile: false, mirror4: false, seed: 1303, size: 2048, clusters: "ChronoEventHorizon concept" },
+    Plate { set: "scifi", name: "holo_interference", prompt: "holographic interference pattern, iridescent cyan and magenta fine moire lines, dark background, abstract, crisp", tile: true, mirror4: false, seed: 1304, size: 2048, clusters: "hologram overlays, sci-fi family" },
+    Plate { set: "scifi", name: "synth_sun", prompt: "retro synthwave sunset sun disc with horizontal cut stripes, neon magenta to orange gradient, pure black background, minimal flat graphic", tile: false, mirror4: false, seed: 1305, size: 2048, clusters: "SynthwaveOutrun" },
 ];
 
 /// Builds every plate.
@@ -44,9 +46,30 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let workflow = String::from_utf8_lossy(&crate::ctx::read(&wf_path)?).to_string();
     let mut comfy: Option<Comfy> = None;
     for p in PLATES {
-        let fp = fingerprint(&[b"comfy-v2", workflow.as_bytes(), p.prompt.as_bytes(), NEGATIVE.as_bytes(), &p.seed.to_le_bytes(), &[u8::from(p.tile)], &p.size.to_le_bytes()]);
+        // The SDXL render is keyed by what feeds ComfyUI; the job also covers post-processing, so a
+        // post change re-uses the cached raw render instead of re-running SDXL.
+        let gen_fp = fingerprint(&[
+            workflow.as_bytes(),
+            p.prompt.as_bytes(),
+            NEGATIVE.as_bytes(),
+            &p.seed.to_le_bytes(),
+        ]);
+        let fp = fingerprint(&[
+            b"comfy-v3",
+            &[u8::from(p.mirror4)],
+            workflow.as_bytes(),
+            p.prompt.as_bytes(),
+            NEGATIVE.as_bytes(),
+            &p.seed.to_le_bytes(),
+            &[u8::from(p.tile)],
+            &p.size.to_le_bytes(),
+        ]);
         let job = format!("comfy/{}", p.name);
         ctx.job(&job, &fp, |ctx| {
+            let raw_path = ctx.scratch("comfy")?.join(format!("{}.png", p.name));
+            let raw_fp_path = raw_path.with_extension("fp");
+            let cached = raw_path.exists() && std::fs::read_to_string(&raw_fp_path).map(|s| s == gen_fp).unwrap_or(false);
+            if !cached {
             if comfy.is_none() {
                 comfy = Some(Comfy::connect(&ctx.paths)?);
             }
@@ -63,10 +86,14 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             let wf = comfy::patch(&workflow, &params)?;
             let images = c.run(&wf, Duration::from_secs(900))?;
             let bytes = images.first().ok_or_else(|| tool_err("comfyui", "no image"))?;
-            let raw_path = ctx.scratch("comfy")?.join(format!("{}.png", p.name));
             img::write_file(&raw_path, bytes)?;
+            img::write_file(&raw_fp_path, gen_fp.as_bytes())?;
+            }
             let mut master = img::load(&raw_path)?.to_channels(3);
             img::crush_blacks(&mut master, 0.03);
+            if p.mirror4 {
+                master = img::mirror4(&master);
+            }
             if p.tile {
                 master = img::make_seamless(&master, 0.2);
             }
@@ -103,7 +130,16 @@ mod tests {
     fn workflow_patches_cleanly() {
         let wf = include_str!("../../workflows/sdxl_plate.json");
         let mut p = serde_json::Map::new();
-        for (k, v) in [("prompt", serde_json::json!("x")), ("negative", serde_json::json!("y")), ("seed", serde_json::json!(1)), ("steps", serde_json::json!(2)), ("cfg", serde_json::json!(3.0)), ("width", serde_json::json!(1024)), ("height", serde_json::json!(1024)), ("prefix", serde_json::json!("z"))] {
+        for (k, v) in [
+            ("prompt", serde_json::json!("x")),
+            ("negative", serde_json::json!("y")),
+            ("seed", serde_json::json!(1)),
+            ("steps", serde_json::json!(2)),
+            ("cfg", serde_json::json!(3.0)),
+            ("width", serde_json::json!(1024)),
+            ("height", serde_json::json!(1024)),
+            ("prefix", serde_json::json!("z")),
+        ] {
             p.insert(k.into(), v);
         }
         let v = super::comfy::patch(wf, &p).unwrap_or_default();

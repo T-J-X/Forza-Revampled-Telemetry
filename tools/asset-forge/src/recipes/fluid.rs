@@ -43,7 +43,7 @@ def gn_displace(ob, layers, spikes=None, axis='NORMAL'):
         (s_scale, s_amp, s_rad) = spikes
         vo = node(nt, 'ShaderNodeTexVoronoi', voronoi_dimensions='3D', feature='F1', distance='EUCLIDEAN')
         vo.inputs['Scale'].default_value = s_scale
-        vo.inputs['Randomness'].default_value = 0.25
+        vo.inputs['Randomness'].default_value = 0.45
         lk(nt, pos.outputs[0], vo.inputs['Vector'])
         t = math_node(nt, 'DIVIDE', vo.outputs['Distance'], vb=s_rad)
         t = math_node(nt, 'MINIMUM', t, vb=1.0)
@@ -64,8 +64,12 @@ def gn_displace(ob, layers, spikes=None, axis='NORMAL'):
         breathe = math_node(nt, 'MAXIMUM', breathe, vb=0.15)
         sz = node(nt, 'ShaderNodeSeparateXYZ')
         lk(nt, nrm.outputs[0], sz.inputs[0])
-        up = math_node(nt, 'MAXIMUM', sz.outputs['Z'], vb=0.0)
-        up = math_node(nt, 'POWER', up, vb=0.7)
+        # Spikes stand only on the upward-facing crown (normal z above ~0.55), never on the wall.
+        up = node(nt, 'ShaderNodeMapRange', interpolation_type='SMOOTHSTEP', clamp=True)
+        lk(nt, sz.outputs['Z'], up.inputs['Value'])
+        up.inputs['From Min'].default_value = 0.5
+        up.inputs['From Max'].default_value = 0.8
+        up = up.outputs['Result']
         t = math_node(nt, 'MULTIPLY', t, breathe)
         t = math_node(nt, 'MULTIPLY', t, up)
         spike_h = math_node(nt, 'MULTIPLY', t, vb=s_amp)
@@ -135,7 +139,7 @@ def metal_material(name, color, roughness, coat=0.0, metallic=1.0):
     lk(nt, p.outputs[0], o.inputs['Surface'])
     return m
 
-def studio(sc, strength=1.0, key=600.0):
+def studio(sc, strength=1.0, key=600.0, zenith=False):
     # A procedural photo studio at infinity for chrome to reflect: a big overhead softbox, a bright
     # horizon band, two vertical strip boxes, a cool rim and a black floor. Plus area lights for
     # crisp speculars. Mirror metal is only as good as what it reflects.
@@ -162,17 +166,38 @@ def studio(sc, strength=1.0, key=600.0):
         m.inputs['From Min'].default_value = c
         m.inputs['From Max'].default_value = d
         return math_node(nt, 'SUBTRACT', n.outputs['Result'], m.outputs['Result'])
-    top = band(sp.outputs['Z'], 0.78, 0.9, 2.0, 3.0)
+    top = band(sp.outputs['Z'], 0.78, 0.9, 2.0, 3.0) if not zenith else band(sp.outputs['Z'], 0.5, 0.6, 2.0, 3.0)
     horizon = band(sp.outputs['Z'], -0.02, 0.06, 0.16, 0.3)
     strip_a = band(sp.outputs['X'], 0.86, 0.9, 0.97, 0.99)
     strip_b = band(sp.outputs['X'], -0.99, -0.97, -0.9, -0.86)
     rim = band(sp.outputs['Y'], 0.9, 0.95, 2.0, 3.0)
     upper = band(sp.outputs['Z'], 0.05, 0.25, 2.0, 3.0)
+    # A dim floor and a low bounce card, so the underside of chrome reads as a gradient, not a hole.
+    floor = band(sp.outputs['Z'], -3.0, -2.0, -0.08, -0.01)
+    bounce = band(sp.outputs['Z'], -0.4, -0.28, -0.14, -0.05)
+    if zenith:
+        # A top-down mirror only sees the sky near the zenith: break the softbox into a ceiling of
+        # strip lights and a cross bar so the ripples have edges to bend.
+        sx = math_node(nt, 'FRACT', math_node(nt, 'MULTIPLY', sp.outputs['X'], vb=1.0))
+        sx = math_node(nt, 'ABSOLUTE', math_node(nt, 'SUBTRACT', sx, vb=0.5))
+        sy = math_node(nt, 'ABSOLUTE', sp.outputs['Y'])
+        stripes = node(nt, 'ShaderNodeMapRange', interpolation_type='SMOOTHSTEP', clamp=True)
+        lk(nt, sx, stripes.inputs['Value'])
+        stripes.inputs['From Min'].default_value = 0.04
+        stripes.inputs['From Max'].default_value = 0.42
+        bar = node(nt, 'ShaderNodeMapRange', interpolation_type='SMOOTHSTEP', clamp=True)
+        lk(nt, sy, bar.inputs['Value'])
+        bar.inputs['From Min'].default_value = 0.3
+        bar.inputs['From Max'].default_value = 0.02
+        lit = math_node(nt, 'MAXIMUM', math_node(nt, 'SUBTRACT', None, stripes.outputs['Result'], va=1.0), bar.outputs['Result'])
+        top = math_node(nt, 'MULTIPLY', top, math_node(nt, 'ADD', math_node(nt, 'MULTIPLY', lit, vb=0.78), None, vb=0.22))
     L = math_node(nt, 'MULTIPLY', top, vb=3.2)
     L = math_node(nt, 'ADD', L, math_node(nt, 'MULTIPLY', horizon, vb=1.6))
     strips = math_node(nt, 'MULTIPLY', math_node(nt, 'ADD', strip_a, strip_b), upper)
     L = math_node(nt, 'ADD', L, math_node(nt, 'MULTIPLY', strips, vb=2.6))
     L = math_node(nt, 'ADD', L, math_node(nt, 'MULTIPLY', rim, vb=1.2))
+    L = math_node(nt, 'ADD', L, math_node(nt, 'MULTIPLY', floor, vb=0.1))
+    L = math_node(nt, 'ADD', L, math_node(nt, 'MULTIPLY', bounce, vb=0.55))
     L = math_node(nt, 'ADD', L, None, vb=0.015)
     L = math_node(nt, 'MULTIPLY', L, vb=strength)
     lk(nt, L, bg.inputs['Strength'])
@@ -196,12 +221,12 @@ sc = reset()
 dev = gpu_cycles(sc, samples=ARGS.get('samples', 128), denoise=True, bounces=10)
 resolution(sc, cell, cell)
 view(sc, 'AgX', look='AgX - Punchy')
-studio(sc)
+studio(sc, zenith=(style == 'mercury_pool'))
 if style == 'mercury_pool':
     bpy.ops.mesh.primitive_grid_add(x_subdivisions=600, y_subdivisions=600, size=2.0)
     ob = bpy.context.active_object
     bpy.ops.object.shade_smooth()
-    handles = gn_displace(ob, [(2.2, 0.09), (6.0, 0.022)], axis='Z')
+    handles = gn_displace(ob, [(2.2, 0.055), (6.0, 0.012)], axis='Z')
     ob.data.materials.append(metal_material('mercury', (0.80, 0.81, 0.83), 0.035))
     ortho_cam(sc, 2.0)
     dmin, dmax = -0.07, 0.07
@@ -221,7 +246,7 @@ else:
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=7, radius=1.0)
     ob = bpy.context.active_object
     bpy.ops.object.shade_smooth()
-    handles = gn_displace(ob, [(0.9, 0.5), (2.4, 0.08)])
+    handles = gn_displace(ob, [(0.9, 0.5), (2.4, 0.035)])
     ob.data.materials.append(metal_material('chrome', (0.93, 0.93, 0.95), 0.03))
     persp_cam(sc, (0.0, -5.4, 0.9), (0.0, 0.0, 0.0), lens=58.0)
     dmin, dmax = -0.33, 0.33

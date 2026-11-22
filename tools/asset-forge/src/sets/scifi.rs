@@ -24,7 +24,12 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
 fn holo_grid(ctx: &mut Ctx) -> Result<()> {
     let params = json!({ "w": 4096, "h": 2048, "samples": 160, "seed": 81 });
     let body = format!("{}\n{}", recipes::classic::EXPR_HELPERS, recipes::scifi::HOLO_GRID);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v1"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v1",
+    ]);
     ctx.job("scifi/holo_grid", &fp, |ctx| {
         let out = ctx.scratch("scifi_holo")?;
         let mut p = params.clone();
@@ -36,7 +41,13 @@ fn holo_grid(ctx: &mut Ctx) -> Result<()> {
             "assets/scifi/holo_floor_grid.png",
             &g,
             Format::Png8,
-            Spec::new("scifi", "color", "blender:scifi::HOLO_GRID (emissive grid, ray-length fade, 24 mm lens) seed=81", CLUSTERS).alpha("additive"),
+            Spec::new(
+                "scifi",
+                "color",
+                "blender:scifi::HOLO_GRID (emissive grid, ray-length fade, 24 mm lens) seed=81",
+                CLUSTERS,
+            )
+            .alpha("additive"),
         )
     })
 }
@@ -44,7 +55,12 @@ fn holo_grid(ctx: &mut Ctx) -> Result<()> {
 fn warp(ctx: &mut Ctx) -> Result<()> {
     let params = json!({ "frames": 32, "cell": 512, "samples": 64, "seed": 82 });
     let body = format!("{}\n{}", recipes::classic::EXPR_HELPERS, recipes::scifi::WARP_TUNNEL);
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), body.as_bytes(), params.to_string().as_bytes(), b"post-v1"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        body.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v1",
+    ]);
     ctx.job("scifi/warp", &fp, |ctx| {
         let out = ctx.scratch("scifi_warp")?;
         let mut p = params.clone();
@@ -59,10 +75,21 @@ fn warp(ctx: &mut Ctx) -> Result<()> {
             "assets/scifi/warp_tunnel_8x4.png",
             &img::atlas(&frames, 8),
             Format::Png8,
-            Spec::new("scifi", "flipbook", "blender:scifi::WARP_TUNNEL (emissive tube, torus-periodic streaks scrolled one period) seed=82", CLUSTERS)
-                .alpha("additive")
-                .flip(Flipbook { cols: 8, rows: 4, frames: 32, fps: 30, cell: 512 })
-                .qa(format!("loop seam score {score:.2}")),
+            Spec::new(
+                "scifi",
+                "flipbook",
+                "blender:scifi::WARP_TUNNEL (emissive tube, torus-periodic streaks scrolled one period) seed=82",
+                CLUSTERS,
+            )
+            .alpha("additive")
+            .flip(Flipbook {
+                cols: 8,
+                rows: 4,
+                frames: 32,
+                fps: 30,
+                cell: 512,
+            })
+            .qa(format!("loop seam score {score:.2}")),
         )
     })
 }
@@ -73,7 +100,11 @@ fn cov(d: f32, hw: f32) -> f32 {
 }
 
 fn masks(ctx: &mut Ctx) -> Result<()> {
-    let fp = fingerprint(&[b"scifi-masks-v1", include_bytes!("scifi.rs"), include_bytes!("../procedural.rs")]);
+    let fp = fingerprint(&[
+        b"scifi-masks-v1",
+        include_bytes!("scifi.rs"),
+        include_bytes!("../procedural.rs"),
+    ]);
     ctx.job("scifi/masks", &fp, |ctx| {
         let gen_grid = "rust:sets::scifi::masks (exact tileable lattice, analytic AA)";
         // Square grid: minor every 64 px, major every 256 px.
@@ -87,8 +118,17 @@ fn masks(ctx: &mut Ctx) -> Result<()> {
             let major = cov(line(fx, 256.0).min(line(fy, 256.0)), 1.6);
             [minor.max(major), 0.0, 0.0, 0.0]
         });
-        ctx.image("scifi/masks/grid_square", "assets/scifi/grid_square_2k.png", &grid, Format::Png8,
-            Spec::new("scifi", "mask", gen_grid, CLUSTERS).alpha("additive").tile().space("linear").qa(format!("tile seam score {:.2}", img::tile_seam_score(&grid))))?;
+        ctx.image(
+            "scifi/masks/grid_square",
+            "assets/scifi/grid_square_2k.png",
+            &grid,
+            Format::Png8,
+            Spec::new("scifi", "mask", gen_grid, CLUSTERS)
+                .alpha("additive")
+                .tile()
+                .space("linear")
+                .qa(format!("tile seam score {:.2}", img::tile_seam_score(&grid))),
+        )?;
         // Dot matrix (Oblivion-style), 32 px pitch.
         let dots = Img::from_fn(2048, 2048, 1, |x, y| {
             let c = |p: usize| ((p % 32) as f32 + 0.5 - 16.0).abs();
@@ -96,8 +136,16 @@ fn masks(ctx: &mut Ctx) -> Result<()> {
             let big = (x / 32) % 8 == 0 && (y / 32) % 8 == 0;
             [cov(d, if big { 3.2 } else { 1.8 }), 0.0, 0.0, 0.0]
         });
-        ctx.image("scifi/masks/grid_dots", "assets/scifi/grid_dots_2k.png", &dots, Format::Png8,
-            Spec::new("scifi", "mask", gen_grid, CLUSTERS).alpha("additive").tile().space("linear"))?;
+        ctx.image(
+            "scifi/masks/grid_dots",
+            "assets/scifi/grid_dots_2k.png",
+            &dots,
+            Format::Png8,
+            Spec::new("scifi", "mask", gen_grid, CLUSTERS)
+                .alpha("additive")
+                .tile()
+                .space("linear"),
+        )?;
         // 45° crosshatch, 64 px pitch along the diagonal (2048 / 64 integer so it tiles).
         let hatch = Img::from_fn(2048, 2048, 1, |x, y| {
             let a = ((x + y) % 64) as f32;
@@ -106,20 +154,84 @@ fn masks(ctx: &mut Ctx) -> Result<()> {
             let d2 = b.min(64.0 - b) / std::f32::consts::SQRT_2;
             [cov(d1.min(d2), 0.9) * 0.6, 0.0, 0.0, 0.0]
         });
-        ctx.image("scifi/masks/grid_hatch", "assets/scifi/grid_hatch_2k.png", &hatch, Format::Png8,
-            Spec::new("scifi", "mask", gen_grid, CLUSTERS).alpha("additive").tile().space("linear"))?;
+        ctx.image(
+            "scifi/masks/grid_hatch",
+            "assets/scifi/grid_hatch_2k.png",
+            &hatch,
+            Format::Png8,
+            Spec::new("scifi", "mask", gen_grid, CLUSTERS)
+                .alpha("additive")
+                .tile()
+                .space("linear"),
+        )?;
         let scan = pr::scanlines(2, 64);
-        ctx.image("scifi/masks/scanline_2px", "assets/scifi/scanline_2px.png", &scan, Format::Png8,
-            Spec::new("scifi", "mask", "rust:procedural::scanlines (2 px pitch)", "RetroCyber VFD cavity, sci-fi family").alpha("none").tile().space("linear").qa("multiply; repeat"))?;
+        ctx.image(
+            "scifi/masks/scanline_2px",
+            "assets/scifi/scanline_2px.png",
+            &scan,
+            Format::Png8,
+            Spec::new(
+                "scifi",
+                "mask",
+                "rust:procedural::scanlines (2 px pitch)",
+                "RetroCyber VFD cavity, sci-fi family",
+            )
+            .alpha("none")
+            .tile()
+            .space("linear")
+            .qa("multiply; repeat"),
+        )?;
         let scan3 = pr::scanlines(3, 96);
-        ctx.image("scifi/masks/scanline_3px", "assets/scifi/scanline_3px.png", &scan3, Format::Png8,
-            Spec::new("scifi", "mask", "rust:procedural::scanlines (3 px pitch)", "sci-fi family").alpha("none").tile().space("linear").qa("multiply; repeat"))?;
+        ctx.image(
+            "scifi/masks/scanline_3px",
+            "assets/scifi/scanline_3px.png",
+            &scan3,
+            Format::Png8,
+            Spec::new(
+                "scifi",
+                "mask",
+                "rust:procedural::scanlines (3 px pitch)",
+                "sci-fi family",
+            )
+            .alpha("none")
+            .tile()
+            .space("linear")
+            .qa("multiply; repeat"),
+        )?;
         let mesh = pr::vfd_mesh(16, 9.0);
-        ctx.image("scifi/masks/vfd_mesh", "assets/scifi/vfd_hex_mesh.png", &mesh, Format::Png8,
-            Spec::new("scifi", "mask", "rust:procedural::vfd_mesh (flat-top hex wire, 9 px)", "RetroCyber, VFD members of the sci-fi family").alpha("none").tile().space("linear").qa(format!("multiply; tile seam score {:.2}", img::tile_seam_score(&mesh))))?;
+        ctx.image(
+            "scifi/masks/vfd_mesh",
+            "assets/scifi/vfd_hex_mesh.png",
+            &mesh,
+            Format::Png8,
+            Spec::new(
+                "scifi",
+                "mask",
+                "rust:procedural::vfd_mesh (flat-top hex wire, 9 px)",
+                "RetroCyber, VFD members of the sci-fi family",
+            )
+            .alpha("none")
+            .tile()
+            .space("linear")
+            .qa(format!("multiply; tile seam score {:.2}", img::tile_seam_score(&mesh))),
+        )?;
         let triad = pr::phosphor_triad(3);
-        ctx.image("scifi/masks/phosphor_triad", "assets/scifi/phosphor_triad.png", &triad, Format::Png8,
-            Spec::new("scifi", "mask", "rust:procedural::phosphor_triad (aperture-grille RGB stripes, 3 px)", "SynthwaveOutrun CRT look").alpha("none").tile().space("linear").qa("multiply; repeat"))?;
+        ctx.image(
+            "scifi/masks/phosphor_triad",
+            "assets/scifi/phosphor_triad.png",
+            &triad,
+            Format::Png8,
+            Spec::new(
+                "scifi",
+                "mask",
+                "rust:procedural::phosphor_triad (aperture-grille RGB stripes, 3 px)",
+                "SynthwaveOutrun CRT look",
+            )
+            .alpha("none")
+            .tile()
+            .space("linear")
+            .qa("multiply; repeat"),
+        )?;
         Ok(())
     })
 }
@@ -143,29 +255,67 @@ pub fn reticle_svg() -> String {
     let (cx, cy) = cell(0);
     let _ = write!(s, r##"<circle cx="{cx}" cy="{cy}" r="380" stroke-width="10"/>"##);
     for k in 0..36 {
-        let len = if k % 9 == 0 { 70.0 } else if k % 3 == 0 { 44.0 } else { 24.0 };
+        let len = if k % 9 == 0 {
+            70.0
+        } else if k % 3 == 0 {
+            44.0
+        } else {
+            24.0
+        };
         let (x0, y0) = pol(cx, cy, 380.0, k as f32 * 10.0);
         let (x1, y1) = pol(cx, cy, 380.0 - len, k as f32 * 10.0);
-        let _ = write!(s, r##"<line x1="{x0:.1}" y1="{y0:.1}" x2="{x1:.1}" y2="{y1:.1}" stroke-width="8"/>"##);
+        let _ = write!(
+            s,
+            r##"<line x1="{x0:.1}" y1="{y0:.1}" x2="{x1:.1}" y2="{y1:.1}" stroke-width="8"/>"##
+        );
     }
-    let _ = write!(s, r##"<path d="M{} {cy} H{} M{} {cy} H{} M{cx} {} V{} M{cx} {} V{}" stroke-width="10"/>"##, cx - 220.0, cx - 70.0, cx + 70.0, cx + 220.0, cy - 220.0, cy - 70.0, cy + 70.0, cy + 220.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {cy} H{} M{} {cy} H{} M{cx} {} V{} M{cx} {} V{}" stroke-width="10"/>"##,
+        cx - 220.0,
+        cx - 70.0,
+        cx + 70.0,
+        cx + 220.0,
+        cy - 220.0,
+        cy - 70.0,
+        cy + 70.0,
+        cy + 220.0
+    );
     // 1: FSD lead-car lock box — corner brackets.
     let (cx, cy) = cell(1);
     let (h, l) = (330.0, 110.0);
     for (sx, sy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
         let (x, y) = (cx + sx * h, cy + sy * h);
-        let _ = write!(s, r##"<path d="M{x} {} V{y} H{}" stroke-width="16"/>"##, y - sy * l, x - sx * l);
+        let _ = write!(
+            s,
+            r##"<path d="M{x} {} V{y} H{}" stroke-width="16"/>"##,
+            y - sy * l,
+            x - sx * l
+        );
     }
     // 2: chevron stack.
     let (cx, cy) = cell(2);
     for k in 0..4 {
         let y = cy - 240.0 + k as f32 * 150.0;
-        let _ = write!(s, r##"<path d="M{} {} L{cx} {y} L{} {}" stroke-width="22" opacity="{:.2}"/>"##, cx - 220.0, y + 110.0, cx + 220.0, y + 110.0, 1.0 - k as f32 * 0.2);
+        let _ = write!(
+            s,
+            r##"<path d="M{} {} L{cx} {y} L{} {}" stroke-width="22" opacity="{:.2}"/>"##,
+            cx - 220.0,
+            y + 110.0,
+            cx + 220.0,
+            y + 110.0,
+            1.0 - k as f32 * 0.2
+        );
     }
     // 3: range rings with ticks.
     let (cx, cy) = cell(3);
     for r in [140.0, 260.0, 380.0] {
-        let _ = write!(s, r##"<circle cx="{cx}" cy="{cy}" r="{r}" stroke-width="6" stroke-dasharray="{} {}"/>"##, r * 0.12, r * 0.06);
+        let _ = write!(
+            s,
+            r##"<circle cx="{cx}" cy="{cy}" r="{r}" stroke-width="6" stroke-dasharray="{} {}"/>"##,
+            r * 0.12,
+            r * 0.06
+        );
     }
     // 4: pitch ladder segment.
     let (cx, cy) = cell(4);
@@ -173,28 +323,66 @@ pub fn reticle_svg() -> String {
         let y = cy + 300.0 - k as f32 * 150.0;
         let dash = if *deg < 0 { r##" stroke-dasharray="40 26""## } else { "" };
         let w = if *deg == 0 { 420.0 } else { 300.0 };
-        let _ = write!(s, r##"<path d="M{} {y} H{} M{} {y} H{}" stroke-width="10"{dash}/>"##, cx - w, cx - 90.0, cx + 90.0, cx + w);
+        let _ = write!(
+            s,
+            r##"<path d="M{} {y} H{} M{} {y} H{}" stroke-width="10"{dash}/>"##,
+            cx - w,
+            cx - 90.0,
+            cx + 90.0,
+            cx + w
+        );
     }
     // 5: waterline (boresight W).
     let (cx, cy) = cell(5);
-    let _ = write!(s, r##"<path d="M{} {cy} H{} L{} {} L{cx} {} L{} {} L{} {cy} H{}" stroke-width="14"/>"##, cx - 360.0, cx - 160.0, cx - 80.0, cy + 90.0, cy, cx + 80.0, cy + 90.0, cx + 160.0, cx + 360.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {cy} H{} L{} {} L{cx} {} L{} {} L{} {cy} H{}" stroke-width="14"/>"##,
+        cx - 360.0,
+        cx - 160.0,
+        cx - 80.0,
+        cy + 90.0,
+        cy,
+        cx + 80.0,
+        cy + 90.0,
+        cx + 160.0,
+        cx + 360.0
+    );
     // 6: hex target.
     let (cx, cy) = cell(6);
     for r in [360.0, 200.0] {
-        let pts: Vec<String> = (0..6).map(|k| { let (x, y) = pol(cx, cy, r, 30.0 + k as f32 * 60.0); format!("{x:.1},{y:.1}") }).collect();
+        let pts: Vec<String> = (0..6)
+            .map(|k| {
+                let (x, y) = pol(cx, cy, r, 30.0 + k as f32 * 60.0);
+                format!("{x:.1},{y:.1}")
+            })
+            .collect();
         let _ = write!(s, r##"<polygon points="{}" stroke-width="10"/>"##, pts.join(" "));
     }
-    let _ = write!(s, r##"<circle cx="{cx}" cy="{cy}" r="16" fill="#FFFFFF" stroke="none"/>"##);
+    let _ = write!(
+        s,
+        r##"<circle cx="{cx}" cy="{cy}" r="16" fill="#FFFFFF" stroke="none"/>"##
+    );
     // 7: 24-segment 270° arc gauge.
     let (cx, cy) = cell(7);
     for k in 0..24 {
         let a0 = 225.0 - k as f32 * 11.25 - 1.6;
         let a1 = a0 - 7.6;
-        let _ = write!(s, r##"<path d="{}" stroke-width="44" stroke-linecap="butt"/>"##, arc(cx, cy, 360.0, a1, a0));
+        let _ = write!(
+            s,
+            r##"<path d="{}" stroke-width="44" stroke-linecap="butt"/>"##,
+            arc(cx, cy, 360.0, a1, a0)
+        );
     }
     // 8: crosshair with dots.
     let (cx, cy) = cell(8);
-    let _ = write!(s, r##"<path d="M{} {cy} H{} M{cx} {} V{}" stroke-width="6"/>"##, cx - 400.0, cx + 400.0, cy - 400.0, cy + 400.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {cy} H{} M{cx} {} V{}" stroke-width="6"/>"##,
+        cx - 400.0,
+        cx + 400.0,
+        cy - 400.0,
+        cy + 400.0
+    );
     for k in 1..=7 {
         let d = k as f32 * 55.0;
         for (x, y) in [(cx + d, cy), (cx - d, cy), (cx, cy + d), (cx, cy - d)] {
@@ -203,42 +391,137 @@ pub fn reticle_svg() -> String {
     }
     // 9: radar sweep sector.
     let (cx, cy) = cell(9);
-    let _ = write!(s, r##"<path d="M{cx} {cy} L{:.1} {:.1} {} Z" stroke-width="8"/>"##, pol(cx, cy, 400.0, 60.0).0, pol(cx, cy, 400.0, 60.0).1, arc(cx, cy, 400.0, 60.0, 120.0).replacen('M', "L", 1));
-    let _ = write!(s, r##"<path d="{}" stroke-width="5" opacity="0.6"/><path d="{}" stroke-width="5" opacity="0.6"/>"##, arc(cx, cy, 260.0, 60.0, 120.0), arc(cx, cy, 130.0, 60.0, 120.0));
+    let _ = write!(
+        s,
+        r##"<path d="M{cx} {cy} L{:.1} {:.1} {} Z" stroke-width="8"/>"##,
+        pol(cx, cy, 400.0, 60.0).0,
+        pol(cx, cy, 400.0, 60.0).1,
+        arc(cx, cy, 400.0, 60.0, 120.0).replacen('M', "L", 1)
+    );
+    let _ = write!(
+        s,
+        r##"<path d="{}" stroke-width="5" opacity="0.6"/><path d="{}" stroke-width="5" opacity="0.6"/>"##,
+        arc(cx, cy, 260.0, 60.0, 120.0),
+        arc(cx, cy, 130.0, 60.0, 120.0)
+    );
     // 10: diamond lock.
     let (cx, cy) = cell(10);
-    let _ = write!(s, r##"<path d="M{cx} {} L{} {cy} L{cx} {} L{} {cy} Z" stroke-width="14"/>"##, cy - 330.0, cx + 330.0, cy + 330.0, cx - 330.0);
-    let _ = write!(s, r##"<path d="M{cx} {} L{} {cy} L{cx} {} L{} {cy} Z" stroke-width="6" opacity="0.6"/>"##, cy - 190.0, cx + 190.0, cy + 190.0, cx - 190.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{cx} {} L{} {cy} L{cx} {} L{} {cy} Z" stroke-width="14"/>"##,
+        cy - 330.0,
+        cx + 330.0,
+        cy + 330.0,
+        cx - 330.0
+    );
+    let _ = write!(
+        s,
+        r##"<path d="M{cx} {} L{} {cy} L{cx} {} L{} {cy} Z" stroke-width="6" opacity="0.6"/>"##,
+        cy - 190.0,
+        cx + 190.0,
+        cy + 190.0,
+        cx - 190.0
+    );
     // 11: bracket pair.
     let (cx, cy) = cell(11);
-    let _ = write!(s, r##"<path d="M{} {} H{} V{} H{} M{} {} H{} V{} H{}" stroke-width="18"/>"##, cx - 240.0, cy - 300.0, cx - 340.0, cy + 300.0, cx - 240.0, cx + 240.0, cy - 300.0, cx + 340.0, cy + 300.0, cx + 240.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {} H{} V{} H{} M{} {} H{} V{} H{}" stroke-width="18"/>"##,
+        cx - 240.0,
+        cy - 300.0,
+        cx - 340.0,
+        cy + 300.0,
+        cx - 240.0,
+        cx + 240.0,
+        cy - 300.0,
+        cx + 340.0,
+        cy + 300.0,
+        cx + 240.0
+    );
     // 12: compass tape.
     let (cx, cy) = cell(12);
-    let _ = write!(s, r##"<path d="M{} {} H{}" stroke-width="6"/>"##, cx - 460.0, cy + 60.0, cx + 460.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {} H{}" stroke-width="6"/>"##,
+        cx - 460.0,
+        cy + 60.0,
+        cx + 460.0
+    );
     for k in -18..=18 {
         let x = cx + k as f32 * 25.0;
-        let len = if k % 6 == 0 { 120.0 } else if k % 2 == 0 { 70.0 } else { 40.0 };
-        let _ = write!(s, r##"<path d="M{x} {} V{}" stroke-width="6"/>"##, cy + 60.0, cy + 60.0 - len);
+        let len = if k % 6 == 0 {
+            120.0
+        } else if k % 2 == 0 {
+            70.0
+        } else {
+            40.0
+        };
+        let _ = write!(
+            s,
+            r##"<path d="M{x} {} V{}" stroke-width="6"/>"##,
+            cy + 60.0,
+            cy + 60.0 - len
+        );
     }
-    let _ = write!(s, r##"<path d="M{} {} L{cx} {} L{} {} Z" fill="#FFFFFF" stroke="none"/>"##, cx - 34.0, cy + 160.0, cy + 100.0, cx + 34.0, cy + 160.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {} L{cx} {} L{} {} Z" fill="#FFFFFF" stroke="none"/>"##,
+        cx - 34.0,
+        cy + 160.0,
+        cy + 100.0,
+        cx + 34.0,
+        cy + 160.0
+    );
     // 13: triangle carets.
     let (cx, cy) = cell(13);
     for (k, x) in [-240.0f32, 0.0, 240.0].iter().enumerate() {
         let fill = if k == 1 { "#FFFFFF" } else { "none" };
-        let _ = write!(s, r##"<path d="M{} {} L{} {} L{} {} Z" stroke-width="12" fill="{fill}"/>"##, cx + x - 80.0, cy - 60.0, cx + x + 80.0, cy - 60.0, cx + x, cy + 80.0);
+        let _ = write!(
+            s,
+            r##"<path d="M{} {} L{} {} L{} {} Z" stroke-width="12" fill="{fill}"/>"##,
+            cx + x - 80.0,
+            cy - 60.0,
+            cx + x + 80.0,
+            cy - 60.0,
+            cx + x,
+            cy + 80.0
+        );
     }
     // 14: octagonal gear bay (RetroCyber [ 4 ]).
     let (cx, cy) = cell(14);
-    let pts: Vec<String> = (0..8).map(|k| { let (x, y) = pol(cx, cy, 400.0, 22.5 + k as f32 * 45.0); format!("{x:.1},{y:.1}") }).collect();
+    let pts: Vec<String> = (0..8)
+        .map(|k| {
+            let (x, y) = pol(cx, cy, 400.0, 22.5 + k as f32 * 45.0);
+            format!("{x:.1},{y:.1}")
+        })
+        .collect();
     let _ = write!(s, r##"<polygon points="{}" stroke-width="14"/>"##, pts.join(" "));
-    let pts: Vec<String> = (0..8).map(|k| { let (x, y) = pol(cx, cy, 340.0, 22.5 + k as f32 * 45.0); format!("{x:.1},{y:.1}") }).collect();
-    let _ = write!(s, r##"<polygon points="{}" stroke-width="5" opacity="0.55"/>"##, pts.join(" "));
+    let pts: Vec<String> = (0..8)
+        .map(|k| {
+            let (x, y) = pol(cx, cy, 340.0, 22.5 + k as f32 * 45.0);
+            format!("{x:.1},{y:.1}")
+        })
+        .collect();
+    let _ = write!(
+        s,
+        r##"<polygon points="{}" stroke-width="5" opacity="0.55"/>"##,
+        pts.join(" ")
+    );
     // 15: dot ring (60 dots, quarter marks large).
     let (cx, cy) = cell(15);
     for k in 0..60 {
         let (x, y) = pol(cx, cy, 380.0, k as f32 * 6.0);
-        let r = if k % 15 == 0 { 22.0 } else if k % 5 == 0 { 14.0 } else { 8.0 };
-        let _ = write!(s, r##"<circle cx="{x:.1}" cy="{y:.1}" r="{r}" fill="#FFFFFF" stroke="none"/>"##);
+        let r = if k % 15 == 0 {
+            22.0
+        } else if k % 5 == 0 {
+            14.0
+        } else {
+            8.0
+        };
+        let _ = write!(
+            s,
+            r##"<circle cx="{x:.1}" cy="{y:.1}" r="{r}" fill="#FFFFFF" stroke="none"/>"##
+        );
     }
     s.push_str("</svg>\n");
     s

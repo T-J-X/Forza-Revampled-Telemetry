@@ -19,10 +19,18 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let src_path = ctx.paths.forge_dir().join("data").join("logos.json");
     let src = crate::ctx::read(&src_path)?;
     let fonts_json = std::fs::read(ctx.abs("assets/fonts/fonts.json")).unwrap_or_default();
-    let doc: Value = serde_json::from_slice(&src).map_err(|source| ForgeError::Json { context: src_path.display().to_string(), source })?;
+    let doc: Value = serde_json::from_slice(&src).map_err(|source| ForgeError::Json {
+        context: src_path.display().to_string(),
+        source,
+    })?;
     let fonts: Value = serde_json::from_slice(&fonts_json).unwrap_or(Value::Null);
     let font_dirs: Vec<PathBuf> = std::fs::read_dir(ctx.abs("assets/fonts"))
-        .map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()).collect())
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect()
+        })
         .unwrap_or_default();
     let dir_refs: Vec<&std::path::Path> = font_dirs.iter().map(PathBuf::as_path).collect();
     let opt = svg::options(&dir_refs);
@@ -37,8 +45,17 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     for l in &logos {
         let key = l["key"].as_str().unwrap_or_default().to_owned();
         let slug = key.to_lowercase();
-        let uses_fonts: &[u8] = if l["source"].as_str() == Some("commons") { b"" } else { &fonts_json };
-        let fp = fingerprint(&[b"logo-v2", l.to_string().as_bytes(), include_bytes!("logos.rs"), uses_fonts]);
+        let uses_fonts: &[u8] = if l["source"].as_str() == Some("commons") {
+            b""
+        } else {
+            &fonts_json
+        };
+        let fp = fingerprint(&[
+            b"logo-v2",
+            l.to_string().as_bytes(),
+            include_bytes!("logos.rs"),
+            uses_fonts,
+        ]);
         all_fp.push(fp.clone());
         let meta_path = meta_dir.join(format!("{slug}.json"));
         let res = ctx.job(&format!("logos/{slug}"), &fp, |ctx| {
@@ -52,7 +69,10 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         }
     }
     if !failures.is_empty() {
-        return Err(ForgeError::Check { asset: "logos".into(), message: failures.join("\n") });
+        return Err(ForgeError::Check {
+            asset: "logos".into(),
+            message: failures.join("\n"),
+        });
     }
     let refs: Vec<&[u8]> = all_fp.iter().map(String::as_bytes).collect();
     let index_fp = fingerprint(&refs);
@@ -108,15 +128,37 @@ fn one(ctx: &mut Ctx, agent: &ureq::Agent, opt: &resvg::usvg::Options<'_>, fonts
             std::thread::sleep(std::time::Duration::from_millis(250));
             let attribution = l["attribution"].as_str().unwrap_or_default();
             let lic = l["licence"].as_str().unwrap_or("see source");
-            let lic_text = if attribution.is_empty() || lic == "Public domain" { lic.to_owned() } else { format!("{lic} ({attribution})") };
-            (String::from_utf8_lossy(&bytes).to_string(), format!("{} — {}", l["page"].as_str().unwrap_or(url), l["file"].as_str().unwrap_or_default()), lic_text, false)
+            let lic_text = if attribution.is_empty() || lic == "Public domain" {
+                lic.to_owned()
+            } else {
+                format!("{lic} ({attribution})")
+            };
+            (
+                String::from_utf8_lossy(&bytes).to_string(),
+                format!(
+                    "{} — {}",
+                    l["page"].as_str().unwrap_or(url),
+                    l["file"].as_str().unwrap_or_default()
+                ),
+                lic_text,
+                false,
+            )
         }
         _ => {
-            let svg = if l["generic"].as_bool() == Some(true) { generic_svg() } else { wordmark_svg(l, fonts) };
+            let svg = if l["generic"].as_bool() == Some(true) {
+                generic_svg()
+            } else {
+                wordmark_svg(l, fonts, opt, key)?
+            };
             let tree = svg::parse(svg.as_bytes(), opt, key)?;
             let outlined = svg::outlined(&tree);
             let font = l["wordmark"]["font"].as_str().unwrap_or("geometric");
-            (outlined, format!("rust:sets::logos remade ({font}, outlined)"), l["licence"].as_str().unwrap_or("MIT (asset-forge)").to_owned(), true)
+            (
+                outlined,
+                format!("rust:sets::logos remade ({font}, outlined)"),
+                l["licence"].as_str().unwrap_or("MIT (asset-forge)").to_owned(),
+                true,
+            )
         }
     };
     img::write_file(&ctx.abs(&svg_rel), svg_text.as_bytes())?;
@@ -125,10 +167,17 @@ fn one(ctx: &mut Ctx, agent: &ureq::Agent, opt: &resvg::usvg::Options<'_>, fonts
     // Optional crop [x0, y0, x1, y1] as fractions of the trimmed art (drops sub-lines such as a
     // team name), then trim and re-fit again.
     if let Some(c) = l["crop"].as_array() {
-        let f = |i: usize| c.get(i).and_then(Value::as_f64).unwrap_or(if i < 2 { 0.0 } else { 1.0 }) as f32;
+        let f = |i: usize| {
+            c.get(i)
+                .and_then(Value::as_f64)
+                .unwrap_or(if i < 2 { 0.0 } else { 1.0 }) as f32
+        };
         let (x0, y0) = ((f(0) * full.w as f32) as usize, (f(1) * full.h as f32) as usize);
         let (x1, y1) = ((f(2) * full.w as f32) as usize, (f(3) * full.h as f32) as usize);
-        full = trim(&full.crop(x0, y0, x1.saturating_sub(x0).max(1), y1.saturating_sub(y0).max(1)), 4096);
+        full = trim(
+            &full.crop(x0, y0, x1.saturating_sub(x0).max(1), y1.saturating_sub(y0).max(1)),
+            4096,
+        );
     }
     let mode = match l["mono"].as_str() {
         Some("silhouette") => Mono::Silhouette,
@@ -139,11 +188,48 @@ fn one(ctx: &mut Ctx, agent: &ureq::Agent, opt: &resvg::usvg::Options<'_>, fonts
     let mono = to_mono(&full, mode);
     let dial = dial_variant(&mono, mode);
     let base = format!("assets/logos/{slug}");
-    let spec = |kind: &'static str, q: &str| Spec::new("logos", kind, generator.clone(), CLUSTERS).alpha("straight").licence(licence.clone()).qa(q.to_owned());
-    ctx.file(&format!("logos/{slug}/svg"), &svg_rel, "vector".into(), spec("vector", if remade { "remade wordmark" } else { "official SVG, unmodified" }).space("srgb"), Some(&full))?;
-    ctx.image(&format!("logos/{slug}/full"), &format!("{base}_full.png"), &full, Format::Png8, spec("logo", "full colour, 4096 px longest side"))?;
-    ctx.image(&format!("logos/{slug}/mono"), &format!("{base}_mono.png"), &mono, Format::Png8, spec("logo", &format!("white, {mode:?}")))?;
-    ctx.image(&format!("logos/{slug}/dial"), &format!("{base}_dial.png"), &dial, Format::Png8, spec("logo", "white, 1024 px, strokes thickened for small sizes"))?;
+    let spec = |kind: &'static str, q: &str| {
+        Spec::new("logos", kind, generator.clone(), CLUSTERS)
+            .alpha("straight")
+            .licence(licence.clone())
+            .qa(q.to_owned())
+    };
+    ctx.file(
+        &format!("logos/{slug}/svg"),
+        &svg_rel,
+        "vector".into(),
+        spec(
+            "vector",
+            if remade {
+                "remade wordmark"
+            } else {
+                "official SVG, unmodified"
+            },
+        )
+        .space("srgb"),
+        Some(&full),
+    )?;
+    ctx.image(
+        &format!("logos/{slug}/full"),
+        &format!("{base}_full.png"),
+        &full,
+        Format::Png8,
+        spec("logo", "full colour, 4096 px longest side"),
+    )?;
+    ctx.image(
+        &format!("logos/{slug}/mono"),
+        &format!("{base}_mono.png"),
+        &mono,
+        Format::Png8,
+        spec("logo", &format!("white, {mode:?}")),
+    )?;
+    ctx.image(
+        &format!("logos/{slug}/dial"),
+        &format!("{base}_dial.png"),
+        &dial,
+        Format::Png8,
+        spec("logo", "white, 1024 px, strokes thickened for small sizes"),
+    )?;
     Ok(json!({
         "name": name,
         "kind": l["kind"],
@@ -159,7 +245,9 @@ fn one(ctx: &mut Ctx, agent: &ureq::Agent, opt: &resvg::usvg::Options<'_>, fonts
     }))
 }
 
-fn wordmark_svg(l: &Value, fonts: &Value) -> String {
+/// A remade wordmark: laid out once on a generous canvas, then re-emitted with the viewBox fitted
+/// to the real glyph bounds so wide tracking never clips.
+fn wordmark_svg(l: &Value, fonts: &Value, opt: &resvg::usvg::Options<'_>, key: &str) -> Result<String> {
     let w = &l["wordmark"];
     let text = w["text"].as_str().unwrap_or("BRAND");
     let font_id = w["font"].as_str().unwrap_or("michroma");
@@ -175,13 +263,25 @@ fn wordmark_svg(l: &Value, fonts: &Value) -> String {
     let tracking = w["tracking"].as_f64().unwrap_or(0.12);
     let colour = w["colour"].as_str().unwrap_or("#E8ECF2");
     let size = 200.0;
-    let width = (text.chars().count() as f64 * size * (0.78 + tracking)).ceil() + 80.0;
     let esc = text.replace('&', "&amp;").replace('<', "&lt;");
-    format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="300" viewBox="0 0 {width} 300"><text x="{}" y="222" text-anchor="middle" font-family="{family}" font-weight="{weight}" font-size="{size}" letter-spacing="{}" fill="{colour}">{esc}</text></svg>"##,
-        width / 2.0,
+    let body = format!(
+        r##"<text x="200" y="272" font-family="{family}" font-weight="{weight}" font-size="{size}" letter-spacing="{}" fill="{colour}">{esc}</text>"##,
         tracking * size
-    )
+    );
+    let wide = (text.chars().count() as f64 * size * (1.6 + tracking)).ceil() + 400.0;
+    let probe = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{wide}" height="400" viewBox="0 0 {wide} 400">{body}</svg>"##
+    );
+    let tree = svg::parse(probe.as_bytes(), opt, key)?;
+    let (x, y, w, h) = match tree.root().abs_bounding_box() {
+        Some(r) => (r.x() as f64, r.y() as f64, r.width() as f64, r.height() as f64),
+        None => (0.0, 0.0, wide, 300.0),
+    };
+    let pad = 0.06 * h.max(1.0);
+    let (vx, vy, vw, vh) = (x - pad, y - pad, w + 2.0 * pad, h + 2.0 * pad);
+    Ok(format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{vw:.1}" height="{vh:.1}" viewBox="{vx:.1} {vy:.1} {vw:.1} {vh:.1}">{body}</svg>"##
+    ))
 }
 
 /// A neutral steering-wheel mark for traffic vehicles and unknown makes.
@@ -210,7 +310,11 @@ fn trim(img: &Img, longest: usize) -> Img {
     if (k - 1.0).abs() < 0.02 {
         return c;
     }
-    c.resize(((c.w as f32 * k).round() as usize).max(1), ((c.h as f32 * k).round() as usize).max(1), false)
+    c.resize(
+        ((c.w as f32 * k).round() as usize).max(1),
+        ((c.h as f32 * k).round() as usize).max(1),
+        false,
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -256,7 +360,8 @@ fn classify(full: &Img) -> Mono {
                 continue;
             }
             dark += 1;
-            let near_clear = (-2isize..=2).any(|dy| (-2isize..=2).any(|dx| small.get_clamp(x as isize + dx, y as isize + dy, 3) < 0.1));
+            let near_clear = (-2isize..=2)
+                .any(|dy| (-2isize..=2).any(|dx| small.get_clamp(x as isize + dx, y as isize + dy, 3) < 0.1));
             if near_clear {
                 edge += 1;
             }
@@ -304,17 +409,25 @@ fn to_mono(full: &Img, mode: Mono) -> Img {
 /// 1024 px, with strokes thickened (alpha dilation) so thin details survive small sizes.
 fn dial_variant(mono: &Img, mode: Mono) -> Img {
     let k = 960.0 / mono.w.max(mono.h) as f32;
-    let small = mono.resize(((mono.w as f32 * k).round() as usize).max(1), ((mono.h as f32 * k).round() as usize).max(1), false);
+    let small = mono.resize(
+        ((mono.w as f32 * k).round() as usize).max(1),
+        ((mono.h as f32 * k).round() as usize).max(1),
+        false,
+    );
     let r: isize = if mode == Mono::Silhouette { 3 } else { 1 };
     let (w, h) = (small.w + 64, small.h + 64);
     let mut padded = Img::new(w, h, 4);
     padded.paste(&small, 32, 32);
     let horiz = Img::from_fn(w, h, 1, |x, y| {
-        let m = (-r..=r).map(|d| padded.get_clamp(x as isize + d, y as isize, 3)).fold(0.0f32, f32::max);
+        let m = (-r..=r)
+            .map(|d| padded.get_clamp(x as isize + d, y as isize, 3))
+            .fold(0.0f32, f32::max);
         [m, 0.0, 0.0, 0.0]
     });
     Img::from_fn(w, h, 4, |x, y| {
-        let m = (-r..=r).map(|d| horiz.get_clamp(x as isize, y as isize + d, 0)).fold(0.0f32, f32::max);
+        let m = (-r..=r)
+            .map(|d| horiz.get_clamp(x as isize, y as isize + d, 0))
+            .fold(0.0f32, f32::max);
         // Firm the edge a little so the mark reads crisply on a dark dial.
         [1.0, 1.0, 1.0, smoothstep(0.08, 0.85, m)]
     })

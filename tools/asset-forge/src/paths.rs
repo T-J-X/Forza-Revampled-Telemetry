@@ -66,7 +66,6 @@ impl Paths {
     pub fn comfy_models(&self) -> PathBuf {
         self.comfy_dir.join("ComfyUI").join("models")
     }
-
 }
 
 /// Walks up from the current directory to the folder that holds the workspace `Cargo.toml`.

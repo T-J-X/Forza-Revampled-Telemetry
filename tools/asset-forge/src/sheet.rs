@@ -17,7 +17,10 @@ const ORDER: &[(&str, &str)] = &[
 ];
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Writes the sheet next to the ledger.
@@ -62,30 +65,51 @@ header{padding:28px 24px 8px}h1{margin:0;font-weight:600;letter-spacing:.02em}h2
     for (key, title) in ORDER {
         let Some(rows) = by_set.get(key) else { continue };
         let bytes: u64 = rows.iter().map(|r| r.bytes).sum();
-        let _ = write!(h, r#"<h2 id="{key}">{title} <span class="meta">· {} files · {}</span></h2><div class="grid">"#, rows.len(), human(bytes));
+        let _ = write!(
+            h,
+            r#"<h2 id="{key}">{title} <span class="meta">· {} files · {}</span></h2><div class="grid">"#,
+            rows.len(),
+            human(bytes)
+        );
         for r in rows {
             let thumb = r.thumb.strip_prefix("assets/").unwrap_or(&r.thumb);
             let file = r.path.strip_prefix("assets/").unwrap_or(&r.path);
-            let alpha_cls = if r.alpha == "straight" || r.alpha == "premultiplied" { " alpha" } else { "" };
+            let alpha_cls = if r.alpha == "straight" || r.alpha == "premultiplied" {
+                " alpha"
+            } else {
+                ""
+            };
             let img_html = if thumb.is_empty() {
                 format!(r#"<span class="meta">{}</span>"#, esc(&r.kind))
             } else {
                 format!(r#"<img loading="lazy" src="{}" alt="{}">"#, esc(thumb), esc(&r.id))
             };
-            let mut tags = vec![r.kind.clone(), r.dims.clone(), human(r.bytes), format!("{} / {}", r.colorspace, r.alpha)];
+            let mut tags = vec![
+                r.kind.clone(),
+                r.dims.clone(),
+                human(r.bytes),
+                format!("{} / {}", r.colorspace, r.alpha),
+            ];
             if r.tileable {
                 tags.push("tileable".into());
             }
             if let Some(f) = r.flipbook {
                 tags.push(format!("flipbook {}x{} · {} f", f.cols, f.rows, f.frames));
             }
-            let tags_html: String = tags.iter().map(|t| format!(r#"<span class="tag">{}</span>"#, esc(t))).collect();
+            let tags_html: String = tags
+                .iter()
+                .map(|t| format!(r#"<span class="tag">{}</span>"#, esc(t)))
+                .collect();
             let _ = write!(
                 h,
                 r#"<div class="card"><a class="thumb{alpha_cls}" href="{}">{img_html}</a><div class="body"><div class="path">{}</div><div class="tags">{tags_html}</div>{}<details><summary>generator · licence · clusters</summary><div>{}</div><div>Licence: {}</div><div>For: {}</div></details></div></div>"#,
                 esc(file),
                 esc(file),
-                if r.qa.is_empty() { String::new() } else { format!(r#"<div class="qa">{}</div>"#, esc(&r.qa)) },
+                if r.qa.is_empty() {
+                    String::new()
+                } else {
+                    format!(r#"<div class="qa">{}</div>"#, esc(&r.qa))
+                },
                 esc(&r.generator),
                 esc(&r.licence),
                 esc(&r.clusters)

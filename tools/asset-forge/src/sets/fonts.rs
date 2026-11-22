@@ -175,12 +175,16 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
 
 fn font_spec(family: &str, source: &str, kind: &'static str) -> Spec {
     let clusters: &'static str = "all clusters (type roles in data/figma_tokens.json), OSD, configurator";
-    Spec::new("fonts", kind, format!("{family}: {source}"), clusters).space("n/a").licence("OFL-1.1")
+    Spec::new("fonts", kind, format!("{family}: {source}"), clusters)
+        .space("n/a")
+        .licence("OFL-1.1")
 }
 
 fn has_tnum(face: &ttf_parser::Face<'_>) -> bool {
     let tag = ttf_parser::Tag::from_bytes(b"tnum");
-    face.tables().gsub.is_some_and(|g| g.features.into_iter().any(|f| f.tag == tag))
+    face.tables()
+        .gsub
+        .is_some_and(|g| g.features.into_iter().any(|f| f.tag == tag))
 }
 
 fn digits_monospaced(face: &ttf_parser::Face<'_>) -> bool {

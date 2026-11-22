@@ -28,7 +28,12 @@ fn cars(ctx: &mut Ctx) -> Result<()> {
         {"name": "hypercar", "L": 4.78, "W": 2.06, "H": 1.10, "ride": 0.09, "wr": 0.36, "wb": 2.76, "wb_shift": -0.08, "belt": 0.58, "hood": 0.42, "deck": 0.7, "cabin_front": 0.42, "cabin_rear": -0.22, "roof_peak": 0.5, "tail": 0.5, "plan_n": 3.5, "paint": [0.33, 0.35, 0.38]}
     ]);
     let params = json!({ "cars": cars, "sprite": {"w": 1024, "h": 768, "samples": 160}, "seed": 91 });
-    let fp = fingerprint(&[recipes::PRELUDE.as_bytes(), recipes::adas::CARS.as_bytes(), params.to_string().as_bytes(), b"post-v1"]);
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        recipes::adas::CARS.as_bytes(),
+        params.to_string().as_bytes(),
+        b"post-v1",
+    ]);
     ctx.job("adas/cars", &fp, |ctx| {
         let out = ctx.scratch("adas_cars")?;
         let mut p = params.clone();
@@ -89,72 +94,205 @@ pub fn decal_svg() -> String {
     // 0: dashed lane line (3 m dash / 9 m gap scaled), vertical strip.
     let (x, y) = cell(0);
     for k in 0..4 {
-        let _ = write!(s, r##"<rect x="{}" y="{}" width="48" height="160" rx="10" fill="#FFFFFF"/>"##, x + 488.0, y + 32.0 + k as f32 * 256.0);
+        let _ = write!(
+            s,
+            r##"<rect x="{}" y="{}" width="48" height="160" rx="10" fill="#FFFFFF"/>"##,
+            x + 488.0,
+            y + 32.0 + k as f32 * 256.0
+        );
     }
     // 1: solid line.
     let (x, y) = cell(1);
-    let _ = write!(s, r##"<rect x="{}" y="{y}" width="48" height="1024" fill="#FFFFFF"/>"##, x + 488.0);
+    let _ = write!(
+        s,
+        r##"<rect x="{}" y="{y}" width="48" height="1024" fill="#FFFFFF"/>"##,
+        x + 488.0
+    );
     // 2: double solid.
     let (x, y) = cell(2);
-    let _ = write!(s, r##"<rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/><rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/>"##, x + 450.0, x + 538.0);
+    let _ = write!(
+        s,
+        r##"<rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/><rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/>"##,
+        x + 450.0,
+        x + 538.0
+    );
     // 3: dash + solid.
     let (x, y) = cell(3);
-    let _ = write!(s, r##"<rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/>"##, x + 538.0);
+    let _ = write!(
+        s,
+        r##"<rect x="{}" y="{y}" width="36" height="1024" fill="#FFFFFF"/>"##,
+        x + 538.0
+    );
     for k in 0..4 {
-        let _ = write!(s, r##"<rect x="{}" y="{}" width="36" height="160" rx="8" fill="#FFFFFF"/>"##, x + 450.0, y + 32.0 + k as f32 * 256.0);
+        let _ = write!(
+            s,
+            r##"<rect x="{}" y="{}" width="36" height="160" rx="8" fill="#FFFFFF"/>"##,
+            x + 450.0,
+            y + 32.0 + k as f32 * 256.0
+        );
     }
     // 4: chevrons.
     let (x, y) = cell(4);
     for k in 0..3 {
         let yy = y + 180.0 + k as f32 * 250.0;
-        let _ = write!(s, r##"<path d="M{} {} L{} {yy} L{} {} L{} {} L{} {} L{} {} Z" fill="#FFFFFF"/>"##, x + 232.0, yy + 200.0, x + 512.0, x + 792.0, yy + 200.0, x + 792.0, yy + 280.0, x + 512.0, yy + 80.0, x + 232.0, yy + 280.0);
+        let _ = write!(
+            s,
+            r##"<path d="M{} {} L{} {yy} L{} {} L{} {} L{} {} L{} {} Z" fill="#FFFFFF"/>"##,
+            x + 232.0,
+            yy + 200.0,
+            x + 512.0,
+            x + 792.0,
+            yy + 200.0,
+            x + 792.0,
+            yy + 280.0,
+            x + 512.0,
+            yy + 80.0,
+            x + 232.0,
+            yy + 280.0
+        );
     }
     // 5: arrow straight.
     let (x, y) = cell(5);
-    let _ = write!(s, r##"<path d="M{} {} V{} H{} L{} {} L{} {} H{} V{} Z" fill="#FFFFFF"/>"##, x + 462.0, y + 960.0, y + 420.0, x + 340.0, x + 512.0, y + 80.0, x + 684.0, y + 420.0, x + 562.0, y + 960.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {} V{} H{} L{} {} L{} {} H{} V{} Z" fill="#FFFFFF"/>"##,
+        x + 462.0,
+        y + 960.0,
+        y + 420.0,
+        x + 340.0,
+        x + 512.0,
+        y + 80.0,
+        x + 684.0,
+        y + 420.0,
+        x + 562.0,
+        y + 960.0
+    );
     // 6: arrow left turn.
     let (x, y) = cell(6);
-    let _ = write!(s, r##"<path d="M{} {} V{} Q{} {} {} {} H{} V{} L{} {} L{} {} V{} H{} Q{} {} {} {} V{} Z" fill="#FFFFFF"/>"##,
-        x + 612.0, y + 960.0, y + 520.0, x + 612.0, y + 380.0, x + 472.0, y + 380.0, x + 400.0, y + 470.0, x + 140.0, y + 330.0, x + 400.0, y + 190.0, y + 280.0, x + 472.0, x + 712.0, y + 280.0, x + 712.0, y + 520.0, y + 960.0);
+    let _ = write!(
+        s,
+        r##"<path d="M{} {} V{} Q{} {} {} {} H{} V{} L{} {} L{} {} V{} H{} Q{} {} {} {} V{} Z" fill="#FFFFFF"/>"##,
+        x + 612.0,
+        y + 960.0,
+        y + 520.0,
+        x + 612.0,
+        y + 380.0,
+        x + 472.0,
+        y + 380.0,
+        x + 400.0,
+        y + 470.0,
+        x + 140.0,
+        y + 330.0,
+        x + 400.0,
+        y + 190.0,
+        y + 280.0,
+        x + 472.0,
+        x + 712.0,
+        y + 280.0,
+        x + 712.0,
+        y + 520.0,
+        y + 960.0
+    );
     // 7: arrow right turn (mirror of 6).
     let (x, y) = cell(7);
-    let _ = write!(s, r##"<g transform="translate({} 0) scale(-1 1)"><path d="M{} {} V{} Q{} {} {} {} H{} V{} L{} {} L{} {} V{} H{} Q{} {} {} {} V{} Z" fill="#FFFFFF"/></g>"##,
-        2.0 * x + 1024.0, x + 612.0, y + 960.0, y + 520.0, x + 612.0, y + 380.0, x + 472.0, y + 380.0, x + 400.0, y + 470.0, x + 140.0, y + 330.0, x + 400.0, y + 190.0, y + 280.0, x + 472.0, x + 712.0, y + 280.0, x + 712.0, y + 520.0, y + 960.0);
+    let _ = write!(
+        s,
+        r##"<g transform="translate({} 0) scale(-1 1)"><path d="M{} {} V{} Q{} {} {} {} H{} V{} L{} {} L{} {} V{} H{} Q{} {} {} {} V{} Z" fill="#FFFFFF"/></g>"##,
+        2.0 * x + 1024.0,
+        x + 612.0,
+        y + 960.0,
+        y + 520.0,
+        x + 612.0,
+        y + 380.0,
+        x + 472.0,
+        y + 380.0,
+        x + 400.0,
+        y + 470.0,
+        x + 140.0,
+        y + 330.0,
+        x + 400.0,
+        y + 190.0,
+        y + 280.0,
+        x + 472.0,
+        x + 712.0,
+        y + 280.0,
+        x + 712.0,
+        y + 520.0,
+        y + 960.0
+    );
     // 8: crosswalk bars.
     let (x, y) = cell(8);
     for k in 0..6 {
-        let _ = write!(s, r##"<rect x="{}" y="{}" width="96" height="784" fill="#FFFFFF"/>"##, x + 92.0 + k as f32 * 150.0, y + 120.0);
+        let _ = write!(
+            s,
+            r##"<rect x="{}" y="{}" width="96" height="784" fill="#FFFFFF"/>"##,
+            x + 92.0 + k as f32 * 150.0,
+            y + 120.0
+        );
     }
     // 9: stop line.
     let (x, y) = cell(9);
-    let _ = write!(s, r##"<rect x="{x}" y="{}" width="1024" height="120" fill="#FFFFFF"/>"##, y + 452.0);
+    let _ = write!(
+        s,
+        r##"<rect x="{x}" y="{}" width="1024" height="120" fill="#FFFFFF"/>"##,
+        y + 452.0
+    );
     // 10: two-tone path ribbon (Tesla style), vertical, fades in with distance.
     let (x, y) = cell(10);
-    let _ = write!(s, r##"<rect x="{}" y="{y}" width="624" height="1024" fill="url(#path)" mask="url(#m10)"/><mask id="m10"><rect x="{}" y="{y}" width="624" height="1024" fill="url(#fade)"/></mask>"##, x + 200.0, x + 200.0);
+    let _ = write!(
+        s,
+        r##"<rect x="{}" y="{y}" width="624" height="1024" fill="url(#path)" mask="url(#m10)"/><mask id="m10"><rect x="{}" y="{y}" width="624" height="1024" fill="url(#fade)"/></mask>"##,
+        x + 200.0,
+        x + 200.0
+    );
     // 11: road edge glow (gradient towards the edge).
     let (x, y) = cell(11);
-    let _ = write!(s, r##"<rect x="{x}" y="{y}" width="1024" height="1024" fill="url(#edge)"/>"##);
+    let _ = write!(
+        s,
+        r##"<rect x="{x}" y="{y}" width="1024" height="1024" fill="url(#edge)"/>"##
+    );
     // 12: ego underglow ellipse.
     let (x, y) = cell(12);
-    let _ = write!(s, r##"<ellipse cx="{}" cy="{}" rx="300" ry="470" fill="url(#glow)"/>"##, x + 512.0, y + 512.0);
+    let _ = write!(
+        s,
+        r##"<ellipse cx="{}" cy="{}" rx="300" ry="470" fill="url(#glow)"/>"##,
+        x + 512.0,
+        y + 512.0
+    );
     // 13: blind-spot proximity arcs (three bands, cyan → amber → crimson by tint).
     let (x, y) = cell(13);
     for (k, r) in [260.0f32, 360.0, 460.0].iter().enumerate() {
         let a0 = 200f32.to_radians();
         let a1 = 340f32.to_radians();
         let (cx, cy) = (x + 512.0, y + 620.0);
-        let _ = write!(s, r##"<path d="M{:.1} {:.1} A{r} {r} 0 0 1 {:.1} {:.1}" stroke="#FFFFFF" stroke-width="{}" stroke-linecap="round" fill="none" opacity="{:.2}"/>"##,
-            cx + r * a0.cos(), cy + r * a0.sin(), cx + r * a1.cos(), cy + r * a1.sin(), 46.0 - k as f32 * 10.0, 1.0 - k as f32 * 0.28);
+        let _ = write!(
+            s,
+            r##"<path d="M{:.1} {:.1} A{r} {r} 0 0 1 {:.1} {:.1}" stroke="#FFFFFF" stroke-width="{}" stroke-linecap="round" fill="none" opacity="{:.2}"/>"##,
+            cx + r * a0.cos(),
+            cy + r * a0.sin(),
+            cx + r * a1.cos(),
+            cy + r * a1.sin(),
+            46.0 - k as f32 * 10.0,
+            1.0 - k as f32 * 0.28
+        );
     }
     // 14: lane fill gradient (between lines).
     let (x, y) = cell(14);
-    let _ = write!(s, r##"<rect x="{x}" y="{y}" width="1024" height="1024" fill="url(#path)" opacity="0.35"/>"##);
+    let _ = write!(
+        s,
+        r##"<rect x="{x}" y="{y}" width="1024" height="1024" fill="url(#path)" opacity="0.35"/>"##
+    );
     // 15: lead-car lock box (FSD).
     let (x, y) = cell(15);
     let (cx, cy, h, l) = (x + 512.0, y + 512.0, 330.0f32, 110.0f32);
     for (sx, sy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
         let (px, py) = (cx + sx * h, cy + sy * h);
-        let _ = write!(s, r##"<path d="M{px} {} V{py} H{}" stroke="#FFFFFF" stroke-width="22" fill="none" stroke-linecap="round"/>"##, py - sy * l, px - sx * l);
+        let _ = write!(
+            s,
+            r##"<path d="M{px} {} V{py} H{}" stroke="#FFFFFF" stroke-width="22" fill="none" stroke-linecap="round"/>"##,
+            py - sy * l,
+            px - sx * l
+        );
     }
     s.push_str("</svg>\n");
     s

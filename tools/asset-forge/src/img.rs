@@ -247,14 +247,16 @@ pub fn encode_png(img: &Img, sixteen: bool, srgb: bool) -> Result<Vec<u8>> {
     {
         let mut enc = png::Encoder::new(&mut out, img.w as u32, img.h as u32);
         enc.set_color(png_color(img.c));
-        enc.set_depth(if sixteen { png::BitDepth::Sixteen } else { png::BitDepth::Eight });
+        enc.set_depth(if sixteen {
+            png::BitDepth::Sixteen
+        } else {
+            png::BitDepth::Eight
+        });
         enc.set_compression(png::Compression::Fast);
         if srgb {
             enc.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
         }
-        let mut writer = enc
-            .write_header()
-            .map_err(|e| image_err(Path::new("<png>"), e))?;
+        let mut writer = enc.write_header().map_err(|e| image_err(Path::new("<png>"), e))?;
         let bytes: Vec<u8> = if sixteen {
             img.data
                 .iter()
@@ -312,20 +314,44 @@ pub fn save_thumb(img: &Img, path: &Path, max: usize) -> Result<u64> {
 /// at the original borders and 1 inside, so the borders come from the copy's interior.
 /// `band` is the blend band as a fraction of the size (0.1..0.5).
 pub fn make_seamless(img: &Img, band: f32) -> Img {
+    // Two separable passes. Horizontal: near the left/right edges, cross-fade to the copy shifted
+    // by half the width, whose own discontinuity sits in the middle column where its weight is 0.
+    // Then the same vertically on that result, which keeps every row seamless. (A single 2D pass
+    // leaks the shifted copy's wrap row into the side bands as a seam at mid-height.)
     let (w, h) = (img.w, img.h);
     let bw = (w as f32 * band).max(1.0);
     let bh = (h as f32 * band).max(1.0);
-    Img::from_fn(w, h, img.c, |x, y| {
-        let dx = (x as f32 + 0.5).min(w as f32 - x as f32 - 0.5);
-        let dy = (y as f32 + 0.5).min(h as f32 - y as f32 - 0.5);
-        let wx = smoothstep(0.0, bw, dx);
-        let wy = smoothstep(0.0, bh, dy);
-        let wgt = wx * wy;
+    let pass_x = Img::from_fn(w, h, img.c, |x, y| {
+        let d = (x as f32 + 0.5).min(w as f32 - x as f32 - 0.5);
+        let wgt = smoothstep(0.0, bw, d);
         let sx = (x + w / 2) % w;
+        let mut out = [0.0f32; 4];
+        for (ch, o) in out.iter_mut().enumerate().take(img.c) {
+            *o = img.get(x, y, ch) * wgt + img.get(sx, y, ch) * (1.0 - wgt);
+        }
+        out
+    });
+    Img::from_fn(w, h, img.c, |x, y| {
+        let d = (y as f32 + 0.5).min(h as f32 - y as f32 - 0.5);
+        let wgt = smoothstep(0.0, bh, d);
         let sy = (y + h / 2) % h;
         let mut out = [0.0f32; 4];
         for (ch, o) in out.iter_mut().enumerate().take(img.c) {
-            *o = img.get(x, y, ch) * wgt + img.get(sx, sy, ch) * (1.0 - wgt);
+            *o = pass_x.get(x, y, ch) * wgt + pass_x.get(x, sy, ch) * (1.0 - wgt);
+        }
+        out
+    })
+}
+
+/// Four-fold mirror symmetry from the top-left quadrant (square Chladni plates are symmetric).
+pub fn mirror4(img: &Img) -> Img {
+    let (w, h) = (img.w, img.h);
+    Img::from_fn(w, h, img.c, |x, y| {
+        let sx = if x < w / 2 { x } else { w - 1 - x };
+        let sy = if y < h / 2 { y } else { h - 1 - y };
+        let mut out = [0.0f32; 4];
+        for (ch, o) in out.iter_mut().enumerate().take(img.c) {
+            *o = img.get(sx, sy, ch);
         }
         out
     })
@@ -504,7 +530,9 @@ mod tests {
         let frames: Vec<Img> = (0..16)
             .map(|i| {
                 let t = i as f32 / 16.0 * std::f32::consts::TAU;
-                Img::from_fn(8, 8, 1, |x, _| [((x as f32) * 0.3 + t).sin() * 0.5 + 0.5, 0.0, 0.0, 0.0])
+                Img::from_fn(8, 8, 1, |x, _| {
+                    [((x as f32) * 0.3 + t).sin() * 0.5 + 0.5, 0.0, 0.0, 0.0]
+                })
             })
             .collect();
         let s = loop_seam_score(&frames);

@@ -44,7 +44,13 @@ pub fn from_premultiplied(px: &[u8], w: usize, h: usize) -> Img {
     let mut img = Img::new(w, h, 4);
     for (i, p) in px.chunks_exact(4).enumerate() {
         let a = f32::from(p[3]) / 255.0;
-        let un = |c: u8| if a > 0.0 { (f32::from(c) / 255.0 / a).min(1.0) } else { 0.0 };
+        let un = |c: u8| {
+            if a > 0.0 {
+                (f32::from(c) / 255.0 / a).min(1.0)
+            } else {
+                0.0
+            }
+        };
         img.data[i * 4] = un(p[0]);
         img.data[i * 4 + 1] = un(p[1]);
         img.data[i * 4 + 2] = un(p[2]);

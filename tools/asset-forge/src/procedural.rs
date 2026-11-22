@@ -171,7 +171,9 @@ pub fn blur(img: &Img, sigma: f32, wrap: bool) -> Img {
         return img.clone();
     }
     let r = (sigma * 3.0).ceil() as isize;
-    let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp())
+        .collect();
     let ks: f32 = k.iter().sum();
     let pass = |src: &Img, horizontal: bool| {
         Img::from_fn(src.w, src.h, src.c, |x, y| {
@@ -234,7 +236,9 @@ pub fn blue_noise(size: usize, seed: u64) -> Img {
     let argmin_off = |on: &[bool], e: &[f32]| (0..n).filter(|&i| !on[i]).min_by(|&a, &b| e[a].total_cmp(&e[b]));
     // Phase 0: relax the initial pattern until the tightest cluster is the largest void.
     for _ in 0..n {
-        let (Some(c), _) = (argmax_on(&on, &energy), ()) else { break };
+        let (Some(c), _) = (argmax_on(&on, &energy), ()) else {
+            break;
+        };
         on[c] = false;
         splat(&mut energy, c, -1.0);
         let Some(v) = argmin_off(&on, &energy) else { break };
@@ -393,7 +397,12 @@ mod tests {
     #[test]
     fn fbm_tiles() {
         let img = Img::from_fn(128, 128, 1, |x, y| {
-            [fbm(x as f32 / 128.0, y as f32 / 128.0, 4, 4, 0.5, 3) * 0.5 + 0.5, 0.0, 0.0, 0.0]
+            [
+                fbm(x as f32 / 128.0, y as f32 / 128.0, 4, 4, 0.5, 3) * 0.5 + 0.5,
+                0.0,
+                0.0,
+                0.0,
+            ]
         });
         assert!(tile_seam_score(&img) < 2.0, "{}", tile_seam_score(&img));
     }
@@ -401,7 +410,11 @@ mod tests {
     #[test]
     fn caustics_tile_and_loop() {
         let frames: Vec<Img> = (0..12).map(|i| caustic(64, i as f32 / 12.0, 5, 0.25, 2)).collect();
-        assert!(tile_seam_score(&frames[0]) < 2.5, "tile {}", tile_seam_score(&frames[0]));
+        assert!(
+            tile_seam_score(&frames[0]) < 2.5,
+            "tile {}",
+            tile_seam_score(&frames[0])
+        );
         let l = loop_seam_score(&frames);
         assert!(l < 1.6, "loop {l}");
         let mean: f32 = frames[0].data.iter().sum::<f32>() / frames[0].data.len() as f32;

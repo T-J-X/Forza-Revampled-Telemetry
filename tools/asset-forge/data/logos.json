@@ -57,7 +57,7 @@
         0.0,
         0.0,
         1.0,
-        0.66
+        0.6
       ]
     },
     {
@@ -628,7 +628,13 @@
       "attribution": "Unknown author",
       "page": "https://commons.wikimedia.org/wiki/File:Abarth_Trofeo_Slalom.svg",
       "notes": "No Abarth brand logo SVG on Commons (en.wiki has only a PNG). This file is the Abarth scorpion + ABARTH + a \"TROFEO SLALOM\" event line: usable only after cropping away TROFEO SLALOM; the scorpion is not the current shield badge.",
-      "mono": "auto"
+      "mono": "auto",
+      "crop": [
+        0.0,
+        0.0,
+        0.255,
+        1.0
+      ]
     },
     {
       "key": "ALUMICRAFT",
@@ -1440,7 +1446,7 @@
       "attribution": "Rivian, LLC",
       "page": "https://commons.wikimedia.org/wiki/File:Rivian_logo_and_wordmark.svg",
       "notes": "Compass emblem + RIVIAN wordmark.",
-      "mono": "auto"
+      "mono": "silhouette"
     },
     {
       "key": "SALEEN",
