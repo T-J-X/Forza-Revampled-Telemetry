@@ -53,7 +53,7 @@ fn register_class() -> Result<(), WinError> {
         ..WNDCLASSEXW::default()
     };
     // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
-    unsafe { crate::register_class_once(&REGISTERED, &class) }
+    unsafe { crate::register_class_once(&REGISTERED, &class) }.map(|_| ())
 }
 
 /// Keeps the window alive for surfaces: see [`OverlayHandle`].

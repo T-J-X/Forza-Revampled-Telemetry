@@ -49,8 +49,10 @@ impl OverlaySurface {
     /// present to this window. `target` keeps the window handle alive for the surface's life.
     ///
     /// # Errors
-    /// [`GpuError`] if the surface, adapter or device cannot be created, or if the surface
-    /// cannot present with premultiplied alpha.
+    /// [`GpuError`] if the surface, adapter or device cannot be created, if the surface
+    /// cannot present with premultiplied alpha, and [`GpuError::DeviceFailed`] if configuring
+    /// it failed (an unconfigured surface must never reach `get_current_texture`, where wgpu
+    /// panics).
     pub fn create(
         target: impl Into<wgpu::SurfaceTarget<'static>>,
         width: u32,
@@ -87,6 +89,11 @@ impl OverlaySurface {
             view_formats: Vec::new(),
         };
         surface.configure(&ctx.device, &config);
+        // wgpu reports a failed configure to the uncaptured-error handler (or, for a lost
+        // device, the device-lost callback) synchronously, and both set the flag.
+        if ctx.has_failed() {
+            return Err(GpuError::DeviceFailed);
+        }
         let renderer = QuadRenderer::new(&ctx.device, format);
         tracing::info!(?format, ?present_mode, width, height, "overlay surface configured");
         Ok((
@@ -129,9 +136,14 @@ impl OverlaySurface {
     /// Draws `batch` at `opacity` and presents it.
     ///
     /// # Errors
-    /// [`GpuError::SurfaceLost`] when the surface must be recreated, and
-    /// [`GpuError::SurfaceValidation`] on a validation error.
+    /// [`GpuError::SurfaceLost`] when the surface must be recreated,
+    /// [`GpuError::SurfaceValidation`] on a validation error, and [`GpuError::DeviceFailed`]
+    /// without touching the swapchain once the context has failed (for example when a
+    /// configure in `resize` or a reconfigure below did not succeed).
     pub fn render(&mut self, ctx: &GpuContext, opacity: f32, batch: &QuadBatch) -> Result<FrameOutcome, GpuError> {
+        if ctx.has_failed() {
+            return Err(GpuError::DeviceFailed);
+        }
         let t0 = Instant::now();
         let acquired = self.surface.get_current_texture();
         let t1 = Instant::now();

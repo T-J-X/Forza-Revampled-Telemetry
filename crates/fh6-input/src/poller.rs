@@ -169,7 +169,9 @@ fn run(
             now_ms: u64::try_from(now.duration_since(epoch).as_millis()).unwrap_or(u64::MAX),
             driving_active: frame.is_driving_active(now),
             ms_since_resume: frame.time_since_driving_resumed_ms(now),
-            demo_mode: shared.demo_mode() || cfg.demo_mode,
+            // Only the --demo flag lifts the camera-ring race guard; config.json's DemoMode
+            // never does, so RB in a menu cannot move the camera index.
+            demo_mode: shared.demo_mode(),
             settings_focused: false,
         };
         tracker.is_osd_open = shared.osd_open();

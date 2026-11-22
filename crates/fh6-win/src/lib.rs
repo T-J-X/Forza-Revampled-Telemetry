@@ -61,6 +61,8 @@ impl WinError {
 
 /// Registers a window class once per process. A failed registration is not cached, and a
 /// class that already exists (another thread registered it first) counts as success.
+/// Returns `true` only when this call registered `class`, so the caller knows whether the
+/// resources it put in `class` (a background brush) are now owned by the class.
 ///
 /// # Safety
 /// `class` must be fully initialised: a valid window procedure and `'static` strings.
@@ -68,18 +70,21 @@ impl WinError {
 pub(crate) unsafe fn register_class_once(
     done: &std::sync::OnceLock<()>,
     class: &windows::Win32::UI::WindowsAndMessaging::WNDCLASSEXW,
-) -> Result<(), WinError> {
+) -> Result<bool, WinError> {
     if done.get().is_some() {
-        return Ok(());
+        return Ok(false);
     }
     // SAFETY: the caller guarantees `class` is valid for registration.
     let atom = unsafe { windows::Win32::UI::WindowsAndMessaging::RegisterClassExW(class) };
-    if atom == 0 {
+    let registered = if atom == 0 {
         let err = windows::core::Error::from_thread();
         if err.code() != windows::Win32::Foundation::ERROR_CLASS_ALREADY_EXISTS.to_hresult() {
             return Err(WinError::call("RegisterClassExW", err));
         }
-    }
+        false
+    } else {
+        true
+    };
     let _ = done.set(());
-    Ok(())
+    Ok(registered)
 }

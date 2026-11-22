@@ -242,12 +242,8 @@ impl CarProfileDatabase {
         }
         let json = serde_json::to_string(&self.file_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        let tmp_path = format!("{}.tmp", self.file_path);
-        fs::write(&tmp_path, json)?;
-        if std::path::Path::new(&self.file_path).exists() {
-            let _ = fs::remove_file(&self.file_path);
-        }
-        fs::rename(&tmp_path, &self.file_path)
+        // Never delete the old file first: a crash or a failed rename would lose every profile.
+        crate::atomic_file::write_atomically(Path::new(&self.file_path), json.as_bytes())
     }
 }
 

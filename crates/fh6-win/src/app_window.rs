@@ -5,6 +5,7 @@
 //! thread's message loop (which also delivers the foreground WinEvent hook).
 use crate::WinError;
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Duration;
 use windows::core::{w, PCWSTR};
@@ -125,8 +126,9 @@ fn remove_icon(hwnd: HWND) {
     }
 }
 
-/// Main-thread control over the app window, passed to the handler. It borrows the window's
-/// state, so it cannot outlive the [`AppWindow`] that owns it.
+/// Main-thread control over the app window. It borrows the window's state: from
+/// [`AppWindow::ctl`] it cannot outlive the [`AppWindow`], and the one passed to the handler
+/// lives only for that call. Once the window is destroyed every method is a no-op.
 #[derive(Clone, Copy)]
 pub struct WindowCtl<'a> {
     hwnd: HWND,
@@ -142,12 +144,15 @@ impl std::fmt::Debug for WindowCtl<'_> {
 }
 
 impl WindowCtl<'_> {
-    fn state(&self) -> Option<&WindowState> {
-        Some(self.state)
+    fn alive(&self) -> bool {
+        !self.state.destroyed.get()
     }
 
     /// Starts (or restarts) timer `id` with the given period.
     pub fn set_timer(&self, id: usize, period: Duration) {
+        if !self.alive() {
+            return;
+        }
         let ms = u32::try_from(period.as_millis()).unwrap_or(u32::MAX).max(1);
         // SAFETY: a window-owned timer on a live window; WM_TIMER goes to its wndproc.
         unsafe {
@@ -158,21 +163,22 @@ impl WindowCtl<'_> {
     /// Updates the tray tooltip (truncated to 127 UTF-16 units).
     pub fn set_tooltip(&self, text: &str) {
         let tip = encode_tip(text);
-        if let Some(state) = self.state() {
-            state.tooltip.set(tip);
+        self.state.tooltip.set(tip);
+        if self.alive() {
+            notify_icon(self.hwnd, tip, NIM_MODIFY);
         }
-        notify_icon(self.hwnd, tip, NIM_MODIFY);
     }
 
     /// Sets the check mark on the "Overlay visible" menu item.
     pub fn set_overlay_checked(&self, checked: bool) {
-        if let Some(state) = self.state() {
-            state.overlay_checked.set(checked);
-        }
+        self.state.overlay_checked.set(checked);
     }
 
     /// Destroys the window, which ends the message loop.
     pub fn quit(&self) {
+        if !self.alive() {
+            return;
+        }
         // SAFETY: called on the window's own thread (WindowCtl is not Send).
         unsafe {
             let _ = DestroyWindow(self.hwnd);
@@ -252,36 +258,53 @@ fn dispatch(hwnd: HWND, state: &WindowState, event: AppEvent) {
         Ok(mut handler) => handler(&ctl, event),
         Err(_) => Flow::Continue,
     };
-    if flow == Flow::Quit && !state.destroyed.get() {
+    if flow == Flow::Quit {
         ctl.quit();
     }
 }
 
-unsafe extern "system" fn app_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    // SAFETY: see WindowCtl::state; the pointer is 0 until AppWindow::create installs it and
-    // is cleared on WM_NCDESTROY.
+/// Takes a strong reference to the state installed in the window's user data, if any.
+///
+/// The window owns one strong count of the `Rc` (installed by [`AppWindow::create`], released
+/// on `WM_NCDESTROY`). The extra reference taken here keeps the state, including the handler
+/// closure that may be running, alive for the whole message, even if the handler drops its
+/// own [`AppWindow`] (which destroys the window) while it runs.
+fn state_of(hwnd: HWND) -> Option<Rc<WindowState>> {
+    // SAFETY: reading this window's user data slot; it is 0 until AppWindow::create installs
+    // the pointer and is cleared on WM_NCDESTROY before that count is released.
     let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *const WindowState;
-    // SAFETY: a non-null pointer refers to the live WindowState owned by AppWindow.
-    let Some(state) = (unsafe { ptr.as_ref() }) else {
+    if ptr.is_null() {
+        return None;
+    }
+    // SAFETY: a non-null pointer came from Rc::into_raw in AppWindow::create and its strong
+    // count is still held by the window (released only after the slot is cleared). The window
+    // procedure runs on the window's creating thread, which is the only thread holding any
+    // Rc to this state (AppWindow is not Send), so the non-atomic count is not raced.
+    unsafe {
+        Rc::increment_strong_count(ptr);
+        Some(Rc::from_raw(ptr))
+    }
+}
+
+unsafe extern "system" fn app_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    let Some(state) = state_of(hwnd) else {
         // SAFETY: default processing for messages before the state is installed.
         return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
     };
     match msg {
-        WM_TIMER => dispatch(hwnd, state, AppEvent::Timer(wparam.0)),
+        WM_TIMER => dispatch(hwnd, &state, AppEvent::Timer(wparam.0)),
         WM_TRAY => match u32::try_from(lparam.0 & 0xFFFF).unwrap_or(0) {
             WM_RBUTTONUP | WM_CONTEXTMENU => {
-                if let Some(cmd) = show_tray_menu(hwnd, state) {
-                    dispatch(hwnd, state, AppEvent::Tray(cmd));
+                if let Some(cmd) = show_tray_menu(hwnd, &state) {
+                    dispatch(hwnd, &state, AppEvent::Tray(cmd));
                 }
             }
-            WM_LBUTTONDBLCLK => dispatch(hwnd, state, AppEvent::Tray(TrayCommand::ToggleOverlay)),
+            WM_LBUTTONDBLCLK => dispatch(hwnd, &state, AppEvent::Tray(TrayCommand::ToggleOverlay)),
             _ => {}
         },
         WM_CLOSE => {
-            dispatch(hwnd, state, AppEvent::CloseRequested);
-            if !state.destroyed.get() {
-                WindowCtl { hwnd, state }.quit();
-            }
+            dispatch(hwnd, &state, AppEvent::CloseRequested);
+            WindowCtl { hwnd, state: &state }.quit();
         }
         WM_DESTROY => {
             state.destroyed.set(true);
@@ -290,8 +313,14 @@ unsafe extern "system" fn app_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
             unsafe { PostQuitMessage(0) };
         }
         WM_NCDESTROY => {
-            // SAFETY: detach the state so no later message can reach it.
-            unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0) };
+            // SAFETY: detach the state first so no later message can take it.
+            let ptr = unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0) } as *const WindowState;
+            if !ptr.is_null() {
+                // SAFETY: releases the window's own strong count, taken by Rc::into_raw in
+                // AppWindow::create; the slot is now 0, so it cannot be released twice. The
+                // `state` reference above keeps the value alive until this message returns.
+                drop(unsafe { Rc::from_raw(ptr) });
+            }
         }
         m if m == state.taskbar_created && m != 0 => {
             // Explorer restarted: the tray icon must be added again.
@@ -315,13 +344,13 @@ fn register_class() -> Result<(), WinError> {
         ..WNDCLASSEXW::default()
     };
     // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
-    unsafe { crate::register_class_once(&REGISTERED, &class) }
+    unsafe { crate::register_class_once(&REGISTERED, &class) }.map(|_| ())
 }
 
 /// The hidden app window. Lives on the main thread; not `Send`.
 pub struct AppWindow {
     hwnd: HWND,
-    state: *mut WindowState,
+    state: Rc<WindowState>,
 }
 
 impl std::fmt::Debug for AppWindow {
@@ -363,16 +392,16 @@ impl AppWindow {
         // SAFETY: static NUL-terminated name.
         let taskbar_created = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
         let tip = encode_tip(tooltip);
-        let state = Box::into_raw(Box::new(WindowState {
+        let state = Rc::new(WindowState {
             handler: RefCell::new(handler),
             tooltip: Cell::new(tip),
             overlay_checked: Cell::new(true),
             taskbar_created,
             destroyed: Cell::new(false),
-        }));
-        // SAFETY: `state` is a valid heap pointer owned by the returned AppWindow and freed in
-        // its Drop after the window is destroyed.
-        unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, state as isize) };
+        });
+        // SAFETY: the window takes its own strong count, released on WM_NCDESTROY (see
+        // state_of), so the pointer stays valid for every message the window receives.
+        unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, Rc::into_raw(Rc::clone(&state)) as isize) };
         if !notify_icon(hwnd, tip, NIM_ADD) {
             tracing::warn!("tray icon could not be added");
         }
@@ -381,10 +410,10 @@ impl AppWindow {
 
     /// Control handle for the main thread.
     pub fn ctl(&self) -> WindowCtl<'_> {
-        // SAFETY: `state` is the Box pointer installed in `create`; it is freed only in Drop,
-        // and the returned WindowCtl borrows `self`, so it cannot outlive it.
-        let state = unsafe { &*self.state };
-        WindowCtl { hwnd: self.hwnd, state }
+        WindowCtl {
+            hwnd: self.hwnd,
+            state: &self.state,
+        }
     }
 
     /// A `Send` handle other threads use to ask the app to close.
@@ -417,17 +446,62 @@ impl AppWindow {
 
 impl Drop for AppWindow {
     fn drop(&mut self) {
-        // SAFETY: `state` is the pointer installed in `create`; the window is destroyed (and
-        // its user data cleared on WM_NCDESTROY) before the state is freed, so no message
-        // can observe a dangling pointer.
-        unsafe {
-            if let Some(state) = self.state.as_ref() {
-                if !state.destroyed.get() {
-                    let _ = DestroyWindow(self.hwnd);
+        // Destroying the window releases its strong count on WM_NCDESTROY; ours drops after.
+        // A message being dispatched holds its own count, so the state outlives it either way.
+        self.ctl().quit();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell as StdRefCell;
+
+    thread_local! {
+        static SELF_DROPPING: StdRefCell<Option<AppWindow>> = const { StdRefCell::new(None) };
+    }
+
+    /// The handler drops its own window mid-dispatch: the state (and the running closure)
+    /// must stay alive until the message returns, and later ctl calls are no-ops.
+    #[test]
+    fn handler_can_drop_its_own_window() {
+        let ran = Rc::new(Cell::new(false));
+        let handler: AppHandler = {
+            let ran = Rc::clone(&ran);
+            Box::new(move |ctl, event| {
+                if event == AppEvent::Timer(7) {
+                    let window = SELF_DROPPING.with(|w| w.borrow_mut().take());
+                    drop(window);
+                    // The window is gone; these must not touch freed memory or the HWND.
+                    ctl.set_overlay_checked(false);
+                    ctl.set_tooltip("after drop");
+                    ctl.set_timer(7, Duration::from_millis(1));
+                    ctl.quit();
+                    ran.set(true);
                 }
-            }
-            SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
-            drop(Box::from_raw(self.state));
+                Flow::Continue
+            })
+        };
+        let window = AppWindow::create("fh6 test window", handler).expect("window");
+        let hwnd = window.hwnd;
+        SELF_DROPPING.with(|w| *w.borrow_mut() = Some(window));
+        // SAFETY: a window-owned timer on the live test window.
+        unsafe {
+            SetTimer(Some(hwnd), 7, 1, None);
         }
+        let mut msg = MSG::default();
+        while !ran.get() {
+            // SAFETY: standard message loop on the window's thread.
+            let got = unsafe { GetMessageW(&mut msg, None, 0, 0) };
+            if got.0 <= 0 {
+                break;
+            }
+            // SAFETY: `msg` was filled by GetMessageW.
+            unsafe {
+                DispatchMessageW(&msg);
+            }
+        }
+        assert!(ran.get(), "the handler ran to completion");
+        assert!(SELF_DROPPING.with(|w| w.borrow().is_none()));
     }
 }

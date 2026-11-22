@@ -94,7 +94,8 @@ impl OffscreenTarget {
     }
 
     /// Renders `batch` and waits for the GPU. Returns (CPU encode+submit time, submit-to-idle
-    /// time), the latter an upper bound on GPU time for the frame.
+    /// time), the latter an upper bound on GPU time for the frame. Check
+    /// [`GpuContext::has_failed`] afterwards: a rejected submit returns almost at once.
     pub fn render(&mut self, ctx: &GpuContext, opacity: f32, batch: &QuadBatch) -> (Duration, Duration) {
         let t0 = Instant::now();
         self.renderer
@@ -115,7 +116,8 @@ impl OffscreenTarget {
     /// Renders `batch` and reads the result back.
     ///
     /// # Errors
-    /// [`GpuError::Readback`] if mapping the readback buffer fails.
+    /// [`GpuError::Readback`] if mapping the readback buffer fails, and
+    /// [`GpuError::DeviceFailed`] if wgpu reported an error (the image would be meaningless).
     pub fn render_to_image(
         &mut self,
         ctx: &GpuContext,
@@ -177,6 +179,9 @@ impl OffscreenTarget {
             }
         }
         self.readback.unmap();
+        if ctx.has_failed() {
+            return Err(GpuError::DeviceFailed);
+        }
         Ok(RgbaImage {
             width: self.width,
             height: self.height,

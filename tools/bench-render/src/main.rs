@@ -74,6 +74,9 @@ fn run() -> Result<(), String> {
         }
     }
 
+    if ctx.has_failed() {
+        return Err("wgpu reported an error or lost the device during the run; the timings are invalid".into());
+    }
     let mut total: Vec<Duration> = build.iter().zip(&encode).map(|(a, b)| *a + *b).collect();
     println!("Adapter: {}", ctx.adapter_summary());
     println!(
