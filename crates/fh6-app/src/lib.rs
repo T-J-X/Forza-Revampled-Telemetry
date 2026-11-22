@@ -11,8 +11,9 @@ pub mod launcher;
 pub mod logging;
 pub mod perf_report;
 pub mod process_watcher;
-pub mod remapper;
 #[cfg(windows)]
+pub mod refraction;
+pub mod remapper;
 pub mod render_loop;
 pub mod resources;
 pub mod widget_server;

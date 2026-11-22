@@ -96,6 +96,14 @@ fn run() -> Result<()> {
     let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
     let timing = kit.set_gpu_timing(true);
     let assets = root.join("assets");
+    if assets.join("fonts").is_dir() {
+        let faces = kit.fonts_mut().load_dir(&assets.join("fonts"))?;
+        println!(
+            "fonts: {} faces from assets/fonts, {} roles bound",
+            faces.len(),
+            kit.bind_font_roles()
+        );
+    }
     let cfg = AppConfig {
         current_camera_index: 3,
         custom_driver_name: "TJX".to_string(),

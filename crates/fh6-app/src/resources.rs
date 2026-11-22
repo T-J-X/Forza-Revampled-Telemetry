@@ -72,7 +72,7 @@ impl KitResources {
 }
 
 fn find_upwards(starts: &[PathBuf], probe: impl Fn(&Path) -> Option<PathBuf>) -> Option<PathBuf> {
-    starts.iter().flat_map(|s| s.ancestors()).find_map(|d| probe(d))
+    starts.iter().flat_map(|s| s.ancestors()).find_map(probe)
 }
 
 #[cfg(test)]

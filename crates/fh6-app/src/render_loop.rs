@@ -2,6 +2,7 @@
 //! the active cluster update and draw with the render kit, and presents. No queue, no lock, no
 //! readback on this path.
 use crate::latency::{caught_next_vsync, FrameStats, Percentiles, SAMPLE_CAPACITY};
+use crate::refraction::{RefractionSource, RETRY};
 use crate::resources::KitResources;
 use fh6_core::{AppConfig, ClusterTheme, ConfigHandle, TelemetryReader, VisibilityController, VisibilityInputs};
 use fh6_gpu::seven_seg::StackStr;
@@ -111,6 +112,8 @@ pub struct RenderSetup {
     pub options: RenderOptions,
     /// Tokens, brand palettes, asset folders.
     pub resources: KitResources,
+    /// The game executable (for the optional glass refraction capture).
+    pub game_process: String,
     /// Run once when a benchmark finishes (asks the app to quit).
     pub on_bench_done: Box<dyn FnOnce() + Send>,
 }
@@ -237,6 +240,8 @@ struct Loop {
     palette: Palette,
     logo: Logo,
     last_update: Instant,
+    refraction: Option<RefractionSource>,
+    refraction_retry: Instant,
 }
 
 fn new_kit(ctx: &GpuContext, resources: &KitResources) -> Option<Kit> {
@@ -255,6 +260,8 @@ fn new_kit(ctx: &GpuContext, resources: &KitResources) -> Option<Kit> {
                     }
                 }
             }
+            let bound = kit.bind_font_roles();
+            tracing::info!(bound, "font roles bound to the tokens' families");
             Some(kit)
         }
         Err(err) => {
@@ -270,8 +277,9 @@ impl Loop {
         self.present_mode = format!("{:?}", surface.present_mode());
         self.size = surface.size();
         let kit = new_kit(&ctx, &self.resources);
-        // Clusters hold resources of the old device: rebuild them on the new one.
+        // Clusters and the refraction texture belong to the old device: rebuild them.
         self.active = None;
+        self.refraction = None;
         self.gpu = Some(Gpu { ctx, surface, kit });
         self.lost_since = None;
     }
@@ -281,6 +289,7 @@ impl Loop {
     fn lose_gpu(&mut self, why: &str) {
         tracing::warn!(why, "dropping the GPU device; it is recreated in 1 s");
         self.active = None;
+        self.refraction = None;
         self.gpu = None;
         self.lost_since = Some(Instant::now());
     }
@@ -362,6 +371,48 @@ impl Loop {
             kit.set_palette(self.palette);
         }
         self.palette_cache = Some(key);
+    }
+
+    /// Starts, polls or stops the optional refraction capture (`"GlassRefraction": true`).
+    fn update_refraction(&mut self, cfg: &AppConfig, layout: &Layout, game_process: &str) {
+        let on = cfg
+            .extra
+            .get("GlassRefraction")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        if !on {
+            if self.refraction.take().is_some() {
+                kit.set_refraction_source(None);
+                tracing::info!("glass refraction capture stopped");
+            }
+            return;
+        }
+        if self.refraction.is_none() {
+            let now = Instant::now();
+            if now < self.refraction_retry {
+                return;
+            }
+            self.refraction_retry = now + RETRY;
+            let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+            let rect = layout
+                .transform()
+                .apply_rect(&layout.envelope.expand(48.0))
+                .intersect(&fh6_kit::Rect::from_xywh(0.0, 0.0, w, h));
+            self.refraction = RefractionSource::start(game_process, rect);
+        }
+        if let Some(src) = self.refraction.as_mut() {
+            match src.poll(&gpu.ctx.device, &gpu.ctx.queue) {
+                Ok(Some(view)) => kit.set_refraction_source(Some((view, src.rect()))),
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, "glass refraction capture stopped");
+                    self.refraction = None;
+                    kit.set_refraction_source(None);
+                }
+            }
+        }
     }
 
     /// Records and presents one frame at `opacity`. With `draw` false, presents a fully
@@ -459,6 +510,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         control,
         options,
         resources,
+        game_process,
         on_bench_done,
     } = setup;
     let refresh = fh6_win::system::composition_timing()
@@ -507,6 +559,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
         palette,
         logo: Logo::default(),
         last_update: Instant::now(),
+        refraction: None,
+        refraction_retry: Instant::now(),
     };
     lp.adopt(gpu, surface);
     let mut visibility = VisibilityController::default();
@@ -601,7 +655,10 @@ fn run(setup: RenderSetup) -> RenderSummary {
         if vis.opacity <= 0.0 {
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
-                blank_presented = matches!(lp.render(0.0, &layout, false, false), Some(FrameOutcome::Presented { .. }));
+                blank_presented = matches!(
+                    lp.render(0.0, &layout, false, false),
+                    Some(FrameOutcome::Presented { .. })
+                );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
             }
             // A skipped blank frame (timeout, occluded, reconfigured) is retried on the next
@@ -621,6 +678,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         let build_start = Instant::now();
         lp.ensure_cluster(&cfg, view);
         lp.ensure_palette(&cfg, data.car_ordinal);
+        lp.update_refraction(&cfg, &layout, &game_process);
         let update_dt = (build_start - lp.last_update).as_secs_f32().min(MAX_DT);
         lp.last_update = build_start;
         let signals = lp.smoother.update(data, &cfg, &lp.resources.tokens, update_dt);

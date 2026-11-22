@@ -42,7 +42,7 @@ impl Camera25 {
     #[must_use]
     pub fn project(&self, p: Vec3) -> Option<Vec2> {
         let zc = p.z - self.eye.z;
-        if !(zc > NEAR_Z) || !zc.is_finite() {
+        if zc.partial_cmp(&NEAR_Z) != Some(std::cmp::Ordering::Greater) || !zc.is_finite() {
             return None;
         }
         Some(vec2(

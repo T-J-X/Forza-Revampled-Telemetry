@@ -82,6 +82,12 @@ impl Kit {
         &mut self.fonts
     }
 
+    /// Binds the token font roles to loaded faces (call after loading `assets/fonts`).
+    /// Returns how many roles found their family.
+    pub fn bind_font_roles(&mut self) -> usize {
+        self.fonts.bind_tokens(&self.tokens.fonts)
+    }
+
     /// The font choice for a frame: the role faces, with `display_override` (a user font)
     /// replacing the display role when given.
     #[must_use]

@@ -123,6 +123,7 @@ impl Cluster for LiquidGlassSample {
             lens: self.tokens_glass.lens * m,
             fresnel: self.tokens_glass.fresnel * m,
             light_angle: self.light.angle(),
+            refraction: fh6_kit::Refraction::World,
             ..self.tokens_glass
         };
         let plate = Shape::round_rect(PLATE, 64.0);

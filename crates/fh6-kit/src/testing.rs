@@ -57,7 +57,7 @@ impl RgbaImage {
         let f = factor.max(1);
         let (w, h) = ((self.width / f).max(1), (self.height / f).max(1));
         let mut out = vec![0u8; (w * h * 4) as usize];
-        let n = (f * f) as u32;
+        let n = f * f;
         for y in 0..h {
             for x in 0..w {
                 let mut acc = [0u32; 4];

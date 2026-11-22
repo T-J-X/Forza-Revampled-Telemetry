@@ -436,8 +436,8 @@ impl<'f> Painter<'f> {
         if let Some(ghost_paint) = ghost {
             let mut g = left_style;
             g.paint = ghost_paint;
-            let mut eights = [b'8'; 20];
-            if let Ok(s) = std::str::from_utf8(&mut eights[..empty]) {
+            let eights = [b'8'; 20];
+            if let Ok(s) = std::str::from_utf8(&eights[..empty]) {
                 if !s.is_empty() {
                     self.text(vec2(left, pos.y), s, &g);
                 }

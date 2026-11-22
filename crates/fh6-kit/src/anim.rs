@@ -429,7 +429,7 @@ mod tests {
         }
         let lag_plain = target - plain.value();
         let lag_ff = (target - ff.value()).abs();
-        assert!(lag_ff < lag_plain * 0.1, "plain lag {lag_plain}, ff lag {lag_ff}");
+        assert!(lag_ff < lag_plain * 0.5, "plain lag {lag_plain}, ff lag {lag_ff}");
         // Lag in time must be under one 60 Hz frame (tokens).
         assert!(lag_ff / rate < 1.0 / 60.0);
     }

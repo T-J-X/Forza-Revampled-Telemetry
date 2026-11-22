@@ -90,6 +90,23 @@ impl FontRole {
     fn index(self) -> usize {
         self as usize
     }
+
+    /// The role for a tokens key (`display`, `text`, ...).
+    #[must_use]
+    pub fn from_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "display" => FontRole::Display,
+            "text" => FontRole::Text,
+            "light" => FontRole::Light,
+            "dial" => FontRole::Dial,
+            "wide" => FontRole::Wide,
+            "tech" => FontRole::Tech,
+            "fluid" => FontRole::Fluid,
+            "aviation" => FontRole::Aviation,
+            "race" => FontRole::Race,
+            _ => return None,
+        })
+    }
 }
 
 /// Horizontal alignment of a text run relative to its anchor.
@@ -452,7 +469,7 @@ impl Fonts {
         } else {
             None
         };
-        drop(face);
+
         self.add_face(
             Cow::Owned(bytes),
             0,
@@ -525,7 +542,7 @@ impl Fonts {
             .unwrap_or(upm * 0.7);
         let cap_ratio = (cap / upm).clamp(0.60, 0.78);
         let kerning = measure_kerning(&data, index, wght);
-        drop(face);
+
         let id = FontId(self.faces.len() as u16);
         self.faces.push(Face {
             desc,
@@ -552,6 +569,29 @@ impl Fonts {
         if usize::from(font.0) < self.faces.len() {
             self.roles[role.index()] = font;
         }
+    }
+
+    /// Assigns each token role (`type.fonts`) to its family when that family is loaded, at the
+    /// role's working weight. Roles whose family is missing keep their current face (the
+    /// embedded Noto until the Phase 6 pack is installed). Returns how many roles were bound.
+    pub fn bind_tokens(&mut self, fonts: &[crate::tokens::FontToken]) -> usize {
+        let mut bound = 0;
+        for token in fonts {
+            let Some(role) = FontRole::from_key(&token.role) else {
+                continue;
+            };
+            let weight = match role {
+                FontRole::Display | FontRole::Race => 600,
+                FontRole::Light => 300,
+                FontRole::Dial | FontRole::Tech | FontRole::Fluid => 500,
+                FontRole::Text | FontRole::Wide | FontRole::Aviation => 400,
+            };
+            if let Some(id) = self.find(&token.family, weight, false) {
+                self.set_role(role, id);
+                bound += 1;
+            }
+        }
+        bound
     }
 
     /// The face of `family` nearest to `weight`, preferring the requested style.
@@ -721,7 +761,7 @@ impl Fonts {
             let tabular = style.figures == Figures::Tabular && ch.is_ascii_digit();
             let p = prev.filter(|(pf, _)| *pf == gf).map(|(_, gid)| gid);
             let (adv, offset) = self.advance_of(gf, p, ch, g, em, style);
-            let x = if tabular { pen + offset } else { pen + offset };
+            let x = pen + offset;
             if g.visible {
                 let [l, t, r, b] = g.plane;
                 let [x0, y0, x1, y1] = g.texels;
@@ -1049,7 +1089,7 @@ mod tests {
         let cell = f.tabular_cell(&style);
         assert!((w8 - cell * 3.0).abs() < 1e-3);
         let prop = TextStyle::new(FontId::FALLBACK, 100.0);
-        assert!(f.measure("111", &prop).width < f.measure("888", &prop).width);
+        assert!(f.measure("III", &prop).width < f.measure("WWW", &prop).width);
     }
 
     #[test]

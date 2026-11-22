@@ -135,9 +135,9 @@ h1{{margin:0 0 4px;font-size:22px}} h2{{margin:28px 0 10px;font-size:16px;color:
             if !current.is_empty() {
                 h.push_str("</div>\n");
             }
-            let _ = write!(
+            let _ = writeln!(
                 h,
-                "<h2>{} <span class=\"b\">{}</span></h2><div class=\"grid\">\n",
+                "<h2>{} <span class=\"b\">{}</span></h2><div class=\"grid\">",
                 esc(&r.display),
                 esc(&r.cluster)
             );
@@ -148,7 +148,7 @@ h1{{margin:0 0 4px;font-size:22px}} h2{{margin:28px 0 10px;font-size:16px;color:
         let gpu = b
             .gpu_ms
             .map_or_else(|| "GPU n/a".to_string(), |g| format!("GPU {g:.3} ms"));
-        let _ = write!(
+        let _ = writeln!(
             h,
             "<div class=\"card\"><a href=\"{full}\"><img src=\"{thumb}\" alt=\"{name} {state}\"></a><div class=\"cap\">{state}<br>\
 <span class=\"b\">{gpu}</span><span class=\"b\">CPU {cpu:.3} ms</span><span class=\"b\">{draws} draws</span><span class=\"b\">{inst} instances</span>\

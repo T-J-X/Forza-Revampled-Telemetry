@@ -249,6 +249,10 @@ pub struct GlassTokens {
     pub caustic: f32,
     /// Inner rim alpha (0..=255).
     pub inner_rim_alpha: u8,
+    /// Inner rim inset in px.
+    pub inner_rim_inset: f32,
+    /// 1 px rim colours top, 0.38, 0.78 down the outline (tokens `glass.rim.stops`).
+    pub rim: [Color; 3],
 }
 
 impl Default for GlassTokens {
@@ -261,6 +265,12 @@ impl Default for GlassTokens {
             sheen_sag: 44.0,
             caustic: 0.32,
             inner_rim_alpha: 40,
+            inner_rim_inset: 2.0,
+            rim: [
+                Color::WHITE.with_alpha8(235),
+                Color::rgb_u32(0x38BDF8).with_alpha8(150),
+                Color::rgb_u32(0x0284C7).with_alpha8(70),
+            ],
         }
     }
 }
@@ -361,6 +371,19 @@ impl Default for LayoutTokens {
     }
 }
 
+/// One font role (tokens `type.fonts.<role>`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontToken {
+    /// Role key: display, text, light, dial, wide, tech, fluid, aviation, race.
+    pub role: String,
+    /// Family name, e.g. "Saira Condensed".
+    pub family: String,
+    /// Weights the pack ships.
+    pub weights: Vec<u16>,
+    /// Cap height / em of the face.
+    pub cap_ratio: f32,
+}
+
 /// A family default palette (tokens `paletteModes.familyDefaults`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FamilyPalette {
@@ -391,6 +414,8 @@ pub struct Tokens {
     pub type_scale: TypeScale,
     /// Layout.
     pub layout: LayoutTokens,
+    /// Font roles: family, weights and cap ratio (tokens `type.fonts`).
+    pub fonts: Vec<FontToken>,
     /// Family default palettes.
     pub family_defaults: Vec<FamilyPalette>,
     /// Schema version string from `meta.version`.
@@ -418,6 +443,25 @@ impl Default for Tokens {
             glass: GlassTokens::default(),
             type_scale: TypeScale::default(),
             layout: LayoutTokens::default(),
+            fonts: [
+                ("display", "Saira Condensed", 0.70),
+                ("text", "Titillium Web", 0.692),
+                ("light", "Saira", 0.70),
+                ("dial", "Barlow Semi Condensed", 0.70),
+                ("wide", "Michroma", 0.72),
+                ("tech", "Chakra Petch", 0.70),
+                ("fluid", "Exo 2", 0.70),
+                ("aviation", "B612 Mono", 0.70),
+                ("race", "Saira Condensed", 0.70),
+            ]
+            .into_iter()
+            .map(|(role, family, cap_ratio)| FontToken {
+                role: role.into(),
+                family: family.into(),
+                weights: Vec::new(),
+                cap_ratio,
+            })
+            .collect(),
             family_defaults: vec![
                 fam("classicAnalog", 0xFF7A1A, 0xC9CED6, 0xFFC21A, 0xFFFFFF),
                 fam("modernDigital", 0x00D2FF, 0x8A96A8, 0xFFFFFF, 0x978DFC),
@@ -589,6 +633,57 @@ impl Tokens {
         if let Some(x) = num(v, &["glass", "frost", "noiseScalePx"]) {
             gl.frost_noise_px = x;
         }
+        if let Some(stops) = get(v, &["glass", "rim", "stops"]).and_then(Value::as_array) {
+            for (slot, s) in gl.rim.iter_mut().zip(stops) {
+                if let Some(c) = s
+                    .get("hex")
+                    .and_then(Value::as_str)
+                    .and_then(|h| Color::from_hex(h).ok())
+                {
+                    let a = num(s, &["alpha"]).map_or(255.0, |a| a.clamp(0.0, 255.0));
+                    *slot = c.with_alpha8(a as u8);
+                }
+            }
+        }
+        if let Some(a) = num(v, &["glass", "innerRim", "alpha"]) {
+            gl.inner_rim_alpha = a.clamp(0.0, 255.0) as u8;
+        }
+        if let Some(x) = num(v, &["glass", "innerRim", "insetPx"]) {
+            gl.inner_rim_inset = x;
+        }
+        if let Some(x) = num(v, &["glass", "crownSheen", "heightPct"]) {
+            gl.sheen_height = x;
+        }
+        if let Some(x) = num(v, &["glass", "crownSheen", "sagPx"]) {
+            gl.sheen_sag = x;
+        }
+        if let Some(a) = num(v, &["glass", "crownSheen", "alphaTop"]) {
+            gl.sheen_alpha = a.clamp(0.0, 255.0) as u8;
+        }
+        if let Some(fonts) = get(v, &["type", "fonts"]).and_then(Value::as_object) {
+            let parsed: Vec<FontToken> = fonts
+                .iter()
+                .filter_map(|(role, f)| {
+                    Some(FontToken {
+                        role: role.clone(),
+                        family: f.get("family")?.as_str()?.to_string(),
+                        weights: f
+                            .get("weights")
+                            .and_then(Value::as_array)
+                            .map(|w| {
+                                w.iter()
+                                    .filter_map(|x| x.as_u64().and_then(|x| u16::try_from(x).ok()))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        cap_ratio: num(f, &["capRatio"]).unwrap_or(0.7),
+                    })
+                })
+                .collect();
+            if !parsed.is_empty() {
+                t.fonts = parsed;
+            }
+        }
         let ts = &mut t.type_scale;
         for (key, slot) in [
             ("gearHero", &mut ts.gear_hero),
@@ -602,7 +697,10 @@ impl Tokens {
             ("microLabel", &mut ts.micro_label),
             ("nano", &mut ts.nano),
         ] {
-            if let Some(x) = num(v, &["type", "scale", key]).or_else(|| num(v, &["type", "scale", key, "cap"])) {
+            if let Some(x) = num(v, &["type", "scale", key])
+                .or_else(|| num(v, &["type", "scale", key, "capPx"]))
+                .or_else(|| num(v, &["type", "scale", key, "cap"]))
+            {
                 *slot = x;
             }
         }
@@ -635,6 +733,10 @@ impl Tokens {
             sheen_sag: self.glass.sheen_sag,
             caustic_strength: self.glass.caustic,
             inner_rim: Color::WHITE.with_alpha8(self.glass.inner_rim_alpha),
+            inner_rim_inset: self.glass.inner_rim_inset,
+            rim_top: self.glass.rim[0],
+            rim_mid: self.glass.rim[1],
+            rim_bottom: self.glass.rim[2],
             ..Glass::default()
         }
     }
@@ -689,5 +791,15 @@ mod tests {
         let t = Tokens::load(&path).expect("data/figma_tokens.json loads");
         assert!(!t.version.is_empty());
         assert!(t.family_defaults.len() >= 7);
+        // Phase 3 v3.2 bindings.
+        assert!(t.version.starts_with("3."), "version {}", t.version);
+        assert!(t
+            .fonts
+            .iter()
+            .any(|f| f.role == "display" && f.family == "Saira Condensed"));
+        assert!(t.fonts.iter().any(|f| f.role == "text" && f.family == "Titillium Web"));
+        assert!((t.type_scale.gear_hero - 200.0).abs() < 1e-3);
+        assert_eq!(t.glass.rim[0].to_srgb8(), [255, 255, 255, 235]);
+        assert_eq!(t.roles.warning.to_string(), "#FF2D3A");
     }
 }

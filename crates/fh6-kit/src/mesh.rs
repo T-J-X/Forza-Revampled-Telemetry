@@ -521,7 +521,7 @@ mod tests {
     fn car_proxy_is_closed_geometry() {
         let m = MeshData::car_proxy(4.6, 1.9, 1.3);
         assert_eq!(m.positions.len(), m.normals.len());
-        assert!(m.indices.len() % 3 == 0 && !m.indices.is_empty());
+        assert!(m.indices.len().is_multiple_of(3) && !m.indices.is_empty());
         assert!(m.indices.iter().all(|i| (*i as usize) < m.positions.len()));
         let max_y = m.positions.iter().map(|p| p[1]).fold(0.0f32, f32::max);
         assert!((max_y - 1.3).abs() < 1e-4);

@@ -254,7 +254,13 @@ impl Color {
         let mut c = self.to_oklch();
         c.l = c.l.max(0.70);
         c.c = c.c.min(0.26);
-        Self::from_oklch(c).with_alpha(self.a)
+        // OKLab lightness only approximates luminance: lift further until 7:1 holds.
+        let mut out = Self::from_oklch(c);
+        while out.contrast_on_black() < 7.0 && c.l < 1.0 {
+            c.l = (c.l + 0.01).min(1.0);
+            out = Self::from_oklch(c);
+        }
+        out.with_alpha(self.a)
     }
 }
 
