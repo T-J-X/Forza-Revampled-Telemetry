@@ -531,7 +531,24 @@ impl<'f> Painter<'f> {
         let image = paint.image();
 
         // Anti-aliasing margin: 1.5 device pixels.
-        let bbox = bbox.expand(1.5 / px_scale);
+        let mut bbox = bbox.expand(1.5 / px_scale);
+        // Trim the quad to the clip when the transform is axis-aligned: pixels outside the clip
+        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep) costs only
+        // the clipped area.
+        // Glass derives its optics from the full bounds, so it is never trimmed.
+        if let (Some(clip), false) = (self.state.clip_rect, is_glass) {
+            let [a, b, c, d, tx, ty] = xf.m;
+            if b == 0.0 && c == 0.0 && a > 1e-6 && d > 1e-6 {
+                let local = Rect::from_points(
+                    vec2((clip.min.x - tx) / a, (clip.min.y - ty) / d),
+                    vec2((clip.max.x - tx) / a, (clip.max.y - ty) / d),
+                );
+                bbox = bbox.intersect(&local);
+                if bbox.is_empty() && enc.kind != kind::GLYPH {
+                    return;
+                }
+            }
+        }
         let world = xf.apply_rect(&bbox);
         let blur_margin = self.state.segment.blur_px * 3.0;
         self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
