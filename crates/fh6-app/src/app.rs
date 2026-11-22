@@ -159,6 +159,7 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         window: overlay.surface_handle(),
         telemetry: reader,
         config: watcher.handle(),
+        profiles: watcher.profiles(),
         input: Arc::clone(&input),
         foreground: foreground.reader(),
         control: Arc::clone(&control),
