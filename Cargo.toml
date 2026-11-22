@@ -16,6 +16,7 @@ members = [
     "tools/bench-render",
     "tools/screen-capture",
     "tools/stand-in-game",
+    "tools/wgc-bench",
 ]
 
 [workspace.package]

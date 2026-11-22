@@ -1,269 +1,308 @@
-//! Headless 4K PNG Preview Exporter — Phase 5 full implementation.
-//! Renders 29 clusters × 4 states with 30-frame warm-up, scrims, OSD and interactive HTML gallery.
-//! Output goes to `<workspace root>/mockups/` (gitignored).
+//! Headless 4K preview exporter on `fh6-kit`.
+//!
+//! For every cluster in `fh6_clusters::registry::REGISTRY` and each of the four review states it
+//! warms the cluster up through `update` with a real `dt` (springs settle, strobes run), renders
+//! one 3840x2160 frame on the GPU exactly as the overlay would, and writes:
+//! - `mockups/kit/<Cluster>/<state>.png`: the 4K frame over OLED black;
+//! - `mockups/_thumbs/kit/<Cluster>/<state>.png`: a 960x540 box-downsample of that frame;
+//! - `mockups/index.html`: a script-free gallery with badges computed from the renders (GPU time,
+//!   draw calls, colour budget shares);
+//! - the OEM scrim at 0/50/100% and the Unified OSD (still tiny-skia until Phases 8–9).
+//!
+//! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
+//! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
+mod gallery;
+mod states;
 
-use fh6_clusters::render_cluster;
-use fh6_core::{config::CameraViewMode, AppConfig, ClusterTheme, FH6TelemetryData};
-use fh6_osd::{
-    dyno::{dyno_telemetry, synthetic_trail},
-    model::UnifiedOsdState,
-    render_unified_osd_4k,
-};
-use fh6_render::oem_scrim::{
-    ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
-    scrim::render_oem_scrim,
-};
+use fh6_clusters::registry::REGISTRY;
+use fh6_core::{config::CameraViewMode, AppConfig, ClusterTheme};
+use fh6_gpu::GpuContext;
+use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
+use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
+use gallery::{Badges, Render};
+use states::STATES;
+use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::time::Instant;
 
 const W: u32 = 3840;
 const H: u32 = 2160;
-const THUMB_W: u32 = 960;
-const THUMB_H: u32 = 540;
+const THUMB_FACTOR: u32 = 4;
 const DT: f32 = 1.0 / 60.0;
 
-fn workspace_root() -> PathBuf {
-    let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
-    let p = PathBuf::from(manifest);
-    // tools/preview-export -> tools -> workspace root
-    p.parent().unwrap().parent().unwrap().to_path_buf()
+type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+#[derive(Debug)]
+struct Args {
+    legacy: bool,
+    frames: u32,
+    out: Option<PathBuf>,
 }
 
-fn output_root() -> PathBuf {
-    workspace_root().join("mockups")
-}
-
-fn ensure_dir(p: &Path) {
-    fs::create_dir_all(p).expect("create dir");
-}
-
-fn make_base_telemetry() -> FH6TelemetryData {
-    FH6TelemetryData {
-        is_race_on: 1,
-        engine_max_rpm: 9000.0,
-        engine_idle_rpm: 850.0,
-        ..Default::default()
-    }
-}
-
-fn state_telemetry(state_idx: usize, frame_idx: u32) -> FH6TelemetryData {
-    let mut t = make_base_telemetry();
-    match state_idx {
-        0 => {
-            t.current_engine_rpm = 900.0;
-            t.speed_ms = 0.0;
-            t.power_watts = 12_000.0;
-            t.gear = 0;
-            t.accel = 0;
-            t.brake = 0;
-        }
-        1 => {
-            t.current_engine_rpm = 4500.0;
-            t.speed_ms = 29.0576;
-            t.gear = 4;
-            t.accel = 115;
-            t.brake = 0;
-            t.boost_psi = 4.5;
-            t.power_watts = 310_000.0;
-            t.angular_velocity_y = 0.08;
-        }
-        2 => {
-            let rpm = 8200.0 + (8850.0 - 8200.0) * (frame_idx as f32 / 30.0);
-            t.current_engine_rpm = rpm;
-            t.speed_ms = 62.5856;
-            t.gear = 6;
-            t.accel = 255;
-            t.brake = 0;
-            t.boost_psi = 18.5;
-            t.power_watts = 1_150_000.0;
-        }
-        3 => {
-            t.current_engine_rpm = 6000.0;
-            t.speed_ms = 37.9984;
-            t.gear = 3;
-            t.accel = 38;
-            t.brake = 255;
-            t.power_watts = 480_000.0;
-            t.steer = -85;
-            t.acceleration_x = 11.2;
-            t.acceleration_z = -12.5;
-            t.roll = 0.06;
-            t.tire_slip_angle_rl = 0.38;
-            t.tire_slip_angle_rr = 0.38;
-        }
-        _ => {}
-    }
-    t
-}
-
-fn save_png(pix: &tiny_skia::Pixmap, path: &Path) {
-    // Make outer border transparent for OLED cutout gate
-    let w = pix.width() as usize;
-    let h = pix.height() as usize;
-    let mut data_vec = pix.data().to_vec();
-    let margin = 32usize;
-    for y in 0..h {
-        for x in 0..w {
-            if x < margin || x >= w - margin || y < margin || y >= h - margin {
-                let idx = (y * w + x) * 4 + 3;
-                data_vec[idx] = 0;
+fn parse_args() -> Result<Args> {
+    let mut args = Args {
+        legacy: false,
+        frames: 30,
+        out: None,
+    };
+    let mut it = std::env::args().skip(1);
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--legacy" => args.legacy = true,
+            "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
+            "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
+            "-h" | "--help" => {
+                println!("preview-export [--legacy] [--frames N] [--out DIR]");
+                std::process::exit(0);
             }
+            other => return Err(format!("unknown argument {other:?}").into()),
         }
     }
-    // Reconstruct pixmap with modified alpha
-    let mut pixmap = tiny_skia::Pixmap::new(pix.width(), pix.height()).unwrap();
-    pixmap.data_mut().copy_from_slice(&data_vec);
-    let data = pixmap.encode_png().expect("encode");
-    fs::write(path, data).expect("write png");
+    Ok(args)
 }
 
-fn delete_old_flat_clusters(root: &Path) {
-    let clusters_dir = root.join("ModernClusters");
-    if let Ok(entries) = fs::read_dir(&clusters_dir) {
-        for e in entries.flatten() {
-            if e.path().is_file() {
-                if let Some(name) = e.file_name().to_str() {
-                    if name.contains('_') && name.ends_with(".png") {
-                        let _ = fs::remove_file(e.path());
-                    }
+fn workspace_root() -> PathBuf {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .parent()
+        .and_then(Path::parent)
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("preview-export failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<()> {
+    let args = parse_args()?;
+    let root = workspace_root();
+    let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));
+    fs::create_dir_all(&out)?;
+
+    let tokens = Tokens::load(&root.join("data/figma_tokens.json")).unwrap_or_else(|e| {
+        eprintln!("tokens: {e}; using built-in defaults");
+        Tokens::default()
+    });
+    let ctx = GpuContext::headless()?;
+    println!("GPU: {}", ctx.adapter_summary());
+    let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
+    let timing = kit.set_gpu_timing(true);
+    let assets = root.join("assets");
+    let cfg = AppConfig {
+        current_camera_index: 3,
+        custom_driver_name: "TJX".to_string(),
+        ..Default::default()
+    };
+    let logo = Logo {
+        image: None,
+        brand_name: String::new(),
+        custom_name: cfg.custom_driver_name.clone(),
+    };
+    let target = Offscreen::new(&ctx.device, W, H);
+    let layout = Layout::from_config(&cfg, &tokens, View::Cockpit, (W, H));
+    let fonts = kit.font_choice(None);
+    let mut renders = Vec::new();
+
+    for entry in REGISTRY {
+        let name = entry.theme.to_string();
+        let palette = Palette::family(&tokens, entry.family);
+        for state in &STATES {
+            let started = Instant::now();
+            let mut cluster = {
+                let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(&assets));
+                (entry.make)(&mut setup)
+            };
+            kit.set_palette(palette);
+            let mut smoother = SignalSmoother::new();
+            let data = state.telemetry();
+            let mut t = 0.0;
+            for _ in 0..=args.frames {
+                let signals = smoother.update(&data, &cfg, &tokens, DT);
+                cluster.update(&FrameInput {
+                    telemetry: &data,
+                    signals: &signals,
+                    dt: DT,
+                    t,
+                    config: &cfg,
+                    palette: &palette,
+                    tokens: &tokens,
+                    fonts,
+                    logo: &logo,
+                    view: View::Cockpit,
+                    reduced_flash: false,
+                });
+                t += DT;
+            }
+            // Render twice: the first frame may queue glyphs that only appear on the next.
+            let mut img = RgbaImage {
+                width: 0,
+                height: 0,
+                pixels: Vec::new(),
+            };
+            let mut stats = fh6_kit::FrameStats::default();
+            let mut gpu_ms = None;
+            for _ in 0..2 {
+                {
+                    let mut p = kit.begin_frame(&layout);
+                    cluster.draw(&mut p, &layout);
+                }
+                let mut encoder = ctx.device.create_command_encoder(&Default::default());
+                stats = kit.render(
+                    &ctx.device,
+                    &ctx.queue,
+                    &mut encoder,
+                    target.view(),
+                    OFFSCREEN_FORMAT,
+                    (W, H),
+                    1.0,
+                );
+                target.copy_out(&mut encoder);
+                ctx.queue.submit(Some(encoder.finish()));
+                img = target.read(&ctx.device)?;
+                if timing {
+                    gpu_ms = kit.gpu_time(&ctx.device).map(|d| d.as_secs_f64() * 1000.0);
                 }
             }
+            if ctx.has_failed() {
+                return Err(format!("wgpu reported an error rendering {name} {}", state.name).into());
+            }
+            let full = out.join("kit").join(&name).join(format!("{}.png", state.name));
+            let thumb = out.join("_thumbs/kit").join(&name).join(format!("{}.png", state.name));
+            let shown = img.over([0, 0, 0]);
+            shown.save_png(&full)?;
+            shown.downsample(THUMB_FACTOR).save_png(&thumb)?;
+            // A 1:1 crop around the cluster for close review.
+            let (cx, cy) = (layout.anchor.x as u32, layout.anchor.y as u32);
+            let crop = shown.crop(cx.saturating_sub(800), cy.saturating_sub(450), 1600, 760);
+            crop.save_png(&out.join("kit").join(&name).join(format!("{}_crop.png", state.name)))?;
+            let badges = Badges::compute(&img, &palette, &tokens, &stats, gpu_ms);
+            println!(
+                "{name:<22} {:<18} {:>6.3} ms GPU  {:>3} draws  {:>4} instances  ({:.1} s)",
+                state.name,
+                gpu_ms.unwrap_or(f64::NAN),
+                stats.draw_calls,
+                stats.instances,
+                started.elapsed().as_secs_f32()
+            );
+            renders.push(Render {
+                cluster: name.clone(),
+                display: entry.name.to_string(),
+                state: state.name.to_string(),
+                full: rel(&out, &full),
+                thumb: rel(&out, &thumb),
+                badges,
+            });
         }
     }
+
+    legacy::scrims(&out)?;
+    legacy::osd(&out)?;
+    if args.legacy {
+        legacy::clusters(&out)?;
+    }
+    gallery::write_index(&out, &renders, ctx.adapter_summary().to_string().as_str(), args.legacy)?;
+    verify(&out, &renders)?;
+    println!("Export complete: {} kit renders in {}", renders.len(), out.display());
+    Ok(())
 }
 
-fn main() {
-    let out_root = output_root();
-    let clusters_dir = out_root.join("ModernClusters");
-    let scrim_dir = out_root.join("Scrim");
-    let thumbs_dir = out_root.join("_thumbs");
-    ensure_dir(&clusters_dir);
-    ensure_dir(&scrim_dir);
-    ensure_dir(&thumbs_dir);
-    delete_old_flat_clusters(&out_root);
+fn rel(root: &Path, p: &Path) -> String {
+    p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
+}
 
-    let trail = synthetic_trail();
-    assert_eq!(trail.len(), 120, "synthetic_trail must return 120 points");
+fn verify(out: &Path, renders: &[Render]) -> Result<()> {
+    for r in renders {
+        for f in [&r.full, &r.thumb] {
+            let p = out.join(f);
+            if !p.is_file() {
+                return Err(format!("missing {}", p.display()).into());
+            }
+        }
+        if r.badges.covered == 0 {
+            return Err(format!("{} {} rendered nothing", r.cluster, r.state).into());
+        }
+    }
+    for f in [
+        "Scrim/OemScrim_0pct.png",
+        "Scrim/OemScrim_50pct.png",
+        "Scrim/OemScrim_100pct.png",
+        "UnifiedOsd_4K.png",
+        "index.html",
+    ] {
+        if !out.join(f).is_file() {
+            return Err(format!("missing {f}").into());
+        }
+    }
+    Ok(())
+}
 
-    let all_themes = ClusterTheme::all();
-    let n = all_themes.len();
-    println!("Clusters to render: {}", n);
+/// The v1 tiny-skia renders kept until their kit rebuilds (scrim: Phase 8, OSD: Phase 9,
+/// clusters: Phase 7).
+mod legacy {
+    use super::{AppConfig, CameraViewMode, ClusterTheme, Result, H, W};
+    use fh6_clusters::render_cluster;
+    use fh6_osd::{dyno::dyno_telemetry, model::UnifiedOsdState, render_unified_osd_4k};
+    use fh6_render::oem_scrim::{
+        ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
+        scrim::render_oem_scrim,
+    };
+    use std::fs;
+    use std::path::Path;
 
-    let state_defs = [
-        ("01_idle", 0usize),
-        ("02_mid_cruise", 1usize),
-        ("03_redline_strobe", 2usize),
-        ("04_drift_braking", 3usize),
-    ];
+    fn pixmap() -> Result<tiny_skia::Pixmap> {
+        tiny_skia::Pixmap::new(W, H).ok_or_else(|| "pixmap allocation failed".into())
+    }
 
-    for &theme in all_themes {
-        let theme_name = theme.to_string();
-        let theme_dir = clusters_dir.join(&theme_name);
-        let thumb_theme_dir = thumbs_dir.join(&theme_name);
-        ensure_dir(&theme_dir);
-        ensure_dir(&thumb_theme_dir);
+    fn save(pix: &tiny_skia::Pixmap, path: &Path) -> Result<()> {
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        fs::write(path, pix.encode_png()?)?;
+        Ok(())
+    }
 
+    pub fn scrims(out: &Path) -> Result<()> {
+        let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).ok_or("bounds")?;
+        for pct in [0, 50, 100] {
+            let cfg = AppConfig {
+                ambient_glow_enabled: true,
+                ambient_glow_intensity: 0.25,
+                ambient_cowl_feather: 0.40,
+                current_camera_index: if pct == 0 { 4 } else { 3 },
+                oem_dash_opaque_pct: pct,
+                active_camera_view: if pct == 0 {
+                    CameraViewMode::Bonnet
+                } else {
+                    CameraViewMode::Cockpit
+                },
+                ..Default::default()
+            };
+            let mut pix = pixmap()?;
+            {
+                let mut pm = pix.as_mut();
+                render_oem_scrim(&mut pm, bounds, 1.0, &cfg);
+                if pct > 0 {
+                    let accent = ClusterTheme::LiquidGlass.accent_rgb();
+                    let sigma = feather_sigma_px(cfg.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
+                    BinnacleAmbientWash::new().render(&mut pm, W, H, accent, cfg.ambient_glow_intensity, sigma, 1.0);
+                }
+            }
+            save(&pix, &out.join(format!("Scrim/OemScrim_{pct}pct.png")))?;
+        }
+        Ok(())
+    }
+
+    pub fn osd(out: &Path) -> Result<()> {
         let cfg = AppConfig {
-            current_camera_index: 3,
-            cockpit_hud_style_typed: theme,
-            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
-            ..Default::default()
-        };
-
-        for &(state_name, state_idx) in &state_defs {
-            // 30-frame warm-up
-            let mut last_telem = state_telemetry(state_idx, 0);
-            for frame in 0..=30 {
-                let _dt = DT;
-                last_telem = state_telemetry(state_idx, frame as u32);
-            }
-            // render 4K
-            let mut pix4k = tiny_skia::Pixmap::new(W, H).unwrap();
-            {
-                let mut pm = pix4k.as_mut();
-                render_cluster(&mut pm, theme, &last_telem, &cfg);
-            }
-            let out_path = theme_dir.join(format!("{state_name}.png"));
-            save_png(&pix4k, &out_path);
-
-            // thumbnail
-            let mut pix_thumb = tiny_skia::Pixmap::new(THUMB_W, THUMB_H).unwrap();
-            {
-                let mut pm = pix_thumb.as_mut();
-                render_cluster(&mut pm, theme, &last_telem, &cfg);
-            }
-            let thumb_path = thumb_theme_dir.join(format!("{state_name}.png"));
-            save_png(&pix_thumb, &thumb_path);
-        }
-    }
-
-    // Scrims
-    {
-        let base_cfg = AppConfig {
-            ambient_glow_enabled: true,
-            ambient_glow_intensity: 0.25,
-            ambient_cowl_feather: 0.40,
-            ..Default::default()
-        };
-
-        // 0%
-        {
-            let mut cfg0 = base_cfg.clone();
-            cfg0.current_camera_index = 4;
-            cfg0.oem_dash_opaque_pct = 0;
-            cfg0.active_camera_view = CameraViewMode::Bonnet;
-            let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
-            {
-                let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
-                render_oem_scrim(&mut pm, bounds, 1.0, &cfg0);
-            }
-            save_png(&pix, &scrim_dir.join("OemScrim_0pct.png"));
-        }
-        // 50%
-        {
-            let mut cfg50 = base_cfg.clone();
-            cfg50.current_camera_index = 3;
-            cfg50.oem_dash_opaque_pct = 50;
-            cfg50.active_camera_view = CameraViewMode::Cockpit;
-            let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
-            {
-                let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
-                render_oem_scrim(&mut pm, bounds, 1.0, &cfg50);
-                let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                let intensity = cfg50.ambient_glow_intensity.clamp(0.0, 1.0);
-                let feather_sigma = feather_sigma_px(cfg50.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
-                let mut wash = BinnacleAmbientWash::new();
-                wash.render(&mut pm, W, H, accent, intensity, feather_sigma, 1.0);
-            }
-            save_png(&pix, &scrim_dir.join("OemScrim_50pct.png"));
-        }
-        // 100%
-        {
-            let mut cfg100 = base_cfg.clone();
-            cfg100.current_camera_index = 3;
-            cfg100.oem_dash_opaque_pct = 100;
-            cfg100.active_camera_view = CameraViewMode::Cockpit;
-            let mut pix = tiny_skia::Pixmap::new(W, H).unwrap();
-            {
-                let mut pm = pix.as_mut();
-                let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).unwrap();
-                render_oem_scrim(&mut pm, bounds, 1.0, &cfg100);
-                let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                let intensity = cfg100.ambient_glow_intensity.clamp(0.0, 1.0);
-                let feather_sigma = feather_sigma_px(cfg100.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
-                let mut wash = BinnacleAmbientWash::new();
-                wash.render(&mut pm, W, H, accent, intensity, feather_sigma, 1.0);
-            }
-            save_png(&pix, &scrim_dir.join("OemScrim_100pct.png"));
-        }
-    }
-
-    // Unified OSD
-    {
-        let osd_cfg = AppConfig {
-            custom_driver_name: "ØG『死』ŦJ乂".to_string(),
+            custom_driver_name: "TJX".to_string(),
             ..Default::default()
         };
         let state = UnifiedOsdState {
@@ -272,158 +311,27 @@ fn main() {
             ..Default::default()
         };
         let telem = dyno_telemetry(8.0);
-        let pix = render_unified_osd_4k(&state, &osd_cfg, Some(&telem));
-        save_png(&pix, &out_root.join("UnifiedOsd_4K.png"));
+        let pix = render_unified_osd_4k(&state, &cfg, Some(&telem));
+        save(&pix, &out.join("UnifiedOsd_4K.png"))
     }
 
-    generate_index_html(&out_root, n, &state_defs);
-    verify_export(&out_root, n, &state_defs);
-    println!("✅ Export complete");
-}
-
-fn generate_index_html(root: &Path, _n: usize, _state_defs: &[(&str, usize)]) {
-    let mut html = String::new();
-    html.push_str(r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>FH6 4K Cluster Gallery</title>
-<style>
-body{background:#0b0f19;color:#e5e7eb;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:24px}
-header{margin-bottom:24px}
-h1{margin:0}
-.badges{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
-.badge{background:rgba(17,24,39,0.78);border:1px solid rgba(56,189,248,0.28);padding:6px 10px;border-radius:8px;font-size:12px;backdrop-filter:blur(8px)}
-.filters{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
-button{background:rgba(17,24,39,0.78);border:1px solid rgba(56,189,248,0.28);color:#e5e7eb;padding:6px 12px;border-radius:8px;cursor:pointer}
-button.active{background:rgba(56,189,248,0.2)}
-#search{margin-left:auto;padding:6px 10px;border-radius:8px;border:1px solid rgba(56,189,248,0.28);background:rgba(17,24,39,0.78);color:#e5e7eb}
-.showcase{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:16px;margin-bottom:24px}
-.card{background:rgba(17,24,39,0.78);border:1px solid rgba(56,189,248,0.28);border-radius:12px;overflow:hidden;backdrop-filter:blur(10px)}
-.card img{display:block;width:100%;height:auto}
-.cap{padding:8px 12px;font-size:12px;color:#94a3b8}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-.lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.95);display:none;align-items:center;justify-content:center;z-index:9999}
-.lightbox img{max-width:95vw;max-height:90vh}
-.lightbox .close{position:absolute;top:20px;right:30px;font-size:28px;color:#fff;cursor:pointer}
-</style></head><body>
-<header><h1>FH6 4K Cluster Gallery</h1>
-<div class="badges">
-<span class="badge">Resolution: 3840x2160 (4K)</span>
-<span class="badge" id="badge-clusters">Clusters: 0 / 0</span>
-<span class="badge" id="badge-oled">OLED True-Black #000000 Cutout: PASS</span>
-<span class="badge" id="badge-driver">Driver Tag: ØG『死』ŦJ乂 VERIFIED</span>
-</div>
-<div class="filters">
-<button data-filter="all" class="active">All 4 States</button>
-<button data-filter="01_idle">01 Idle</button>
-<button data-filter="02_mid_cruise">02 Mid Cruise</button>
-<button data-filter="03_redline_strobe">03 Redline Strobe</button>
-<button data-filter="04_drift_braking">04 Drift & Braking</button>
-<input id="search" placeholder="Search cluster name...">
-</div>
-</header>
-<div class="showcase">
-<div class="card"><img src="UnifiedOsd_4K.png" alt="OSD"><div class="cap">Unified OSD 4K</div></div>
-<div class="card"><img src="Scrim/OemScrim_0pct.png"><div class="cap">OemScrim 0%</div></div>
-<div class="card"><img src="Scrim/OemScrim_50pct.png"><div class="cap">OemScrim 50%</div></div>
-<div class="card"><img src="Scrim/OemScrim_100pct.png"><div class="cap">OemScrim 100%</div></div>
-</div>
-<div class="grid" id="gallery"></div>
-<div class="lightbox" id="lightbox"><span class="close" id="lb-close">✕</span><img id="lb-img"></div>
-<script>
-const themes = [
-"#);
-    let all_themes = ClusterTheme::all();
-    for (i, theme) in all_themes.iter().enumerate() {
-        let name = theme.to_string();
-        html.push_str(&format!("\"{}\",", name));
-        if i % 5 == 4 {
-            html.push('\n');
-        }
-    }
-    html.push_str(r#"];
-const states = ["01_idle","02_mid_cruise","03_redline_strobe","04_drift_braking"];
-const gallery = document.getElementById('gallery');
-function renderGallery(filter='all', query=''){
-  gallery.innerHTML='';
-  themes.forEach(t=>{
-    states.forEach(s=>{
-      if(filter!=='all' && s!==filter) return;
-      if(query && !t.toLowerCase().includes(query.toLowerCase())) return;
-      const card=document.createElement('div');
-      card.className='card';
-      card.dataset.state=s;
-      card.dataset.name=t.toLowerCase();
-      card.innerHTML=`<img src="_thumbs/${t}/${s}.png" data-full="ModernClusters/${t}/${s}.png" alt="${t} ${s}"><div class="cap">${t} · ${s}</div>`;
-      card.addEventListener('click',()=>openLightbox(card.querySelector('img').dataset.full));
-      gallery.appendChild(card);
-    });
-  });
-  document.getElementById('badge-clusters').textContent=`Clusters: ${themes.length} / ${themes.length}`;
-}
-document.querySelectorAll('button[data-filter]').forEach(b=>{
-  b.addEventListener('click',()=>{
-    document.querySelectorAll('button[data-filter]').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    renderGallery(b.dataset.filter, document.getElementById('search').value);
-  });
-});
-document.getElementById('search').addEventListener('input',e=>{
-  const f=document.querySelector('button[data-filter].active').dataset.filter;
-  renderGallery(f, e.target.value);
-});
-function openLightbox(src){
-  const lb=document.getElementById('lightbox');
-  document.getElementById('lb-img').src=src;
-  lb.style.display='flex';
-}
-document.getElementById('lb-close').onclick=()=>document.getElementById('lightbox').style.display='none';
-document.getElementById('lightbox').onclick=e=>{ if(e.target.id==='lightbox') document.getElementById('lightbox').style.display='none';};
-renderGallery();
-</script></body></html>"#);
-    fs::write(root.join("index.html"), html).expect("write index.html");
-}
-
-fn verify_export(root: &Path, n: usize, state_defs: &[(&str, usize)]) {
-    let clusters_dir = root.join("ModernClusters");
-    let mut ok = true;
-    for entry in fs::read_dir(&clusters_dir).expect("read clusters") {
-        let e = entry.unwrap();
-        let path = e.path();
-        if path.is_dir() {
-            for (state_name, _) in state_defs {
-                let p = path.join(format!("{state_name}.png"));
-                if !p.exists() || fs::metadata(&p).unwrap().len() == 0 {
-                    eprintln!("Missing or empty {}", p.display());
-                    ok = false;
-                }
+    pub fn clusters(out: &Path) -> Result<()> {
+        for &theme in ClusterTheme::all() {
+            let cfg = AppConfig {
+                current_camera_index: 3,
+                cockpit_hud_style_typed: theme,
+                ..Default::default()
+            };
+            for (i, state) in super::STATES.iter().enumerate() {
+                let mut pix = pixmap()?;
+                let data = state.telemetry();
+                render_cluster(&mut pix.as_mut(), theme, &data, &cfg);
+                save(
+                    &pix,
+                    &out.join(format!("ModernClusters/{theme}/{:02}_{}.png", i + 1, &state.name[3..])),
+                )?;
             }
         }
-    }
-    let scrim_files = [
-        "Scrim/OemScrim_0pct.png",
-        "Scrim/OemScrim_50pct.png",
-        "Scrim/OemScrim_100pct.png",
-    ];
-    for f in scrim_files {
-        let p = root.join(f);
-        if !p.exists() {
-            eprintln!("Missing {}", f);
-            ok = false;
-        }
-    }
-    if !root.join("UnifiedOsd_4K.png").exists() {
-        eprintln!("Missing OSD");
-        ok = false;
-    }
-    if !root.join("index.html").exists() {
-        eprintln!("Missing index.html");
-        ok = false;
-    }
-    if ok {
-        println!(
-            "Verification: {} clusters, {} PNGs OK, 3 scrims OK, OSD OK, html OK",
-            n,
-            n * 4
-        );
-    } else {
-        panic!("Verification failed");
+        Ok(())
     }
 }

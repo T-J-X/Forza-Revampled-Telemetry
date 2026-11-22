@@ -15,5 +15,6 @@ fh6-core = { path = "../../crates/fh6-core" }
 fh6-render = { path = "../../crates/fh6-render" }
 fh6-clusters = { path = "../../crates/fh6-clusters" }
 fh6-osd = { path = "../../crates/fh6-osd" }
+fh6-kit = { path = "../../crates/fh6-kit" }
+fh6-gpu = { path = "../../crates/fh6-gpu" }
 tiny-skia.workspace = true
-png.workspace = true

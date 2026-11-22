@@ -73,7 +73,7 @@ fn active() -> Option<Arc<Shared>> {
 }
 
 /// The file name of the process that owns `pid`, lower-cased.
-fn process_image_name(pid: u32) -> Option<String> {
+pub(crate) fn process_image_name(pid: u32) -> Option<String> {
     // SAFETY: OpenProcess with query-only rights; the handle is closed below.
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
     let mut buf = [0u16; 1024];

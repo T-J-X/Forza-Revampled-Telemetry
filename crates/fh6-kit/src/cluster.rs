@@ -73,22 +73,22 @@ impl Layout {
     #[must_use]
     pub fn from_config(config: &AppConfig, tokens: &Tokens, view: View, target: (u32, u32)) -> Self {
         let (w, h) = (target.0.max(1) as f32, target.1.max(1) as f32);
-        let (ax, ay, view_scale, envelope) = match view {
+        // v2 sizes are authored at user scale 1.0 (tokens); `CockpitScale` and `BonnetScale` are
+        // v1 authoring multipliers and do not apply to kit clusters.
+        let (ax, ay, envelope) = match view {
             View::Hood => (
                 config.bonnet_anchor_x as f32,
                 config.bonnet_anchor_y as f32,
-                config.bonnet_scale,
                 tokens.layout.hood_envelope,
             ),
             View::Cockpit | View::Chase => (
                 config.cockpit_anchor_x as f32,
                 config.cockpit_anchor_y as f32,
-                config.cockpit_scale,
                 tokens.layout.cockpit_envelope,
             ),
         };
         let user = finite_or(config.cluster_scale, 1.0).clamp(0.70, 1.40);
-        let scale = finite_or(view_scale, 1.0).clamp(0.25, 4.0) * user * h / REF_HEIGHT;
+        let scale = user * h / REF_HEIGHT;
         let height_offset = config
             .extra
             .get("ClusterHeightOffsetPx")

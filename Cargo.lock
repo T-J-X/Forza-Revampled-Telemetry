@@ -230,10 +230,13 @@ dependencies = [
 name = "fh6-app"
 version = "0.1.0"
 dependencies = [
+ "fh6-clusters",
  "fh6-core",
  "fh6-gpu",
  "fh6-input",
+ "fh6-kit",
  "fh6-osd",
+ "fh6-render",
  "fh6-win",
  "serde_json",
  "thiserror",
@@ -246,6 +249,7 @@ name = "fh6-clusters"
 version = "0.1.0"
 dependencies = [
  "fh6-core",
+ "fh6-kit",
  "fh6-render",
  "tiny-skia 0.11.4",
  "tracing",
@@ -1015,9 +1019,10 @@ version = "0.1.0"
 dependencies = [
  "fh6-clusters",
  "fh6-core",
+ "fh6-gpu",
+ "fh6-kit",
  "fh6-osd",
  "fh6-render",
- "png 0.17.16",
  "tiny-skia 0.11.4",
 ]
 
@@ -1631,6 +1636,13 @@ checksum = "d7d179596ff5ec0f6de4db64d54011bde6289cc49603d3a6e4ce3f329207ab88"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "wgc-bench"
+version = "0.1.0"
+dependencies = [
+ "fh6-win",
 ]
 
 [[package]]

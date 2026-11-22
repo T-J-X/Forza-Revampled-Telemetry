@@ -9,5 +9,6 @@ rust-version.workspace = true
 [dependencies]
 fh6-core = { path = "../fh6-core" }
 fh6-render = { path = "../fh6-render" }
+fh6-kit = { path = "../fh6-kit" }
 tiny-skia.workspace = true
 tracing.workspace = true

@@ -14,4 +14,5 @@ pub mod process_watcher;
 pub mod remapper;
 #[cfg(windows)]
 pub mod render_loop;
+pub mod resources;
 pub mod widget_server;

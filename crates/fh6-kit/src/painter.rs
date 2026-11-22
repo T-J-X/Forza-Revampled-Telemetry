@@ -179,6 +179,14 @@ impl<'f> Painter<'f> {
         self.transform(&Affine::rotate_about(angle, center));
     }
 
+    /// Replaces the local-to-target transform (e.g. `Affine::IDENTITY` to draw in target
+    /// pixels for a HUD readout). Restored by the matching [`Painter::restore`].
+    pub fn set_transform(&mut self, xf: Affine) {
+        if xf.is_finite() {
+            self.state.xf = xf;
+        }
+    }
+
     /// The current local-to-target transform.
     #[must_use]
     pub fn current_transform(&self) -> Affine {

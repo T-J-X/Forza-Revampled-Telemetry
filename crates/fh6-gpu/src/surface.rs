@@ -126,6 +126,62 @@ impl OverlaySurface {
         tracing::info!(width, height, "overlay surface resized");
     }
 
+    /// Acquires the next swapchain image, lets `record` encode the frame into it (the render
+    /// kit's path), submits and presents. `record` receives the context, an encoder, the image's
+    /// view, the swapchain format and size.
+    ///
+    /// # Errors
+    /// [`GpuError::SurfaceLost`] when the surface must be recreated, and
+    /// [`GpuError::SurfaceValidation`] on a validation error.
+    pub fn render_with(
+        &mut self,
+        ctx: &GpuContext,
+        record: impl FnOnce(&GpuContext, &mut wgpu::CommandEncoder, &wgpu::TextureView, wgpu::TextureFormat, (u32, u32)),
+    ) -> Result<FrameOutcome, GpuError> {
+        let t0 = Instant::now();
+        let acquired = self.surface.get_current_texture();
+        let t1 = Instant::now();
+        let (frame, suboptimal) = match acquired {
+            wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(FrameOutcome::Skipped)
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&ctx.device, &self.config);
+                return Ok(FrameOutcome::Skipped);
+            }
+            wgpu::CurrentSurfaceTexture::Lost => return Err(GpuError::SurfaceLost),
+            wgpu::CurrentSurfaceTexture::Validation => return Err(GpuError::SurfaceValidation),
+        };
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("fh6 overlay frame"),
+        });
+        record(
+            ctx,
+            &mut encoder,
+            &view,
+            self.config.format,
+            (self.config.width, self.config.height),
+        );
+        ctx.queue.submit(Some(encoder.finish()));
+        let t2 = Instant::now();
+        ctx.queue.present(frame);
+        let t3 = Instant::now();
+        if suboptimal {
+            self.surface.configure(&ctx.device, &self.config);
+        }
+        Ok(FrameOutcome::Presented {
+            timings: FrameTimings {
+                acquire_wait: t1 - t0,
+                encode_submit: t2 - t1,
+                present: t3 - t2,
+            },
+            at: t3,
+        })
+    }
+
     /// Draws `batch` at `opacity` and presents it.
     ///
     /// # Errors
