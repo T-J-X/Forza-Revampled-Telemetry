@@ -1,6 +1,10 @@
-//! fh6-render: 4K rendering engine, ClusterRenderer trait, and optical layout primitives.
-use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
-use tiny_skia::{Color, PixmapMut, Rect};
+//! fh6-render: the v1 CPU layer kept for the OEM scrim, ambient wash, layout kit, tokens and
+//! text until their Phase 7–9 rebuilds on `fh6-kit`.
+//!
+//! The cluster contract moved to `fh6_kit::Cluster` (contract v2) and the cluster registry to
+//! `fh6_clusters::registry`; the v1 `ClusterRenderer` trait, `StubRenderer` and `registry.rs`
+//! were removed in Phase 5.
+use tiny_skia::Color;
 
 pub mod assets;
 pub mod dispatch;
@@ -8,15 +12,8 @@ pub mod kit;
 pub mod layout;
 pub mod oem_scrim;
 pub mod pool;
-pub mod registry;
-pub mod renderer;
 pub mod text;
 pub mod tokens;
-
-pub trait ClusterRenderer: Send + Sync {
-    fn theme(&self) -> ClusterTheme;
-    fn render(&mut self, pixmap: &mut PixmapMut, bounds: Rect, data: &FH6TelemetryData, config: &AppConfig);
-}
 
 pub struct RenderContext {
     pub clear_color: Color,

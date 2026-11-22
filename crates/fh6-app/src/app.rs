@@ -163,6 +163,8 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         foreground: foreground.reader(),
         control: Arc::clone(&control),
         options,
+        resources: crate::resources::KitResources::resolve(&config_path),
+        game_process: args.game_process.clone(),
         on_bench_done: Box::new(move || close.request_close()),
     })
     .map_err(io_err("starting the render thread"))?;

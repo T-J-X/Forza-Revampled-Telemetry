@@ -8,13 +8,16 @@ members = [
     "crates/fh6-input",
     "crates/fh6-win",
     "crates/fh6-gpu",
+    "crates/fh6-kit",
     "crates/fh6-app",
     "tools/preview-export",
     "tools/mock-udp",
     "tools/parity-dump",
     "tools/bench-render",
+    "tools/web-preview",
     "tools/screen-capture",
     "tools/stand-in-game",
+    "tools/wgc-bench",
     "tools/asset-forge",
 ]
 
@@ -35,6 +38,6 @@ tiny-skia = "0.11"
 arc-swap = "1.7"
 png = "0.17"
 windows = "0.62"
-wgpu = { version = "30.0.2", default-features = false, features = ["dx12", "wgsl", "std", "parking_lot"] }
+wgpu = { version = "30.0.2", default-features = false, features = ["dx12", "webgpu", "wgsl", "std", "parking_lot"] }
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"

@@ -1,21 +1,27 @@
-//! The render thread: wakes on every packet (or each vsync while fading), draws the latest
-//! packet only, and presents. No queue, no lock, no readback on this path.
+//! The render thread: wakes on every packet (or each refresh while something animates), lets
+//! the active cluster update and draw with the render kit, and presents. No queue, no lock, no
+//! readback on this path.
 use crate::latency::{caught_next_vsync, FrameStats, Percentiles, SAMPLE_CAPACITY};
-use fh6_core::telemetry::FH6TelemetryData;
-use fh6_core::{AppConfig, ConfigHandle, TelemetryReader, VisibilityController, VisibilityInputs};
-use fh6_gpu::test_cluster::{self, StatLine, TestClusterInput};
-use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface, QuadBatch};
+use crate::refraction::{RefractionSource, RETRY};
+use crate::resources::KitResources;
+use fh6_core::{AppConfig, ClusterTheme, ConfigHandle, TelemetryReader, VisibilityController, VisibilityInputs};
+use fh6_gpu::seven_seg::StackStr;
+use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
+use fh6_kit::{
+    vec2, Affine, Align, Cluster, FrameInput, Kit, Layout, Logo, Painter, Palette, SignalSmoother, TextStyle, VAlign,
+    View,
+};
 use fh6_osd::LiveDynoGenerator;
 use fh6_win::{ForegroundReader, OverlayHandle};
+use std::fmt::Write as _;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle, Thread};
 use std::time::{Duration, Instant};
 
-/// Reference resolution the config anchors are authored in.
-const REF_W: f32 = 3840.0;
+/// Reference height the config anchors are authored in.
 const REF_H: f32 = 2160.0;
 /// Wait between checks while hidden (packets and focus changes wake the thread sooner).
 const IDLE_WAIT: Duration = Duration::from_millis(50);
@@ -23,6 +29,8 @@ const IDLE_WAIT: Duration = Duration::from_millis(50);
 const FALLBACK_REFRESH: Duration = Duration::from_micros(16_667);
 /// Benchmarks discard this much warm-up.
 const BENCH_WARMUP: Duration = Duration::from_secs(2);
+/// Longest `dt` a cluster sees (after a hide, a stall or a debugger pause).
+const MAX_DT: f32 = 0.1;
 
 /// Cross-thread controls for the render thread.
 #[derive(Debug, Default)]
@@ -102,6 +110,10 @@ pub struct RenderSetup {
     pub control: Arc<RenderControl>,
     /// Command-line switches.
     pub options: RenderOptions,
+    /// Tokens, brand palettes, asset folders.
+    pub resources: KitResources,
+    /// The game executable (for the optional glass refraction capture).
+    pub game_process: String,
     /// Run once when a benchmark finishes (asks the app to quit).
     pub on_bench_done: Box<dyn FnOnce() + Send>,
 }
@@ -129,9 +141,9 @@ pub struct RenderSummary {
     pub cpu_frame: Percentiles,
     /// Blocked on the swapchain latency wait.
     pub acquire_wait: Percentiles,
-    /// Building the quad batch.
+    /// Cluster update and draw recording.
     pub build: Percentiles,
-    /// Upload, record, submit.
+    /// Kit render (pack, upload, record) and submit.
     pub encode_submit: Percentiles,
     /// The `present` call.
     pub present: Percentiles,
@@ -155,17 +167,22 @@ pub fn spawn(setup: RenderSetup) -> io::Result<(JoinHandle<RenderSummary>, Threa
     Ok((handle, thread))
 }
 
-/// `#RRGGBB` to straight sRGB-encoded RGBA, or `fallback`.
-pub fn parse_hex(hex: &str, fallback: [f32; 4]) -> [f32; 4] {
-    let digits = hex.trim().trim_start_matches('#');
-    if digits.len() != 6 || !digits.is_ascii() {
-        return fallback;
-    }
-    let channel = |i: usize| u8::from_str_radix(&digits[i..i + 2], 16).map(|v| f32::from(v) / 255.0);
-    match (channel(0), channel(2), channel(4)) {
-        (Ok(r), Ok(g), Ok(b)) => [r, g, b, 1.0],
-        _ => fallback,
-    }
+/// The theme `cfg` selects for `view` (hood uses `BonnetHudStyle`, the rest
+/// `CockpitHudStyle`, then `HudStyle`).
+pub fn theme_for(cfg: &AppConfig, view: View) -> ClusterTheme {
+    let style = match view {
+        View::Hood => cfg.bonnet_hud_style.as_str(),
+        View::Cockpit | View::Chase => {
+            if !cfg.cockpit_hud_style.trim().is_empty() {
+                cfg.cockpit_hud_style.as_str()
+            } else if !cfg.hud_style.trim().is_empty() {
+                cfg.hud_style.as_str()
+            } else {
+                "LiquidGlass"
+            }
+        }
+    };
+    fh6_render::dispatch::style_to_theme(style)
 }
 
 /// Whether to draw the live dyno instead of the received packet. The demo, the bench and the
@@ -176,43 +193,37 @@ pub fn uses_dyno(bypass: bool, live_preview: bool, fresh: bool, race_on: bool) -
     (bypass || live_preview) && !(fresh && race_on)
 }
 
-/// The test cluster's input for one frame.
-pub fn cluster_input(data: &FH6TelemetryData, cfg: &AppConfig, camera: usize, size: (u32, u32)) -> TestClusterInput {
-    let (w, h) = (size.0 as f32, size.1 as f32);
-    let (ax, ay, scale) = if camera == 4 {
-        (cfg.bonnet_anchor_x, cfg.bonnet_anchor_y, cfg.bonnet_scale)
-    } else {
-        (cfg.cockpit_anchor_x, cfg.cockpit_anchor_y, cfg.cockpit_scale)
-    };
-    let kmh = cfg.speed_unit.eq_ignore_ascii_case("KMH") || cfg.speed_unit.eq_ignore_ascii_case("KPH");
-    TestClusterInput {
-        speed: if kmh { data.speed_kmh() } else { data.speed_mph() },
-        gear: data.gear,
-        rpm: data.current_engine_rpm,
-        max_rpm: data.engine_max_rpm,
-        shift_start: cfg.shift_start_pct.clamp(0.1, 1.0),
-        redline: cfg.redline_pct.clamp(0.1, 1.0),
-        throttle: data.throttle_pct(),
-        brake: data.brake_pct(),
-        anchor: [ax as f32 * w / REF_W, ay as f32 * h / REF_H],
-        scale: scale * cfg.cluster_scale.clamp(0.7, 1.4) * h / REF_H,
-        accent: parse_hex(&cfg.primary_hex, [0.0, 0.824, 1.0, 1.0]),
-    }
+/// One `--stats` line.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct StatLine {
+    label: &'static str,
+    value: f32,
+    decimals: usize,
 }
 
-/// The device and swapchain. `None` while they are being recreated after a loss.
+/// The device, swapchain and kit. `None` while they are being recreated after a loss.
 struct Gpu {
     ctx: GpuContext,
     surface: OverlaySurface,
+    kit: Option<Kit>,
+}
+
+/// The cluster on screen and what it was built for.
+struct Active {
+    theme: ClusterTheme,
+    view: View,
+    family: &'static str,
+    cluster: Box<dyn Cluster>,
+    born: Instant,
 }
 
 struct Loop {
     gpu: Option<Gpu>,
+    resources: KitResources,
     /// Last known adapter, present mode and size, for the summary.
     adapter: String,
     present_mode: String,
     size: (u32, u32),
-    batch: QuadBatch,
     stats: FrameStats,
     scratch: Vec<f32>,
     stat_lines: [StatLine; 4],
@@ -220,14 +231,56 @@ struct Loop {
     packets: u64,
     fps_window: (Instant, u64),
     lost_since: Option<Instant>,
+    active: Option<Active>,
+    smoother: SignalSmoother,
+    /// Theme cache: the config it came from (pointer identity) and the view.
+    theme_cache: Option<(*const AppConfig, View, ClusterTheme)>,
+    /// Palette cache: config identity, car ordinal and family.
+    palette_cache: Option<(*const AppConfig, i32, &'static str)>,
+    palette: Palette,
+    logo: Logo,
+    last_update: Instant,
+    refraction: Option<RefractionSource>,
+    refraction_retry: Instant,
+}
+
+fn new_kit(ctx: &GpuContext, resources: &KitResources) -> Option<Kit> {
+    match Kit::new(&ctx.device, &ctx.queue, resources.tokens.clone()) {
+        Ok(mut kit) => {
+            for dir in resources
+                .assets
+                .iter()
+                .map(|a| a.join("fonts"))
+                .chain(resources.user_fonts.clone())
+            {
+                if dir.is_dir() {
+                    match kit.fonts_mut().load_dir(&dir) {
+                        Ok(faces) => tracing::info!(dir = %dir.display(), faces = faces.len(), "fonts loaded"),
+                        Err(err) => tracing::warn!(error = %err, "fonts not loaded"),
+                    }
+                }
+            }
+            let bound = kit.bind_font_roles();
+            tracing::info!(bound, "font roles bound to the tokens' families");
+            Some(kit)
+        }
+        Err(err) => {
+            tracing::error!(error = %err, "render kit could not start");
+            None
+        }
+    }
 }
 
 impl Loop {
-    fn adopt(&mut self, gpu: Gpu) {
-        self.adapter = gpu.ctx.adapter_summary().to_string();
-        self.present_mode = format!("{:?}", gpu.surface.present_mode());
-        self.size = gpu.surface.size();
-        self.gpu = Some(gpu);
+    fn adopt(&mut self, ctx: GpuContext, surface: OverlaySurface) {
+        self.adapter = ctx.adapter_summary().to_string();
+        self.present_mode = format!("{:?}", surface.present_mode());
+        self.size = surface.size();
+        let kit = new_kit(&ctx, &self.resources);
+        // Clusters and the refraction texture belong to the old device: rebuild them.
+        self.active = None;
+        self.refraction = None;
+        self.gpu = Some(Gpu { ctx, surface, kit });
         self.lost_since = None;
     }
 
@@ -235,6 +288,8 @@ impl Loop {
     /// shows nothing), and schedules a recreation.
     fn lose_gpu(&mut self, why: &str) {
         tracing::warn!(why, "dropping the GPU device; it is recreated in 1 s");
+        self.active = None;
+        self.refraction = None;
         self.gpu = None;
         self.lost_since = Some(Instant::now());
     }
@@ -248,7 +303,7 @@ impl Loop {
         match OverlaySurface::create(window.clone(), self.size.0, self.size.1) {
             Ok((ctx, surface)) => {
                 tracing::info!("GPU device and overlay surface recreated");
-                self.adopt(Gpu { ctx, surface });
+                self.adopt(ctx, surface);
             }
             Err(err) => {
                 tracing::warn!(error = %err, "recreating the GPU device failed; retrying");
@@ -257,11 +312,151 @@ impl Loop {
         }
     }
 
-    /// Renders the current batch and handles loss. `None` when nothing was presented.
-    fn render(&mut self, opacity: f32) -> Option<FrameOutcome> {
+    /// Makes sure the active cluster matches the config and view.
+    fn ensure_cluster(&mut self, cfg: &Arc<AppConfig>, view: View) {
+        let ptr = Arc::as_ptr(cfg);
+        let theme = match self.theme_cache {
+            Some((p, v, t)) if p == ptr && v == view => t,
+            _ => {
+                let t = theme_for(cfg, view);
+                self.theme_cache = Some((ptr, view, t));
+                t
+            }
+        };
+        if self.active.as_ref().is_some_and(|a| a.theme == theme && a.view == view) {
+            return;
+        }
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        let entry = fh6_clusters::registry::resolve(theme);
+        let assets = self.resources.assets.clone();
+        let cluster = {
+            let mut setup = kit.setup(&gpu.ctx.device, &gpu.ctx.queue, assets.as_deref());
+            (entry.make)(&mut setup)
+        };
+        tracing::info!(%theme, cluster = entry.name, ?view, "cluster selected");
+        self.active = Some(Active {
+            theme,
+            view,
+            family: entry.family,
+            cluster,
+            born: Instant::now(),
+        });
+        self.palette_cache = None;
+    }
+
+    /// Refreshes the palette and logo when the config, car or family changed.
+    fn ensure_palette(&mut self, cfg: &Arc<AppConfig>, car_ordinal: i32) {
+        let Some(family) = self.active.as_ref().map(|a| a.family) else {
+            return;
+        };
+        let key = (Arc::as_ptr(cfg), car_ordinal, family);
+        if self.palette_cache == Some(key) {
+            return;
+        }
+        let tokens = &self.resources.tokens;
+        self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family);
+        let brand = self
+            .resources
+            .cars
+            .get_brand_palette_for_ordinal(&car_ordinal.to_string())
+            .map(|b| b.display_name.clone())
+            .unwrap_or_default();
+        self.logo = Logo {
+            image: None,
+            brand_name: brand,
+            custom_name: cfg.custom_driver_name.clone(),
+        };
+        if let Some(kit) = self.gpu.as_mut().and_then(|g| g.kit.as_mut()) {
+            kit.set_palette(self.palette);
+        }
+        self.palette_cache = Some(key);
+    }
+
+    /// Starts, polls or stops the optional refraction capture (`"GlassRefraction": true`).
+    fn update_refraction(&mut self, cfg: &AppConfig, layout: &Layout, game_process: &str) {
+        let on = cfg
+            .extra
+            .get("GlassRefraction")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        if !on {
+            if self.refraction.take().is_some() {
+                kit.set_refraction_source(None);
+                tracing::info!("glass refraction capture stopped");
+            }
+            return;
+        }
+        if self.refraction.is_none() {
+            let now = Instant::now();
+            if now < self.refraction_retry {
+                return;
+            }
+            self.refraction_retry = now + RETRY;
+            let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+            let rect = layout
+                .transform()
+                .apply_rect(&layout.envelope.expand(48.0))
+                .intersect(&fh6_kit::Rect::from_xywh(0.0, 0.0, w, h));
+            self.refraction = RefractionSource::start(game_process, rect);
+        }
+        if let Some(src) = self.refraction.as_mut() {
+            match src.poll(&gpu.ctx.device, &gpu.ctx.queue) {
+                Ok(Some(view)) => kit.set_refraction_source(Some((view, src.rect()))),
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, "glass refraction capture stopped");
+                    self.refraction = None;
+                    kit.set_refraction_source(None);
+                }
+            }
+        }
+    }
+
+    /// Records and presents one frame at `opacity`. With `draw` false, presents a fully
+    /// transparent frame (hide). `None` when nothing was presented.
+    fn render(&mut self, opacity: f32, layout: &Layout, draw: bool, stats_on: bool) -> Option<FrameOutcome> {
         let gpu = self.gpu.as_mut()?;
-        let result = gpu.surface.render(&gpu.ctx, opacity, &self.batch);
-        let failed = gpu.ctx.has_failed();
+        let Gpu { ctx, surface, kit } = gpu;
+        let Some(kit) = kit.as_mut() else {
+            // No kit: present an empty frame so nothing stale stays on screen.
+            let result = surface.render_with(ctx, |_, enc, view, _, _| {
+                drop(enc.begin_render_pass(&fh6_kit::wgpu::RenderPassDescriptor {
+                    label: Some("fh6 clear"),
+                    color_attachments: &[Some(fh6_kit::wgpu::RenderPassColorAttachment {
+                        view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: fh6_kit::wgpu::Operations {
+                            load: fh6_kit::wgpu::LoadOp::Clear(fh6_kit::wgpu::Color::TRANSPARENT),
+                            store: fh6_kit::wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                }));
+            });
+            return result.ok();
+        };
+        {
+            let mut p = kit.begin_frame(layout);
+            if draw {
+                if let Some(active) = self.active.as_ref() {
+                    active.cluster.draw(&mut p, layout);
+                }
+                if stats_on {
+                    draw_stats(&mut p, &self.stat_lines, self.size);
+                }
+            }
+        }
+        let result = surface.render_with(ctx, |ctx, encoder, view, format, size| {
+            kit.render(&ctx.device, &ctx.queue, encoder, view, format, size, opacity);
+        });
+        let failed = ctx.has_failed();
         match result {
             Ok(outcome) if !failed => Some(outcome),
             Ok(_) => {
@@ -283,6 +478,26 @@ impl Loop {
     }
 }
 
+/// The `--stats` lines in the top-left corner, in target pixels.
+fn draw_stats(p: &mut Painter<'_>, lines: &[StatLine; 4], size: (u32, u32)) {
+    let k = size.1 as f32 / REF_H;
+    let cap = 26.0 * k;
+    let font = p.fonts().role(fh6_kit::FontRole::Display);
+    let ink = p.palette().roles.ink;
+    let style = TextStyle::new(font, cap)
+        .paint(ink)
+        .align(Align::Left, VAlign::CapTop)
+        .tabular();
+    p.save();
+    p.set_transform(Affine::IDENTITY);
+    for (i, line) in lines.iter().enumerate() {
+        let mut text = StackStr::<32>::new();
+        let _ = write!(text, "{} {:.*}", line.label, line.decimals, line.value);
+        p.text(vec2(64.0 * k, 64.0 * k + i as f32 * cap * 1.8), text.as_str(), &style);
+    }
+    p.restore();
+}
+
 fn run(setup: RenderSetup) -> RenderSummary {
     let RenderSetup {
         gpu,
@@ -294,18 +509,21 @@ fn run(setup: RenderSetup) -> RenderSummary {
         foreground,
         control,
         options,
+        resources,
+        game_process,
         on_bench_done,
     } = setup;
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
         .unwrap_or(FALLBACK_REFRESH);
     let measure_vblank = options.stats || options.bench.is_some();
+    let palette = Palette::family(&resources.tokens, "modernDigital");
     let mut lp = Loop {
         gpu: None,
+        resources,
         adapter: String::new(),
         present_mode: String::new(),
         size: (1, 1),
-        batch: QuadBatch::new(),
         stats: FrameStats::default(),
         scratch: Vec::with_capacity(SAMPLE_CAPACITY),
         stat_lines: [
@@ -334,8 +552,17 @@ fn run(setup: RenderSetup) -> RenderSummary {
         packets: 0,
         fps_window: (Instant::now(), 0),
         lost_since: None,
+        active: None,
+        smoother: SignalSmoother::new(),
+        theme_cache: None,
+        palette_cache: None,
+        palette,
+        logo: Logo::default(),
+        last_update: Instant::now(),
+        refraction: None,
+        refraction_retry: Instant::now(),
     };
-    lp.adopt(Gpu { ctx: gpu, surface });
+    lp.adopt(gpu, surface);
     let mut visibility = VisibilityController::default();
     let mut dyno = LiveDynoGenerator::new();
     let mut last_seq = 0u64;
@@ -422,12 +649,16 @@ fn run(setup: RenderSetup) -> RenderSummary {
         // Only a packet that is actually drawn counts toward the latency stats.
         let new_packet = !synthetic && fresh && frame.seq != last_seq;
         last_seq = frame.seq;
+        let view = View::from_camera_index(i32::try_from(input.camera_index()).unwrap_or(3));
+        let layout = Layout::from_config(&cfg, &lp.resources.tokens, view, lp.size);
 
         if vis.opacity <= 0.0 {
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
-                lp.batch.clear();
-                blank_presented = matches!(lp.render(0.0), Some(FrameOutcome::Presented { .. }));
+                blank_presented = matches!(
+                    lp.render(0.0, &layout, false, false),
+                    Some(FrameOutcome::Presented { .. })
+                );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
             }
             // A skipped blank frame (timeout, occluded, reconfigured) is retried on the next
@@ -439,21 +670,46 @@ fn run(setup: RenderSetup) -> RenderSummary {
         // While visible, wake every refresh even without packets so a stale stream is hidden
         // within one frame of the 250 ms trigger (packets and focus changes also unpark).
         keep_ticking = true;
-        if !(new_packet || vis.animating || synthetic) {
+        let cluster_moving = lp.active.as_ref().is_some_and(|a| a.cluster.animating());
+        if !(new_packet || vis.animating || synthetic || cluster_moving || lp.active.is_none()) {
             continue;
         }
 
         let build_start = Instant::now();
-        lp.batch.clear();
-        let input_frame = cluster_input(data, &cfg, input.camera_index(), lp.size);
-        test_cluster::build(&mut lp.batch, &input_frame);
-        if options.stats {
-            let line_h = (lp.size.1 as f32 / REF_H * 34.0).max(10.0);
-            test_cluster::build_stats(&mut lp.batch, [line_h * 2.0, line_h * 2.0], line_h, &lp.stat_lines);
+        lp.ensure_cluster(&cfg, view);
+        lp.ensure_palette(&cfg, data.car_ordinal);
+        lp.update_refraction(&cfg, &layout, &game_process);
+        let update_dt = (build_start - lp.last_update).as_secs_f32().min(MAX_DT);
+        lp.last_update = build_start;
+        let signals = lp.smoother.update(data, &cfg, &lp.resources.tokens, update_dt);
+        let fonts = lp
+            .gpu
+            .as_ref()
+            .and_then(|g| g.kit.as_ref())
+            .map(|k| k.font_choice(None));
+        if let (Some(active), Some(fonts)) = (lp.active.as_mut(), fonts) {
+            let reduced_flash = cfg
+                .extra
+                .get("ReducedFlash")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            active.cluster.update(&FrameInput {
+                telemetry: data,
+                signals: &signals,
+                dt: update_dt,
+                t: (build_start - active.born).as_secs_f32(),
+                config: &cfg,
+                palette: &lp.palette,
+                tokens: &lp.resources.tokens,
+                fonts,
+                logo: &lp.logo,
+                view,
+                reduced_flash,
+            });
         }
         let built = build_start.elapsed();
 
-        if let Some(FrameOutcome::Presented { timings, at }) = lp.render(vis.opacity) {
+        if let Some(FrameOutcome::Presented { timings, at }) = lp.render(vis.opacity, &layout, true, options.stats) {
             lp.frames += 1;
             lp.stats.cpu_frame.record(built + timings.cpu());
             lp.stats.acquire_wait.record(timings.acquire_wait);
@@ -528,49 +784,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hex_colours() {
-        assert_eq!(parse_hex("#FFFFFF", [0.0; 4]), [1.0, 1.0, 1.0, 1.0]);
-        assert_eq!(parse_hex("00d2ff", [0.0; 4])[0], 0.0);
-        assert_eq!(parse_hex("#12", [0.5; 4]), [0.5; 4]);
-        assert_eq!(parse_hex("#GGGGGG", [0.5; 4]), [0.5; 4]);
-        assert_eq!(parse_hex("#ÅÅÅ", [0.5; 4]), [0.5; 4]);
+    fn theme_follows_the_view() {
+        let cfg = AppConfig {
+            cockpit_hud_style: "LiquidGlass".into(),
+            bonnet_hud_style: "Gt7HoodPro".into(),
+            ..AppConfig::default()
+        };
+        assert_eq!(theme_for(&cfg, View::Cockpit), ClusterTheme::LiquidGlass);
+        assert_eq!(theme_for(&cfg, View::Hood), ClusterTheme::Gt7HoodPro);
+        let empty = AppConfig {
+            cockpit_hud_style: String::new(),
+            hud_style: String::new(),
+            ..AppConfig::default()
+        };
+        assert_eq!(theme_for(&empty, View::Cockpit), ClusterTheme::LiquidGlass);
+    }
+
+    #[test]
+    fn layouts_scale_from_4k_and_follow_the_camera() {
+        let cfg = AppConfig::default();
+        let tokens = fh6_kit::Tokens::default();
+        let cockpit = Layout::from_config(&cfg, &tokens, View::from_camera_index(3), (3840, 2160));
+        assert_eq!(cockpit.anchor, vec2(1920.0, 1835.0));
+        let hood = Layout::from_config(&cfg, &tokens, View::from_camera_index(4), (1920, 1080));
+        assert_eq!(hood.anchor, vec2(960.0, 880.0), "bonnet anchor at half resolution");
+        assert!((hood.scale - cockpit.scale * 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn dyno_replaces_paused_and_stale_packets_only_for_preview_and_demo() {
-        // Real driving data always wins.
         assert!(!uses_dyno(true, true, true, true));
-        // OSD live view while paused: the game keeps sending fresh IsRaceOn == 0 packets.
         assert!(uses_dyno(false, true, true, false));
-        // OSD live view or demo with no stream at all.
         assert!(uses_dyno(false, true, false, false));
         assert!(uses_dyno(true, false, false, true));
-        // Normal overlay never invents data; the visibility rules hide it instead.
         assert!(!uses_dyno(false, false, true, false));
         assert!(!uses_dyno(false, false, false, true));
-    }
-
-    #[test]
-    fn anchors_scale_from_4k_and_follow_the_camera() {
-        let cfg = AppConfig::default();
-        let data = FH6TelemetryData {
-            speed_ms: 10.0,
-            ..FH6TelemetryData::default()
-        };
-        let cockpit = cluster_input(&data, &cfg, 3, (3840, 2160));
-        assert_eq!(cockpit.anchor, [1920.0, 1835.0]);
-        assert!((cockpit.scale - 1.45).abs() < 1e-6);
-        assert!((cockpit.speed - 22.369).abs() < 0.01, "MPH by default");
-
-        let hood = cluster_input(&data, &cfg, 4, (1920, 1080));
-        assert_eq!(hood.anchor, [960.0, 880.0], "bonnet anchor at half resolution");
-        assert!((hood.scale - 1.55 * 0.5).abs() < 1e-6);
-
-        let kmh = AppConfig {
-            speed_unit: "KMH".into(),
-            ..AppConfig::default()
-        };
-        assert!((cluster_input(&data, &kmh, 3, (3840, 2160)).speed - 36.0).abs() < 0.01);
     }
 
     #[test]
