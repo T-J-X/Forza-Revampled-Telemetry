@@ -45,8 +45,9 @@ pub fn run_stand_in_window(rect: MonitorRect, rgb: [u8; 3], title: &str) -> Resu
     static REGISTERED: OnceLock<()> = OnceLock::new();
     let colour = COLORREF(u32::from(rgb[0]) | (u32::from(rgb[1]) << 8) | (u32::from(rgb[2]) << 16));
     if REGISTERED.get().is_none() {
-        // SAFETY: the brush becomes the class background for the process lifetime (or is
-        // deleted below if registration fails); the module handle is this executable's.
+        // SAFETY: the brush becomes the class background for the process lifetime, or is
+        // deleted below if this call did not register the class; the module handle is this
+        // executable's.
         let brush: HBRUSH = unsafe { CreateSolidBrush(colour) };
         let class = WNDCLASSEXW {
             cbSize: u32::try_from(std::mem::size_of::<WNDCLASSEXW>()).unwrap_or(80),
@@ -58,12 +59,14 @@ pub fn run_stand_in_window(rect: MonitorRect, rgb: [u8; 3], title: &str) -> Resu
             ..WNDCLASSEXW::default()
         };
         // SAFETY: `class` is fully initialised with a valid window procedure and static strings.
-        if let Err(err) = unsafe { crate::register_class_once(&REGISTERED, &class) } {
+        let registered = unsafe { crate::register_class_once(&REGISTERED, &class) };
+        if !matches!(registered, Ok(true)) {
+            // Failed, or another thread registered the class first: the brush is unused.
             // SAFETY: the brush was created above and is owned by nobody else.
             unsafe {
                 let _ = DeleteObject(HGDIOBJ(brush.0));
             }
-            return Err(err);
+            registered?;
         }
     }
     let title = HSTRING::from(title);

@@ -182,6 +182,14 @@ pub fn theme_for(cfg: &AppConfig, view: View) -> ClusterTheme {
     fh6_render::dispatch::style_to_theme(style)
 }
 
+/// Whether to draw the live dyno instead of the received packet. The demo, the bench and the
+/// OSD live view all need a moving dash when the game is not actually driving: when the
+/// stream is stale, and also when the game keeps sending `IsRaceOn == 0` packets while
+/// paused (those carry frozen or zeroed values).
+pub fn uses_dyno(bypass: bool, live_preview: bool, fresh: bool, race_on: bool) -> bool {
+    (bypass || live_preview) && !(fresh && race_on)
+}
+
 /// One `--stats` line.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct StatLine {
@@ -546,6 +554,11 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 gpu.surface.resize(&gpu.ctx, w, h);
             }
         }
+        // A loss can happen while the dash is hidden and nothing renders: notice it here (one
+        // atomic load) so the device is rebuilt before the dash is needed again.
+        if lp.gpu.as_ref().is_some_and(|gpu| gpu.ctx.has_failed()) {
+            lp.lose_gpu("wgpu reported an error");
+        }
         lp.try_recreate(&window);
         if lp.gpu.is_none() {
             // Nothing is on screen while the device is gone: the window has no content.
@@ -559,7 +572,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
         let fresh = !frame.is_stale(wake);
         let bypass = options.demo || options.bench.is_some();
         let live_preview = input.osd_open();
-        let synthetic = (bypass || live_preview) && !fresh;
+        let race_on = frame.data.is_race_on == 1;
+        let synthetic = uses_dyno(bypass, live_preview, fresh, race_on);
         let synth_data;
         let data = if synthetic {
             synth_data = dyno.tick(dt.as_secs_f32());
@@ -569,7 +583,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         };
         let vis = visibility.update(
             VisibilityInputs {
-                race_on: frame.data.is_race_on == 1,
+                race_on,
                 stream_fresh: fresh,
                 game_foreground: foreground.is_game_foreground(),
                 user_hidden: control.user_hidden(),
@@ -578,20 +592,21 @@ fn run(setup: RenderSetup) -> RenderSummary {
             },
             dt,
         );
-        let new_packet = fresh && frame.seq != last_seq;
+        // Only a packet that is actually drawn counts toward the latency stats.
+        let new_packet = !synthetic && fresh && frame.seq != last_seq;
         last_seq = frame.seq;
         let view = View::from_camera_index(i32::try_from(input.camera_index()).unwrap_or(3));
         let layout = Layout::from_config(&cfg, &lp.resources.tokens, view, lp.size);
 
         if vis.opacity <= 0.0 {
-            keep_ticking = false;
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
-                if let Some(FrameOutcome::Presented { .. }) = lp.render(0.0, &layout, false, false) {
-                    blank_presented = true;
-                }
-                tracing::debug!(reason = ?vis.hidden_because, "overlay hidden");
+                blank_presented = matches!(lp.render(0.0, &layout, false, false), Some(FrameOutcome::Presented { .. }));
+                tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
             }
+            // A skipped blank frame (timeout, occluded, reconfigured) is retried on the next
+            // refresh, so the last visible frame never lingers; once it is on screen, idle.
+            keep_ticking = !blank_presented;
             continue;
         }
         blank_presented = false;
@@ -736,6 +751,16 @@ mod tests {
         let hood = Layout::from_config(&cfg, &tokens, View::from_camera_index(4), (1920, 1080));
         assert_eq!(hood.anchor, vec2(960.0, 880.0), "bonnet anchor at half resolution");
         assert!((hood.scale - cockpit.scale * 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dyno_replaces_paused_and_stale_packets_only_for_preview_and_demo() {
+        assert!(!uses_dyno(true, true, true, true));
+        assert!(uses_dyno(false, true, true, false));
+        assert!(uses_dyno(false, true, false, false));
+        assert!(uses_dyno(true, false, false, true));
+        assert!(!uses_dyno(false, false, true, false));
+        assert!(!uses_dyno(false, false, false, true));
     }
 
     #[test]

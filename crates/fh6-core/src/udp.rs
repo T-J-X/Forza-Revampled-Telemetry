@@ -21,9 +21,11 @@ pub const STALE_AFTER: Duration = Duration::from_millis(250);
 /// How often a blocked receive wakes to check for shutdown.
 const RECV_TIMEOUT: Duration = Duration::from_millis(100);
 
-/// A packet that arrives on the second port within this window with the same game timestamp
-/// as the latest one is a duplicate (senders such as `mock-udp` send to both ports).
-const DUPLICATE_WINDOW: Duration = Duration::from_millis(50);
+/// The port whose packets are being published keeps the stream until it has been silent this
+/// long; until then the other port's packets are dropped. Senders such as `mock-udp` send the
+/// same datagram to both ports, and publishing both copies would double every packet and, when
+/// one receive thread lags, alternate old and new values. Well under [`STALE_AFTER`].
+const SOURCE_SWITCH_AFTER: Duration = Duration::from_millis(50);
 
 /// Called after every published packet.
 pub type PacketNotify = Arc<dyn Fn() + Send + Sync>;
@@ -136,8 +138,8 @@ impl TelemetryReader {
 /// Shared state of the receive threads. Only the UDP threads lock it; readers never do.
 #[derive(Debug, Default)]
 struct ReceiveState {
-    /// The last published packet, to recognise the same datagram arriving on the second port.
-    last_data: Option<FH6TelemetryData>,
+    /// The port the published stream comes from (see [`SOURCE_SWITCH_AFTER`]).
+    source: Option<u16>,
     last_received: Option<Instant>,
     seq: u64,
     race_resumed_at: Option<Instant>,
@@ -145,15 +147,16 @@ struct ReceiveState {
 }
 
 impl ReceiveState {
-    /// Builds the next frame, or `None` if `data` duplicates the previous packet.
-    fn next_frame(&mut self, data: FH6TelemetryData, now: Instant) -> Option<TelemetryFrame> {
-        // Same payload (not just the same game timestamp, so a pause flip is never dropped).
-        let duplicate = self.last_data.as_ref() == Some(&data)
-            && self
-                .last_received
-                .is_some_and(|t| now.saturating_duration_since(t) < DUPLICATE_WINDOW);
-        if duplicate {
-            return None;
+    /// Builds the next frame for a packet received on `port`, or `None` if another port owns
+    /// the stream. Every packet from the owning port is published, identical or not, so a
+    /// paused game's repeated packets and pause flips all go through (and are forwarded).
+    fn next_frame(&mut self, port: u16, data: FH6TelemetryData, now: Instant) -> Option<TelemetryFrame> {
+        let source_live = self
+            .last_received
+            .is_some_and(|t| now.saturating_duration_since(t) < SOURCE_SWITCH_AFTER);
+        match self.source {
+            Some(source) if source != port && source_live => return None,
+            _ => self.source = Some(port),
         }
         let stream_was_live = self
             .last_received
@@ -165,7 +168,6 @@ impl ReceiveState {
             self.race_resumed_at = None;
         }
         self.was_racing = racing;
-        self.last_data = Some(data.clone());
         self.last_received = Some(now);
         self.seq += 1;
         Some(TelemetryFrame {
@@ -225,17 +227,25 @@ impl TelemetryEngine {
     ///
     /// # Errors
     /// [`UdpError::Bind`] if the primary port cannot be bound, [`UdpError::Spawn`] if a thread
-    /// cannot be started. Calling `start` on a running engine is a no-op.
+    /// cannot be started. On error nothing is left running or bound, so `start` can simply be
+    /// called again. Calling `start` on a running engine is a no-op.
     pub fn start(&mut self) -> Result<(), UdpError> {
         if self.running.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        let primary = bind(self.ports.primary, self.ports.all_interfaces).map_err(|source| {
-            self.running.store(false, Ordering::SeqCst);
-            UdpError::Bind {
-                port: self.ports.primary,
-                source,
-            }
+        let result = self.start_threads();
+        if result.is_err() {
+            // Stop any thread that did start (it drops its socket) and clear the bound ports.
+            self.shutdown();
+            self.bound.clear();
+        }
+        result
+    }
+
+    fn start_threads(&mut self) -> Result<(), UdpError> {
+        let primary = bind(self.ports.primary, self.ports.all_interfaces).map_err(|source| UdpError::Bind {
+            port: self.ports.primary,
+            source,
         })?;
         let mut sockets = vec![(self.ports.primary, primary)];
         if let Some(port) = self.ports.fallback {
@@ -258,6 +268,7 @@ impl TelemetryEngine {
 
         for (port, socket) in sockets {
             let ctx = ReceiveContext {
+                port,
                 socket,
                 state: Arc::clone(&state),
                 latest: Arc::clone(&self.reader.latest),
@@ -324,6 +335,7 @@ fn bind(port: u16, all_interfaces: bool) -> io::Result<UdpSocket> {
 }
 
 struct ReceiveContext {
+    port: u16,
     socket: UdpSocket,
     state: Arc<Mutex<ReceiveState>>,
     latest: Arc<ArcSwap<TelemetryFrame>>,
@@ -357,13 +369,15 @@ impl ReceiveContext {
 
     fn handle_packet(&self, bytes: &[u8], now: Instant) {
         let Ok(data) = decode(bytes) else { return };
-        let frame = {
+        {
             // ReceiveState is consistent after every call, so a poisoned lock is still usable.
             let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            state.next_frame(data, now)
-        };
-        let Some(frame) = frame else { return };
-        self.latest.store(Arc::new(frame));
+            let Some(frame) = state.next_frame(self.port, data, now) else {
+                return;
+            };
+            // Stored under the lock so `seq` only ever increases for readers.
+            self.latest.store(Arc::new(frame));
+        }
         if let Some(notify) = &self.notify {
             notify();
         }
@@ -394,45 +408,106 @@ mod tests {
         assert_eq!(frame.time_since_driving_resumed_ms(now), 0.0);
     }
 
+    const PRIMARY: u16 = 8000;
+    const FALLBACK: u16 = 5500;
+
     #[test]
-    fn duplicate_from_second_port_is_dropped() {
+    fn copy_from_second_port_is_dropped() {
         let mut state = ReceiveState::default();
         let t0 = Instant::now();
-        assert!(state.next_frame(packet(1, 100), t0).is_some());
+        assert!(state.next_frame(PRIMARY, packet(1, 100), t0).is_some());
         assert!(state
-            .next_frame(packet(1, 100), t0 + Duration::from_millis(1))
+            .next_frame(FALLBACK, packet(1, 100), t0 + Duration::from_millis(1))
             .is_none());
         let next = state
-            .next_frame(packet(1, 116), t0 + Duration::from_millis(16))
-            .expect("new timestamp is published");
+            .next_frame(PRIMARY, packet(1, 116), t0 + Duration::from_millis(16))
+            .expect("the owning port is published");
         assert_eq!(next.seq, 2);
+    }
+
+    #[test]
+    fn lagging_second_port_cannot_reorder_the_stream() {
+        let mut state = ReceiveState::default();
+        let t0 = Instant::now();
+        let ms = |n| t0 + Duration::from_millis(n);
+        assert!(state.next_frame(PRIMARY, packet(1, 1), ms(0)).is_some());
+        assert!(state.next_frame(PRIMARY, packet(1, 2), ms(16)).is_some());
+        // The fallback thread delivers its copy of packet 1 late: an older value, dropped.
+        assert!(state.next_frame(FALLBACK, packet(1, 1), ms(20)).is_none());
+        let third = state.next_frame(PRIMARY, packet(1, 3), ms(33)).expect("frame");
+        assert_eq!((third.seq, third.data.timestamp_ms), (3, 3));
+    }
+
+    #[test]
+    fn identical_packets_from_one_port_are_all_published() {
+        // A paused game repeats the same packet; each one is real and must be forwarded.
+        let mut state = ReceiveState::default();
+        let t0 = Instant::now();
+        for n in 0..4u64 {
+            let frame = state.next_frame(PRIMARY, packet(0, 500), t0 + Duration::from_millis(16 * n));
+            assert_eq!(frame.map(|f| f.seq), Some(n + 1));
+        }
     }
 
     #[test]
     fn pause_flip_with_same_timestamp_is_not_dropped() {
         let mut state = ReceiveState::default();
         let t0 = Instant::now();
-        assert!(state.next_frame(packet(1, 500), t0).is_some());
-        let paused = state.next_frame(packet(0, 500), t0 + Duration::from_millis(2));
+        assert!(state.next_frame(PRIMARY, packet(1, 500), t0).is_some());
+        let paused = state.next_frame(PRIMARY, packet(0, 500), t0 + Duration::from_millis(2));
         assert!(paused.is_some(), "IsRaceOn changed, so it is a new packet");
+    }
+
+    #[test]
+    fn other_port_takes_over_when_the_source_goes_quiet() {
+        let mut state = ReceiveState::default();
+        let t0 = Instant::now();
+        assert!(state.next_frame(PRIMARY, packet(1, 1), t0).is_some());
+        assert!(state
+            .next_frame(FALLBACK, packet(1, 2), t0 + Duration::from_millis(30))
+            .is_none());
+        let switched = state.next_frame(FALLBACK, packet(1, 3), t0 + Duration::from_millis(60));
+        assert!(switched.is_some(), "the primary was silent for 60 ms");
+        assert!(state
+            .next_frame(PRIMARY, packet(1, 3), t0 + Duration::from_millis(61))
+            .is_none());
+    }
+
+    #[test]
+    fn failed_start_leaves_nothing_running_and_can_retry() {
+        // Hold the port so the first start fails to bind.
+        let blocker = UdpSocket::bind("127.0.0.1:0").expect("blocker bind");
+        let port = blocker.local_addr().expect("blocker addr").port();
+        let mut engine = TelemetryEngine::new(TelemetryPorts {
+            primary: port,
+            fallback: None,
+            forward: None,
+            all_interfaces: false,
+        });
+        assert!(matches!(engine.start(), Err(UdpError::Bind { .. })));
+        assert!(engine.bound_ports().is_empty());
+        drop(blocker);
+        engine.start().expect("the retry binds once the port is free");
+        assert_eq!(engine.bound_ports(), &[port]);
+        engine.shutdown();
     }
 
     #[test]
     fn race_resume_is_tracked() {
         let mut state = ReceiveState::default();
         let t0 = Instant::now();
-        let f1 = state.next_frame(packet(1, 1), t0).expect("frame");
+        let f1 = state.next_frame(PRIMARY, packet(1, 1), t0).expect("frame");
         assert_eq!(f1.race_resumed_at, Some(t0));
         let f2 = state
-            .next_frame(packet(1, 2), t0 + Duration::from_millis(16))
+            .next_frame(PRIMARY, packet(1, 2), t0 + Duration::from_millis(16))
             .expect("frame");
         assert_eq!(f2.race_resumed_at, Some(t0), "continuous racing keeps the resume time");
         let f3 = state
-            .next_frame(packet(0, 3), t0 + Duration::from_millis(32))
+            .next_frame(PRIMARY, packet(0, 3), t0 + Duration::from_millis(32))
             .expect("frame");
         assert_eq!(f3.race_resumed_at, None);
         let t4 = t0 + Duration::from_millis(48);
-        let f4 = state.next_frame(packet(1, 4), t4).expect("frame");
+        let f4 = state.next_frame(PRIMARY, packet(1, 4), t4).expect("frame");
         assert_eq!(f4.race_resumed_at, Some(t4));
         assert!(f4.is_driving_active(t4 + Duration::from_millis(10)));
         assert!(

@@ -61,6 +61,22 @@ fn save_round_trips_without_bom() {
 }
 
 #[test]
+fn save_strips_manual_gearbox_buttons_from_the_mask() {
+    // A/B/X/Y (0xF000) are the manual gearbox; they must never be written to disk.
+    let cfg = AppConfig {
+        osd_toggle_mask: 0x1000 | 0x8000 | 0x0020,
+        ..AppConfig::default()
+    };
+    let out = std::env::temp_dir().join(format!("fh6_cfg_mask_{}.json", std::process::id()));
+    cfg.save(&out).expect("save");
+    // Read the raw file: loading would sanitise again and hide a missing save-side strip.
+    let raw: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).expect("read back")).expect("json");
+    assert_eq!(raw["OsdToggleMask"], 0x0020);
+    std::fs::remove_file(out).ok();
+}
+
+#[test]
 fn watcher_hot_reloads_on_change() {
     let path = std::env::temp_dir().join(format!("fh6_cfg_watch_{}.json", std::process::id()));
     std::fs::write(&path, r#"{"CockpitAnchorY":1835}"#).expect("write initial");

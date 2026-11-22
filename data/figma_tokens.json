@@ -2,29 +2,84 @@
   "$schema": "https://figma-hmi-tokens.local/v2/schema.json",
   "meta": {
     "project": "FH6_WheelDash",
-    "version": "2.0.0",
+    "version": "3.2.0",
     "targetDisplay": "55-inch LG C1 4K WOLED",
-    "targetResolution": { "width": 3840, "height": 2160 },
-    "baseLogicalResolution": { "width": 1920, "height": 1080 },
-    "dpiScale": 2.0,
+    "targetResolution": {
+      "width": 3840,
+      "height": 2160
+    },
+    "baseLogicalResolution": {
+      "width": 1920,
+      "height": 1080
+    },
+    "dpiScale": 2,
     "spatialGridUnitPx": 8,
     "glanceabilityTargetMs": 150,
-    "figmaFileKey": "ZW8mpHivoqjl8p7eLlvdBi",
-    "figmaFileUrl": "https://www.figma.com/design/ZW8mpHivoqjl8p7eLlvdBi"
+    "figmaFileKey": null,
+    "figmaFileUrl": null,
+    "schemaDoc": "docs/design/TOKENS.md",
+    "units": "All sizes are 4K pixels (3840x2160) at cluster scale 1.0 unless a key says otherwise. Multiply by the user cluster scale (0.70..1.40). Alpha values are 0..255 unless the key ends in Pct or Opacity (0..1).",
+    "colourSpace": "Hex values are sRGB. fh6-kit converts to linear premultiplied RGBA before blending (SKILLS.md law 1).",
+    "figmaNote": "Phase 3 used the HTML-board fallback (docs/design/FIGMA.md). The two legacy keys ZW8mpHivoqjl8p7eLlvdBi and FsEcAnDwfFf340i8zwbBup are not the v2 master.",
+    "legacyKeys": "typography.tiers, sharedSemantics and clusters.* are v1 values kept for the current tiny-skia code. New work reads the v3 sections (colorRoles .. accessibility). Phase 7 replaces clusters.* per cluster.",
+    "updated": "2026-11-20",
+    "researchBasis": "docs/design/RESEARCH.md §8 principles 1–10",
+    "critiqueRound": "docs/design/CRITIQUE.md round 1 fixes applied 2026-11-21"
   },
   "typography": {
-    "primaryFontStack": ["Bahnschrift", "Bahnschrift SemiCondensed", "Segoe UI"],
-    "monospaceFontStack": ["Consolas", "Bahnschrift", "Segoe UI"],
-    "installedHostFonts": ["Bahnschrift", "Bahnschrift SemiCondensed", "Bahnschrift Light", "Consolas", "Segoe UI"],
+    "primaryFontStack": [
+      "Saira Condensed",
+      "Saira",
+      "Noto Sans"
+    ],
+    "monospaceFontStack": [
+      "B612 Mono",
+      "Saira Condensed",
+      "Noto Sans Mono"
+    ],
+    "installedHostFonts": [
+      "Bahnschrift",
+      "Bahnschrift SemiCondensed",
+      "Bahnschrift Light",
+      "Consolas",
+      "Segoe UI"
+    ],
     "opticalCapHeightRatio": 0.72,
     "tabularPitchFactor": 0.62,
     "tiers": {
-      "tier1_HeroGear": { "sizePt": 76.0, "weight": "Bold", "trackingPx": -1.5, "lineHeightRatio": 0.72 },
-      "tier1_HeroSpeed": { "sizePt": 54.0, "weight": "Bold", "trackingPx": -1.0, "tabular": true },
-      "tier2_PrimaryMetric": { "sizePt": 24.0, "weight": "SemiBold", "trackingPx": 0.0, "tabular": true },
-      "tier2_SecondaryMetric": { "sizePt": 16.0, "weight": "SemiBold", "trackingPx": 0.2, "tabular": true },
-      "tier3_MicroLabel": { "sizePt": 9.5, "weight": "Bold", "trackingPx": 2.2, "uppercase": true, "alpha": 145 }
-    }
+      "tier1_HeroGear": {
+        "sizePt": 76,
+        "weight": "Bold",
+        "trackingPx": -1.5,
+        "lineHeightRatio": 0.72
+      },
+      "tier1_HeroSpeed": {
+        "sizePt": 54,
+        "weight": "Bold",
+        "trackingPx": -1,
+        "tabular": true
+      },
+      "tier2_PrimaryMetric": {
+        "sizePt": 24,
+        "weight": "SemiBold",
+        "trackingPx": 0,
+        "tabular": true
+      },
+      "tier2_SecondaryMetric": {
+        "sizePt": 16,
+        "weight": "SemiBold",
+        "trackingPx": 0.2,
+        "tabular": true
+      },
+      "tier3_MicroLabel": {
+        "sizePt": 9.5,
+        "weight": "Bold",
+        "trackingPx": 2.2,
+        "uppercase": true,
+        "alpha": 145
+      }
+    },
+    "v1Note": "tiers below are v1 point sizes; v3 type scale is in type.*"
   },
   "sharedSemantics": {
     "revStages": {
@@ -41,11 +96,1368 @@
       "absAlertYellow": "#FACC15"
     }
   },
+  "colorRoles": {
+    "doc": "Every cluster colours itself only through these roles. A palette (factory, custom or random) fills primary, secondary, accent and shift; the rest are fixed or derived.",
+    "roles": {
+      "primary": {
+        "source": "brand.PrimaryHex",
+        "use": "hero accents, tach fill, needle, ego car tint"
+      },
+      "secondary": {
+        "source": "brand.SecondaryHex",
+        "use": "trim, logo-zone ring, secondary arcs, sub-dial accents"
+      },
+      "accent": {
+        "source": "brand.AccentHex",
+        "use": "leading edges, meniscus orb core, focus, active segment"
+      },
+      "shift": {
+        "source": "brand.ShiftFlashHex",
+        "use": "rev-limiter strobe and the final shift-light stage"
+      },
+      "warning": {
+        "source": "fixed",
+        "hex": "#FF2D3A",
+        "use": "redline sector, brake, alerts. Never replaced by a brand colour."
+      },
+      "caution": {
+        "source": "fixed",
+        "hex": "#FFB020",
+        "use": "caution stage, ABS/TCS active, slip warnings"
+      },
+      "go": {
+        "source": "fixed",
+        "hex": "#2BE37A",
+        "use": "first shift-light stage, throttle"
+      },
+      "glassTint": {
+        "source": "derived",
+        "rule": "mix(primary, #0A1220, 0.72) at alpha glass.tintAlpha",
+        "use": "glass plates"
+      },
+      "ink": {
+        "source": "fixed",
+        "hex": "#F4F7FB",
+        "use": "hero digits and primary text"
+      },
+      "inkMuted": {
+        "source": "fixed",
+        "hex": "#F4F7FB",
+        "alpha": 158,
+        "use": "units, secondary values"
+      },
+      "inkLabel": {
+        "source": "fixed",
+        "hex": "#F4F7FB",
+        "alpha": 120,
+        "use": "micro-labels"
+      },
+      "inkGhost": {
+        "source": "fixed",
+        "hex": "#F4F7FB",
+        "alpha": 16,
+        "use": "ghost 8s, unlit segments, unlit LEDs"
+      },
+      "hairline": {
+        "source": "fixed",
+        "hex": "#FFFFFF",
+        "alpha": 46,
+        "use": "1 px tracks, grids, dividers"
+      },
+      "rimSpecular": {
+        "source": "fixed",
+        "hex": "#FFFFFF",
+        "alpha": 216,
+        "use": "top of every 1 px specular rim"
+      },
+      "oledBlack": {
+        "source": "fixed",
+        "hex": "#000000",
+        "alpha": 255,
+        "use": "off pixels, VFD cavities, scrim core, singularities"
+      }
+    },
+    "derivedTextSafe": {
+      "doc": "Any role drawn as text or a thin line on black is lifted to stay readable.",
+      "rule": "convert to OKLCH; if L < minL raise L to minL keeping hue; clamp chroma to maxC",
+      "minL": 0.7,
+      "maxC": 0.26,
+      "minContrastOnBlack": 7
+    },
+    "revStages": {
+      "doc": "Pods light on per-car, per-gear thresholds (car profile; fallback fractions below of shiftRpm), outside-in, 0 ms attack, landing on the centre pod above the gear. At shiftRpm the whole row takes the shift colour; at the limiter the row strobes (motion.limiterStrobe).",
+      "stage1": {
+        "from": 0.75,
+        "role": "go",
+        "hex": "#2BE37A"
+      },
+      "stage2": {
+        "from": 0.85,
+        "role": "caution",
+        "hex": "#FFB020"
+      },
+      "stage3": {
+        "from": 0.93,
+        "role": "warning",
+        "hex": "#FF2D3A"
+      },
+      "shift": {
+        "from": 1,
+        "role": "shift",
+        "defaultHex": "#978DFC",
+        "note": "violet lifted to OKLCH L 0.70 so the shift cue never drops in luminance below the red stage (>= 7:1 on black). Brands whose ShiftFlashHex is white strobe white; a palette validator keeps shift >= 60 deg of hue from primary."
+      },
+      "unlitAlpha": 22,
+      "hysteresisRpm": 120
+    },
+    "inputs": {
+      "throttle": "#2BE37A",
+      "brake": "#FF2D3A",
+      "clutch": "#38BDF8",
+      "handbrake": "#FFB020",
+      "absActive": "#FFD60A",
+      "tcsActive": "#FFB020"
+    },
+    "thermal": {
+      "doc": "Discrete 4-step tyre / brake temperature (ACC convention). Steps crossfade over motion.durations.crossfade; never a continuous hue sweep.",
+      "steps": [
+        {
+          "below": 70,
+          "name": "cold",
+          "hex": "#3B82F6"
+        },
+        {
+          "below": 100,
+          "name": "optimal",
+          "hex": "#2BE37A"
+        },
+        {
+          "below": 112,
+          "name": "hot",
+          "hex": "#FFB020"
+        },
+        {
+          "below": 999,
+          "name": "overheated",
+          "hex": "#FF2D3A"
+        }
+      ],
+      "unit": "degC, per compound bands from the car profile when present"
+    },
+    "proximity": {
+      "doc": "3-step blind-spot / proximity arcs",
+      "steps": [
+        "#8C929C",
+        "#FFB020",
+        "#FF2D3A"
+      ]
+    },
+    "assists": {
+      "on": "#E8ECF2",
+      "off": "#5A606B",
+      "intervening": "#FF2D3A",
+      "doc": "GT7 3-state assist code (TC/ABS/STAB)"
+    },
+    "lume": {
+      "nightGreen": "#7DFF8A",
+      "nightBlue": "#5FD8FF",
+      "dayGreen": "#E3EBC4",
+      "dayBlue": "#F1F3EE"
+    },
+    "adas": {
+      "neutralObject": "#8C929C",
+      "neutralAlpha": 178,
+      "inPath": "#3BA7FF",
+      "imminent": "#FF2D3A",
+      "cone": "#FF8A1F",
+      "maxSaturatedObjects": 2,
+      "maxRoadUsers": 6,
+      "maxLanes": 3
+    },
+    "budget": {
+      "doc": "Colour is state, never decoration (RESEARCH principle 3). Checked per mockup with a lit-pixel histogram.",
+      "baseHueMinPctOfLit": 80,
+      "whiteMaxPctOfLit": 15,
+      "redMaxPctOfLit": 5,
+      "redAtLimiterExempt": true,
+      "redStructural": false
+    }
+  },
+  "paletteModes": {
+    "factory": {
+      "doc": "Brand palette from assets/car_brands/car_brands.json (BrandPalettes[brand]). Unknown brand uses BrandPalettes.DEFAULT, then the family default.",
+      "map": {
+        "primary": "PrimaryHex",
+        "secondary": "SecondaryHex",
+        "accent": "AccentHex",
+        "shift": "ShiftFlashHex"
+      }
+    },
+    "custom": {
+      "doc": "User sets primary, accent and shift in the OSD or configurator; secondary = primary rotated -30 deg hue at L-0.12 unless set."
+    },
+    "random": {
+      "doc": "Re-roll generates a harmonious palette in OKLCH. A lock keeps it per cluster.",
+      "primary": {
+        "L": [
+          0.66,
+          0.8
+        ],
+        "C": [
+          0.14,
+          0.24
+        ],
+        "H": [
+          0,
+          360
+        ]
+      },
+      "accent": {
+        "rule": "primary hue + one of [+30, -30, +150, 180] deg",
+        "L": [
+          0.78,
+          0.9
+        ],
+        "C": [
+          0.12,
+          0.2
+        ]
+      },
+      "secondary": {
+        "rule": "primary hue + 180 deg",
+        "L": [
+          0.55,
+          0.7
+        ],
+        "C": [
+          0.04,
+          0.1
+        ]
+      },
+      "shift": {
+        "rule": "pick from [#FFFFFF, accent, #7C5CFF, #00E5FF] by highest contrast to stage3"
+      },
+      "forbidden": "primary hue within 25 deg of the warning hue is rejected so red never means two things; shift must sit >= 60 deg of hue from primary"
+    },
+    "familyDefaults": {
+      "classicAnalog": {
+        "primary": "#FF7A1A",
+        "secondary": "#C9CED6",
+        "accent": "#FFC21A",
+        "shift": "#FFFFFF"
+      },
+      "modernDigital": {
+        "primary": "#00D2FF",
+        "secondary": "#8A96A8",
+        "accent": "#FFFFFF",
+        "shift": "#978DFC"
+      },
+      "liquidGlass": {
+        "primary": "#38BDF8",
+        "secondary": "#C7E9FF",
+        "accent": "#FFFFFF",
+        "shift": "#978DFC"
+      },
+      "sciFi": {
+        "primary": "#00F5D4",
+        "secondary": "#FEE440",
+        "accent": "#FF2E97",
+        "shift": "#FF2E97"
+      },
+      "fluidGenerative": {
+        "primary": "#9AD8FF",
+        "secondary": "#B8C2CF",
+        "accent": "#FFFFFF",
+        "shift": "#FF5A1F"
+      },
+      "adasHud": {
+        "primary": "#3B82F6",
+        "secondary": "#94A3B8",
+        "accent": "#38BDF8",
+        "shift": "#978DFC"
+      },
+      "raceDash": {
+        "primary": "#00B4FF",
+        "secondary": "#9AA3AE",
+        "accent": "#FFD60A",
+        "shift": "#B27CFF"
+      }
+    }
+  },
+  "type": {
+    "doc": "Sizes are cap heights in 4K px at scale 1.0. Font size = capPx / capRatio of the active face, so user fonts keep the same optical size. Digits always use a fixed advance (tabular), whatever the face.",
+    "fonts": {
+      "display": {
+        "family": "Saira Condensed",
+        "weights": [
+          300,
+          500,
+          600,
+          700,
+          800
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "hero gear, speed, primary metrics (system default)"
+      },
+      "text": {
+        "family": "Titillium Web",
+        "weights": [
+          400,
+          600,
+          700
+        ],
+        "licence": "OFL",
+        "capRatio": 0.692,
+        "role": "labels, units, micro-labels, OSD text"
+      },
+      "light": {
+        "family": "Saira",
+        "weights": [
+          100,
+          200,
+          300,
+          500,
+          600
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "floating light numerals (Liquid Glass, ADAS)"
+      },
+      "dial": {
+        "family": "Barlow Semi Condensed",
+        "weights": [
+          500,
+          600,
+          700
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "analog dial numerals (DIN-like)"
+      },
+      "wide": {
+        "family": "Michroma",
+        "weights": [
+          400
+        ],
+        "licence": "OFL",
+        "capRatio": 0.715,
+        "role": "wide wordmarks, custom name, sparse caps"
+      },
+      "tech": {
+        "family": "Chakra Petch",
+        "weights": [
+          500,
+          600,
+          700
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "sci-fi labels"
+      },
+      "fluid": {
+        "family": "Exo 2",
+        "weights": [
+          200,
+          300,
+          600,
+          800
+        ],
+        "licence": "OFL",
+        "capRatio": 0.705,
+        "role": "fluid / generative numerals"
+      },
+      "aviation": {
+        "family": "B612 Mono",
+        "weights": [
+          400,
+          700
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "HUD symbology numerics (designed for cockpit displays)"
+      },
+      "segment": {
+        "family": "procedural-7seg",
+        "licence": "n/a",
+        "role": "VFD digits drawn as SDF segments by fh6-kit, not a font"
+      },
+      "fallback": {
+        "family": "Noto Sans",
+        "note": "glyph fallback incl. JP (SKILLS.md law 5)"
+      },
+      "race": {
+        "family": "Saira Condensed",
+        "weights": [
+          700,
+          800
+        ],
+        "licence": "OFL",
+        "capRatio": 0.7,
+        "role": "Race Dash gear and values (bold condensed, white on black)"
+      }
+    },
+    "scale": {
+      "gearHero": {
+        "capPx": 200,
+        "font": "display",
+        "weight": 700,
+        "trackingEm": -0.02
+      },
+      "gearCompact": {
+        "capPx": 150,
+        "font": "display",
+        "weight": 700,
+        "trackingEm": -0.02
+      },
+      "speedHero": {
+        "capPx": 112,
+        "font": "display",
+        "weight": 600,
+        "tabular": true,
+        "ghost": "8",
+        "trackingEm": 0
+      },
+      "speedCompact": {
+        "capPx": 84,
+        "font": "display",
+        "weight": 600,
+        "tabular": true,
+        "ghost": "8"
+      },
+      "metricPrimary": {
+        "capPx": 44,
+        "font": "display",
+        "weight": 600,
+        "tabular": true
+      },
+      "metricSecondary": {
+        "capPx": 30,
+        "font": "display",
+        "weight": 500,
+        "tabular": true
+      },
+      "dialNumeral": {
+        "capPx": 34,
+        "font": "dial",
+        "weight": 600
+      },
+      "unit": {
+        "capPx": 20,
+        "font": "text",
+        "weight": 600,
+        "uppercase": true,
+        "trackingEm": 0.12,
+        "colorRole": "inkMuted"
+      },
+      "microLabel": {
+        "capPx": 16,
+        "font": "text",
+        "weight": 600,
+        "uppercase": true,
+        "trackingEm": 0.16,
+        "colorRole": "inkLabel"
+      },
+      "nano": {
+        "capPx": 12,
+        "font": "text",
+        "weight": 600,
+        "uppercase": true,
+        "trackingEm": 0.18,
+        "colorRole": "inkLabel",
+        "note": "smallest allowed size"
+      }
+    },
+    "tabular": {
+      "advanceEm": 0.6,
+      "doc": "Fixed digit cell = advanceEm x font size, digit centred in its cell. Speed is a fixed 3-cell field; unused leading cells draw the ghost glyph in inkGhost.",
+      "speedCells": 3,
+      "rpmCells": 5,
+      "ghostGlyph": "8",
+      "ghostByFamily": {
+        "classicAnalog": false,
+        "liquidGlass": false,
+        "fluidGenerative": false,
+        "modernDigital": true,
+        "raceDash": true,
+        "sciFi": "segments",
+        "adasHud": false,
+        "doc": "ghost 8s belong to digital and VFD families; analog, glass and fluid faces suppress them"
+      }
+    },
+    "userFonts": {
+      "doc": "A user font replaces display (and optionally text). Layout keeps working because: sizes are cap-height based; digits use fixed cells; labels fit their box by shrinking to 85% then eliding; vertical centring uses cap height, not the em box.",
+      "minCapRatio": 0.6,
+      "maxCapRatio": 0.78,
+      "labelMinShrink": 0.85
+    },
+    "rule": "No text below type.scale.nano. Never more than 3 sizes in one cluster zone.",
+    "ratios": {
+      "doc": "Proportions from RESEARCH.md §9 (est., to verify on the C1).",
+      "speedToGear": [
+        0.4,
+        0.56
+      ],
+      "labelToValue": [
+        0.22,
+        0.3
+      ],
+      "gearToClusterHeight": [
+        0.35,
+        0.55
+      ],
+      "raceGearToPanelHeight": [
+        0.45,
+        0.55
+      ]
+    },
+    "tnumCheck": "Phase 6 records per face whether tnum exists; fh6-kit forces fixed MSDF advances either way.",
+    "keyline": {
+      "doc": "hood view and any glyph over a bright scene: black ring around the strokes (MSDF outer distance), never a box",
+      "innerPx": 6,
+      "outerPx": 18,
+      "gearInnerPx": 8,
+      "gearOuterPx": 24,
+      "alpha": 230
+    }
+  },
+  "space": {
+    "gridPx": 8,
+    "steps": {
+      "s1": 8,
+      "s2": 16,
+      "s3": 24,
+      "s4": 32,
+      "s6": 48,
+      "s8": 64,
+      "s12": 96,
+      "s16": 128
+    }
+  },
+  "stroke": {
+    "doc": "Widths in 4K px. Specular rims are always exactly 1 px at any scale (snap to the pixel grid); other strokes scale.",
+    "rim": 1,
+    "hairline": 1,
+    "xs": 2,
+    "s": 3,
+    "m": 4,
+    "l": 6,
+    "xl": 10,
+    "tick": {
+      "minor": 2,
+      "mid": 3,
+      "major": 5
+    },
+    "tickLength": {
+      "minor": 14,
+      "mid": 22,
+      "major": 34
+    },
+    "needle": {
+      "tip": 3,
+      "base": 14,
+      "tail": 10,
+      "lengthPctOfRadius": 0.92
+    }
+  },
+  "radius": {
+    "xs": 6,
+    "s": 12,
+    "m": 24,
+    "l": 40,
+    "xl": 64,
+    "pill": 9999,
+    "squircleExponent": 4,
+    "chamferDeg": 45,
+    "chamferPx": 28
+  },
+  "glow": {
+    "doc": "Emissive levels for fh6-kit bloom. sigma in px at 4K. Two-lobe glows add a tight core and a wide halo. Bloom never exceeds 96 px radius (budget).",
+    "none": {
+      "lobes": []
+    },
+    "soft": {
+      "lobes": [
+        {
+          "sigma": 6,
+          "intensity": 0.35
+        }
+      ]
+    },
+    "medium": {
+      "lobes": [
+        {
+          "sigma": 5,
+          "intensity": 0.45
+        },
+        {
+          "sigma": 18,
+          "intensity": 0.3
+        }
+      ]
+    },
+    "hot": {
+      "lobes": [
+        {
+          "sigma": 4,
+          "intensity": 0.6
+        },
+        {
+          "sigma": 16,
+          "intensity": 0.45
+        },
+        {
+          "sigma": 48,
+          "intensity": 0.25
+        }
+      ]
+    },
+    "phosphor": {
+      "lobes": [
+        {
+          "sigma": 2,
+          "intensity": 0.7
+        },
+        {
+          "sigma": 10,
+          "intensity": 0.4
+        }
+      ],
+      "note": "VFD: tight core, short halo"
+    },
+    "bloomThresholdLuma": 0.8,
+    "maxBloomRadiusPx": 96,
+    "rule": "Only glance ranks 1–3 (shift lights, gear, speed, tach fill/needle) write to the emissive buffer that feeds bloom. Labels, bezels, tyres, G-ball and other rank 4–5 elements never glow.",
+    "emissiveRanks": [
+      1,
+      2,
+      3
+    ],
+    "bloomChain": {
+      "levels": 8,
+      "fromPx": 256,
+      "threshold": 0.7,
+      "knee": 0.7,
+      "intensity": 0.8
+    },
+    "neon": {
+      "haloPx": 6,
+      "bloomPx": 24,
+      "bloomIntensity": 0.12
+    }
+  },
+  "glass": {
+    "doc": "Liquid Glass material for plates, pods and the OSD. Premium without background refraction; refraction is an optional layer when a captured game frame exists.",
+    "tintAlpha": {
+      "min": 28,
+      "default": 44,
+      "max": 64
+    },
+    "tintRole": "glassTint",
+    "frost": {
+      "noiseScalePx": 1.4,
+      "amplitude": 0.035,
+      "octaves": 2
+    },
+    "rim": {
+      "widthPx": 1,
+      "stops": [
+        {
+          "at": 0,
+          "hex": "#FFFFFF",
+          "alpha": 235
+        },
+        {
+          "at": 0.38,
+          "hex": "#38BDF8",
+          "alpha": 150
+        },
+        {
+          "at": 0.78,
+          "hex": "#0284C7",
+          "alpha": 70
+        },
+        {
+          "at": 1,
+          "hex": "#0EA5E9",
+          "alpha": 125
+        }
+      ],
+      "note": "Vertical gradient along the outline; accent role may replace #38BDF8."
+    },
+    "innerRim": {
+      "widthPx": 1,
+      "insetPx": 2,
+      "hex": "#FFFFFF",
+      "alpha": 40
+    },
+    "crownSheen": {
+      "heightPct": 0.18,
+      "sagPx": 44,
+      "alphaTop": 76,
+      "alphaMid": 26,
+      "note": "arched highlight under the top edge, offset by lateral G (motion.parallax)"
+    },
+    "caustic": {
+      "asset": "assets/liquid_glass_caustic_lens.png",
+      "blend": "screen",
+      "opacity": 0.12,
+      "procedural": "two octaves of animated voronoi edges, 0.05 Hz drift",
+      "mask": "edge band only: caustic *= 1 - smoothstep(48, 140, insetDistance); knocked out behind gear and speed; frozen at idle (phase from integrated speed, amplitude 0.3 + 0.7*clamp(|G|/1.2))"
+    },
+    "fresnel": {
+      "ior": 1.52,
+      "r0": 0.0426,
+      "power": 5,
+      "edgeBandPx": 10
+    },
+    "refraction": {
+      "optional": true,
+      "backdropBlurPx": 24,
+      "offsetPx": 14,
+      "chromaticSplitPx": 1.5
+    },
+    "contactShadow": "none (OLED): separation comes from rims and inner glow, never from grey shadows",
+    "lensing": {
+      "widthPx": [
+        24,
+        40
+      ],
+      "formula": "uv += n * k * (1 - smoothstep(0, w, d))^2, k grows with element size",
+      "selfOnly": true
+    },
+    "crescentAlpha": 18,
+    "arRimTint": "#7B6CFF",
+    "dimmingPad": {
+      "doc": "feathered black pad behind gear and speed; alpha = maxAlpha * (1 - scrimPct)",
+      "maxAlpha": 140,
+      "featherPx": 60
+    },
+    "dither": "blue-noise tile on every low-alpha gradient (Phase 6 asset)",
+    "variants": {
+      "regular": "alpha 28..44",
+      "tinted": "alpha 56..64 (accessibility / bright scenes)",
+      "rule": "one variant per cluster, never mixed"
+    },
+    "materialize": {
+      "ms": 200,
+      "doc": "show ramps lensing and rim, not opacity; hide is 1 frame"
+    }
+  },
+  "materials": {
+    "doc": "Named looks with a texture (Phase 6) and a procedural fallback (fh6-kit). Phase 6 makes the textures.",
+    "brushedTitanium": {
+      "base": "#2A2E35",
+      "highlight": "#C9CED6",
+      "anisotropy": "radial or circular",
+      "fallback": "conic gradient banding, 48 bands, 6% amplitude"
+    },
+    "guilloche": {
+      "patterns": [
+        "clousDeParis",
+        "barleycorn",
+        "wave",
+        "sunburst"
+      ],
+      "lineAlpha": 14,
+      "pitchPx": 9,
+      "fallback": "procedural line field in the dial shader"
+    },
+    "enamelDial": {
+      "base": "#06070A",
+      "vignetteAlpha": 120
+    },
+    "carbonTwill": {
+      "weavePx": 12,
+      "sheenAlpha": 18,
+      "fallback": "2x2 twill pattern with anisotropic highlight"
+    },
+    "vfdCavity": {
+      "base": "#000000",
+      "meshAlpha": 10,
+      "meshPitchPx": 6,
+      "scanlinePx": 2,
+      "scanlineAlpha": 34
+    },
+    "liquidMetal": {
+      "envBands": [
+        "#0B0D10",
+        "#E8EEF5",
+        "#5E6773",
+        "#14171C",
+        "#C9D3DE"
+      ],
+      "specular": "#FFFFFF",
+      "tintMix": 0.18,
+      "note": "environment banding + SDF smooth-union surface + spec highlight"
+    },
+    "sapphire": {
+      "tint": "#DCEEFF",
+      "alpha": 46
+    }
+  },
+  "motion": {
+    "doc": "Clusters animate from FrameInput dt. Springs are closed-form (period T in seconds, damping ratio zeta), exact at 60/120/144 Hz. Durations sit on the Material 3 50 ms scale.",
+    "springs": {
+      "needle": {
+        "T": 0.07,
+        "zeta": 0.75,
+        "feedForward": true,
+        "note": "live needle; with velocity feed-forward the lag is <= 16.7 ms"
+      },
+      "ribbon": {
+        "T": 0.07,
+        "zeta": 0.9,
+        "feedForward": true
+      },
+      "snap": {
+        "T": 0.102,
+        "zeta": 1
+      },
+      "fast": {
+        "T": 0.168,
+        "zeta": 0.9,
+        "note": "incoming gear glyph"
+      },
+      "default": {
+        "T": 0.237,
+        "zeta": 0.9
+      },
+      "slow": {
+        "T": 0.363,
+        "zeta": 0.9
+      },
+      "expressive": {
+        "T": 0.322,
+        "zeta": 0.8
+      },
+      "light": {
+        "T": 0.15,
+        "zeta": 1,
+        "note": "virtual light azimuth"
+      },
+      "gBall": {
+        "T": 0.168,
+        "zeta": 0.9
+      },
+      "parallax": {
+        "omegaRadS": 12,
+        "layersPx": [
+          0,
+          2,
+          4
+        ],
+        "note": "hero 0, tach +/-2, bezel +/-4 px per g (lateral and longitudinal)"
+      },
+      "fluidSlosh": {
+        "T": 0.62,
+        "zeta": 0.35,
+        "note": "liquid surface tilt; deliberately under-damped, settles at zero input"
+      }
+    },
+    "durations": {
+      "scaleMs": [
+        50,
+        100,
+        150,
+        200,
+        250,
+        300,
+        350,
+        400,
+        450,
+        500,
+        550,
+        600,
+        700,
+        800,
+        900,
+        1000
+      ],
+      "micro": 50,
+      "short": 100,
+      "crossfade": 150,
+      "materialize": 200,
+      "medium": 300,
+      "long": 500,
+      "bootMax": 1000
+    },
+    "easing": {
+      "emphasized": "cubic-bezier(0.2, 0, 0, 1)",
+      "emphasizedDecelerate": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+      "standardAccelerate": "cubic-bezier(0.3, 0, 1, 1)",
+      "linear": "linear",
+      "note": "baked to 256-entry LUTs at load"
+    },
+    "shiftLights": {
+      "attackMs": 0,
+      "releaseMaxMs": 50,
+      "note": "same-frame on; short tail like an LED behind a lens"
+    },
+    "limiterStrobe": {
+      "hz": 10,
+      "dutyPct": 50,
+      "framesAt60": "3 on / 3 off",
+      "framesAt120": "6 on / 6 off",
+      "releaseMaxMs": 50,
+      "scope": "the shift-light strip only (max height layout.zones.z1_gearAndShift.strobeStripMaxPx)",
+      "heroGearPulse": {
+        "hz": 2,
+        "afterMsOnLimiter": 500,
+        "depthPct": 25
+      },
+      "reducedFlash": {
+        "hz": 2,
+        "mode": "sine breath",
+        "depthPct": 40
+      },
+      "rule": "Nothing taller than the strip flashes faster than 3 Hz; no large saturated-red area ever flashes (WCAG 2.3.1). Red washes are steady ramps, never strobes."
+    },
+    "gearChange": {
+      "outgoing": {
+        "ms": 50,
+        "scaleTo": 0.92,
+        "fade": true
+      },
+      "incoming": {
+        "spring": "fast",
+        "scaleFrom": 1.12,
+        "slidePx": 24,
+        "direction": "up for upshift, down for downshift"
+      },
+      "rimFlash": {
+        "frames": 1,
+        "alphaPct": 60
+      },
+      "upshiftGlow": {
+        "speedPxPerS": 4000,
+        "doc": "Liquid Glass: glow leaves the gear glyph and runs round the rims"
+      },
+      "note": "signature moment in every family; families add one flourish on top"
+    },
+    "ignitionSweep": {
+      "upMs": 350,
+      "downMs": 300,
+      "easingUp": "emphasizedDecelerate",
+      "easingDown": "standardAccelerate",
+      "trigger": "first IsRaceOn 0->1 after launch only; never on unpause",
+      "skippable": true
+    },
+    "visibility": {
+      "hideMs": 0,
+      "showMs": 200,
+      "note": "hide within 1 frame (AGENTS rule 9)"
+    },
+    "speedDisplay": {
+      "hysteresis": 0.6,
+      "note": "displayed integer changes only when |v - shown| >= 0.6 units, so the last digit never flickers"
+    },
+    "boot": {
+      "maxMs": 1000,
+      "doc": "show slowly, hide instantly: gear and speed are live from frame 1; decorative layers materialize; sector boot for Sci-Fi"
+    },
+    "idle": {
+      "rule": "Idle is still: with constant telemetry nothing moves outside telemetry-bound regions. Fluid, particles and glitch are forced by telemetry or events and settle at zero input.",
+      "staticLumaMaxPct": 20
+    },
+    "afterimage": {
+      "doc": "LFA-style: raw needle under 90 deg/s, up to 4 ghost needles above 180 deg/s",
+      "ghosts": 4,
+      "ringBuffer": "[f32; 4]"
+    }
+  },
+  "layout": {
+    "doc": "Local cluster coordinates are 4K px relative to the anchor at scale 1.0. Users move the anchor vertically and scale the envelope.",
+    "canvas": {
+      "width": 3840,
+      "height": 2160
+    },
+    "cockpit": {
+      "anchor": {
+        "x": 1920,
+        "y": 1835
+      },
+      "envelope": {
+        "x": -720,
+        "y": -320,
+        "w": 1440,
+        "h": 560
+      },
+      "view": 3
+    },
+    "hood": {
+      "anchor": {
+        "x": 1920,
+        "y": 1760
+      },
+      "envelope": {
+        "x": -880,
+        "y": -220,
+        "w": 1760,
+        "h": 400
+      },
+      "view": 4,
+      "scrimPct": 0
+    },
+    "hudRaised": {
+      "anchor": {
+        "x": 1920,
+        "y": 1595
+      },
+      "note": "WindshieldHud: +240 px up the sightline from the cockpit anchor"
+    },
+    "userScale": {
+      "min": 0.7,
+      "default": 1,
+      "max": 1.4
+    },
+    "userHeightOffsetPx": {
+      "min": -240,
+      "max": 240
+    },
+    "safeMarginPx": {
+      "bottom": 40,
+      "sides": 160
+    },
+    "zones": {
+      "doc": "Rank-ordered zones inside the cockpit envelope. Families move zones, but rank order and minimum sizes hold.",
+      "z1_gearAndShift": {
+        "rank": 1,
+        "gearCapMinPx": 150,
+        "shiftRowSpanMinPx": 720,
+        "strobeStripMaxPx": 42,
+        "strobeStripMaxPxAtMaxScale": 59
+      },
+      "z2_speed": {
+        "rank": 2,
+        "capMinPx": 84,
+        "maxDistanceFromGearPx": 460,
+        "note": "460 px allows a tucked analog satellite (Classic) whose digits sit at its centre"
+      },
+      "z3_tach": {
+        "rank": 3
+      },
+      "z4_visualisation": {
+        "rank": 4,
+        "placement": "directly under speed and gear (rule 4)"
+      },
+      "z5_bezelLabels": {
+        "rank": 5
+      }
+    },
+    "logoZone": {
+      "doc": "Analog and some digital clusters reserve a logo zone. Phase 6 supplies a 4K logo (full, mono white, dial variant). If logo is off or missing, the custom name is set in type.fonts.wide.",
+      "crest": {
+        "maxDiameterPx": 96
+      },
+      "wordmark": {
+        "maxW": 220,
+        "maxH": 44
+      },
+      "variant": "dial (mono white at alpha 215 with a 1 px engraved shadow)",
+      "customName": {
+        "font": "wide",
+        "capPx": 18,
+        "trackingEm": 0.3,
+        "maxChars": 14
+      }
+    },
+    "depthLayers": {
+      "min": 3,
+      "doc": "hero, tach, bezel at parallax 0 / 2 / 4 px"
+    },
+    "densityTiers": {
+      "full": "all ranks",
+      "race": "ranks 1-3 + alarms",
+      "zen": "gear, speed, shift lights only",
+      "doc": "GT7 Race Info Only / Lucid Zen"
+    },
+    "classicDial": {
+      "defaultSweep": {
+        "startDeg": 135,
+        "sweepDeg": 270,
+        "doc": "symmetric linear face (0 at 7:30, max at 4:30)"
+      },
+      "trackMode": {
+        "optional": true,
+        "shiftAtTwelve": true,
+        "formula": "angle = 270 + (rpm - shiftRpm) * 270 / maxRpm (screen degrees, 0 = 3 o'clock, clockwise)",
+        "doc": "Porsche-style per-car rotation so the needle stands vertical at the shift rpm; offered as a mode because a linear 270 deg face becomes lopsided when rotated"
+      },
+      "operatingBand": "peak-torque to peak-power rpm from the car profile, 9 px band on the chapter ring, lume green at 35%"
+    }
+  },
+  "states": {
+    "doc": "Reference telemetry for the 4 review states used by every mockup and golden render.",
+    "limiterRpm": 8700,
+    "maxRpm": 9000,
+    "idleRpm": 900,
+    "idle": {
+      "rpm": 900,
+      "gear": "N",
+      "speedMph": 0,
+      "throttle": 0,
+      "brake": 0,
+      "gLat": 0,
+      "gLong": 0,
+      "slipDeg": 0,
+      "steer": 0
+    },
+    "cruise": {
+      "rpm": 5200,
+      "gear": "4",
+      "speedMph": 118,
+      "throttle": 0.42,
+      "brake": 0,
+      "gLat": 0.18,
+      "gLong": 0.08,
+      "slipDeg": 1,
+      "steer": 0.06
+    },
+    "redline": {
+      "rpm": 8680,
+      "gear": "5",
+      "speedMph": 152,
+      "throttle": 1,
+      "brake": 0,
+      "gLat": 0.05,
+      "gLong": 0.42,
+      "slipDeg": 0,
+      "steer": 0,
+      "strobePhase": "on"
+    },
+    "drift": {
+      "rpm": 7100,
+      "gear": "3",
+      "speedMph": 74,
+      "throttle": 0.3,
+      "brake": 0.62,
+      "gLat": -0.96,
+      "gLong": -0.58,
+      "slipDeg": 27,
+      "steer": -0.38
+    }
+  },
+  "components": {
+    "doc": "Shared component anatomy. Full specs in docs/design/COMPONENTS.md; Phase 7 builds them once in crates/fh6-clusters/src/common/.",
+    "heroGear": {
+      "scale": "type.scale.gearHero",
+      "reverse": "R in warning role",
+      "neutral": "N in inkMuted",
+      "motion": "motion.gearChange",
+      "minRatioSpeedToGear": 0.4,
+      "maxRatioSpeedToGear": 0.56
+    },
+    "tabularSpeed": {
+      "scale": "type.scale.speedHero",
+      "cells": 3,
+      "ghost": true,
+      "unitLabel": "type.scale.unit"
+    },
+    "tach": {
+      "variants": [
+        "arc",
+        "bar",
+        "ribbon",
+        "needleDial",
+        "chevron"
+      ],
+      "redlineFromRpmPct": 0.92,
+      "tickEvery": 1000
+    },
+    "shiftLights": {
+      "variants": [
+        "linear16",
+        "outsideIn15",
+        "converging5Pairs",
+        "arcJewels",
+        "ribbonPills16"
+      ],
+      "fill": "outside-in by default; linear left-to-right allowed for linear16",
+      "unlit": "inkGhost",
+      "pod": {
+        "doc": "LED-lens pod (race est.)",
+        "gapPctOfWidth": 30,
+        "radiusPctOfHeight": 35,
+        "core": "2-stop radial, centre 40% toward white, edge full hue",
+        "innerRimAlphaPct": 50,
+        "unlitAlpha": 22
+      },
+      "counts": {
+        "race": 10,
+        "raceWithAlarmColumns": "10 top + 5 per side",
+        "modern": 11,
+        "glass": 16,
+        "analogJewels": 15
+      }
+    },
+    "limiterStrobe": {
+      "motion": "motion.limiterStrobe",
+      "colorRole": "shift",
+      "scope": "shift lights + one family-specific element"
+    },
+    "logoZone": "layout.logoZone",
+    "microLabel": "type.scale.microLabel",
+    "glassPlate": "glass",
+    "bezel": {
+      "variants": [
+        "titaniumRing",
+        "chamfer45",
+        "carbonFrame",
+        "frameless"
+      ]
+    },
+    "adasRoad": {
+      "eye": {
+        "x": 0,
+        "y": 3.4,
+        "z": -6
+      },
+      "nearZ": 0.1,
+      "egoZ": 3.2,
+      "laneWidthM": 3.6,
+      "curvature": "kappa = yawRate / max(v, 3 m/s)",
+      "fadeEdgesPx": 120,
+      "verticalFovDeg": 33,
+      "carpet": {
+        "segments": 64,
+        "nearAlpha": 0.55,
+        "farAlpha": 0,
+        "brakeZoneAlphaPct": 35
+      },
+      "underglow": {
+        "sigmaPctOfCarWidth": 30,
+        "nominal": "#38BDF8",
+        "assist": "#FFB020",
+        "limiter": "#C04BFF"
+      },
+      "pitchDeg": 8,
+      "note": "Round-1 critique: the v1 eye (0, 1.85, -3.4) sits too low, so the ego roof covers the road ahead. Raised to a Tesla-style chase cam; ego in the bottom 40% of the scene band, lead car fully above the ego roof. AGENTS.md (Design Council 3D) still quotes the old eye and should be updated by the conductor.",
+      "groundFill": "none: the road reads from edge lines, dashes and the carpet; an optional ground is a black dimming pad, never lit colour",
+      "trafficRules": "traffic #8C929C at alpha 178, peak luminance <= 45% of the speed digits; no ambient car in an adjacent lane nearer than egoZ + 6 m; a blind-spot car shows only as the proximity arc plus a ghost body at alpha 0.30",
+      "egoHeading": "path tangent + sign(kappa) * |slip|: the nose points into the bend in a drift (verify signs against tests/golden/packets before coding)"
+    },
+    "gBall": {
+      "ringsG": [
+        0.5,
+        1,
+        1.5
+      ],
+      "trailMs": 500
+    },
+    "tyreSlipQuad": {
+      "slipRamp": [
+        "#38BDF8",
+        "#2BE37A",
+        "#FFB020",
+        "#FF2D3A"
+      ],
+      "slipRatioMax": 0.25
+    },
+    "signedBar": {
+      "doc": "F1 MGU-K style signed bar above the gear: grows from centre, vanishes near zero",
+      "heightPctOfGear": [
+        8,
+        12
+      ],
+      "spring": "fast"
+    },
+    "fpm": {
+      "pxPerDeg": 14,
+      "clampDeg": 35,
+      "hideBelowMs": 5,
+      "fadeMs": 120
+    }
+  },
+  "families": {
+    "classicAnalog": {
+      "spec": "docs/design/families/classic-analog.md",
+      "patternSetter": "PorscheAnalog",
+      "hero": "docs/design/heroes/classic-analog/"
+    },
+    "modernDigital": {
+      "spec": "docs/design/families/modern-digital.md",
+      "patternSetter": "Gt7HoodPro",
+      "hero": "docs/design/heroes/modern-digital/"
+    },
+    "raceDash": {
+      "spec": "docs/design/families/race-dash.md",
+      "patternSetter": "BoschDdu",
+      "hero": "docs/design/heroes/race-dash/"
+    },
+    "liquidGlass": {
+      "spec": "docs/design/families/liquid-glass.md",
+      "patternSetter": "LiquidGlass",
+      "hero": "docs/design/heroes/liquid-glass/"
+    },
+    "sciFi": {
+      "spec": "docs/design/families/sci-fi.md",
+      "patternSetter": "RetroCyber",
+      "hero": "docs/design/heroes/sci-fi/"
+    },
+    "fluidGenerative": {
+      "spec": "docs/design/families/fluid-generative.md",
+      "patternSetter": "KineticLiquidMetal",
+      "hero": "docs/design/heroes/fluid-generative/"
+    },
+    "adasHud": {
+      "spec": "docs/design/families/adas-hud.md",
+      "patternSetter": "TeslaAdas",
+      "hero": "docs/design/heroes/adas-hud/"
+    }
+  },
+  "accessibility": {
+    "reducedFlash": {
+      "default": false,
+      "effect": "motion.limiterStrobe.reducedFlash replaces every strobe; nothing flashes above 3 Hz"
+    },
+    "minCapPx": 12,
+    "colourIndependence": "every stage change is also a position or count change (more pods lit), never colour alone",
+    "blurGate": {
+      "downscaleTo": [
+        960,
+        540
+      ],
+      "sigma": 1.5,
+      "gearMinContrast": 7,
+      "speedMinContrast": 4.5,
+      "doc": "CI gate on every mockup (RESEARCH principle 4)"
+    },
+    "flashAudit": "automated flash-area audit over preview-export frames (WCAG 2.3.1)",
+    "glassTinted": "OSD toggle raises glass to the tinted variant"
+  },
+  "light": {
+    "doc": "One virtual light per cluster drives every 1 px rim, facet and anisotropic finish (RESEARCH principle 5).",
+    "azimuthDeg": "135 + 25 * clamp(gLat / 1.5, -1, 1)",
+    "elevationDeg": 40,
+    "spring": {
+      "T": 0.15,
+      "zeta": 1
+    },
+    "rimPeakWhitePct": [
+      60,
+      80
+    ],
+    "rimExponent": [
+      24,
+      48
+    ],
+    "testMinMoveDegAt1g": 15
+  },
   "clusters": {
     "0_BoschDdu": {
       "name": "Bosch Motorsport DDU 10 GT3",
-      "anchor4K": { "cx": 1920, "cy": 1690 },
-      "containerLogicalSize": { "width": 640, "height": 284, "cornerRadius": 14, "padding": 16, "gap": 12 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1690
+      },
+      "containerLogicalSize": {
+        "width": 640,
+        "height": 284,
+        "cornerRadius": 14,
+        "padding": 16,
+        "gap": 12
+      },
       "assetBindings": {
         "bezelPlate": "assets/bosch_ddu_bezel.png"
       },
@@ -61,17 +1473,60 @@
         "peakHoldTick": "#FF1744"
       },
       "layout": {
-        "ledShiftArray": { "count": 16, "yOffset": -120, "pillWidth": 24, "pillHeight": 9, "gap": 6 },
-        "rpmBarRect": { "x": -294, "y": -94, "w": 588, "h": 18 },
-        "leftWingGrid": { "x": -294, "y": -64, "w": 184, "h": 176, "rows": 2, "cols": 2, "cellGap": 8 },
-        "centerHeroBay": { "x": -98, "y": -64, "w": 196, "h": 176, "gearY": -18, "speedY": 58 },
-        "rightWingGrid": { "x": 110, "y": -64, "w": 184, "h": 176, "rows": 2, "cols": 2, "cellGap": 8 }
+        "ledShiftArray": {
+          "count": 16,
+          "yOffset": -120,
+          "pillWidth": 24,
+          "pillHeight": 9,
+          "gap": 6
+        },
+        "rpmBarRect": {
+          "x": -294,
+          "y": -94,
+          "w": 588,
+          "h": 18
+        },
+        "leftWingGrid": {
+          "x": -294,
+          "y": -64,
+          "w": 184,
+          "h": 176,
+          "rows": 2,
+          "cols": 2,
+          "cellGap": 8
+        },
+        "centerHeroBay": {
+          "x": -98,
+          "y": -64,
+          "w": 196,
+          "h": 176,
+          "gearY": -18,
+          "speedY": 58
+        },
+        "rightWingGrid": {
+          "x": 110,
+          "y": -64,
+          "w": 184,
+          "h": 176,
+          "rows": 2,
+          "cols": 2,
+          "cellGap": 8
+        }
       }
     },
     "1_Gt7DriftHud": {
       "name": "Gran Turismo 7 Telemetry Glass",
-      "anchor4K": { "cx": 1920, "cy": 1710 },
-      "containerLogicalSize": { "width": 760, "height": 220, "cornerRadius": 18, "padding": 20, "gap": 16 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1710
+      },
+      "containerLogicalSize": {
+        "width": 760,
+        "height": 220,
+        "cornerRadius": 18,
+        "padding": 20,
+        "gap": 16
+      },
       "assetBindings": {
         "glassPlate": "assets/gt7_stadium_glass.png"
       },
@@ -86,16 +1541,46 @@
         "gMeterRing": "#38FFFFFF"
       },
       "layout": {
-        "leftTireMatrix": { "x": -356, "y": -80, "w": 170, "h": 160 },
-        "centerTachRibbon": { "x": -170, "y": -80, "w": 340, "h": 42 },
-        "centerGearSpeedBay": { "x": -170, "y": -24, "w": 340, "h": 104 },
-        "rightGMeterAndDrift": { "x": 186, "y": -80, "w": 170, "h": 160, "gCircleRadius": 46 }
+        "leftTireMatrix": {
+          "x": -356,
+          "y": -80,
+          "w": 170,
+          "h": 160
+        },
+        "centerTachRibbon": {
+          "x": -170,
+          "y": -80,
+          "w": 340,
+          "h": 42
+        },
+        "centerGearSpeedBay": {
+          "x": -170,
+          "y": -24,
+          "w": 340,
+          "h": 104
+        },
+        "rightGMeterAndDrift": {
+          "x": 186,
+          "y": -80,
+          "w": 170,
+          "h": 160,
+          "gCircleRadius": 46
+        }
       }
     },
     "2_PorscheAnalog": {
       "name": "Porsche 992 GT3 RS Weissach",
-      "anchor4K": { "cx": 1920, "cy": 1680 },
-      "containerLogicalSize": { "width": 700, "height": 300, "cornerRadius": 24, "padding": 16, "gap": 16 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1680
+      },
+      "containerLogicalSize": {
+        "width": 700,
+        "height": 300,
+        "cornerRadius": 24,
+        "padding": 16,
+        "gap": 16
+      },
       "assetBindings": {
         "tachDialPlate": "assets/porsche_tach_dial.png"
       },
@@ -109,16 +1594,50 @@
         "wingGlassFill": "#D80E1116"
       },
       "layout": {
-        "centerTachDial": { "cx": 0, "cy": 0, "outerRadius": 134, "innerHaloRadius": 96, "startAngleDeg": 135, "sweepAngleDeg": 270 },
-        "gearWindow": { "x": -32, "y": 46, "w": 64, "h": 48, "cornerRadius": 8 },
-        "leftWingCard": { "x": -332, "y": -76, "w": 178, "h": 152, "cornerRadius": 16 },
-        "rightWingCard": { "x": 154, "y": -76, "w": 178, "h": 152, "cornerRadius": 16 }
+        "centerTachDial": {
+          "cx": 0,
+          "cy": 0,
+          "outerRadius": 134,
+          "innerHaloRadius": 96,
+          "startAngleDeg": 135,
+          "sweepAngleDeg": 270
+        },
+        "gearWindow": {
+          "x": -32,
+          "y": 46,
+          "w": 64,
+          "h": 48,
+          "cornerRadius": 8
+        },
+        "leftWingCard": {
+          "x": -332,
+          "y": -76,
+          "w": 178,
+          "h": 152,
+          "cornerRadius": 16
+        },
+        "rightWingCard": {
+          "x": 154,
+          "y": -76,
+          "w": 178,
+          "h": 152,
+          "cornerRadius": 16
+        }
       }
     },
     "3_LiquidGlass": {
       "name": "Apple CarPlay Ultra Frosted Sapphire",
-      "anchor4K": { "cx": 1920, "cy": 1700 },
-      "containerLogicalSize": { "width": 680, "height": 244, "cornerRadius": 40, "padding": 20, "gap": 16 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1700
+      },
+      "containerLogicalSize": {
+        "width": 680,
+        "height": 244,
+        "cornerRadius": 40,
+        "padding": 20,
+        "gap": 16
+      },
       "assetBindings": {
         "causticLensPlate": "assets/liquid_glass_caustic_lens.png"
       },
@@ -133,17 +1652,58 @@
         "pillSegmentLit": "#F8FAFC"
       },
       "layout": {
-        "topPillRibbon": { "count": 16, "y": -90, "totalWidth": 576, "pillHeight": 11, "pillRadius": 5.5, "gap": 6 },
-        "centerHeroSquircle": { "x": -108, "y": -58, "w": 216, "h": 152, "cornerRadius": 26 },
-        "leftWingTopBoost": { "x": -308, "y": -58, "w": 178, "h": 70, "cornerRadius": 16 },
-        "leftWingBottomDynamic": { "x": -308, "y": 24, "w": 178, "h": 70, "cornerRadius": 16 },
-        "rightWingPedalCapsules": { "x": 130, "y": -58, "w": 178, "h": 152, "capsuleWidth": 22, "capsuleGap": 18 }
+        "topPillRibbon": {
+          "count": 16,
+          "y": -90,
+          "totalWidth": 576,
+          "pillHeight": 11,
+          "pillRadius": 5.5,
+          "gap": 6
+        },
+        "centerHeroSquircle": {
+          "x": -108,
+          "y": -58,
+          "w": 216,
+          "h": 152,
+          "cornerRadius": 26
+        },
+        "leftWingTopBoost": {
+          "x": -308,
+          "y": -58,
+          "w": 178,
+          "h": 70,
+          "cornerRadius": 16
+        },
+        "leftWingBottomDynamic": {
+          "x": -308,
+          "y": 24,
+          "w": 178,
+          "h": 70,
+          "cornerRadius": 16
+        },
+        "rightWingPedalCapsules": {
+          "x": 130,
+          "y": -58,
+          "w": 178,
+          "h": 152,
+          "capsuleWidth": 22,
+          "capsuleGap": 18
+        }
       }
     },
     "4_WindshieldHud": {
       "name": "Collimated Fighter-Jet HUD + 3D Road-Map",
-      "anchor4K": { "cx": 1920, "cy": 1210 },
-      "containerLogicalSize": { "width": 660, "height": 348, "cornerRadius": 0, "padding": 16, "gap": 12 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1210
+      },
+      "containerLogicalSize": {
+        "width": 660,
+        "height": 348,
+        "cornerRadius": 0,
+        "padding": 16,
+        "gap": 12
+      },
       "palette": {
         "collimatedCyan": "#00E5FF",
         "ghostDoubleReflect": "#1600E5FF",
@@ -153,17 +1713,53 @@
         "radarGridHairline": "#2E00E5FF"
       },
       "layout": {
-        "chevronRpmArc": { "segments": 20, "y": -146, "width": 540, "height": 28 },
-        "centerVectorReticle": { "x": -114, "y": -96, "w": 228, "h": 118 },
-        "leftPitchLadder": { "x": -260, "y": -96, "w": 116, "h": 118 },
-        "rightPitchLadder": { "x": 144, "y": -96, "w": 116, "h": 118 },
-        "lower3DRoadMap": { "x": -226, "y": 40, "w": 452, "h": 126, "horizonY": 46, "egoY": 150 }
+        "chevronRpmArc": {
+          "segments": 20,
+          "y": -146,
+          "width": 540,
+          "height": 28
+        },
+        "centerVectorReticle": {
+          "x": -114,
+          "y": -96,
+          "w": 228,
+          "h": 118
+        },
+        "leftPitchLadder": {
+          "x": -260,
+          "y": -96,
+          "w": 116,
+          "h": 118
+        },
+        "rightPitchLadder": {
+          "x": 144,
+          "y": -96,
+          "w": 116,
+          "h": 118
+        },
+        "lower3DRoadMap": {
+          "x": -226,
+          "y": 40,
+          "w": 452,
+          "h": 126,
+          "horizonY": 46,
+          "egoY": 150
+        }
       }
     },
     "5_TeslaAdas": {
       "name": "Tesla Mind-of-Car 3D Neural Vector Cluster",
-      "anchor4K": { "cx": 1920, "cy": 1680 },
-      "containerLogicalSize": { "width": 700, "height": 292, "cornerRadius": 22, "padding": 20, "gap": 12 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1680
+      },
+      "containerLogicalSize": {
+        "width": 700,
+        "height": 292,
+        "cornerRadius": 22,
+        "padding": 20,
+        "gap": 12
+      },
       "assetBindings": {
         "egoCoupeSprite": "assets/adas_ego_coupe.png",
         "trafficSedanSprite": "assets/adas_traffic_sedan.png",
@@ -181,17 +1777,54 @@
         "leadTargetLock": "#38BDF8"
       },
       "layout": {
-        "topPowerRegenLine": { "x": -326, "y": -126, "w": 652, "h": 4 },
-        "topLeftSpeedBlock": { "x": -326, "y": -112, "w": 186, "h": 78 },
-        "topCenterPrndStrip": { "x": -94, "y": -112, "w": 188, "h": 28 },
-        "topRightTelemetryPills": { "x": 126, "y": -112, "w": 200, "h": 78 },
-        "perspective3DViewport": { "x": -326, "y": -24, "w": 652, "h": 160, "horizonY": -14, "egoZMeters": 3.2 }
+        "topPowerRegenLine": {
+          "x": -326,
+          "y": -126,
+          "w": 652,
+          "h": 4
+        },
+        "topLeftSpeedBlock": {
+          "x": -326,
+          "y": -112,
+          "w": 186,
+          "h": 78
+        },
+        "topCenterPrndStrip": {
+          "x": -94,
+          "y": -112,
+          "w": 188,
+          "h": 28
+        },
+        "topRightTelemetryPills": {
+          "x": 126,
+          "y": -112,
+          "w": 200,
+          "h": 78
+        },
+        "perspective3DViewport": {
+          "x": -326,
+          "y": -24,
+          "w": 652,
+          "h": 160,
+          "horizonY": -14,
+          "egoZMeters": 3.2
+        }
       }
     },
     "6_RetroCyber": {
       "name": "Quadra V-Tech Vacuum Fluorescent Display",
-      "anchor4K": { "cx": 1920, "cy": 1700 },
-      "containerLogicalSize": { "width": 680, "height": 250, "cornerRadius": 0, "chamferPx": 22, "padding": 18, "gap": 14 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1700
+      },
+      "containerLogicalSize": {
+        "width": 680,
+        "height": 250,
+        "cornerRadius": 0,
+        "chamferPx": 22,
+        "padding": 18,
+        "gap": 14
+      },
       "assetBindings": {
         "cyberVfdBezel": "assets/cyber_vfd_bezel.png"
       },
@@ -206,16 +1839,50 @@
         "vfdGhostUnlit": "#1800F5D4"
       },
       "layout": {
-        "slantedRpmStaircase": { "segments": 24, "x": -304, "y": -96, "w": 608, "h": 38, "slantDeg": -18 },
-        "leftTelemetryBay": { "x": -304, "y": -38, "w": 176, "h": 134 },
-        "centerOctagonGearAnd7Seg": { "x": -110, "y": -38, "w": 220, "h": 134, "digitWidth": 42, "digitHeight": 72 },
-        "rightBargraphBay": { "x": 128, "y": -38, "w": 176, "h": 134, "barSteps": 16 }
+        "slantedRpmStaircase": {
+          "segments": 24,
+          "x": -304,
+          "y": -96,
+          "w": 608,
+          "h": 38,
+          "slantDeg": -18
+        },
+        "leftTelemetryBay": {
+          "x": -304,
+          "y": -38,
+          "w": 176,
+          "h": 134
+        },
+        "centerOctagonGearAnd7Seg": {
+          "x": -110,
+          "y": -38,
+          "w": 220,
+          "h": 134,
+          "digitWidth": 42,
+          "digitHeight": 72
+        },
+        "rightBargraphBay": {
+          "x": 128,
+          "y": -38,
+          "w": 176,
+          "h": 134,
+          "barSteps": 16
+        }
       }
     },
     "7_Gt7HoodPro": {
       "name": "Gran Turismo 7 Bonnet/Hood Panoramic HUD",
-      "anchor4K": { "cx": 1920, "cy": 1760 },
-      "containerLogicalSize": { "width": 780, "height": 204, "cornerRadius": 20, "padding": 16, "gap": 16 },
+      "anchor4K": {
+        "cx": 1920,
+        "cy": 1760
+      },
+      "containerLogicalSize": {
+        "width": 780,
+        "height": 204,
+        "cornerRadius": 20,
+        "padding": 16,
+        "gap": 16
+      },
       "assetBindings": {
         "hoodProPlate": "assets/gt7_hood_pro_plate.png"
       },
@@ -228,11 +1895,35 @@
         "shiftDiamondCyan": "#00E5FF"
       },
       "layout": {
-        "convergingShiftDiamonds": { "pairs": 5, "y": -84, "spanWidth": 288 },
-        "panoramicRpmArch": { "x": -244, "y": -62, "w": 488, "h": 64 },
-        "centerGearPrism": { "x": -44, "y": -14, "w": 88, "h": 88 },
-        "leftTireMatrix": { "x": -372, "y": -56, "w": 118, "h": 130 },
-        "rightGReticle": { "x": 254, "y": -56, "w": 118, "h": 130 }
+        "convergingShiftDiamonds": {
+          "pairs": 5,
+          "y": -84,
+          "spanWidth": 288
+        },
+        "panoramicRpmArch": {
+          "x": -244,
+          "y": -62,
+          "w": 488,
+          "h": 64
+        },
+        "centerGearPrism": {
+          "x": -44,
+          "y": -14,
+          "w": 88,
+          "h": 88
+        },
+        "leftTireMatrix": {
+          "x": -372,
+          "y": -56,
+          "w": 118,
+          "h": 130
+        },
+        "rightGReticle": {
+          "x": 254,
+          "y": -56,
+          "w": 118,
+          "h": 130
+        }
       }
     }
   }

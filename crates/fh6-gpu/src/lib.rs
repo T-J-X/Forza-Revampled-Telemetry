@@ -49,6 +49,10 @@ pub enum GpuError {
     /// A validation error while acquiring a frame.
     #[error("surface validation error")]
     SurfaceValidation,
+    /// wgpu reported an uncaptured error (validation, a failed surface configure) or lost the
+    /// device. Drop the context and its surfaces and create new ones.
+    #[error("the GPU reported an error or lost the device")]
+    DeviceFailed,
     /// Reading back an offscreen frame failed.
     #[error("reading back the offscreen frame: {0}")]
     Readback(String),
