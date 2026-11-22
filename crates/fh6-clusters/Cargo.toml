@@ -12,3 +12,6 @@ fh6-render = { path = "../fh6-render" }
 fh6-kit = { path = "../fh6-kit" }
 tiny-skia.workspace = true
 tracing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+fh6-gpu = { path = "../fh6-gpu" }

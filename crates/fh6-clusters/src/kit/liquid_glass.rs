@@ -20,7 +20,7 @@ const THICKNESS: f32 = 22.0;
 /// The plate.
 const PLATE: Rect = Rect {
     min: vec2(-520.0, -250.0),
-    max: vec2(520.0, 220.0),
+    max: vec2(520.0, 236.0),
 };
 
 /// The Liquid Glass sample cluster.
@@ -196,7 +196,7 @@ impl Cluster for LiquidGlassSample {
         // 5. Speed (tabular, ghost 8s) and its unit in the ribbon's open bottom.
         self.speed.draw(
             p,
-            vec2(0.0, 168.0),
+            vec2(0.0, 160.0),
             self.fonts.display,
             64.0,
             roles.ink,
@@ -206,7 +206,7 @@ impl Cluster for LiquidGlassSample {
             .paint(roles.ink_label)
             .align(Align::Center, VAlign::CapMiddle)
             .tracking(self.label_tracking);
-        p.text(vec2(0.0, 207.0), self.sig.unit.label(), &label);
+        p.text(vec2(0.0, 216.0), self.sig.unit.label(), &label);
 
         // 6. Wings: rpm readout (left), throttle and brake bars (right).
         let value = TextStyle::new(self.fonts.display, 40.0)

@@ -7,6 +7,7 @@
 //!
 //! All work targets are sized to the **work rectangle** (the union of what was drawn, plus the
 //! bloom margin), not the screen, so a cluster costs what it covers.
+use crate::clock::Stamp;
 use crate::images::Images;
 use crate::math::Rect;
 use crate::mesh::Meshes;
@@ -18,7 +19,7 @@ use crate::text::{Fonts, ATLAS_WIDTH};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use std::mem::size_of;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Format of the linear scene, emissive and layer targets.
 pub(crate) const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -298,9 +299,10 @@ pub(crate) struct Renderer {
     pub(crate) meshes: Meshes,
     timer: Option<GpuTimer>,
     timing_enabled: bool,
+    bloom_enabled: bool,
     globals: Vec<Globals>,
     post: Vec<PostParams>,
-    started: Instant,
+    started: Stamp,
 }
 
 fn blend_state(mode: BlendMode) -> wgpu::BlendState {
@@ -627,13 +629,19 @@ impl Renderer {
             meshes: Meshes::new(device, DEPTH_FORMAT),
             timer,
             timing_enabled: false,
+            bloom_enabled: true,
             globals: Vec::with_capacity(MAX_SEGMENTS),
             post: Vec::with_capacity(MAX_POST),
-            started: Instant::now(),
+            started: Stamp::now(),
         }
     }
 
     /// Turns GPU timestamp queries on (when the device supports them).
+    /// Turns the bloom passes on or off (a quality setting; layers still record emissive).
+    pub(crate) fn set_bloom(&mut self, on: bool) {
+        self.bloom_enabled = on;
+    }
+
     pub(crate) fn set_timing(&mut self, on: bool) -> bool {
         self.timing_enabled = on && self.timer.is_some();
         self.timing_enabled
@@ -1032,7 +1040,8 @@ impl Renderer {
         opacity: f32,
         bloom_margin_px: f32,
     ) -> FrameStats {
-        let t0 = Instant::now();
+        let t0 = Stamp::now();
+        let bloom_on = scene.bloom_used && self.bloom_enabled;
         let mut stats = FrameStats {
             instances: scene.instances.len() as u32,
             dropped: scene.dropped,
@@ -1045,7 +1054,7 @@ impl Renderer {
 
         // Work rectangle: what was drawn (+ bloom margin), snapped to 16 px, inside the target.
         let mut bounds = scene.bounds;
-        if scene.bloom_used {
+        if bloom_on {
             bounds = bounds.expand(bloom_margin_px);
         }
         let b = bounds.intersect(&Rect::from_xywh(0.0, 0.0, tw as f32, th as f32));
@@ -1306,12 +1315,12 @@ impl Renderer {
                 );
             }
         }
-        if scene.bloom_used {
+        if bloom_on {
             self.bloom(device, encoder, &mut stats, (ww, wh), uv_max, offs.post);
         }
 
         // ----- resolve into the caller's target ---------------------------------------------
-        let base = if scene.bloom_used { V::Tmp(0) } else { V::Scene };
+        let base = if bloom_on { V::Tmp(0) } else { V::Scene };
         let params = PostParams {
             src_texel: [1.0 / cap.0 as f32, 1.0 / cap.1 as f32],
             src_max: uv_max,
@@ -1320,7 +1329,7 @@ impl Renderer {
             dir: uv_max,
             intensity: 1.0 / PYRAMID_LEVELS as f32,
             opacity: opacity.clamp(0.0, 1.0),
-            bloom_on: if scene.bloom_used { 1.0 } else { 0.0 },
+            bloom_on: if bloom_on { 1.0 } else { 0.0 },
             origin: [wx as f32, wy as f32],
             ..zero_params()
         };

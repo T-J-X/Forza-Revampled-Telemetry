@@ -69,6 +69,14 @@ pub fn wordmark<'b>(logo: &Logo, buf: &'b mut [u8; 64]) -> &'b str {
     } else {
         logo.brand_name.trim()
     };
+    // Too long: cut at the last word boundary inside the limit ("BMW M Motorsport" -> "BMW M").
+    let name = if name.chars().count() > MAX_NAME_CHARS {
+        let cut: usize = name.char_indices().nth(MAX_NAME_CHARS).map_or(name.len(), |(i, _)| i);
+        let head = &name[..cut];
+        head.rfind(char::is_whitespace).map_or(head, |i| head[..i].trim_end())
+    } else {
+        name
+    };
     let mut len = 0;
     for ch in name.chars().take(MAX_NAME_CHARS) {
         for up in ch.to_uppercase() {
@@ -135,10 +143,15 @@ mod tests {
         };
         assert_eq!(wordmark(&logo, &mut buf), "PORSCHE");
         let logo = Logo {
+            brand_name: "BMW M Motorsport".into(),
+            ..Logo::default()
+        };
+        assert_eq!(wordmark(&logo, &mut buf), "BMW M");
+        let logo = Logo {
             brand_name: String::new(),
             custom_name: "a very long custom name here".into(),
             ..Logo::default()
         };
-        assert_eq!(wordmark(&logo, &mut buf).chars().count(), MAX_NAME_CHARS);
+        assert!(wordmark(&logo, &mut buf).chars().count() <= MAX_NAME_CHARS);
     }
 }

@@ -19,6 +19,7 @@
 //! `fh6-gpu`) and in a browser (WebGPU). See `docs/kit/README.md` for the author's guide.
 
 pub mod anim;
+mod clock;
 pub mod cluster;
 pub mod color;
 pub mod fluid;

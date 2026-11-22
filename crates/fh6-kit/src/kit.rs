@@ -227,6 +227,11 @@ impl Kit {
         self.renderer.has_world()
     }
 
+    /// Turns bloom on or off for every layer (quality setting; default on).
+    pub fn set_bloom(&mut self, on: bool) {
+        self.renderer.set_bloom(on);
+    }
+
     /// Enables GPU timestamp queries; false when the device lacks `TIMESTAMP_QUERY`.
     pub fn set_gpu_timing(&mut self, on: bool) -> bool {
         self.renderer.set_timing(on)

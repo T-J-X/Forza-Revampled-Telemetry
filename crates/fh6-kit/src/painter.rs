@@ -142,7 +142,10 @@ impl<'f> Painter<'f> {
         }
         self.depth -= 1;
         if let Some(saved) = self.stack.get(self.depth).copied().flatten() {
-            if saved.segment != self.state.segment {
+            // Leaving a glass layer does not need a new pass: the backdrop was snapshotted when the
+            // layer began, so later draws continue in the same segment. A blur change does.
+            let blur_changed = saved.segment.blur_px != self.state.segment.blur_px;
+            if blur_changed || saved.segment.backdrop_px.is_some() && saved.segment != self.state.segment {
                 self.segment_open = false;
             }
             self.state = saved;
