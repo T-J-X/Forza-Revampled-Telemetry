@@ -16,7 +16,9 @@ pub const WASH_ALPHA_MAX: f32 = 35.0;
 /// Lip width in canvas px.
 pub const WASH_LIP_PX: f32 = 1.5;
 /// The lip only runs above `center.y - WASH_TOP_FRACTION * b`.
-pub const WASH_TOP_FRACTION: f32 = 0.45;
+pub const WASH_TOP_FRACTION: f32 = 0.7;
+/// Sigma of the faint halo outside the lip, in device pixels.
+pub const WASH_HALO_PX: f32 = 3.0;
 
 /// The wash's peak alpha (0..=35 of 255) from `AmbientGlowEnabled`, `AmbientGlowIntensity` and
 /// the night lift (`NightAmbientGlowEnabled`, `NightAmbientGlowIntensityPct`).
@@ -110,7 +112,7 @@ impl BinnacleAmbientWash {
         let (cx, cy) = k.fit.center;
         let (sa, sb) = k.fit.semi_axes;
         let unit = k.frame.unit.max(1e-6);
-        let sigma_px = (k.fit.feather.0 * 0.12 * unit).max(1.0);
+        let sigma_px = WASH_HALO_PX;
         let reach = (sigma_px * 3.0 / unit).max(4.0);
         let feather = k.fit.feather.0.max(k.fit.feather.1);
         let (w, h) = k.size;

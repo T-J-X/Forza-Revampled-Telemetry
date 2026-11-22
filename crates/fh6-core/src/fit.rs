@@ -55,7 +55,9 @@ impl FitView {
 pub struct ScrimFit {
     /// Core opacity 0..=1 (`OemDashOpaquePct / 100`); 0 in hood and chase.
     pub opacity: f32,
-    /// Dome centre relative to the cluster anchor.
+    /// Dome centre in cluster local units (origin = the drawn cluster origin, i.e. the anchor
+    /// raised by the height offset). The cockpit height offset is added back so the dome stays
+    /// on the anchor while the cluster moves.
     pub center: (f32, f32),
     /// Semi-axes (a, b).
     pub semi_axes: (f32, f32),
@@ -67,7 +69,7 @@ pub struct ScrimFit {
     pub feather: (f32, f32, f32),
     /// Column void half width (0 = none).
     pub void_half_width: f32,
-    /// Top of the column void relative to the anchor.
+    /// Top of the column void in the same local units (also pinned to the anchor).
     pub void_top: f32,
     /// Softness of the void edge.
     pub void_feather: f32,
@@ -85,18 +87,30 @@ impl ScrimFit {
         let h = finite_clamp(cfg.oem_dash_height_scale, 1.0, 0.5, 1.6);
         let feather = finite_clamp(cfg.oem_dash_feather_px, 96.0, 8.0, 240.0);
         let void_w = finite_clamp(cfg.oem_dash_column_void_px, 220.0, 0.0, 600.0);
+        // The factory binnacle and the steering column do not move when the user raises or
+        // lowers the cluster, so the dome and the void cancel the cockpit height offset: they
+        // stay on the anchor (per-car anchor, dome offsets and scale still move them).
+        let pin = match view {
+            FitView::Cockpit => finite_clamp(
+                cfg.cockpit_height_offset_px,
+                0.0,
+                -HEIGHT_OFFSET_MAX_PX,
+                HEIGHT_OFFSET_MAX_PX,
+            ),
+            FitView::Hood | FitView::Chase => 0.0,
+        };
         Self {
             opacity,
             center: (
                 cfg.oem_dash_offset_x.clamp(-600, 600) as f32,
-                DOME_CENTER_DY + cfg.oem_dash_binnacle_offset_y.clamp(-600, 600) as f32,
+                DOME_CENTER_DY + cfg.oem_dash_binnacle_offset_y.clamp(-600, 600) as f32 + pin,
             ),
             semi_axes: (DOME_SEMI_A * w, DOME_SEMI_B * h),
             exponent_top: exponent(cfg.oem_dash_top_arch),
             exponent_bottom: exponent(cfg.oem_dash_corner_softness),
             feather: (feather, feather * FEATHER_SIDE_RATIO, feather * FEATHER_BOTTOM_RATIO),
             void_half_width: void_w * 0.5,
-            void_top: COLUMN_VOID_TOP_DY,
+            void_top: COLUMN_VOID_TOP_DY + pin,
             void_feather: COLUMN_VOID_FEATHER,
         }
     }
@@ -312,6 +326,24 @@ mod tests {
         assert_eq!(s.feather.0, 96.0);
         assert_eq!(s.feather.1, 120.0);
         assert!((s.feather.2 - 140.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn dome_and_void_stay_on_the_binnacle_when_the_cluster_moves() {
+        let cfg = AppConfig {
+            cockpit_height_offset_px: 170.0,
+            ..AppConfig::default()
+        };
+        let s = ScrimFit::from_config(&cfg, FitView::Cockpit);
+        // The cluster origin is raised by 170; the dome centre moves down by 170 in local units,
+        // i.e. it stays at 75 px above the anchor on screen.
+        assert_eq!(s.center, (0.0, -75.0 + 170.0));
+        assert_eq!(s.void_top, COLUMN_VOID_TOP_DY + 170.0);
+        let wild = AppConfig {
+            cockpit_height_offset_px: 9999.0,
+            ..AppConfig::default()
+        };
+        assert_eq!(ScrimFit::from_config(&wild, FitView::Cockpit).center.1, -75.0 + 240.0);
     }
 
     #[test]

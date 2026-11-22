@@ -2,7 +2,8 @@
 //! (`docs/design/SCRIM_FIT.md` §2 and §3).
 //!
 //! Both draw in cluster local space (4K px at scale 1.0 around the anchor), so they follow the
-//! cluster's anchor, height offset and scale. Draw them before the cluster: game frame, scrim,
+//! cluster's anchor and scale; `ScrimFit` cancels the cockpit height offset, so the dome stays
+//! on the factory binnacle when the user raises or lowers the cluster. Draw them before the cluster: game frame, scrim,
 //! wash, cluster, OSD.
 //!
 //! ```no_run
@@ -30,7 +31,9 @@ pub const WASH_ALPHA_MAX: f32 = 35.0 / 255.0;
 /// Width of the lip line in device pixels (SCRIM_FIT §3: 1–2 px).
 pub const WASH_LIP_PX: f32 = 1.5;
 /// The lip only runs along the top of the dome: above `center.y - WASH_TOP_FRACTION * b`.
-pub const WASH_TOP_FRACTION: f32 = 0.45;
+pub const WASH_TOP_FRACTION: f32 = 0.7;
+/// Sigma of the faint halo outside the lip, in device pixels.
+pub const WASH_HALO_PX: f32 = 3.0;
 
 /// The kit dome for a scrim fit.
 #[must_use]
@@ -120,7 +123,8 @@ pub fn draw_wash(p: &mut Painter<'_>, fit: &ScrimFit, wash: Wash) {
     let shape = Shape::Dome(d);
     p.scoped(|p| {
         p.clip(clip, 0.0);
-        p.glow(&shape, ramp, Glow::new(fit.feather.0 * 0.12, 0.5));
+        // Fixed in device pixels: the spill stays a thin halo at any cluster scale.
+        p.glow(&shape, ramp, Glow::new(WASH_HALO_PX * p.device_px(), 0.5));
         p.stroke(&shape, ramp, Stroke::rim_px(WASH_LIP_PX));
     });
 }
