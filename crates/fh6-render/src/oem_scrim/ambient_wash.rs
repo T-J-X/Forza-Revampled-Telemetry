@@ -1,209 +1,181 @@
-//! Anti-Orb Contoured Binnacle Ambient Wash.
-//! Draws a Bezier-cowl-clipped
-//! inverse-square radial glow tinted by the active cluster accent colour.
-//! Uses premultiplied RGBA8 buffers for correct tiny-skia blending.
-
-use crate::binnacle_center;
+//! The binnacle ambient wash on the CPU (tiny-skia pixmaps, v1 clusters and tools).
+//!
+//! A 1.5 px lip of the cluster colour along the dome's top edge plus a faint halo just outside
+//! it, alpha 12–35 of 255, fading towards the ends of the arc (`docs/design/SCRIM_FIT.md` §3).
+//! Never a fill. The CPU twin of `fh6_kit::scrim::draw_wash`; the result is cached and only
+//! recomputed when its inputs change.
+use crate::oem_scrim::scrim::LocalFrame;
+use fh6_core::fit::{FitView, ScrimFit};
+use fh6_core::AppConfig;
 use tiny_skia::PixmapMut;
 
-/// Maps normalized cowl feather [0.05..1.0] to feather sigma in pixels.
-/// Linear mapping: 0.05 -> 6 px, 1.0 -> 64 px at scale 1.0.
-pub fn feather_sigma_px(norm: f32, scale: f32) -> f32 {
-    let norm_clamped = norm.clamp(0.05, 1.0);
-    let min_px = 6.0;
-    let max_px = 64.0;
-    let t = (norm_clamped - 0.05) / (1.0 - 0.05);
-    let px = min_px + (max_px - min_px) * t;
-    px * scale
+/// Lowest visible alpha (of 255).
+pub const WASH_ALPHA_MIN: f32 = 12.0;
+/// Highest alpha (of 255).
+pub const WASH_ALPHA_MAX: f32 = 35.0;
+/// Lip width in canvas px.
+pub const WASH_LIP_PX: f32 = 1.5;
+/// The lip only runs above `center.y - WASH_TOP_FRACTION * b`.
+pub const WASH_TOP_FRACTION: f32 = 0.45;
+
+/// The wash's peak alpha (0..=35 of 255) from `AmbientGlowEnabled`, `AmbientGlowIntensity` and
+/// the night lift (`NightAmbientGlowEnabled`, `NightAmbientGlowIntensityPct`).
+#[must_use]
+pub fn wash_alpha(cfg: &AppConfig) -> f32 {
+    if !cfg.ambient_glow_enabled {
+        return 0.0;
+    }
+    let mut k = if cfg.ambient_glow_intensity.is_finite() {
+        cfg.ambient_glow_intensity.clamp(0.0, 1.0)
+    } else {
+        0.25
+    };
+    if cfg.night_ambient_glow_enabled {
+        k = k.max((cfg.night_ambient_glow_intensity_pct.clamp(0, 100) as f32) / 100.0);
+    }
+    WASH_ALPHA_MIN + (WASH_ALPHA_MAX - WASH_ALPHA_MIN) * k
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct DirtyKey {
-    accent_r: u8,
-    accent_g: u8,
-    accent_b: u8,
-    intensity_bits: u32,
-    feather_bits: u32,
-    scale_bits: u32,
-    canvas_w: u32,
-    canvas_h: u32,
+/// The horizontal fade along the arc (0 at the ends, 1 in the middle), matching the kit
+/// gradient stops 0 / 0.22 / 0.5 / 0.78 / 1 with 0 / 0.6 / 1 / 0.6 / 0.
+fn arc_fade(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let t = if t > 0.5 { 1.0 - t } else { t };
+    if t < 0.22 {
+        0.6 * t / 0.22
+    } else {
+        0.6 + 0.4 * (t - 0.22) / 0.28
+    }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Key {
+    fit: ScrimFit,
+    frame: LocalFrame,
+    color: (u8, u8, u8),
+    alpha: f32,
+    size: (u32, u32),
+}
+
+/// Cached wash raster (premultiplied RGBA8 over its region of interest).
+#[derive(Debug, Default)]
 pub struct BinnacleAmbientWash {
-    dirty_key: Option<DirtyKey>,
-    roi_buf: Vec<u8>, // Premultiplied RGBA8 flattened, binnacle bounding rect only
-    roi_x: u32,
-    roi_y: u32,
-    roi_w: u32,
-    roi_h: u32,
+    key: Option<Key>,
+    roi: (u32, u32, u32, u32),
+    buf: Vec<u8>,
 }
 
 impl BinnacleAmbientWash {
+    /// An empty wash; the first `render` computes it.
+    #[must_use]
     pub fn new() -> Self {
-        Self {
-            dirty_key: None,
-            roi_buf: Vec::new(),
-            roi_x: 0,
-            roi_y: 0,
-            roi_w: 0,
-            roi_h: 0,
-        }
+        Self::default()
     }
 
+    /// Draws the wash for `cfg`'s cockpit view in `color` over a premultiplied pixmap.
+    pub fn render_for(&mut self, pixmap: &mut PixmapMut, cfg: &AppConfig, color: (u8, u8, u8)) {
+        let fit = ScrimFit::from_config(cfg, FitView::Cockpit);
+        let frame = LocalFrame::from_config(cfg, FitView::Cockpit, pixmap.width(), pixmap.height());
+        self.render(pixmap, &fit, &frame, color, wash_alpha(cfg));
+    }
+
+    /// Draws the wash along `fit`'s top edge. Its alpha scales with the scrim opacity.
     pub fn render(
         &mut self,
         pixmap: &mut PixmapMut,
-        canvas_w: u32,
-        canvas_h: u32,
-        accent: (u8, u8, u8),
-        intensity: f32,
-        feather_sigma: f32,
-        scale: f32,
+        fit: &ScrimFit,
+        frame: &LocalFrame,
+        color: (u8, u8, u8),
+        alpha: f32,
     ) {
-        let key = DirtyKey {
-            accent_r: accent.0,
-            accent_g: accent.1,
-            accent_b: accent.2,
-            intensity_bits: intensity.to_bits(),
-            feather_bits: feather_sigma.to_bits(),
-            scale_bits: scale.to_bits(),
-            canvas_w,
-            canvas_h,
+        let a = alpha.clamp(0.0, WASH_ALPHA_MAX) * fit.opacity.clamp(0.0, 1.0);
+        if !fit.visible() || a <= 0.0 {
+            return;
+        }
+        let key = Key {
+            fit: *fit,
+            frame: *frame,
+            color,
+            alpha: a,
+            size: (pixmap.width(), pixmap.height()),
         };
-
-        if self.dirty_key.as_ref() != Some(&key) {
-            self.recompute(canvas_w, canvas_h, accent, intensity, feather_sigma, scale);
-            self.dirty_key = Some(key);
+        if self.key != Some(key) {
+            self.recompute(&key);
+            self.key = Some(key);
         }
-
-        self.blit(pixmap, canvas_w);
+        self.blit(pixmap);
     }
 
-    fn recompute(
-        &mut self,
-        canvas_w: u32,
-        canvas_h: u32,
-        accent: (u8, u8, u8),
-        intensity: f32,
-        feather_sigma: f32,
-        scale: f32,
-    ) {
-        let (cx, cy) = binnacle_center(canvas_w, canvas_h);
-
-        let margin = (feather_sigma * 3.0).ceil() as u32 + 8;
-        let half_w = (600.0 * scale) as u32 + margin;
-        let half_h = (280.0 * scale) as u32 + margin;
-        let roi_x = (cx as u32).saturating_sub(half_w);
-        let roi_y = (cy as u32).saturating_sub(half_h);
-        let roi_w = (half_w * 2).min(canvas_w - roi_x);
-        let roi_h = (half_h * 2).min(canvas_h - roi_y);
-        self.roi_x = roi_x;
-        self.roi_y = roi_y;
-        self.roi_w = roi_w;
-        self.roi_h = roi_h;
-
-        let y_apex = cy - 220.0 * scale;
-        let r_arch = 520.0 * scale;
-        let h_arch = 110.0 * scale;
-
-        let neck_top = cy + 60.0 * scale;
-        let neck_hw = 55.0 * scale;
-
-        let i_glow = intensity * 1.0_f32;
-        let k = 1.0 / (380.0 * scale * 380.0 * scale);
-        let two_sigma_sq = 2.0 * feather_sigma * feather_sigma;
-
-        let buf_len = (roi_w * roi_h * 4) as usize;
-        self.roi_buf.resize(buf_len, 0u8);
-
-        for py in 0..roi_h {
-            for px in 0..roi_w {
-                let wx = (roi_x + px) as f32;
-                let wy = (roi_y + py) as f32;
-
-                let dx_arch = wx - cx;
-                let y_cowl = y_apex + (dx_arch * dx_arch / (r_arch * r_arch)) * h_arch;
-                let d_cowl = wy - y_cowl;
-
-                let base = ((py * roi_w + px) * 4) as usize;
-
-                if d_cowl < -feather_sigma || (wy > neck_top && (wx - cx).abs() < neck_hw) {
-                    self.roi_buf[base] = 0;
-                    self.roi_buf[base + 1] = 0;
-                    self.roi_buf[base + 2] = 0;
-                    self.roi_buf[base + 3] = 0;
-                    continue;
-                }
-
-                let ddx = wx - cx;
-                let ddy = wy - cy;
-                let radial = i_glow / (1.0 + k * (ddx * ddx + 1.65 * ddy * ddy));
-                let gauss = if d_cowl >= 0.0 {
-                    1.0_f32
+    fn recompute(&mut self, k: &Key) {
+        let (cx, cy) = k.fit.center;
+        let (sa, sb) = k.fit.semi_axes;
+        let unit = k.frame.unit.max(1e-6);
+        let sigma_px = (k.fit.feather.0 * 0.12 * unit).max(1.0);
+        let reach = (sigma_px * 3.0 / unit).max(4.0);
+        let feather = k.fit.feather.0.max(k.fit.feather.1);
+        let (w, h) = k.size;
+        let to_px = |lx: f32, ly: f32| (k.frame.origin.0 + lx * unit, k.frame.origin.1 + ly * unit);
+        let (x0f, y0f) = to_px(cx - sa - feather, cy - sb - reach);
+        let (x1f, y1f) = to_px(cx + sa + feather, cy - WASH_TOP_FRACTION * sb);
+        let x0 = (x0f.floor().max(0.0) as u32).min(w);
+        let y0 = (y0f.floor().max(0.0) as u32).min(h);
+        let x1 = (x1f.ceil().max(0.0) as u32).min(w);
+        let y1 = (y1f.ceil().max(0.0) as u32).min(h);
+        self.roi = (x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0));
+        let (rw, rh) = (self.roi.2 as usize, self.roi.3 as usize);
+        self.buf.clear();
+        self.buf.resize(rw * rh * 4, 0);
+        let half_lip = WASH_LIP_PX * 0.5;
+        for ry in 0..rh {
+            for rx in 0..rw {
+                let (px, py) = ((x0 as usize + rx) as f32 + 0.5, (y0 as usize + ry) as f32 + 0.5);
+                let (lx, ly) = k.frame.to_local(px, py);
+                let d = k.fit.dome_distance(lx, ly) * unit; // canvas px, + outside
+                let lip = (half_lip + 0.5 - d.abs()).clamp(0.0, 1.0);
+                let halo = if d > 0.0 {
+                    0.5 * (-(d * d) / (2.0 * sigma_px * sigma_px)).exp()
                 } else {
-                    (-(d_cowl * d_cowl) / two_sigma_sq).exp()
+                    0.0
                 };
-
-                let l = (radial * gauss).clamp(0.0, 1.0);
-                let alpha_f = l * 35.0;
-
-                if alpha_f < 2.0 {
-                    self.roi_buf[base] = 0;
-                    self.roi_buf[base + 1] = 0;
-                    self.roi_buf[base + 2] = 0;
-                    self.roi_buf[base + 3] = 0;
-                } else {
-                    let alpha = alpha_f as u8;
-                    // Premultiplied alpha calculation
-                    let r = ((accent.0 as u32 * alpha as u32) / 255) as u8;
-                    let g = ((accent.1 as u32 * alpha as u32) / 255) as u8;
-                    let b = ((accent.2 as u32 * alpha as u32) / 255) as u8;
-
-                    self.roi_buf[base] = r;
-                    self.roi_buf[base + 1] = g;
-                    self.roi_buf[base + 2] = b;
-                    self.roi_buf[base + 3] = alpha;
-                }
-            }
-        }
-    }
-
-    fn blit(&self, pixmap: &mut PixmapMut, canvas_w: u32) {
-        let stride = canvas_w as usize * 4;
-        let dst = pixmap.data_mut();
-
-        for py in 0..self.roi_h {
-            let src_row_start = (py * self.roi_w * 4) as usize;
-            let dst_row_start = ((self.roi_y + py) as usize) * stride + (self.roi_x as usize) * 4;
-
-            for px in 0..self.roi_w {
-                let s = src_row_start + (px as usize) * 4;
-                let d = dst_row_start + (px as usize) * 4;
-                if d + 3 >= dst.len() {
-                    break;
-                }
-
-                let src_a = self.roi_buf[s + 3] as u32;
-                if src_a == 0 {
+                let fade = arc_fade((lx - (cx - sa)) / (2.0 * sa));
+                let a8 = (k.alpha * fade * lip.max(halo)).round();
+                if a8 < 1.0 {
                     continue;
                 }
-
-                let inv_src_a = 255 - src_a;
-                // premultiplied source-over
-                dst[d] = (self.roi_buf[s] as u32 + (dst[d] as u32 * inv_src_a) / 255) as u8;
-                dst[d + 1] = (self.roi_buf[s + 1] as u32 + (dst[d + 1] as u32 * inv_src_a) / 255) as u8;
-                dst[d + 2] = (self.roi_buf[s + 2] as u32 + (dst[d + 2] as u32 * inv_src_a) / 255) as u8;
-                let dst_a = dst[d + 3] as u32;
-                let out_a = src_a + dst_a * inv_src_a / 255;
-                dst[d + 3] = out_a as u8;
+                let i = (ry * rw + rx) * 4;
+                let pm = |c: u8| (f32::from(c) * a8 / 255.0).round() as u8;
+                if let Some(px) = self.buf.get_mut(i..i + 4) {
+                    px.copy_from_slice(&[pm(k.color.0), pm(k.color.1), pm(k.color.2), a8 as u8]);
+                }
             }
         }
     }
-}
 
-impl Default for BinnacleAmbientWash {
-    fn default() -> Self {
-        Self::new()
+    fn blit(&self, pixmap: &mut PixmapMut) {
+        let w = pixmap.width() as usize;
+        let (x0, y0, rw, rh) = (
+            self.roi.0 as usize,
+            self.roi.1 as usize,
+            self.roi.2 as usize,
+            self.roi.3 as usize,
+        );
+        let dst = pixmap.data_mut();
+        for ry in 0..rh {
+            for rx in 0..rw {
+                let s = (ry * rw + rx) * 4;
+                let Some(src) = self.buf.get(s..s + 4) else { continue };
+                let sa = u32::from(src[3]);
+                if sa == 0 {
+                    continue;
+                }
+                let d = ((y0 + ry) * w + x0 + rx) * 4;
+                let Some(out) = dst.get_mut(d..d + 4) else { continue };
+                let inv = 255 - sa;
+                for c in 0..4 {
+                    out[c] = (u32::from(src[c]) + u32::from(out[c]) * inv / 255).min(255) as u8;
+                }
+            }
+        }
     }
 }
 
@@ -212,59 +184,61 @@ mod tests {
     use super::*;
     use tiny_skia::Pixmap;
 
-    #[test]
-    fn wash_cavity_pixel_has_valid_premultiplied_alpha() {
-        let mut wash = BinnacleAmbientWash::new();
-        let mut pix = Pixmap::new(3840, 2160).unwrap();
-        wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-
-        // Sample inside the binnacle cavity (cx, cy)
-        let cx = 1920;
-        let cy = (2160.0 * 0.845) as usize;
-        let idx = (cy * 3840 + cx) * 4;
-        let a = pix.data()[idx + 3];
-        let r = pix.data()[idx];
-
-        assert!((12..=35).contains(&a), "cavity alpha must be within 12..=35, got {}", a);
-        assert!(r <= a, "premultiplied R channel ({}) must be <= alpha ({})", r, a);
+    fn cfg() -> AppConfig {
+        AppConfig {
+            oem_dash_opaque_pct: 100,
+            ..AppConfig::default()
+        }
     }
 
     #[test]
-    fn wash_above_cowl_is_pure_black() {
-        let mut wash = BinnacleAmbientWash::new();
-        let mut pix = Pixmap::new(3840, 2160).unwrap();
-        wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-
-        // Top-left corner (well above cowl dome)
-        let idx = (10 * 3840 + 10) * 4;
-        assert_eq!(pix.data()[idx + 3], 0, "pixel above cowl must have alpha=0");
+    fn alpha_stays_in_the_spec_band() {
+        let mut c = cfg();
+        assert!((WASH_ALPHA_MIN..=WASH_ALPHA_MAX).contains(&wash_alpha(&c)));
+        c.ambient_glow_intensity = 5.0;
+        assert_eq!(wash_alpha(&c), WASH_ALPHA_MAX);
+        c.ambient_glow_enabled = false;
+        assert_eq!(wash_alpha(&c), 0.0);
     }
 
     #[test]
-    fn steering_neck_cutout_is_pure_black() {
-        let mut wash = BinnacleAmbientWash::new();
-        let mut pix = Pixmap::new(3840, 2160).unwrap();
-        wash.render(&mut pix.as_mut(), 3840, 2160, (56, 189, 248), 1.0, 12.0, 2.0);
-
-        // Directly below binnacle center in steering neck cutout
-        let cx = 1920;
-        let ny = (2160.0 * 0.845 + 150.0) as usize;
-        let idx = (ny * 3840 + cx) * 4;
-        assert_eq!(pix.data()[idx + 3], 0, "steering neck cutout pixel must have alpha=0");
+    fn lip_runs_along_the_dome_top_and_is_never_a_fill() {
+        let c = cfg();
+        let mut pm = Pixmap::new(3840, 2160).unwrap();
+        BinnacleAmbientWash::new().render_for(&mut pm.as_mut(), &c, (56, 189, 248));
+        // Dome top at (1920, 1290): the lip is lit, premultiplied, within 12..=35.
+        let lip = (1286..1294)
+            .filter_map(|y| pm.pixel(1920, y))
+            .map(|p| p.alpha())
+            .max()
+            .unwrap_or(0);
+        assert!((12..=35).contains(&lip), "lip alpha {lip}");
+        let p = pm.pixel(1920, 1290).unwrap();
+        assert!(p.red() <= p.alpha() && p.blue() <= p.alpha());
+        assert_eq!(pm.pixel(1920, 1500).unwrap().alpha(), 0, "no fill inside the dome");
+        assert_eq!(pm.pixel(1920, 1760).unwrap().alpha(), 0, "no fill at the centre");
+        assert_eq!(pm.pixel(1920, 1100).unwrap().alpha(), 0, "nothing far above");
+        assert_eq!(pm.pixel(1300, 1700).unwrap().alpha(), 0, "nothing down the sides");
     }
 
     #[test]
-    fn dirty_key_skips_recompute_on_same_params() {
-        let mut wash = BinnacleAmbientWash::new();
-        let mut pix = Pixmap::new(3840, 2160).unwrap();
-        wash.render(&mut pix.as_mut(), 3840, 2160, (255, 60, 0), 0.8, 12.0, 2.0);
-        let buf_ptr_1 = wash.roi_buf.as_ptr();
-        wash.render(&mut pix.as_mut(), 3840, 2160, (255, 60, 0), 0.8, 12.0, 2.0);
-        let buf_ptr_2 = wash.roi_buf.as_ptr();
+    fn zero_scrim_means_no_wash() {
+        let mut c = cfg();
+        c.oem_dash_opaque_pct = 0;
+        let mut pm = Pixmap::new(960, 540).unwrap();
+        BinnacleAmbientWash::new().render_for(&mut pm.as_mut(), &c, (255, 255, 255));
+        assert!(pm.data().iter().all(|&v| v == 0));
+    }
 
-        assert_eq!(
-            buf_ptr_1, buf_ptr_2,
-            "dirty-key must prevent unnecessary recompute buffer reallocation"
-        );
+    #[test]
+    fn same_inputs_reuse_the_cache() {
+        let c = cfg();
+        let mut wash = BinnacleAmbientWash::new();
+        let mut pm = Pixmap::new(960, 540).unwrap();
+        wash.render_for(&mut pm.as_mut(), &c, (255, 0, 0));
+        let ptr = wash.buf.as_ptr();
+        wash.render_for(&mut pm.as_mut(), &c, (255, 0, 0));
+        assert_eq!(ptr, wash.buf.as_ptr());
+        assert!(wash.key.is_some());
     }
 }

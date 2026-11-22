@@ -36,6 +36,7 @@ pub mod particles;
 pub mod perspective;
 mod renderer;
 mod scene;
+pub mod scrim;
 pub mod shape;
 pub mod testing;
 pub mod text;

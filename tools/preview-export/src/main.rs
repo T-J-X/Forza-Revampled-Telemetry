@@ -15,7 +15,7 @@ mod gallery;
 mod states;
 
 use fh6_clusters::registry::REGISTRY;
-use fh6_core::{config::CameraViewMode, AppConfig, ClusterTheme};
+use fh6_core::{AppConfig, ClusterTheme};
 use fh6_gpu::GpuContext;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
@@ -255,13 +255,10 @@ fn verify(out: &Path, renders: &[Render]) -> Result<()> {
 /// The v1 tiny-skia renders kept until their kit rebuilds (scrim: Phase 8, OSD: Phase 9,
 /// clusters: Phase 7).
 mod legacy {
-    use super::{AppConfig, CameraViewMode, ClusterTheme, Result, H, W};
+    use super::{AppConfig, ClusterTheme, Result, H, W};
     use fh6_clusters::render_cluster;
     use fh6_osd::{dyno::dyno_telemetry, model::UnifiedOsdState, render_unified_osd_4k};
-    use fh6_render::oem_scrim::{
-        ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
-        scrim::render_oem_scrim,
-    };
+    use fh6_render::oem_scrim::{ambient_wash::BinnacleAmbientWash, scrim::render_oem_scrim};
     use std::fs;
     use std::path::Path;
 
@@ -278,30 +275,19 @@ mod legacy {
     }
 
     pub fn scrims(out: &Path) -> Result<()> {
-        let bounds = tiny_skia::Rect::from_xywh(0.0, 0.0, W as f32, H as f32).ok_or("bounds")?;
         for pct in [0, 50, 100] {
             let cfg = AppConfig {
                 ambient_glow_enabled: true,
                 ambient_glow_intensity: 0.25,
-                ambient_cowl_feather: 0.40,
-                current_camera_index: if pct == 0 { 4 } else { 3 },
                 oem_dash_opaque_pct: pct,
-                active_camera_view: if pct == 0 {
-                    CameraViewMode::Bonnet
-                } else {
-                    CameraViewMode::Cockpit
-                },
                 ..Default::default()
             };
             let mut pix = pixmap()?;
             {
                 let mut pm = pix.as_mut();
-                render_oem_scrim(&mut pm, bounds, 1.0, &cfg);
-                if pct > 0 {
-                    let accent = ClusterTheme::LiquidGlass.accent_rgb();
-                    let sigma = feather_sigma_px(cfg.ambient_cowl_feather.clamp(0.05, 1.0), 1.0);
-                    BinnacleAmbientWash::new().render(&mut pm, W, H, accent, cfg.ambient_glow_intensity, sigma, 1.0);
-                }
+                render_oem_scrim(&mut pm, &cfg);
+                let accent = ClusterTheme::LiquidGlass.accent_rgb();
+                BinnacleAmbientWash::new().render_for(&mut pm, &cfg, accent);
             }
             save(&pix, &out.join(format!("Scrim/OemScrim_{pct}pct.png")))?;
         }
