@@ -5,10 +5,7 @@
 use fh6_core::config::CameraViewMode;
 use fh6_core::ClusterTheme;
 use fh6_render::binnacle_center;
-use fh6_render::oem_scrim::{
-    ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
-    scrim::render_oem_scrim,
-};
+use fh6_render::oem_scrim::{ambient_wash::BinnacleAmbientWash, scrim::render_oem_scrim};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use tiny_skia::{Pixmap, PixmapPaint, Rect, Transform};
@@ -549,26 +546,11 @@ pub fn render_cluster(
     };
 
     if view == CameraViewMode::Cockpit {
-        // Scrim first
-        render_oem_scrim(pixmap, bounds, scale, config);
-
-        // Ambient wash second
-        if config.ambient_glow_enabled {
-            let accent = theme.accent_rgb();
-            let intensity = config.ambient_glow_intensity.clamp(0.0, 1.0);
-            let feather_norm = config.ambient_cowl_feather.clamp(0.05, 1.0);
-            let feather_sigma = feather_sigma_px(feather_norm, scale);
-            let wash_mutex = WASH.get_or_init(|| Mutex::new(BinnacleAmbientWash::new()));
-            let mut wash = wash_mutex.lock().unwrap();
-            wash.render(
-                pixmap,
-                pixmap.width(),
-                pixmap.height(),
-                accent,
-                intensity,
-                feather_sigma,
-                scale,
-            );
+        // Scrim first (SCRIM_FIT dome on the cockpit anchor), then the lip wash.
+        render_oem_scrim(pixmap, config);
+        let wash_mutex = WASH.get_or_init(|| Mutex::new(BinnacleAmbientWash::new()));
+        if let Ok(mut wash) = wash_mutex.lock() {
+            wash.render_for(pixmap, config, theme.accent_rgb());
         }
     }
 
@@ -605,18 +587,16 @@ mod tests {
     fn wash_cockpit_enabled_draws() {
         let mut pix = make_pixmap();
         let mut pixmap = pix.as_mut();
-        // Direct wash test, no cluster overlay
         use fh6_render::oem_scrim::ambient_wash::BinnacleAmbientWash;
-        let mut wash = BinnacleAmbientWash::new();
+        let cfg = fh6_core::AppConfig {
+            oem_dash_opaque_pct: 100,
+            ..fh6_core::AppConfig::default()
+        };
         let accent = ClusterTheme::LiquidGlass.accent_rgb();
-        wash.render(&mut pixmap, 3840, 2160, accent, 1.0, 20.0, 1.0);
-        // Sample inside cavity
-        let cx = 1920;
-        let cy = (2160.0 * 0.845) as usize;
-        let idx = (cy * 3840 + cx) * 4;
-        let a = pixmap.data_mut()[idx + 3];
-        assert!(a > 0, "wash should light cavity pixel, got alpha {}", a);
-        // Sample above cowl
+        BinnacleAmbientWash::new().render_for(&mut pixmap, &cfg, accent);
+        // The lip runs along the dome top at 4K y 1290.
+        let lit = (1284..1296).any(|y| pixmap.data_mut()[(y * 3840 + 1920) * 4 + 3] > 0);
+        assert!(lit, "wash should light the dome lip");
         let idx2 = (10 * 3840 + 10) * 4;
         assert_eq!(pixmap.data_mut()[idx2 + 3], 0, "above cowl must be zero");
     }

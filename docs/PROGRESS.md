@@ -13,7 +13,8 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
 | 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
 | 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
-| 7–11 | ☐ waiting on dependencies |
+| 8 Cockpit fit | ✅ 2026-11-22 (branch `claude/phase-8-cockpit-fit-7daeb6`, see `program/phases/08-cockpit-fit/HANDOVER.md`) |
+| 7, 9–11 | ☐ waiting on dependencies (9 started 2026-11-22) |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -34,6 +35,28 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **Visibility:** nothing hides the overlay in menus or out of focus. (Phase 4)
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
+
+## State of the code (after Phase 8, 2026-11-22)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings (one cargo manifest note: `tools/web-preview` unused dependency `fh6-clusters`, as on main) |
+| `cargo test --workspace` | ✅ 325 passed, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit -p fh6-clusters --target wasm32-unknown-unknown` | ✅ |
+
+What Phase 8 added:
+- **Dome scrim on the kit:** `Shape::Dome`, plus the `fh6_kit::scrim` draw and wash functions. It sits on the binnacle anchor, with an SDF feather, dither and the column void.
+- **Fit model:** `fh6_core::fit` (`ScrimFit`, `ViewPlacement`, `clamp_anchor`), with per-view anchor, height, scale and safe zone and an on-screen clamp in `Layout::from_config`.
+- **Per-car profiles:** `car_profiles.json` v2 is an `Option` overlay, hot-reloaded and applied by car ordinal in the render loop.
+- **Views:** routing for cockpit, hood and the chase HUD, and the LB + RB camera resync.
+- **Camera patcher**
+  - The rewrite writes `CockpitCam\FOV`, the seat `Param.y` and the wheel offset, preserves CRLF, writes atomically, and refuses while the game runs.
+  - It finds the install through Steam `libraryfolders.vdf`, keeps a timestamped backup, and restores in one call.
+  - An opt-in sync service drives it, and `GET /api/camera` reports its status.
+- **Fit review:** `preview-export --fit` writes to `mockups/fit/`.
+- **Perf:** scrim + wash cost +0.17 ms GPU at 4K (Liquid Glass + scrim 0.38 ms).
 
 ## State of the code (after Phase 5, 2026-11-22)
 | Check | Result |
@@ -149,6 +172,9 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 3. Figma is on a Starter plan: 3 pages, 1 variable mode, and an MCP call cap that stopped Phase 3 before the component library and render placement were finished. Upgrade the plan (Professional), or accept the HTML boards as the visual source and finish Figma by hand?
 4. AGENTS.md (Design Council 3D) still quotes the old ADAS eye (0, 1.85 m, −3.4 m). Phase 3 raised it to (0, 3.4 m, −6.0 m) because the old camera hid the road behind the ego car. OK to update AGENTS.md?
 5. Default shift colour: Phase 3 chose violet `#978DFC` (race convention, lifted to ≥ 7:1); brands whose `ShiftFlashHex` is white strobe white. Keep, or default to white?
+6. (Phase 8) Which INI key sets the FOV of the wheel-less cockpit view [3] in FH6, `CockpitCam\FOV` or `Driver\FOV`? The patcher writes `CockpitCam\FOV` ← `WheelLessCockpitFOV` and `Driver\FOV` ← `StandardCockpitFOV`.
+7. (Phase 8) With LB held, does RB still change the in-game camera? The LB + RB resync assumes it does (the ring advances on that RB, then the hold sets `ResyncCameraIndex`).
+8. (Phase 8) The scrim at the default width overlaps the A-pillar vent and the left edge of the centre screen in the stock-seat reference. Tune per car after real low-seat captures (SCRIM_FIT §5), or narrow the default?
 
 ## Decision log (append only)
 | Date | Decision | Why |
@@ -217,3 +243,8 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-22 | ComfyUI plates commit at 2048; the 4K masters stay in gitignored `assets/_masters/` and rebuild by script | Repo budget (~400 MB); the plates are backdrops behind glass and blur |
 | 2026-11-22 | The Liquid Glass lens caustic is traced in Rust over the Blender plate normals instead of Cycles MNEE caustics | MNEE rendered near-black after 7 minutes; the tracer is exact, fast and reproducible |
 | 2026-11-22 | Logos: Commons SVG first (57 brands); Ferrari, Lamborghini and Porsche use their official wordmarks (emblems are not on Commons); 34 brands are remade outlined wordmarks in OFL fonts; mono/dial variants use per-brand modes (silhouette, knockout, ink) and optional crops | 100% coverage with honest licensing; per-brand modes keep internal detail at dial size |
+| 2026-11-22 | Dependency (`tools/preview-export` only): `image` 0.25 with the `jpeg` feature (pure Rust, via zune-jpeg) to decode the reference photos for `--fit` | The fit review composites over `assets/reference/*.jpg`; the kit already uses `image` without features |
+| 2026-11-22 | `windows` feature `Win32_System_Registry` in `fh6-win` | Reads Steam's `SteamPath` to find `libraryfolders.vdf` |
+| 2026-11-22 | The OEM dome stays on the factory binnacle when the user changes the cluster height; it still follows the anchor and the cluster scale | The fit critique showed the dome rising into the windscreen at +170 px; the binnacle does not move. SCRIM_FIT §2 and §4 updated |
+| 2026-11-22 | Car profiles are an `Option` overlay (`car_profiles.json` v2); styles are not shipped per car | Missing keys inherit instead of collapsing to 0; profiles carry fit only |
+| 2026-11-22 | The camera patcher writes only while the game is closed and only when `CameraPatchAuto` is on or the OSD/configurator asks; the first backup is the original | Deploy guard and safe restore; a running game queues the change ("restart needed") |

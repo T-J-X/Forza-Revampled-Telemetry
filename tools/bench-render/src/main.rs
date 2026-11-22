@@ -75,6 +75,8 @@ enum Extra {
     GlassOwn,
     /// The fluid solver stepping each frame, its dye drawn in a plate.
     Fluid,
+    /// The OEM scrim (100%) and lip wash under the cluster.
+    Scrim,
     /// Nothing at all.
     Empty,
 }
@@ -205,6 +207,12 @@ fn main() -> Result<()> {
             extra: Extra::Fluid,
         },
         Scenario {
+            name: "Liquid Glass sample + OEM scrim 100% + wash",
+            theme: Some(ClusterTheme::LiquidGlass),
+            bloom: true,
+            extra: Extra::Scrim,
+        },
+        Scenario {
             name: "Empty frame (hidden)",
             theme: None,
             bloom: true,
@@ -212,6 +220,10 @@ fn main() -> Result<()> {
         },
     ];
 
+    let scrim_cfg = AppConfig {
+        oem_dash_opaque_pct: 100,
+        ..AppConfig::default()
+    };
     let mut rows = Vec::new();
     let mut fluid_note: Option<Stats> = None;
     for sc in &scenarios {
@@ -271,6 +283,15 @@ fn main() -> Result<()> {
             }
             {
                 let mut p = kit.begin_frame(&layout);
+                if sc.extra == Extra::Scrim {
+                    let fit = fh6_core::ScrimFit::from_config(&scrim_cfg, fh6_core::FitView::Cockpit);
+                    fh6_kit::scrim::draw_scrim(&mut p, &fit);
+                    fh6_kit::scrim::draw_wash(
+                        &mut p,
+                        &fit,
+                        fh6_kit::scrim::Wash::from_config(&scrim_cfg, palette.primary),
+                    );
+                }
                 if let Some(c) = cluster.as_ref() {
                     c.draw(&mut p, &layout);
                 }
@@ -295,7 +316,7 @@ fn main() -> Result<()> {
                         let fr = Rect::from_xywh(-500.0, -240.0, 1000.0, 460.0);
                         p.fill(&Shape::round_rect(fr, 48.0), ImagePaint::new(dye, fr));
                     }
-                    Extra::None | Extra::Empty => {}
+                    Extra::None | Extra::Empty | Extra::Scrim => {}
                 }
             }
             let t_recorded = Instant::now();

@@ -1,69 +1,30 @@
 {
-  "Version": "1.0.0",
+  "Version": "2.0.0",
   "Profiles": {
-    "4122": {
-      "CarOrdinal": 4122,
-      "CarName": "2025 BMW M4 CS",
-      "CockpitAnchorX": 1920,
-      "CockpitAnchorY": 1835,
-      "CockpitScale": 1.48,
-      "BonnetAnchorX": 1920,
-      "BonnetAnchorY": 1760,
-      "BonnetScale": 1.55,
-      "CockpitHudStyle": "LiquidGlass",
-      "BonnetHudStyle": "Gt7HoodPro",
-      "OemDashOpaquePct": 100,
-      "OemDashBinnacleOffsetY": 0,
-      "OemDashWidthScale": 1.0,
-      "CockpitOffsetY": -0.045
-    },
     "3595": {
       "CarOrdinal": 3595,
       "CarName": "2020 Ferrari SF90 Stradale",
-      "CockpitAnchorX": 1920,
       "CockpitAnchorY": 1820,
-      "CockpitScale": 1.45,
-      "BonnetAnchorX": 1920,
-      "BonnetAnchorY": 1760,
-      "BonnetScale": 1.55,
-      "CockpitHudStyle": "BoschDdu",
-      "BonnetHudStyle": "Gt7HoodPro",
       "OemDashOpaquePct": 95,
       "OemDashBinnacleOffsetY": -5,
-      "OemDashWidthScale": 1.02,
-      "CockpitOffsetY": -0.045
+      "OemDashWidthScale": 1.02
     },
     "3625": {
       "CarOrdinal": 3625,
       "CarName": "2021 Rimac Nevera",
-      "CockpitAnchorX": 1920,
-      "CockpitAnchorY": 1840,
-      "CockpitScale": 1.5,
-      "BonnetAnchorX": 1920,
-      "BonnetAnchorY": 1760,
-      "BonnetScale": 1.55,
-      "CockpitHudStyle": "TeslaAdas",
-      "BonnetHudStyle": "Gt7HoodPro",
-      "OemDashOpaquePct": 100,
-      "OemDashBinnacleOffsetY": 0,
-      "OemDashWidthScale": 1.0,
-      "CockpitOffsetY": -0.045
+      "CockpitAnchorY": 1840
     },
     "3781": {
       "CarOrdinal": 3781,
       "CarName": "2023 Porsche 911 GT3 RS",
-      "CockpitAnchorX": 1920,
       "CockpitAnchorY": 1830,
-      "CockpitScale": 1.46,
-      "BonnetAnchorX": 1920,
-      "BonnetAnchorY": 1760,
-      "BonnetScale": 1.55,
-      "CockpitHudStyle": "PorscheAnalog",
-      "BonnetHudStyle": "Gt7HoodPro",
-      "OemDashOpaquePct": 100,
       "OemDashBinnacleOffsetY": 2,
-      "OemDashWidthScale": 0.98,
-      "CockpitOffsetY": -0.045
+      "OemDashWidthScale": 0.98
+    },
+    "4122": {
+      "CarOrdinal": 4122,
+      "CarName": "2025 BMW M4 CS",
+      "CockpitAnchorY": 1835
     }
   }
 }

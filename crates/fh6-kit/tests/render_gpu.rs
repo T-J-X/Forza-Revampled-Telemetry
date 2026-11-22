@@ -233,3 +233,41 @@ fn warm_frames_do_not_grow_the_arena() {
     }
     assert_eq!(kit.scene().capacities(), before);
 }
+
+#[test]
+fn dome_scrim_is_opaque_black_core_with_feather_and_void() {
+    let (ctx, mut kit) = setup();
+    // The image spans local +-960 x +-540, so this dome is the SCRIM_FIT shape at about 60%.
+    let dome = fh6_kit::Dome {
+        center: vec2(0.0, 0.0),
+        semi_axes: vec2(400.0, 300.0),
+        exponent_top: 2.6,
+        exponent_bottom: 2.6,
+        feather_top: 80.0,
+        feather_side: 100.0,
+        feather_bottom: 120.0,
+        void_half_width: 60.0,
+        void_top: 150.0,
+        void_feather: 12.0,
+    };
+    let img = render_named(&mut kit, &ctx, "dome", |p| {
+        p.fill(&Shape::Dome(dome), Color::BLACK);
+    });
+    let core = at(&img, vec2(0.0, 0.0));
+    assert_eq!(core, [0, 0, 0, 255], "OLED core is pure black at alpha 255");
+    assert_eq!(at(&img, vec2(330.0, 60.0))[3], 255, "still core near the sides");
+    // Top edge at -300; half-way through the 80 feather is about half alpha.
+    let mid = at(&img, vec2(0.0, -340.0))[3];
+    assert!((90..=165).contains(&mid), "feather mid alpha {mid}");
+    assert_eq!(at(&img, vec2(0.0, -390.0))[3], 0, "outside the feather");
+    assert_eq!(at(&img, vec2(-900.0, 0.0))[3], 0, "A-pillar region clear");
+    assert!(at(&img, vec2(0.0, 270.0))[3] < 8, "column void open");
+    assert_eq!(at(&img, vec2(200.0, 250.0))[3], 255, "void is narrow");
+    // Monotonic fall-off along the top (no banding steps back up beyond dither).
+    let mut prev = 255i32;
+    for i in 0..60 {
+        let a = i32::from(at(&img, vec2(0.0, -296.0 - i as f32 * 2.0))[3]);
+        assert!(a <= prev + 2, "alpha rises at step {i}: {prev} -> {a}");
+        prev = a;
+    }
+}

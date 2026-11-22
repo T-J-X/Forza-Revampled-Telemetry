@@ -4,6 +4,7 @@
 //! thread can read the config every frame. A file that fails to parse (for example while the
 //! configurator is half-way through writing it) is ignored and the previous config stays live.
 use crate::config::AppConfig;
+use crate::profiles::{profiles_path_for, CarProfilesFile, ProfilesHandle};
 use arc_swap::ArcSwap;
 use std::fs;
 use std::io;
@@ -49,6 +50,7 @@ impl ConfigHandle {
 /// Watches a config file and republishes it when its modification time or size changes.
 pub struct ConfigWatcher {
     handle: ConfigHandle,
+    profiles: ProfilesHandle,
     path: PathBuf,
     running: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
@@ -83,17 +85,25 @@ impl ConfigWatcher {
     /// Returns the I/O error if the watcher thread cannot be spawned.
     pub fn spawn(path: PathBuf, interval: Duration, notify: ConfigNotify) -> io::Result<Self> {
         let handle = ConfigHandle::fixed(AppConfig::load(&path));
+        let profiles_path = profiles_path_for(&path);
+        let profiles = ProfilesHandle::fixed(CarProfilesFile::load(&profiles_path));
         let running = Arc::new(AtomicBool::new(true));
         let thread = {
             let handle = handle.clone();
+            let profiles = profiles.clone();
             let running = Arc::clone(&running);
             let path = path.clone();
-            thread::Builder::new()
-                .name("fh6-config-watch".into())
-                .spawn(move || watch_loop(&path, interval, &handle, &running, &*notify))?
+            thread::Builder::new().name("fh6-config-watch".into()).spawn(move || {
+                let files = Watched {
+                    config: &path,
+                    profiles: &profiles_path,
+                };
+                watch_loop(files, interval, &handle, &profiles, &running, &*notify);
+            })?
         };
         Ok(Self {
             handle,
+            profiles,
             path,
             running,
             thread: Some(thread),
@@ -110,31 +120,68 @@ impl ConfigWatcher {
         self.handle.clone()
     }
 
+    /// A cloneable handle to the live car profiles (`car_profiles.json` beside the config).
+    pub fn profiles(&self) -> ProfilesHandle {
+        self.profiles.clone()
+    }
+
     /// The file being watched.
     pub fn path(&self) -> &Path {
         &self.path
     }
 }
 
-fn watch_loop(path: &Path, interval: Duration, handle: &ConfigHandle, running: &AtomicBool, notify: &dyn Fn()) {
+struct Watched<'a> {
+    config: &'a Path,
+    profiles: &'a Path,
+}
+
+fn watch_loop(
+    files: Watched<'_>,
+    interval: Duration,
+    handle: &ConfigHandle,
+    profiles: &ProfilesHandle,
+    running: &AtomicBool,
+    notify: &dyn Fn(),
+) {
+    let path = files.config;
     let mut last = stamp(path);
+    let mut last_profiles = stamp(files.profiles);
     while running.load(Ordering::Relaxed) {
         thread::park_timeout(interval);
         let now = stamp(path);
-        if now == last {
-            continue;
-        }
-        match AppConfig::try_load(path) {
-            Ok(cfg) => {
-                last = now;
-                if *handle.current() != cfg {
-                    handle.publish(cfg);
-                    tracing::info!(path = %path.display(), "config reloaded");
-                    notify();
+        if now != last {
+            match AppConfig::try_load(path) {
+                Ok(cfg) => {
+                    last = now;
+                    if *handle.current() != cfg {
+                        handle.publish(cfg);
+                        tracing::info!(path = %path.display(), "config reloaded");
+                        notify();
+                    }
                 }
+                // Keep `last` unchanged so the next poll retries; the old config stays live.
+                Err(err) => tracing::debug!(error = %err, "config change not loadable yet"),
             }
-            // Keep `last` unchanged so the next poll retries; the old config stays live.
-            Err(err) => tracing::debug!(error = %err, "config change not loadable yet"),
+        }
+        let now_profiles = stamp(files.profiles);
+        if now_profiles != last_profiles {
+            let loaded = if now_profiles.is_none() {
+                Ok(CarProfilesFile::default())
+            } else {
+                CarProfilesFile::try_load(files.profiles)
+            };
+            match loaded {
+                Ok(p) => {
+                    last_profiles = now_profiles;
+                    if *profiles.current() != p {
+                        profiles.publish(p);
+                        tracing::info!(path = %files.profiles.display(), "car profiles reloaded");
+                        notify();
+                    }
+                }
+                Err(err) => tracing::debug!(error = %err, "car profiles change not loadable yet"),
+            }
         }
     }
 }
