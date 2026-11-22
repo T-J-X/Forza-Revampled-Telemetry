@@ -87,7 +87,7 @@ The render path has no queue, no mutex and no GPU readback:
   - The app joins the render thread (which drops the surface and handle) before it drops the window.
 - **Outside `WM_CLOSE`.** A `WM_CLOSE` sent to the overlay (for example by `taskkill`) posts `WM_QUIT` instead of reaching `DefWindowProc`, so the normal shutdown order runs.
 - **Loopback by default.** Telemetry binds `127.0.0.1`, which is what Forza's Data Out targets, and needs no firewall rule. `UdpListenAllInterfaces: true` in `config.json` listens on every interface, for a second PC.
-- **Measured** (`docs/perf/engine.md`, 3840x2160 at 120 Hz, RTX 3070 Ti Laptop): receive-to-present well under one frame, CPU per frame around the 1 ms budget. The `present` call and the queue submit are the largest parts.
+- **Measured** (`docs/perf/engine.md`, 3840x2160 at 120 Hz, RTX 3070 Ti Laptop): receive-to-present 0.452 ms p50 / 0.793 ms p99 (one frame is 8.33 ms), CPU per frame 0.411 ms p50 / 0.712 ms p99 against the 1 ms budget on a quiet machine (1.28 ms p99 with builds running alongside). The `present` call and the queue submit are the largest parts.
 
 ## Action items
 1. [x] `crates/fh6-gpu`: context, overlay surface, offscreen target, quad pipeline.

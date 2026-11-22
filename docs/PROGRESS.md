@@ -37,7 +37,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | Check | Result |
 |---|---|
 | `cargo check --workspace` | ✅ no warnings |
-| `cargo test --workspace` | ✅ 167 passed, 0 failed (the launcher test compiles again) |
+| `cargo test --workspace` | ✅ 182 passed, 0 failed (the launcher test compiles again) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
 | `cargo fmt --all -- --check` | ✅ clean (whole workspace formatted once in Phase 4) |
 | `parity-dump tests/golden/packets` | ✅ 20/20 OK |
@@ -158,3 +158,6 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-21 | Whole workspace run through `cargo fmt --all` once | `fmt --check` is a gate; the tree had drift from before v2 |
 | 2026-11-21 | Per-frame wgpu internals (`Queue::write_buffer` staging, `create_view`, the command encoder) allocate inside wgpu; our frame code allocates nothing | Accepted for Phase 4 (CPU p50 well under budget); Phase 5 moves to a persistent mapped staging ring (ADR 0001 action 6) |
 | 2026-11-21 | Visibility: `--demo`/`--bench-seconds` bypass every rule; the OSD live view lifts only the race-off and stale rules, never the foreground rule; `DemoMode` in config.json no longer bypasses anything | AGENTS directive 9 (never visible in menus or over other apps); review finding |
+| 2026-11-21 | UDP: the port that published last owns the stream until silent for 50 ms; the other port's copies are dropped (replaces payload/timestamp dedupe) | Payload compare dropped a paused game's genuine repeats and their forwards, and a lagging thread could reorder values; review verification |
+| 2026-11-21 | wgpu errors and device loss set a flag instead of panicking; the render loop drops and recreates the device once a second; a failed surface configure is `GpuError::DeviceFailed` | wgpu's default handlers panic the render thread; an unconfigured surface panics in `get_current_texture` |
+| 2026-11-21 | `AppWindow` state is an `Rc` shared by the window and each dispatched message | A handler dropping its own window freed the state it was running from; safe API must stay sound |
