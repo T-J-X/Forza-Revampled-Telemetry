@@ -1,6 +1,7 @@
 //! fh6-core: Core data models, telemetry parser, config, and state machines for FH6 WheelDash.
 
 pub mod atomic_file;
+pub mod camera_status;
 pub mod cars;
 pub mod config;
 pub mod config_watch;
@@ -15,6 +16,7 @@ pub mod trail;
 pub mod udp;
 pub mod visibility;
 
+pub use camera_status::{CameraPatchHandle, CameraPatchState, CameraPatchStatus, CameraRequest};
 pub use cars::{BrandPalette, CarDatabase, CarEntry, CarOrdinals};
 pub use config::AppConfig;
 pub use config::{CameraViewMode, FontPreset, SafeZone, TelemetryPorts};

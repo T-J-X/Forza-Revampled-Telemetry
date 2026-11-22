@@ -3,7 +3,7 @@
 //!
 //! Only requests whose `Host` header names this loopback address are answered, so a web page
 //! cannot read the API through DNS rebinding. Each connection gets its own short-lived thread.
-use fh6_core::TelemetryReader;
+use fh6_core::{CameraPatchHandle, TelemetryReader};
 use std::fmt::Write as _;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
@@ -32,13 +32,14 @@ pub fn is_allowed_host(host: &str) -> bool {
 ///
 /// # Errors
 /// Returns the I/O error if the port cannot be bound or the thread cannot start.
-pub fn spawn(telemetry: TelemetryReader) -> io::Result<()> {
+pub fn spawn(telemetry: TelemetryReader, camera: CameraPatchHandle) -> io::Result<()> {
     let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, PORT))?;
     thread::Builder::new().name("fh6-widget-http".into()).spawn(move || {
         for stream in listener.incoming().flatten() {
             let telemetry = telemetry.clone();
+            let camera = camera.clone();
             let spawned = thread::Builder::new().name("fh6-widget-conn".into()).spawn(move || {
-                if let Err(err) = handle(stream, &telemetry) {
+                if let Err(err) = handle(stream, &telemetry, &camera) {
                     tracing::debug!(error = %err, "widget request failed");
                 }
             });
@@ -59,7 +60,7 @@ fn respond(stream: &mut TcpStream, status: &str, content_type: &str, body: &str)
     stream.write_all(body.as_bytes())
 }
 
-fn handle(mut stream: TcpStream, telemetry: &TelemetryReader) -> io::Result<()> {
+fn handle(mut stream: TcpStream, telemetry: &TelemetryReader, camera: &CameraPatchHandle) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_millis(500)))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
@@ -81,6 +82,14 @@ fn handle(mut stream: TcpStream, telemetry: &TelemetryReader) -> io::Result<()> 
     }
 
     let path = request_line.split_whitespace().nth(1).unwrap_or("/");
+    if path.starts_with("/api/camera") {
+        return respond(
+            &mut stream,
+            "200 OK",
+            "application/json",
+            &camera_json(&camera.status()),
+        );
+    }
     let frame = telemetry.latest();
     if path.starts_with("/api/state") {
         let json = serde_json::to_string(&frame.data).unwrap_or_else(|_| "{}".to_string());
@@ -98,15 +107,41 @@ fn handle(mut stream: TcpStream, telemetry: &TelemetryReader) -> io::Result<()> 
          td{{padding:2px 12px}}</style></head><body><h1>FH6 WheelDash</h1><table>\
          <tr><td>Last packet</td><td>{age}</td></tr><tr><td>Race on</td><td>{}</td></tr>\
          <tr><td>Speed</td><td>{:.0} mph</td></tr><tr><td>Gear</td><td>{}</td></tr>\
-         <tr><td>RPM</td><td>{:.0} / {:.0}</td></tr></table>\
-         <p>JSON: <a href=\"/api/state\">/api/state</a>. The configurator arrives in Phase 10.</p></body></html>",
+         <tr><td>RPM</td><td>{:.0} / {:.0}</td></tr><tr><td>Camera files</td><td>{}</td></tr></table>\
+         <p>JSON: <a href=\"/api/state\">/api/state</a>, <a href=\"/api/camera\">/api/camera</a>. The configurator arrives in Phase 10.</p></body></html>",
         d.is_race_on,
         d.speed_mph(),
         d.gear_string(),
         d.current_engine_rpm,
         d.engine_max_rpm,
+        html_escape(camera.status().state.message()),
     );
     respond(&mut stream, "200 OK", "text/html; charset=utf-8", &html)
+}
+
+/// The camera patch status as JSON: `{"state","message","restartNeeded","installDir","backupDir"}`.
+pub fn camera_json(s: &fh6_core::CameraPatchStatus) -> String {
+    let state = match &s.state {
+        fh6_core::CameraPatchState::Off => "off",
+        fh6_core::CameraPatchState::NoInstall => "noInstall",
+        fh6_core::CameraPatchState::UpToDate => "upToDate",
+        fh6_core::CameraPatchState::Applied => "applied",
+        fh6_core::CameraPatchState::QueuedUntilGameExits => "queued",
+        fh6_core::CameraPatchState::Restored => "restored",
+        fh6_core::CameraPatchState::Failed(_) => "failed",
+    };
+    serde_json::json!({
+        "state": state,
+        "message": s.state.message(),
+        "restartNeeded": s.state.restart_needed(),
+        "installDir": s.install_dir,
+        "backupDir": s.backup_dir,
+    })
+    .to_string()
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 #[cfg(test)]

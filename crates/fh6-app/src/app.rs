@@ -6,7 +6,7 @@
 use crate::args::AppArgs;
 use crate::process_watcher::ProcessWatcher;
 use crate::render_loop::{self, RenderControl, RenderOptions, RenderSetup, RenderSummary};
-use crate::{perf_report, widget_server};
+use crate::{camera_sync, perf_report, widget_server};
 use fh6_core::config::resolve_config_path;
 use fh6_core::{ConfigWatcher, TelemetryEngine, TelemetryPorts, TelemetryReader};
 use fh6_gpu::OverlaySurface;
@@ -104,7 +104,16 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
 
     let reader = TelemetryReader::new();
     let engine = start_engine(cfg.telemetry_ports(), reader.clone(), &waker);
-    if let Err(err) = widget_server::spawn(reader.clone()) {
+    let camera = fh6_core::CameraPatchHandle::new();
+    if let Err(err) = camera_sync::spawn(
+        watcher.handle(),
+        camera.clone(),
+        args.game_process.clone(),
+        Duration::from_secs(2),
+    ) {
+        tracing::warn!(error = %err, "camera sync not started");
+    }
+    if let Err(err) = widget_server::spawn(reader.clone(), camera.clone()) {
         tracing::warn!(error = %err, "status server not started");
     }
     if args.open_widget {

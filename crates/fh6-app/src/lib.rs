@@ -6,6 +6,7 @@
 #[cfg(windows)]
 pub mod app;
 pub mod args;
+pub mod camera_sync;
 pub mod latency;
 pub mod launcher;
 pub mod logging;
