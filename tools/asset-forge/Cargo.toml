@@ -1,0 +1,27 @@
+[package]
+name = "asset-forge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Reproducible asset pipeline for FH6 WheelDash: Blender (bpy as Rust string constants), ComfyUI over HTTP, logos, fonts, ledger and contact sheet"
+
+[[bin]]
+name = "asset-forge"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+png.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "exr"] }
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+ureq = { version = "3.1", default-features = false, features = ["json", "native-tls", "gzip"] }
+oxipng = { version = "10.1", default-features = false, features = ["parallel"] }
+ruzstd = "0.9"
+ttf-parser = "0.25"
+
+[dev-dependencies]
+ktx2 = "0.5"

@@ -15,6 +15,7 @@ members = [
     "tools/bench-render",
     "tools/screen-capture",
     "tools/stand-in-game",
+    "tools/asset-forge",
 ]
 
 [workspace.package]

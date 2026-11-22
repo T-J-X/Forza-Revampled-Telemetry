@@ -34,3 +34,15 @@ node_modules/
 .claude/skills/*/evals/
 .agents/skills/*/evals/
 .claude/skills/prompt-cache-control/
+
+# asset-forge: scratch renders, generated bpy scripts and logs live in target/asset-forge (already
+# ignored); Blender autosaves and any local ComfyUI model copies never belong in git
+*.blend1
+*.blend
+__pycache__/
+*.safetensors
+*.ckpt
+*.pth
+
+# asset-forge 4K masters too large for git (rebuilt by `asset-forge build`)
+/assets/_masters/
