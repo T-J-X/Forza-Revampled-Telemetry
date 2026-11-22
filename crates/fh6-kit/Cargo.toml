@@ -1,0 +1,29 @@
+[package]
+name = "fh6-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "GPU 2D/2.5D render kit for FH6 WheelDash clusters: SDF shapes, paints, bloom, glass, MSDF text, springs, effects"
+
+[dependencies]
+fh6-core = { path = "../fh6-core" }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+png.workspace = true
+ttf-parser = "0.25"
+fdsm = "0.8"
+rustybuzz = "0.20"
+resvg = { version = "0.50", default-features = false }
+gltf = { version = "1.4", default-features = false, features = ["utils"] }
+ktx2 = "0.5"
+ruzstd = "0.9"
+image = { version = "0.25", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+fh6-gpu = { path = "../fh6-gpu" }

@@ -8,6 +8,7 @@ members = [
     "crates/fh6-input",
     "crates/fh6-win",
     "crates/fh6-gpu",
+    "crates/fh6-kit",
     "crates/fh6-app",
     "tools/preview-export",
     "tools/mock-udp",
