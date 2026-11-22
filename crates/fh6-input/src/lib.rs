@@ -8,5 +8,5 @@ pub mod xinput;
 
 pub use hold_state::{HoldConfig, HoldToggle};
 pub use poller::{InputPoller, InputShared};
-pub use tracker::{InputControllerTracker, InputEvents, PadSource, PollContext, MASK_MANUAL_LOCK};
+pub use tracker::{InputControllerTracker, InputEvents, PadSource, PollContext, ResyncConfig, MASK_MANUAL_LOCK};
 pub use xinput::{XInput, XInputError};
