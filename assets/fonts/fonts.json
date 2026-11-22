@@ -1,0 +1,829 @@
+{
+  "defaults": {
+    "aviation": "b612-mono",
+    "dial": "barlow-semi-condensed",
+    "display": "saira-condensed",
+    "fallback": "noto-sans",
+    "fluid": "exo-2",
+    "light": "saira",
+    "race": "saira-condensed",
+    "tech": "chakra-petch",
+    "text": "titillium-web",
+    "wide": "michroma"
+  },
+  "doc": "Font pack for FH6 WheelDash (asset-forge). Paths are relative to assets/. Roles match data/figma_tokens.json type.fonts. Digits are always drawn with a fixed advance by fh6-kit; tnum tells whether the face can do it natively. Users may add their own fonts.",
+  "families": [
+    {
+      "cap_ratio": 0.6880000233650208,
+      "default": true,
+      "dir": "fonts/saira-condensed",
+      "family": "Saira Condensed",
+      "files": [
+        {
+          "axes": [],
+          "file": "SairaCondensed-Thin.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 250
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-ExtraBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 800
+        },
+        {
+          "axes": [],
+          "file": "SairaCondensed-Black.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 900
+        }
+      ],
+      "id": "saira-condensed",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/saira-condensed/OFL.txt",
+      "roles": [
+        "display",
+        "race"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.6850000023841858,
+      "default": true,
+      "dir": "fonts/titillium-web",
+      "family": "Titillium Web",
+      "files": [
+        {
+          "axes": [],
+          "file": "TitilliumWeb-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "TitilliumWeb-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "TitilliumWeb-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "TitilliumWeb-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "TitilliumWeb-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        },
+        {
+          "axes": [],
+          "file": "TitilliumWeb-Black.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 900
+        }
+      ],
+      "id": "titillium-web",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/titillium-web/OFL.txt",
+      "roles": [
+        "text"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
+      "tnum": {
+        "digits_monospaced": true,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.6880000233650208,
+      "default": false,
+      "dir": "fonts/saira",
+      "family": "Saira",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 100.0,
+              "max": 900.0,
+              "min": 100.0,
+              "tag": "wght"
+            },
+            {
+              "default": 100.0,
+              "max": 125.0,
+              "min": 50.0,
+              "tag": "wdth"
+            }
+          ],
+          "file": "Saira[wdth,wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 100
+        }
+      ],
+      "id": "saira",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/saira/OFL.txt",
+      "roles": [
+        "light"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/saira",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": true
+      }
+    },
+    {
+      "cap_ratio": 0.699999988079071,
+      "default": false,
+      "dir": "fonts/barlow-semi-condensed",
+      "family": "Barlow Semi Condensed",
+      "files": [
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Thin.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 250
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-ExtraBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 800
+        },
+        {
+          "axes": [],
+          "file": "BarlowSemiCondensed-Black.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 900
+        }
+      ],
+      "id": "barlow-semi-condensed",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/barlow-semi-condensed/OFL.txt",
+      "roles": [
+        "dial"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": true
+      }
+    },
+    {
+      "cap_ratio": 0.75,
+      "default": false,
+      "dir": "fonts/michroma",
+      "family": "Michroma",
+      "files": [
+        {
+          "axes": [],
+          "file": "Michroma-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        }
+      ],
+      "id": "michroma",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/michroma/OFL.txt",
+      "roles": [
+        "wide"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/michroma",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.699999988079071,
+      "default": false,
+      "dir": "fonts/chakra-petch",
+      "family": "Chakra Petch",
+      "files": [
+        {
+          "axes": [],
+          "file": "ChakraPetch-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "ChakraPetch-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "ChakraPetch-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "ChakraPetch-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "ChakraPetch-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "ChakraPetch-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        }
+      ],
+      "id": "chakra-petch",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/chakra-petch/OFL.txt",
+      "roles": [
+        "tech"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.6899999976158142,
+      "default": false,
+      "dir": "fonts/exo-2",
+      "family": "Exo 2",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 400.0,
+              "max": 900.0,
+              "min": 100.0,
+              "tag": "wght"
+            }
+          ],
+          "file": "Exo2[wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 400
+        }
+      ],
+      "id": "exo-2",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/exo-2/OFL.txt",
+      "roles": [
+        "fluid"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/exo2",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": true
+      }
+    },
+    {
+      "cap_ratio": 0.75,
+      "default": false,
+      "dir": "fonts/b612-mono",
+      "family": "B612 Mono",
+      "files": [
+        {
+          "axes": [],
+          "file": "B612Mono-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "B612Mono-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        }
+      ],
+      "id": "b612-mono",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/b612-mono/OFL.txt",
+      "roles": [
+        "aviation"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/b612mono",
+      "tnum": {
+        "digits_monospaced": true,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.7139999866485596,
+      "default": false,
+      "dir": "fonts/noto-sans",
+      "family": "Noto Sans",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 400.0,
+              "max": 900.0,
+              "min": 100.0,
+              "tag": "wght"
+            },
+            {
+              "default": 100.0,
+              "max": 100.0,
+              "min": 62.5,
+              "tag": "wdth"
+            }
+          ],
+          "file": "NotoSans[wdth,wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 400
+        }
+      ],
+      "id": "noto-sans",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/noto-sans/OFL.txt",
+      "roles": [
+        "fallback"
+      ],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/notosans",
+      "tnum": {
+        "digits_monospaced": true,
+        "feature": true
+      }
+    },
+    {
+      "cap_ratio": 0.6880000233650208,
+      "default": false,
+      "dir": "fonts/saira-semi-condensed",
+      "family": "Saira Semi Condensed",
+      "files": [
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Thin.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 250
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-ExtraBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 800
+        },
+        {
+          "axes": [],
+          "file": "SairaSemiCondensed-Black.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 900
+        }
+      ],
+      "id": "saira-semi-condensed",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/saira-semi-condensed/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.699999988079071,
+      "default": false,
+      "dir": "fonts/barlow-condensed",
+      "family": "Barlow Condensed",
+      "files": [
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Thin.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 250
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-ExtraLight.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 275
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-ExtraBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 800
+        },
+        {
+          "axes": [],
+          "file": "BarlowCondensed-Black.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 900
+        }
+      ],
+      "id": "barlow-condensed",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/barlow-condensed/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": true
+      }
+    },
+    {
+      "cap_ratio": 0.7200000286102295,
+      "default": false,
+      "dir": "fonts/orbitron",
+      "family": "Orbitron",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 400.0,
+              "max": 900.0,
+              "min": 400.0,
+              "tag": "wght"
+            }
+          ],
+          "file": "Orbitron[wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 400
+        }
+      ],
+      "id": "orbitron",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/orbitron/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/orbitron",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.6430000066757202,
+      "default": false,
+      "dir": "fonts/rajdhani",
+      "family": "Rajdhani",
+      "files": [
+        {
+          "axes": [],
+          "file": "Rajdhani-Light.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 300
+        },
+        {
+          "axes": [],
+          "file": "Rajdhani-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        },
+        {
+          "axes": [],
+          "file": "Rajdhani-Medium.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 500
+        },
+        {
+          "axes": [],
+          "file": "Rajdhani-SemiBold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 600
+        },
+        {
+          "axes": [],
+          "file": "Rajdhani-Bold.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 700
+        }
+      ],
+      "id": "rajdhani",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/rajdhani/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.6899999976158142,
+      "default": false,
+      "dir": "fonts/oxanium",
+      "family": "Oxanium",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 200.0,
+              "max": 800.0,
+              "min": 200.0,
+              "tag": "wght"
+            }
+          ],
+          "file": "Oxanium[wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 200
+        }
+      ],
+      "id": "oxanium",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/oxanium/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/oxanium",
+      "tnum": {
+        "digits_monospaced": true,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.621999979019165,
+      "default": false,
+      "dir": "fonts/teko",
+      "family": "Teko",
+      "files": [
+        {
+          "axes": [
+            {
+              "default": 300.0,
+              "max": 700.0,
+              "min": 300.0,
+              "tag": "wght"
+            }
+          ],
+          "file": "Teko[wght].ttf",
+          "style": "normal",
+          "variable": true,
+          "weight": 300
+        }
+      ],
+      "id": "teko",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/teko/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/teko",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.699999988079071,
+      "default": false,
+      "dir": "fonts/share-tech-mono",
+      "family": "Share Tech Mono",
+      "files": [
+        {
+          "axes": [],
+          "file": "ShareTechMono-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        }
+      ],
+      "id": "share-tech-mono",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/share-tech-mono/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sharetechmono",
+      "tnum": {
+        "digits_monospaced": true,
+        "feature": false
+      }
+    },
+    {
+      "cap_ratio": 0.699999988079071,
+      "default": false,
+      "dir": "fonts/russo-one",
+      "family": "Russo One",
+      "files": [
+        {
+          "axes": [],
+          "file": "RussoOne-Regular.ttf",
+          "style": "normal",
+          "variable": false,
+          "weight": 400
+        }
+      ],
+      "id": "russo-one",
+      "licence": "OFL-1.1",
+      "licence_file": "fonts/russo-one/OFL.txt",
+      "roles": [],
+      "source": "https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/russoone",
+      "tnum": {
+        "digits_monospaced": false,
+        "feature": false
+      }
+    }
+  ],
+  "source_commit": "google/fonts@06bfe0d62a98375cb09c942fa18e68bd32cff057",
+  "version": 1
+}

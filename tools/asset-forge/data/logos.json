@@ -1,0 +1,1611 @@
+{
+  "version": 1,
+  "doc": "Logo sources for asset-forge (data, not code). source=commons: downloaded from the url and kept as SVG; source=remade: a wordmark set in an OFL face from assets/fonts and outlined to SVG. Trademarks belong to their owners and are used only to identify the car. mono: auto | silhouette | knockout.",
+  "logos": [
+    {
+      "key": "ACURA",
+      "name": "Acura",
+      "kind": "combined",
+      "aliases": [
+        "Acura"
+      ],
+      "source": "commons",
+      "file": "File:Acura logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/af/Acura_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Basavarajtalwar",
+      "page": "https://commons.wikimedia.org/wiki/File:Acura_logo.svg",
+      "notes": "Official Acura caliper emblem over wordmark; crop the emblem for small sizes.",
+      "mono": "auto"
+    },
+    {
+      "key": "ALFA_ROMEO",
+      "name": "Alfa Romeo",
+      "kind": "wordmark",
+      "aliases": [
+        "Alfa",
+        "Alfa Romeo"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No Alfa Romeo brand logo SVG on Commons: the scudetto/biscione badge is only a non-free PNG on en.wiki (File:Alfa Romeo logo.png); Commons has model wordmarks only (Giulia, Stelvio, 4C...). Remake needed.",
+      "wordmark": {
+        "text": "ALFA ROMEO",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#B5121B"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "ALPINE",
+      "name": "Alpine",
+      "kind": "emblem",
+      "aliases": [
+        "Alpine"
+      ],
+      "source": "commons",
+      "file": "File:Alpine F1 Team Logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/7e/Alpine_F1_Team_Logo.svg",
+      "licence": "Public domain",
+      "attribution": "Alpine F1 Team",
+      "page": "https://commons.wikimedia.org/wiki/File:Alpine_F1_Team_Logo.svg",
+      "notes": "Commons has no Alpine car-brand SVG (en.wiki uses a JPG). The Alpine F1 Team logo carries the same official \"A\" arrow mark above \"ALPINE F1 TEAM\" text: crop to the A-arrow (optionally keep the ALPINE word), drop the F1 TEAM line. Other \"Alpine logo\" SVGs on Commons are Alpine Electronics / Alpine Bau, not the carmaker.",
+      "mono": "auto",
+      "crop": [
+        0.0,
+        0.0,
+        1.0,
+        0.6
+      ]
+    },
+    {
+      "key": "ASTON_MARTIN",
+      "name": "Aston Martin",
+      "kind": "combined",
+      "aliases": [
+        "Aston",
+        "Aston Martin"
+      ],
+      "source": "commons",
+      "file": "File:Aston Martin 1935.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Aston_Martin_1935.svg",
+      "licence": "Public domain",
+      "attribution": "Aston Martin",
+      "page": "https://commons.wikimedia.org/wiki/File:Aston_Martin_1935.svg",
+      "notes": "Wings badge with ASTON MARTIN in the centre bar; described as the 1935 design, close to but not identical to the current (2022) wings, which are not on Commons. Current wordmark as alt.",
+      "mono": "auto"
+    },
+    {
+      "key": "AUDI",
+      "name": "Audi",
+      "kind": "emblem",
+      "aliases": [
+        "Audi"
+      ],
+      "source": "commons",
+      "file": "File:Audi-Logo 2016.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/92/Audi-Logo_2016.svg",
+      "licence": "Public domain",
+      "attribution": "Strichpunkt / KMS Team",
+      "page": "https://commons.wikimedia.org/wiki/File:Audi-Logo_2016.svg",
+      "notes": "Official flat four rings (2016 CI), black, rings only. Avoid \"Audi logo detail.svg\" (10 MB).",
+      "mono": "auto"
+    },
+    {
+      "key": "BMW",
+      "name": "BMW",
+      "kind": "emblem",
+      "aliases": [
+        "BMW"
+      ],
+      "source": "commons",
+      "file": "File:BMW logo (gray).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/BMW_logo_%28gray%29.svg",
+      "licence": "Public domain",
+      "attribution": "BMW",
+      "page": "https://commons.wikimedia.org/wiki/File:BMW_logo_(gray).svg",
+      "notes": "Flat 2020 roundel (grey ring, blue/white quadrants). Alt: 1997-2020 3D-style roundel still used on car badges.",
+      "mono": "ink"
+    },
+    {
+      "key": "BMW_M",
+      "name": "BMW M",
+      "kind": "emblem",
+      "aliases": [
+        "BMW",
+        "BMW M",
+        "M"
+      ],
+      "source": "commons",
+      "file": "File:BMW M logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg",
+      "licence": "Public domain",
+      "attribution": "BMW Motorsport GmbH SVG by CMetalCore",
+      "page": "https://commons.wikimedia.org/wiki/File:BMW_M_logo.svg",
+      "notes": "Tricolour stripes + M with gradients, 14 KB, PD. Alt is the official 2020-2022 grey M (363 KB, CC BY-SA 4.0).",
+      "mono": "auto"
+    },
+    {
+      "key": "BUGATTI",
+      "name": "Bugatti",
+      "kind": "emblem",
+      "aliases": [
+        "Bugatti"
+      ],
+      "source": "commons",
+      "file": "File:Bugatti logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/60/Bugatti_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Bugatti",
+      "page": "https://commons.wikimedia.org/wiki/File:Bugatti_logo.svg",
+      "notes": "Classic red oval macaron with EB and BUGATTI. Alt: the 2022 wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "CADILLAC",
+      "name": "Cadillac",
+      "kind": "combined",
+      "aliases": [
+        "Cadillac"
+      ],
+      "source": "commons",
+      "file": "File:Cadillac Logo 2021.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/7f/Cadillac_Logo_2021.svg",
+      "licence": "Public domain",
+      "attribution": "Cadillac",
+      "page": "https://commons.wikimedia.org/wiki/File:Cadillac_Logo_2021.svg",
+      "notes": "Current monochrome 2021 crest above the CADILLAC wordmark; crop the crest for the emblem. Alt 1999 is the old colour crest in wreath.",
+      "mono": "ink"
+    },
+    {
+      "key": "CHEVROLET",
+      "name": "Chevrolet",
+      "kind": "emblem",
+      "aliases": [
+        "Chevrolet"
+      ],
+      "source": "commons",
+      "file": "File:Chevrolet bowtie 2023.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a8/Chevrolet_bowtie_2023.svg",
+      "licence": "Public domain",
+      "attribution": "Chevrolet",
+      "page": "https://commons.wikimedia.org/wiki/File:Chevrolet_bowtie_2023.svg",
+      "notes": "Current flat outline bowtie (single dark fill, 371 B; recolour as needed). Alt Chevrolet-logo.svg is the 2013 gold bowtie + wordmark (free recreation, 39 KB).",
+      "mono": "auto"
+    },
+    {
+      "key": "DODGE",
+      "name": "Dodge",
+      "kind": "wordmark",
+      "aliases": [
+        "Dodge"
+      ],
+      "source": "commons",
+      "file": "File:Dodge 2022 logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/Dodge_2022_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Stellantis N.V.",
+      "page": "https://commons.wikimedia.org/wiki/File:Dodge_2022_logo.svg",
+      "notes": "Current DODGE wordmark with red Fratzog (officially introduced 2025). Alt: the 2010-2022 wordmark with racing stripes.",
+      "mono": "silhouette"
+    },
+    {
+      "key": "FERRARI",
+      "name": "Ferrari",
+      "kind": "wordmark",
+      "aliases": [
+        "Ferrari"
+      ],
+      "source": "commons",
+      "file": "File:Ferrari wordmark.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ferrari_wordmark.svg",
+      "licence": "Public domain",
+      "attribution": "Ferrari",
+      "page": "https://commons.wikimedia.org/wiki/File:Ferrari_wordmark.svg",
+      "notes": "Commons has no Ferrari prancing-horse shield or horse SVG (only en.wiki non-free); only the Ferrari wordmark (PD-textlogo). The horse/shield must be remade if wanted.",
+      "mono": "auto"
+    },
+    {
+      "key": "FORD",
+      "name": "Ford",
+      "kind": "emblem",
+      "aliases": [
+        "Ford"
+      ],
+      "source": "commons",
+      "file": "File:Ford logo flat.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Ford_logo_flat.svg",
+      "licence": "Public domain",
+      "attribution": "Ford Motor Company",
+      "page": "https://commons.wikimedia.org/wiki/File:Ford_logo_flat.svg",
+      "notes": "Flat blue oval, official colours. Alt is the gradient centennial oval.",
+      "mono": "auto"
+    },
+    {
+      "key": "HONDA",
+      "name": "Honda",
+      "kind": "combined",
+      "aliases": [
+        "Honda"
+      ],
+      "source": "commons",
+      "file": "File:Honda.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/Honda.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:Honda.svg",
+      "notes": "Red H emblem with HONDA below; crop the H for the emblem. Alt: red HONDA wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "HYUNDAI_N",
+      "name": "Hyundai N",
+      "kind": "combined",
+      "aliases": [
+        "Hyundai",
+        "Hyundai N"
+      ],
+      "source": "commons",
+      "file": "File:Hyundai Motor Company logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/44/Hyundai_Motor_Company_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Hyundai Motor Company",
+      "page": "https://commons.wikimedia.org/wiki/File:Hyundai_Motor_Company_logo.svg",
+      "notes": "No Hyundai N badge on Commons (en.wiki has only a non-free PNG, File:Hyundai N Logo.png). Fallback per brief: Hyundai slanted-H emblem + wordmark (blue). The N badge needs a remake.",
+      "mono": "auto"
+    },
+    {
+      "key": "JAGUAR",
+      "name": "Jaguar",
+      "kind": "wordmark",
+      "aliases": [
+        "Jaguar"
+      ],
+      "source": "commons",
+      "file": "File:Jaguar wordmark 2021.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Jaguar_wordmark_2021.svg",
+      "licence": "Public domain",
+      "attribution": "Jaguar Land Rover Limited",
+      "page": "https://commons.wikimedia.org/wiki/File:Jaguar_wordmark_2021.svg",
+      "notes": "2021 JAGUAR wordmark (JLR, PD). Alt Jaguar 2024.svg is the current rebrand wordmark. The only leaper is an svgrepo re-upload with a third-party CC0 claim: treat as unreliable.",
+      "mono": "auto"
+    },
+    {
+      "key": "KOENIGSEGG",
+      "name": "Koenigsegg",
+      "kind": "combined",
+      "aliases": [
+        "Koenigsegg"
+      ],
+      "source": "commons",
+      "file": "File:Koenigsegg logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/39/Koenigsegg_logo.svg",
+      "licence": "Public domain",
+      "attribution": "™/® Koenigsegg Automotive AB",
+      "page": "https://commons.wikimedia.org/wiki/File:Koenigsegg_logo.svg",
+      "notes": "Shield + Koenigsegg wordmark in one file, monochrome; crop the shield for the emblem. No colour shield SVG on Commons.",
+      "mono": "auto"
+    },
+    {
+      "key": "LAMBORGHINI",
+      "name": "Lamborghini",
+      "kind": "wordmark",
+      "aliases": [
+        "Lamborghini"
+      ],
+      "source": "commons",
+      "file": "File:Lamborghini - logo wordmark (italy, 1963-).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Lamborghini_-_logo_wordmark_%28italy%2C_1963-%29.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:Lamborghini_-_logo_wordmark_(italy,_1963-).svg",
+      "notes": "Commons has no bull shield SVG (only en.wiki non-free); script Lamborghini wordmark only. The bull shield must be remade.",
+      "mono": "auto"
+    },
+    {
+      "key": "LEXUS",
+      "name": "Lexus",
+      "kind": "combined",
+      "aliases": [
+        "Lexus"
+      ],
+      "source": "commons",
+      "file": "File:Lexus.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/75/Lexus.svg",
+      "licence": "Public domain",
+      "attribution": "Gaspard",
+      "page": "https://commons.wikimedia.org/wiki/File:Lexus.svg",
+      "notes": "L-in-oval emblem + LEXUS wordmark, single black path.",
+      "mono": "auto"
+    },
+    {
+      "key": "LOTUS",
+      "name": "Lotus",
+      "kind": "wordmark",
+      "aliases": [
+        "Lotus"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "The Lotus Cars roundel is only a local non-free file on en.wiki (File:Lotus Cars logo.svg); not on Commons. Remake needed.",
+      "wordmark": {
+        "text": "LOTUS",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#FFD100"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "MAZDA",
+      "name": "Mazda",
+      "kind": "combined",
+      "aliases": [
+        "Mazda"
+      ],
+      "source": "commons",
+      "file": "File:Mazda logo 2024 (vertical).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Mazda_logo_2024_%28vertical%29.svg",
+      "licence": "Public domain",
+      "attribution": "Mazda",
+      "page": "https://commons.wikimedia.org/wiki/File:Mazda_logo_2024_(vertical).svg",
+      "notes": "Current (2024) flat wing emblem above MAZDA. Alt: blue MAZDA wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "MCLAREN",
+      "name": "McLaren",
+      "kind": "wordmark",
+      "aliases": [
+        "McLaren"
+      ],
+      "source": "commons",
+      "file": "File:McLaren logo (2026).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/bc/McLaren_logo_%282026%29.svg",
+      "licence": "Public domain",
+      "attribution": "McLaren",
+      "page": "https://commons.wikimedia.org/wiki/File:McLaren_logo_(2026).svg",
+      "notes": "MCLAREN wordmark with orange speedmark. Alt: speedmark alone (black or white).",
+      "mono": "silhouette"
+    },
+    {
+      "key": "MERCEDES_AMG",
+      "name": "Mercedes-AMG",
+      "kind": "wordmark",
+      "aliases": [
+        "AMG",
+        "Mercedes AMG",
+        "Mercedes-AMG"
+      ],
+      "source": "commons",
+      "file": "File:AMG logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c9/AMG_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Mercedes-AMG",
+      "page": "https://commons.wikimedia.org/wiki/File:AMG_logo.svg",
+      "notes": "Official AMG wordmark, black.",
+      "mono": "auto"
+    },
+    {
+      "key": "MERCEDES_BENZ",
+      "name": "Mercedes-Benz",
+      "kind": "emblem",
+      "aliases": [
+        "Mercedes",
+        "Mercedes Benz",
+        "Mercedes-Benz"
+      ],
+      "source": "commons",
+      "file": "File:Mercedes-Benz Star (1969-1986, 2025-).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Mercedes-Benz_Star_%281969-1986%2C_2025-%29.svg",
+      "licence": "Public domain",
+      "attribution": "Mercedes-Benz",
+      "page": "https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Star_(1969-1986,_2025-).svg",
+      "notes": "Flat three-pointed star in ring (current 2025 CI), single black path. Avoid Mercedes-Logo.svg (1.5 MB, 1250 paths).",
+      "mono": "auto"
+    },
+    {
+      "key": "MITSUBISHI",
+      "name": "Mitsubishi",
+      "kind": "emblem",
+      "aliases": [
+        "Mitsubishi"
+      ],
+      "source": "commons",
+      "file": "File:Mitsubishi logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Mitsubishi",
+      "page": "https://commons.wikimedia.org/wiki/File:Mitsubishi_logo.svg",
+      "notes": "Red three-diamond emblem (314 B). Alt: Mitsubishi Motors emblem + MITSUBISHI MOTORS text.",
+      "mono": "auto"
+    },
+    {
+      "key": "NISSAN",
+      "name": "Nissan",
+      "kind": "emblem",
+      "aliases": [
+        "Nissan"
+      ],
+      "source": "commons",
+      "file": "File:Nissan 2020 logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Nissan_2020_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Nissan Motor Corporation",
+      "page": "https://commons.wikimedia.org/wiki/File:Nissan_2020_logo.svg",
+      "notes": "Current 2020 flat Nissan badge. Alt: red NISSAN wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "NISSAN_NISMO",
+      "name": "Nismo",
+      "kind": "wordmark",
+      "aliases": [
+        "NISMO",
+        "Nismo",
+        "Nissan"
+      ],
+      "source": "commons",
+      "file": "File:Nismo logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a8/Nismo_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Nismo",
+      "page": "https://commons.wikimedia.org/wiki/File:Nismo_logo.svg",
+      "notes": "Official NISMO wordmark (black + red O).",
+      "mono": "auto"
+    },
+    {
+      "key": "PAGANI",
+      "name": "Pagani",
+      "kind": "wordmark",
+      "aliases": [
+        "Pagani"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No Pagani Automobili logo on Commons or en.wiki (Pagani-Stemma.svg is the town of Pagani coat of arms). Remake as wordmark.",
+      "wordmark": {
+        "text": "PAGANI",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#C9CED6"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "POLARIS",
+      "name": "Polaris",
+      "kind": "wordmark",
+      "aliases": [
+        "Polaris"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "The Polaris Industries logo is only a local non-free file on en.wiki (File:Polaris Industries logo.svg); not on Commons. Remake.",
+      "wordmark": {
+        "text": "POLARIS",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#0067B1"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "PORSCHE",
+      "name": "Porsche",
+      "kind": "wordmark",
+      "aliases": [
+        "Porsche"
+      ],
+      "source": "commons",
+      "file": "File:Porsche Wordmark Logo Black.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Porsche_Wordmark_Logo_Black.svg",
+      "licence": "Public domain",
+      "attribution": "Porsche AG",
+      "page": "https://commons.wikimedia.org/wiki/File:Porsche_Wordmark_Logo_Black.svg",
+      "notes": "Commons has no reliable Porsche crest. Primary is the official current PORSCHE wordmark (Porsche AG, black). Porsche-seeklogo.svg is a full-colour crest but uploaded by a third party claiming CC BY 4.0 for a seeklogo copy: licence unreliable, may be deleted. Porsche Warenzeichen.svg is NOT the crest (rejected).",
+      "mono": "auto"
+    },
+    {
+      "key": "RIMAC",
+      "name": "Rimac",
+      "kind": "combined",
+      "aliases": [
+        "Rimac"
+      ],
+      "source": "commons",
+      "file": "File:Rimac Automobili logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Rimac_Automobili_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:Rimac_Automobili_logo.svg",
+      "notes": "R emblem + RIMAC wordmark, dark grey.",
+      "mono": "auto"
+    },
+    {
+      "key": "SHELBY",
+      "name": "Shelby",
+      "kind": "wordmark",
+      "aliases": [
+        "Shelby"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "The Shelby American logo is only a JPG on en.wiki; no Commons SVG of the cobra or wordmark (only Cobra car blueprints). Remake.",
+      "wordmark": {
+        "text": "SHELBY",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "SUBARU",
+      "name": "Subaru",
+      "kind": "combined",
+      "aliases": [
+        "Subaru"
+      ],
+      "source": "commons",
+      "file": "File:Subaru logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/47/Subaru_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Subaru",
+      "page": "https://commons.wikimedia.org/wiki/File:Subaru_logo.svg",
+      "notes": "Flat Pleiades oval + SUBARU wordmark (2003-2019 flat version, 3.5 KB, clean vector); crop the oval for the emblem. The 2019+ files (Subaru logo (transparent).svg, Subaru Logo 2024.svg, Subaru (2019).svg) embed raster images and weigh 0.8-1.6 MB: avoid. Subaru Logo alt.svg is the blue/yellow square badge.",
+      "mono": "auto"
+    },
+    {
+      "key": "TOYOTA",
+      "name": "Toyota",
+      "kind": "emblem",
+      "aliases": [
+        "Toyota"
+      ],
+      "source": "commons",
+      "file": "File:Toyota Logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/78/Toyota_Logo.svg",
+      "licence": "Public domain",
+      "attribution": "Toyota Motor Corporation",
+      "page": "https://commons.wikimedia.org/wiki/File:Toyota_Logo.svg",
+      "notes": "Three-ellipse emblem, single black path. Alt: red version, and horizontal emblem + TOYOTA.",
+      "mono": "auto"
+    },
+    {
+      "key": "TOYOTA_GR",
+      "name": "Toyota Gazoo Racing / GR",
+      "kind": "emblem",
+      "aliases": [
+        "GR",
+        "Gazoo Racing",
+        "Toyota",
+        "Toyota Gazoo Racing",
+        "Toyota Gazoo Racing / GR"
+      ],
+      "source": "commons",
+      "file": "File:Toyota Gazoo Racing emblem.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Toyota_Gazoo_Racing_emblem.svg",
+      "licence": "Public domain",
+      "attribution": "™/®Toyota Motor Corporation",
+      "page": "https://commons.wikimedia.org/wiki/File:Toyota_Gazoo_Racing_emblem.svg",
+      "notes": "GR emblem (red/white/black). Alt: GR + TOYOTA GAZOO Racing stacked.",
+      "mono": "auto"
+    },
+    {
+      "key": "VOLKSWAGEN",
+      "name": "Volkswagen",
+      "kind": "emblem",
+      "aliases": [
+        "Volkswagen"
+      ],
+      "source": "commons",
+      "file": "File:Volkswagen logo 2019.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg",
+      "licence": "Public domain",
+      "attribution": "Volkswagen",
+      "page": "https://commons.wikimedia.org/wiki/File:Volkswagen_logo_2019.svg",
+      "notes": "2019 flat VW roundel, single path.",
+      "mono": "auto"
+    },
+    {
+      "key": "ABARTH",
+      "name": "Abarth",
+      "kind": "combined",
+      "aliases": [
+        "Abarth"
+      ],
+      "source": "commons",
+      "file": "File:Abarth Trofeo Slalom.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/7f/Abarth_Trofeo_Slalom.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:Abarth_Trofeo_Slalom.svg",
+      "notes": "No Abarth brand logo SVG on Commons (en.wiki has only a PNG). This file is the Abarth scorpion + ABARTH + a \"TROFEO SLALOM\" event line: usable only after cropping away TROFEO SLALOM; the scorpion is not the current shield badge.",
+      "mono": "auto",
+      "crop": [
+        0.0,
+        0.0,
+        0.255,
+        1.0
+      ]
+    },
+    {
+      "key": "ALUMICRAFT",
+      "name": "Alumicraft",
+      "kind": "wordmark",
+      "aliases": [
+        "Alumicraft"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons or en.wiki. Remake as wordmark.",
+      "wordmark": {
+        "text": "ALUMICRAFT",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "APOLLO",
+      "name": "Apollo Automobil",
+      "kind": "wordmark",
+      "aliases": [
+        "Apollo",
+        "Apollo Automobil"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only PNGs on en.wiki (Apollo Automobil Logo.png / Name Logo.png). Remake.",
+      "wordmark": {
+        "text": "APOLLO AUTOMOBIL",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "ARIEL",
+      "name": "Ariel",
+      "kind": "wordmark",
+      "aliases": [
+        "Ariel"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "en.wiki ArielLogo.svg is local, not on Commons. Commons Ariel-Logo.svg is labelled Ariel Ltd (the old motorcycle maker, not Ariel Motor Company) and is under a deletion request (Aug 2026): not used.",
+      "wordmark": {
+        "text": "ARIEL",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "AUSTIN_HEALEY",
+      "name": "Austin-Healey",
+      "kind": "wordmark",
+      "aliases": [
+        "Austin-Healey"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo SVG on Commons or en.wiki. Remake.",
+      "wordmark": {
+        "text": "AUSTIN-HEALEY",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "BAC",
+      "name": "BAC (Briggs Automotive Company)",
+      "kind": "wordmark",
+      "aliases": [
+        "BAC",
+        "BAC (Briggs Automotive Company)"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a JPG on en.wiki. Remake.",
+      "wordmark": {
+        "text": "BAC (BRIGGS AUTOMOTIVE COMPANY)",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "BENTLEY",
+      "name": "Bentley",
+      "kind": "emblem",
+      "aliases": [
+        "Bentley"
+      ],
+      "source": "commons",
+      "file": "File:Bentley.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Bentley.svg",
+      "licence": "CC0",
+      "attribution": "Kai xzzrs",
+      "page": "https://commons.wikimedia.org/wiki/File:Bentley.svg",
+      "notes": "Winged-B emblem, visually correct, but uploaded by a third party claiming CC0 (same uploader as other logo-site copies): licence claim unreliable, may be deleted. en.wiki Bentley (Logo 2025).svg is local non-free.",
+      "mono": "auto"
+    },
+    {
+      "key": "BUICK",
+      "name": "Buick",
+      "kind": "combined",
+      "aliases": [
+        "Buick"
+      ],
+      "source": "commons",
+      "file": "File:Buick-logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Buick-logo.svg",
+      "licence": "Public domain",
+      "attribution": "Buik",
+      "page": "https://commons.wikimedia.org/wiki/File:Buick-logo.svg",
+      "notes": "Tri-shield in a square with BUICK (pre-2022 style). The current (2022+) split tri-shield is en.wiki-only. Alt: BUICK wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "CAN_AM",
+      "name": "Can-Am (BRP)",
+      "kind": "wordmark",
+      "aliases": [
+        "Can-Am",
+        "Can-Am (BRP)"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No Can-Am or BRP logo on Commons (only BRP-Rotax, a different brand). Remake.",
+      "wordmark": {
+        "text": "CAN-AM",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "CASEY_CURRIE",
+      "name": "Casey Currie Motorsports",
+      "kind": "wordmark",
+      "aliases": [
+        "Casey",
+        "Casey Currie Motorsports"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "CASEY CURRIE",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "CITROEN",
+      "name": "Citroën",
+      "kind": "emblem",
+      "aliases": [
+        "Citroen",
+        "Citroën"
+      ],
+      "source": "commons",
+      "file": "File:Citroen 2022.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/dd/Citroen_2022.svg",
+      "licence": "Public domain",
+      "attribution": "Citroën",
+      "page": "https://commons.wikimedia.org/wiki/File:Citroen_2022.svg",
+      "notes": "Current 2022 oval double-chevron emblem. Alt: chevron + CITROËN wordmark, and the 2016 3D chevrons.",
+      "mono": "auto"
+    },
+    {
+      "key": "DE_TOMASO",
+      "name": "De Tomaso",
+      "kind": "wordmark",
+      "aliases": [
+        "De",
+        "De Tomaso"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only PNGs on en.wiki. Remake.",
+      "wordmark": {
+        "text": "DE TOMASO",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "DELOREAN",
+      "name": "DeLorean",
+      "kind": "wordmark",
+      "aliases": [
+        "DeLorean"
+      ],
+      "source": "commons",
+      "file": "File:DeLorean Motor Company logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/1/12/DeLorean_Motor_Company_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Bovineone at en.wikipedia",
+      "page": "https://commons.wikimedia.org/wiki/File:DeLorean_Motor_Company_logo.svg",
+      "notes": "DMC block letters with DELOREAN MOTOR COMPANY line.",
+      "mono": "auto"
+    },
+    {
+      "key": "DEBERTI",
+      "name": "Deberti Designs",
+      "kind": "wordmark",
+      "aliases": [
+        "Deberti",
+        "Deberti Designs"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "DEBERTI DESIGNS",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "EXOMOTIVE",
+      "name": "Exomotive",
+      "kind": "wordmark",
+      "aliases": [
+        "Exomotive"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "EXOMOTIVE",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "FIAT",
+      "name": "Fiat",
+      "kind": "wordmark",
+      "aliases": [
+        "Fiat"
+      ],
+      "source": "commons",
+      "file": "File:FIAT logo (2020).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b5/FIAT_logo_%282020%29.svg",
+      "licence": "Public domain",
+      "attribution": "FIAT",
+      "page": "https://commons.wikimedia.org/wiki/File:FIAT_logo_(2020).svg",
+      "notes": "Current FIAT wordmark (2020, black). Alt: tricolour variant.",
+      "mono": "auto"
+    },
+    {
+      "key": "FORMULA_DRIFT",
+      "name": "Formula Drift",
+      "kind": "wordmark",
+      "aliases": [
+        "Formula",
+        "Formula Drift"
+      ],
+      "source": "commons",
+      "file": "File:Formula Drift logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Formula_Drift_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Formula Drift",
+      "page": "https://commons.wikimedia.org/wiki/File:Formula_Drift_logo.svg",
+      "notes": "FORMULA DRIFT wordmark (black + red).",
+      "mono": "auto"
+    },
+    {
+      "key": "FUNCO",
+      "name": "Funco Motorsports",
+      "kind": "wordmark",
+      "aliases": [
+        "Funco",
+        "Funco Motorsports"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "FUNCO MOTORSPORTS",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "GMC",
+      "name": "GMC",
+      "kind": "wordmark",
+      "aliases": [
+        "GMC"
+      ],
+      "source": "commons",
+      "file": "File:GMC-Logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/30/GMC-Logo.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:GMC-Logo.svg",
+      "notes": "Red GMC letters (122 KB). Alt GMC.svg is the white-on-black box badge (1.6 KB). Note: File:GMC logo.svg is Greater Manchester Council, not the carmaker.",
+      "mono": "auto"
+    },
+    {
+      "key": "GINETTA",
+      "name": "Ginetta",
+      "kind": "wordmark",
+      "aliases": [
+        "Ginetta"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "en.wiki Ginetta Cars logo.svg is local, not on Commons. Remake.",
+      "wordmark": {
+        "text": "GINETTA",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "GORDON_MURRAY",
+      "name": "Gordon Murray Automotive",
+      "kind": "wordmark",
+      "aliases": [
+        "GMA",
+        "Gordon",
+        "Gordon Murray",
+        "Gordon Murray Automotive"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a JPG (group logo) on en.wiki. Remake.",
+      "wordmark": {
+        "text": "GORDON MURRAY",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "HENNESSEY",
+      "name": "Hennessey Performance",
+      "kind": "wordmark",
+      "aliases": [
+        "Hennessey",
+        "Hennessey Performance"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a PNG on en.wiki. Remake.",
+      "wordmark": {
+        "text": "HENNESSEY PERFORMANCE",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "HILLMAN",
+      "name": "Hillman",
+      "kind": "wordmark",
+      "aliases": [
+        "Hillman"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a PNG on en.wiki. Remake.",
+      "wordmark": {
+        "text": "HILLMAN",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "HOLDEN",
+      "name": "Holden",
+      "kind": "wordmark",
+      "aliases": [
+        "Holden"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only PNG/JPG lion logos on en.wiki. Remake.",
+      "wordmark": {
+        "text": "HOLDEN",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#C8102E"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "JEEP",
+      "name": "Jeep",
+      "kind": "wordmark",
+      "aliases": [
+        "Jeep"
+      ],
+      "source": "commons",
+      "file": "File:Jeep wordmark.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/92/Jeep_wordmark.svg",
+      "licence": "Public domain",
+      "attribution": "Jeep",
+      "page": "https://commons.wikimedia.org/wiki/File:Jeep_wordmark.svg",
+      "notes": "JEEP wordmark (olive green).",
+      "mono": "auto"
+    },
+    {
+      "key": "JIMCO",
+      "name": "Jimco",
+      "kind": "wordmark",
+      "aliases": [
+        "Jimco"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "JIMCO",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "KTM",
+      "name": "KTM",
+      "kind": "wordmark",
+      "aliases": [
+        "KTM"
+      ],
+      "source": "commons",
+      "file": "File:KTM-Logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/KTM-Logo.svg",
+      "licence": "Public domain",
+      "attribution": "Unknown author",
+      "page": "https://commons.wikimedia.org/wiki/File:KTM-Logo.svg",
+      "notes": "KTM black on orange.",
+      "mono": "auto"
+    },
+    {
+      "key": "LANCIA",
+      "name": "Lancia",
+      "kind": "wordmark",
+      "aliases": [
+        "Lancia"
+      ],
+      "source": "commons",
+      "file": "File:Lancia Logo 2023.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/Lancia_Logo_2023.svg",
+      "licence": "Public domain",
+      "attribution": "Gruppo Stellantis N.V. - upload: Giov.c",
+      "page": "https://commons.wikimedia.org/wiki/File:Lancia_Logo_2023.svg",
+      "notes": "Current 2023 LANCIA wordmark only; the shield/flag badge is not on Commons as SVG.",
+      "mono": "auto"
+    },
+    {
+      "key": "LAND_ROVER",
+      "name": "Land Rover",
+      "kind": "emblem",
+      "aliases": [
+        "Land",
+        "Land Rover",
+        "Range Rover"
+      ],
+      "source": "commons",
+      "file": "File:Land Rover 2023.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c2/Land_Rover_2023.svg",
+      "licence": "Public domain",
+      "attribution": "Jaguar Land Rover Automotive PLC",
+      "page": "https://commons.wikimedia.org/wiki/File:Land_Rover_2023.svg",
+      "notes": "LAND ROVER oval (2023, black outline).",
+      "mono": "auto"
+    },
+    {
+      "key": "LINCOLN",
+      "name": "Lincoln",
+      "kind": "combined",
+      "aliases": [
+        "Lincoln"
+      ],
+      "source": "commons",
+      "file": "File:Logo Lincoln.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/77/Logo_Lincoln.svg",
+      "licence": "Public domain",
+      "attribution": "Lincoln Motor Company; Ford Motor Company",
+      "page": "https://commons.wikimedia.org/wiki/File:Logo_Lincoln.svg",
+      "notes": "Lincoln star emblem + LINCOLN wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "LUCID",
+      "name": "Lucid Motors",
+      "kind": "wordmark",
+      "aliases": [
+        "Lucid",
+        "Lucid Motors"
+      ],
+      "source": "commons",
+      "file": "File:Lucid Motors logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Lucid_Motors_logo.svg",
+      "licence": "Public domain",
+      "attribution": "Lucid Motors",
+      "page": "https://commons.wikimedia.org/wiki/File:Lucid_Motors_logo.svg",
+      "notes": "LUCID wordmark.",
+      "mono": "auto"
+    },
+    {
+      "key": "MG",
+      "name": "MG",
+      "kind": "emblem",
+      "aliases": [
+        "MG"
+      ],
+      "source": "commons",
+      "file": "File:MG Motor 2021 logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/MG_Motor_2021_logo.svg",
+      "licence": "Public domain",
+      "attribution": "SAIC Motor",
+      "page": "https://commons.wikimedia.org/wiki/File:MG_Motor_2021_logo.svg",
+      "notes": "Current MG octagon (red, 2021).",
+      "mono": "auto"
+    },
+    {
+      "key": "MINI",
+      "name": "MINI",
+      "kind": "emblem",
+      "aliases": [
+        "MINI",
+        "Mini"
+      ],
+      "source": "commons",
+      "file": "File:MINI logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/e9/MINI_logo.svg",
+      "licence": "Public domain",
+      "attribution": "BMW SVG by CMetalCore",
+      "page": "https://commons.wikimedia.org/wiki/File:MINI_logo.svg",
+      "notes": "Winged MINI badge (pre-2018 style, black).",
+      "mono": "auto"
+    },
+    {
+      "key": "MASERATI",
+      "name": "Maserati",
+      "kind": "combined",
+      "aliases": [
+        "Maserati"
+      ],
+      "source": "commons",
+      "file": "File:Maserati logo 2.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/78/Maserati_logo_2.svg",
+      "licence": "Public domain",
+      "attribution": "Maserati",
+      "page": "https://commons.wikimedia.org/wiki/File:Maserati_logo_2.svg",
+      "notes": "Trident + Maserati script.",
+      "mono": "auto"
+    },
+    {
+      "key": "MEYERS_MANX",
+      "name": "Meyers Manx",
+      "kind": "wordmark",
+      "aliases": [
+        "Meyers",
+        "Meyers Manx"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "MEYERS MANX",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "NOBLE",
+      "name": "Noble",
+      "kind": "wordmark",
+      "aliases": [
+        "Noble"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a PNG on en.wiki. Remake.",
+      "wordmark": {
+        "text": "NOBLE",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "OPEL",
+      "name": "Opel",
+      "kind": "emblem",
+      "aliases": [
+        "Opel"
+      ],
+      "source": "commons",
+      "file": "File:Opel logo 2023.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Opel_logo_2023.svg",
+      "licence": "Public domain",
+      "attribution": "Opel",
+      "page": "https://commons.wikimedia.org/wiki/File:Opel_logo_2023.svg",
+      "notes": "Current 2023 Blitz roundel + OPEL.",
+      "mono": "auto"
+    },
+    {
+      "key": "PEEL",
+      "name": "Peel Engineering",
+      "kind": "wordmark",
+      "aliases": [
+        "Peel",
+        "Peel Engineering"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a JPG photo of the badge. Remake.",
+      "wordmark": {
+        "text": "PEEL ENGINEERING",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "PENHALL",
+      "name": "Penhall",
+      "kind": "wordmark",
+      "aliases": [
+        "Penhall"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "PENHALL",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "PEUGEOT",
+      "name": "Peugeot",
+      "kind": "wordmark",
+      "aliases": [
+        "Peugeot"
+      ],
+      "source": "commons",
+      "file": "File:Wordmark Peugeot 2021.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Wordmark_Peugeot_2021.svg",
+      "licence": "Public domain",
+      "attribution": "Peugeot",
+      "page": "https://commons.wikimedia.org/wiki/File:Wordmark_Peugeot_2021.svg",
+      "notes": "Current 2021 PEUGEOT wordmark only; the 2021 lion shield is en.wiki-only. Alts are the older blue wordmarks.",
+      "mono": "auto"
+    },
+    {
+      "key": "PLYMOUTH",
+      "name": "Plymouth",
+      "kind": "wordmark",
+      "aliases": [
+        "Plymouth"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "en.wiki Plymouth logo.svg is local, not on Commons; Commons Plymouth-logo.svg is the Linux boot-splash software, not the car brand (rejected).",
+      "wordmark": {
+        "text": "PLYMOUTH",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#1E5AA8"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "PONTIAC",
+      "name": "Pontiac",
+      "kind": "emblem",
+      "aliases": [
+        "Pontiac"
+      ],
+      "source": "commons",
+      "file": "File:Pontiac dart emblem.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Pontiac_dart_emblem.svg",
+      "licence": "Public domain",
+      "attribution": "General Motors Company",
+      "page": "https://commons.wikimedia.org/wiki/File:Pontiac_dart_emblem.svg",
+      "notes": "Red dart (arrowhead) emblem 1959-2010. Alt: dart + PONTIAC.",
+      "mono": "auto"
+    },
+    {
+      "key": "RADICAL",
+      "name": "Radical Sportscars",
+      "kind": "wordmark",
+      "aliases": [
+        "Radical",
+        "Radical Sportscars"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a PNG on en.wiki. Remake.",
+      "wordmark": {
+        "text": "RADICAL SPORTSCARS",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "RELIANT",
+      "name": "Reliant",
+      "kind": "wordmark",
+      "aliases": [
+        "Reliant"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a JPG badge photo. Remake.",
+      "wordmark": {
+        "text": "RELIANT",
+        "font": "titillium-web",
+        "weight": 700,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "RENAULT",
+      "name": "Renault",
+      "kind": "emblem",
+      "aliases": [
+        "Renault"
+      ],
+      "source": "commons",
+      "file": "File:Renault 2021.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Renault_2021.svg",
+      "licence": "Public domain",
+      "attribution": "Renault",
+      "page": "https://commons.wikimedia.org/wiki/File:Renault_2021.svg",
+      "notes": "Current 2021 flat diamond. Alt: diamond + RENAULT.",
+      "mono": "auto"
+    },
+    {
+      "key": "RIVIAN",
+      "name": "Rivian",
+      "kind": "combined",
+      "aliases": [
+        "Rivian"
+      ],
+      "source": "commons",
+      "file": "File:Rivian logo and wordmark.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Rivian_logo_and_wordmark.svg",
+      "licence": "Public domain",
+      "attribution": "Rivian, LLC",
+      "page": "https://commons.wikimedia.org/wiki/File:Rivian_logo_and_wordmark.svg",
+      "notes": "Compass emblem + RIVIAN wordmark.",
+      "mono": "silhouette"
+    },
+    {
+      "key": "SALEEN",
+      "name": "Saleen",
+      "kind": "wordmark",
+      "aliases": [
+        "Saleen"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "en.wiki Saleen logo.svg is local, not on Commons. Remake.",
+      "wordmark": {
+        "text": "SALEEN",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "SIERRA_CARS",
+      "name": "Sierra Cars",
+      "kind": "wordmark",
+      "aliases": [
+        "Sierra",
+        "Sierra Cars"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons. Remake.",
+      "wordmark": {
+        "text": "SIERRA CARS",
+        "font": "saira-condensed",
+        "weight": 800,
+        "tracking": 0.06,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "TVR",
+      "name": "TVR",
+      "kind": "wordmark",
+      "aliases": [
+        "TVR"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "Only a PNG on en.wiki (Commons TVR SVGs are the Romanian broadcaster). Remake.",
+      "wordmark": {
+        "text": "TVR",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "ULTIMA",
+      "name": "Ultima Sports",
+      "kind": "wordmark",
+      "aliases": [
+        "Ultima",
+        "Ultima Sports"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge wordmark; name is a trademark of its owner)",
+      "notes": "No logo on Commons (File:Ultima Logo.svg is the video game series, rejected). Remake.",
+      "wordmark": {
+        "text": "ULTIMA SPORTS",
+        "font": "michroma",
+        "weight": 400,
+        "tracking": 0.18,
+        "colour": "#E8ECF2"
+      },
+      "mono": "auto"
+    },
+    {
+      "key": "VAUXHALL",
+      "name": "Vauxhall",
+      "kind": "emblem",
+      "aliases": [
+        "Vauxhall"
+      ],
+      "source": "commons",
+      "file": "File:Vauxhall logo 2026.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Vauxhall_logo_2026.svg",
+      "licence": "Public domain",
+      "attribution": "Vauxhall",
+      "page": "https://commons.wikimedia.org/wiki/File:Vauxhall_logo_2026.svg",
+      "notes": "Griffin emblem + VAUXHALL (2026).",
+      "mono": "auto"
+    },
+    {
+      "key": "VOLVO",
+      "name": "Volvo",
+      "kind": "emblem",
+      "aliases": [
+        "Volvo"
+      ],
+      "source": "commons",
+      "file": "File:Volvo-Iron-Mark-Black.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Volvo-Iron-Mark-Black.svg",
+      "licence": "Public domain",
+      "attribution": "Volvo Group",
+      "page": "https://commons.wikimedia.org/wiki/File:Volvo-Iron-Mark-Black.svg",
+      "notes": "Volvo iron mark (circle-arrow with VOLVO), flat black. Labelled Volvo Group; same mark as the car brand.",
+      "mono": "auto"
+    },
+    {
+      "key": "WULING",
+      "name": "Wuling",
+      "kind": "combined",
+      "aliases": [
+        "Wuling"
+      ],
+      "source": "commons",
+      "file": "File:Wuling logo (dark blue-gray).svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/Wuling_logo_%28dark_blue-gray%29.svg",
+      "licence": "Public domain",
+      "attribution": "SAIC-GM-Wuling",
+      "page": "https://commons.wikimedia.org/wiki/File:Wuling_logo_(dark_blue-gray).svg",
+      "notes": "Wuling W emblem + WULING (2020).",
+      "mono": "auto"
+    },
+    {
+      "key": "ZENVO",
+      "name": "Zenvo",
+      "kind": "wordmark",
+      "aliases": [
+        "Zenvo"
+      ],
+      "source": "commons",
+      "file": "File:ZENVO Text Logo.svg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/ZENVO_Text_Logo.svg",
+      "licence": "CC BY-SA 4.0",
+      "attribution": "Zenvo Automotive A/S",
+      "page": "https://commons.wikimedia.org/wiki/File:ZENVO_Text_Logo.svg",
+      "notes": "ZENVO text logo, CC BY-SA 4.0 (credit Zenvo Automotive A/S).",
+      "mono": "auto"
+    },
+    {
+      "key": "DEFAULT",
+      "name": "Generic",
+      "kind": "emblem",
+      "aliases": [
+        "Box",
+        "Bus",
+        "Flatbed",
+        "Unknown",
+        "Generic"
+      ],
+      "source": "remade",
+      "licence": "MIT (asset-forge)",
+      "notes": "Neutral steering-wheel mark for traffic and unknown makes.",
+      "generic": true,
+      "mono": "silhouette"
+    }
+  ]
+}
