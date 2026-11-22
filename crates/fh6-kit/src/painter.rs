@@ -45,6 +45,8 @@ struct State {
     clip_rect: Option<Rect>,
     bloom: Option<Bloom>,
     segment: SegmentKey,
+    /// When false, `layer` ignores backdrop requests (glass draws tint, rim and sheen only).
+    backdrops: bool,
 }
 
 /// Records one frame of drawing. Created by [`crate::Kit::begin_frame`].
@@ -91,6 +93,7 @@ impl<'f> Painter<'f> {
                     blur_px: 0.0,
                     backdrop_px: None,
                 },
+                backdrops: true,
             },
             stack: [None; MAX_DEPTH],
             depth: 0,
@@ -212,6 +215,14 @@ impl<'f> Painter<'f> {
         self.state.opacity *= finite_or(opacity, 0.0).clamp(0.0, 1.0);
     }
 
+    /// Allows or suppresses backdrop snapshots for glass layers until the matching restore.
+    /// Suppressed, a glass layer draws in the current segment: tint, rims, sheen and fresnel
+    /// without frost (each backdrop costs a copy and blur of the work rectangle, so previews
+    /// and thumbnails drawn inside another surface turn it off).
+    pub fn set_backdrops(&mut self, on: bool) {
+        self.state.backdrops = on;
+    }
+
     /// Sets the blend mode until the matching restore.
     pub fn set_blend(&mut self, blend: BlendMode) {
         self.state.blend = blend;
@@ -246,7 +257,10 @@ impl<'f> Painter<'f> {
         let s = self.state.xf.scale_factor();
         let key = SegmentKey {
             blur_px: opts.blur.map_or(0.0, |b| finite_or(b, 0.0).max(0.0) * s),
-            backdrop_px: opts.backdrop.map(|b| finite_or(b.frost_sigma, 0.0).max(0.0) * s),
+            backdrop_px: opts
+                .backdrop
+                .filter(|_| self.state.backdrops)
+                .map(|b| finite_or(b.frost_sigma, 0.0).max(0.0) * s),
         };
         if key != self.state.segment || key.backdrop_px.is_some() {
             self.state.segment = key;

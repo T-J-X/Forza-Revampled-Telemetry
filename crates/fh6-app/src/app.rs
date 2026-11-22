@@ -113,8 +113,31 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
 
     let input = Arc::new(InputShared::new(usize::try_from(cfg.current_camera_index).unwrap_or(3)));
     input.set_demo_mode(args.demo);
-    let poller = InputPoller::spawn(Arc::clone(&input), watcher.handle(), reader.clone(), waker.notify())
-        .map_err(io_err("starting the input thread"))?;
+    let poller = match args.pad_script.as_deref().map(load_pad_script) {
+        Some(Ok(script)) => {
+            tracing::info!(length = ?script.length(), "playing a scripted pad instead of XInput");
+            InputPoller::spawn_scripted(
+                script,
+                Arc::clone(&input),
+                watcher.handle(),
+                reader.clone(),
+                waker.notify(),
+            )
+        }
+        Some(Err(err)) => {
+            tracing::error!(error = %err, "pad script not loaded; using XInput");
+            InputPoller::spawn(Arc::clone(&input), watcher.handle(), reader.clone(), waker.notify())
+        }
+        None => InputPoller::spawn(Arc::clone(&input), watcher.handle(), reader.clone(), waker.notify()),
+    }
+    .map_err(io_err("starting the input thread"))?;
+    let saver = match fh6_osd::ConfigSaver::spawn(config_path.clone()) {
+        Ok(s) => Some(s),
+        Err(err) => {
+            tracing::warn!(error = %err, "OSD saver not started; OSD edits will not be saved");
+            None
+        }
+    };
 
     let rect = monitor::primary_monitor_rect().ok_or(AppError::NoMonitor)?;
     let overlay = Rc::new(OverlayWindow::create(rect)?);
@@ -150,6 +173,7 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         demo: args.demo,
         stats: args.stats,
         bench: args.bench_seconds.map(Duration::from_secs),
+        open_osd: args.open_osd,
     };
     // Before the render thread: if this fails, nothing is running yet that would need stopping.
     let quit_listener = spawn_quit_listener(app_window.close_handle())?;
@@ -166,6 +190,12 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         resources: crate::resources::KitResources::resolve(&config_path),
         game_process: args.game_process.clone(),
         on_bench_done: Box::new(move || close.request_close()),
+        osd: render_loop::OsdSetup {
+            saver,
+            injector: Box::new(WinKeyboard(fh6_win::keyboard::SendInputKeyboard::new())),
+            // Phase 8 replaces this with its camera-patcher backend.
+            fit: Box::new(fh6_osd::ConfigOnlyFit),
+        },
     })
     .map_err(io_err("starting the render thread"))?;
     let _ = waker.0.set(render_thread.clone());
@@ -198,6 +228,20 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         write_bench(&args.bench_out, seconds, summary, &args);
     }
     Ok(code)
+}
+
+/// The OSD's auto-pause ESC, sent through `SendInput`.
+struct WinKeyboard(fh6_win::keyboard::SendInputKeyboard);
+
+impl fh6_osd::KeyboardInjector for WinKeyboard {
+    fn tap_key(&mut self, vk: u16) -> bool {
+        self.0.tap_key(vk)
+    }
+}
+
+fn load_pad_script(path: &Path) -> Result<fh6_input::PadScript, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    fh6_input::PadScript::parse(&text).map_err(|e| e.to_string())
 }
 
 fn write_bench(path: &Path, seconds: u64, summary: &RenderSummary, args: &AppArgs) {

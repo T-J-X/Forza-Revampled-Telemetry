@@ -1,5 +1,7 @@
 //! The controller thread: polls XInput at 125 Hz and publishes results through atomics.
 use crate::hold_state::HoldConfig;
+use crate::script::{PadScript, ScriptedPad};
+use crate::tracker::PadSource;
 use crate::tracker::{InputControllerTracker, PollContext, CAMERA_RING_LEN};
 use crate::xinput::XInput;
 use fh6_core::{ConfigHandle, TelemetryReader};
@@ -25,6 +27,9 @@ pub struct InputShared {
     pad_connected: AtomicBool,
     guide_available: AtomicBool,
     buttons: AtomicU16,
+    pressed: AtomicU16,
+    released: AtomicU16,
+    settings_focus: AtomicBool,
 }
 
 impl InputShared {
@@ -38,6 +43,9 @@ impl InputShared {
             pad_connected: AtomicBool::new(false),
             guide_available: AtomicBool::new(false),
             buttons: AtomicU16::new(0),
+            pressed: AtomicU16::new(0),
+            released: AtomicU16::new(0),
+            settings_focus: AtomicBool::new(false),
         }
     }
 
@@ -92,6 +100,41 @@ impl InputShared {
     pub fn buttons(&self) -> u16 {
         self.buttons.load(Ordering::Relaxed)
     }
+
+    /// Publishes a poll's buttons (A/B/X/Y stripped) and latches the press and release edges
+    /// until the render thread takes them. Returns true when anything changed.
+    pub fn publish_buttons(&self, buttons: u16) -> bool {
+        let buttons = buttons & !crate::tracker::MASK_MANUAL_LOCK;
+        let prev = self.buttons.swap(buttons, Ordering::Relaxed);
+        let down = buttons & !prev;
+        let up = prev & !buttons;
+        if down != 0 {
+            self.pressed.fetch_or(down, Ordering::Relaxed);
+        }
+        if up != 0 {
+            self.released.fetch_or(up, Ordering::Relaxed);
+        }
+        down | up != 0
+    }
+
+    /// Takes the buttons pressed and released since the last call (a tap shorter than a frame
+    /// shows in both).
+    pub fn take_edges(&self) -> (u16, u16) {
+        (
+            self.pressed.swap(0, Ordering::Relaxed),
+            self.released.swap(0, Ordering::Relaxed),
+        )
+    }
+
+    /// Suspends the OSD hold toggle while the OSD keyboard or remapper has focus.
+    pub fn set_settings_focused(&self, focused: bool) {
+        self.settings_focus.store(focused, Ordering::Relaxed);
+    }
+
+    /// Whether the OSD keyboard or remapper has focus.
+    pub fn settings_focused(&self) -> bool {
+        self.settings_focus.load(Ordering::Relaxed)
+    }
 }
 
 /// Owns the input thread; dropping it stops the thread.
@@ -113,12 +156,65 @@ impl InputPoller {
         telemetry: TelemetryReader,
         notify: InputNotify,
     ) -> io::Result<Self> {
+        Self::start(
+            move |shared: &InputShared| match XInput::load() {
+                Ok(x) => {
+                    shared.guide_available.store(x.has_guide(), Ordering::Relaxed);
+                    Some(x)
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "controller input disabled");
+                    None
+                }
+            },
+            shared,
+            config,
+            telemetry,
+            notify,
+        )
+    }
+
+    /// Starts polling a scripted pad instead of XInput (`--pad-script`): the same tracker,
+    /// hold toggle and edge latches, fed from a timeline. For manual runs without a
+    /// controller; A/B/X/Y in a script are stripped like real input.
+    ///
+    /// # Errors
+    /// Returns the I/O error if the thread cannot be spawned.
+    pub fn spawn_scripted(
+        script: PadScript,
+        shared: Arc<InputShared>,
+        config: ConfigHandle,
+        telemetry: TelemetryReader,
+        notify: InputNotify,
+    ) -> io::Result<Self> {
+        Self::start(
+            move |_: &InputShared| Some(ScriptedPad::new(script)),
+            shared,
+            config,
+            telemetry,
+            notify,
+        )
+    }
+
+    fn start<S, F>(
+        make: F,
+        shared: Arc<InputShared>,
+        config: ConfigHandle,
+        telemetry: TelemetryReader,
+        notify: InputNotify,
+    ) -> io::Result<Self>
+    where
+        S: PadSource,
+        F: FnOnce(&InputShared) -> Option<S> + Send + 'static,
+    {
         let running = Arc::new(AtomicBool::new(true));
         let thread = {
             let running = Arc::clone(&running);
-            thread::Builder::new()
-                .name("fh6-input".into())
-                .spawn(move || run(&shared, &config, &telemetry, &*notify, &running))?
+            thread::Builder::new().name("fh6-input".into()).spawn(move || {
+                if let Some(source) = make(&shared) {
+                    run(source, &shared, &config, &telemetry, &*notify, &running);
+                }
+            })?
         };
         Ok(Self {
             running,
@@ -137,23 +233,16 @@ impl Drop for InputPoller {
     }
 }
 
-fn run(
+fn run<S: PadSource>(
+    source: S,
     shared: &InputShared,
     config: &ConfigHandle,
     telemetry: &TelemetryReader,
     notify: &dyn Fn(),
     running: &AtomicBool,
 ) {
-    let xinput = match XInput::load() {
-        Ok(x) => x,
-        Err(err) => {
-            tracing::warn!(error = %err, "controller input disabled");
-            return;
-        }
-    };
-    shared.guide_available.store(xinput.has_guide(), Ordering::Relaxed);
     let mut hold = HoldConfig::from_config(&config.current());
-    let mut tracker = InputControllerTracker::new(xinput, hold);
+    let mut tracker = InputControllerTracker::new(source, hold);
     let epoch = Instant::now();
 
     while running.load(Ordering::Relaxed) {
@@ -172,14 +261,15 @@ fn run(
             // Only the --demo flag lifts the camera-ring race guard; config.json's DemoMode
             // never does, so RB in a menu cannot move the camera index.
             demo_mode: shared.demo_mode(),
-            settings_focused: false,
+            // The OSD keyboard and remapper suspend the hold toggle.
+            settings_focused: shared.settings_focused(),
         };
         tracker.is_osd_open = shared.osd_open();
         let mut camera = shared.camera_index();
         let events = tracker.poll(&mut camera, &ctx);
 
         shared.pad_connected.store(tracker.is_connected(), Ordering::Relaxed);
-        shared.buttons.store(tracker.buttons(), Ordering::Relaxed);
+        let buttons_changed = shared.publish_buttons(tracker.buttons());
         if events.camera_changed {
             shared.set_camera_index(camera);
             tracing::debug!(camera, "camera ring advanced");
@@ -193,9 +283,30 @@ fn run(
         if events.guide_pressed && cfg.guide_button_opens_widget {
             tracing::info!("Guide pressed");
         }
-        if events.any() {
+        // While the OSD is open every button change reaches the screen on the next frame.
+        if events.any() || (buttons_changed && shared.osd_open()) {
             notify();
         }
         thread::park_timeout(POLL_PERIOD.saturating_sub(now.elapsed()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edges_latch_until_taken_and_abxy_is_stripped() {
+        let shared = InputShared::new(3);
+        assert!(shared.publish_buttons(0x0020 | 0x1000));
+        assert_eq!(shared.buttons(), 0x0020);
+        assert!(shared.publish_buttons(0));
+        // A tap shorter than a frame shows as both a press and a release.
+        assert_eq!(shared.take_edges(), (0x0020, 0x0020));
+        assert_eq!(shared.take_edges(), (0, 0));
+        assert!(!shared.publish_buttons(0xF000), "A/B/X/Y alone is no change");
+        assert_eq!(shared.take_edges(), (0, 0));
+        shared.set_settings_focused(true);
+        assert!(shared.settings_focused());
     }
 }

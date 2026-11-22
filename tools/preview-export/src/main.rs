@@ -7,11 +7,14 @@
 //! - `mockups/_thumbs/kit/<Cluster>/<state>.png`: a 960x540 box-downsample of that frame;
 //! - `mockups/index.html`: a script-free gallery with badges computed from the renders (GPU time,
 //!   draw calls, colour budget shares);
-//! - the OEM scrim at 0/50/100% and the Unified OSD (still tiny-skia until Phases 8–9).
+//! - `mockups/osd/`: the kit OSD (every tab, focus, slider, keyboard and remap states) with
+//!   GPU timings; `--backdrop PNG` also writes each state composited over a game frame;
+//! - the OEM scrim at 0/50/100% (still tiny-skia until Phase 8).
 //!
 //! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
 mod gallery;
+mod osd;
 mod states;
 
 use fh6_clusters::registry::REGISTRY;
@@ -39,6 +42,7 @@ struct Args {
     legacy: bool,
     frames: u32,
     out: Option<PathBuf>,
+    backdrop: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Args> {
@@ -46,6 +50,7 @@ fn parse_args() -> Result<Args> {
         legacy: false,
         frames: 30,
         out: None,
+        backdrop: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -53,8 +58,9 @@ fn parse_args() -> Result<Args> {
             "--legacy" => args.legacy = true,
             "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
+            "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
             "-h" | "--help" => {
-                println!("preview-export [--legacy] [--frames N] [--out DIR]");
+                println!("preview-export [--legacy] [--frames N] [--out DIR] [--backdrop PNG]");
                 std::process::exit(0);
             }
             other => return Err(format!("unknown argument {other:?}").into()),
@@ -211,13 +217,26 @@ fn run() -> Result<()> {
         }
     }
 
+    let backdrop = match &args.backdrop {
+        Some(p) => {
+            let (width, height, pixels) = fh6_kit::images::decode_png(&fs::read(p)?)?;
+            Some(RgbaImage { width, height, pixels })
+        }
+        None => None,
+    };
+    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref())?;
     legacy::scrims(&out)?;
-    legacy::osd(&out)?;
     if args.legacy {
         legacy::clusters(&out)?;
     }
-    gallery::write_index(&out, &renders, ctx.adapter_summary().to_string().as_str(), args.legacy)?;
-    verify(&out, &renders)?;
+    gallery::write_index(
+        &out,
+        &renders,
+        &osd_renders,
+        ctx.adapter_summary().to_string().as_str(),
+        args.legacy,
+    )?;
+    verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())
 }
@@ -226,7 +245,14 @@ fn rel(root: &Path, p: &Path) -> String {
     p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
 }
 
-fn verify(out: &Path, renders: &[Render]) -> Result<()> {
+fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> {
+    for r in osd {
+        for f in [&r.full, &r.thumb] {
+            if !out.join(f).is_file() {
+                return Err(format!("missing {f}").into());
+            }
+        }
+    }
     for r in renders {
         for f in [&r.full, &r.thumb] {
             let p = out.join(f);
@@ -242,7 +268,6 @@ fn verify(out: &Path, renders: &[Render]) -> Result<()> {
         "Scrim/OemScrim_0pct.png",
         "Scrim/OemScrim_50pct.png",
         "Scrim/OemScrim_100pct.png",
-        "UnifiedOsd_4K.png",
         "index.html",
     ] {
         if !out.join(f).is_file() {
@@ -252,12 +277,10 @@ fn verify(out: &Path, renders: &[Render]) -> Result<()> {
     Ok(())
 }
 
-/// The v1 tiny-skia renders kept until their kit rebuilds (scrim: Phase 8, OSD: Phase 9,
-/// clusters: Phase 7).
+/// The v1 tiny-skia renders kept until their kit rebuilds (scrim: Phase 8, clusters: Phase 7).
 mod legacy {
     use super::{AppConfig, CameraViewMode, ClusterTheme, Result, H, W};
     use fh6_clusters::render_cluster;
-    use fh6_osd::{dyno::dyno_telemetry, model::UnifiedOsdState, render_unified_osd_4k};
     use fh6_render::oem_scrim::{
         ambient_wash::{feather_sigma_px, BinnacleAmbientWash},
         scrim::render_oem_scrim,
@@ -306,21 +329,6 @@ mod legacy {
             save(&pix, &out.join(format!("Scrim/OemScrim_{pct}pct.png")))?;
         }
         Ok(())
-    }
-
-    pub fn osd(out: &Path) -> Result<()> {
-        let cfg = AppConfig {
-            custom_driver_name: "TJX".to_string(),
-            ..Default::default()
-        };
-        let state = UnifiedOsdState {
-            is_open: true,
-            current_tab: 0,
-            ..Default::default()
-        };
-        let telem = dyno_telemetry(8.0);
-        let pix = render_unified_osd_4k(&state, &cfg, Some(&telem));
-        save(&pix, &out.join("UnifiedOsd_4K.png"))
     }
 
     pub fn clusters(out: &Path) -> Result<()> {

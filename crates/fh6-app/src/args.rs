@@ -15,6 +15,8 @@ pub const USAGE: &str = "FH6_WheelDash [options]
   --config PATH         use this config.json instead of searching for one
   --log PATH            append logs to PATH (default: stderr)
   --open-widget         open the live state page (also when another instance is running)
+  --open-osd            open the OSD at start (demos, benches, screenshots)
+  --pad-script PATH     drive the controller from a timeline file instead of XInput (manual runs)
   --help                print this text";
 
 /// Parsed options.
@@ -38,6 +40,10 @@ pub struct AppArgs {
     pub log: Option<PathBuf>,
     /// Open the live state page.
     pub open_widget: bool,
+    /// Open the OSD at start.
+    pub open_osd: bool,
+    /// Controller timeline to play instead of XInput.
+    pub pad_script: Option<PathBuf>,
 }
 
 impl Default for AppArgs {
@@ -52,6 +58,8 @@ impl Default for AppArgs {
             config: None,
             log: None,
             open_widget: false,
+            open_osd: false,
+            pad_script: None,
         }
     }
 }
@@ -97,6 +105,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, ArgsErro
             "--demo" => out.demo = true,
             "--stats" => out.stats = true,
             "--open-widget" => out.open_widget = true,
+            "--open-osd" => out.open_osd = true,
+            "--pad-script" => out.pad_script = Some(it.next().ok_or(ArgsError::MissingValue("--pad-script"))?.into()),
             "--help" | "-h" | "/?" => return Ok(Command::Help),
             "--bench-seconds" => {
                 let v = it.next().ok_or(ArgsError::MissingValue("--bench-seconds"))?;
@@ -143,6 +153,9 @@ mod tests {
         let Ok(Command::Run(a)) = run(&[
             "--auto-exit",
             "--stats",
+            "--open-osd",
+            "--pad-script",
+            "tour.pad",
             "--demo",
             "--bench-seconds",
             "20",
@@ -152,6 +165,8 @@ mod tests {
             panic!("parse failed");
         };
         assert!(a.auto_exit && a.stats && a.demo);
+        assert!(a.open_osd);
+        assert_eq!(a.pad_script, Some(PathBuf::from("tour.pad")));
         assert_eq!(a.bench_seconds, Some(20));
         assert_eq!(a.game_process, "notepad.exe");
     }

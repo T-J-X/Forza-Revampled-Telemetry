@@ -9,10 +9,14 @@ use fh6_gpu::seven_seg::StackStr;
 use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
 use fh6_kit::{
-    vec2, Affine, Align, Cluster, FrameInput, Kit, Layout, Logo, Painter, Palette, SignalSmoother, TextStyle, VAlign,
-    View,
+    vec2, Affine, Align, Cluster, FontId, FrameInput, Kit, Layout, Logo, Painter, Palette, SignalSmoother, TextStyle,
+    VAlign, View,
 };
-use fh6_osd::LiveDynoGenerator;
+use fh6_osd::nav::NavInput;
+use fh6_osd::{
+    model, AutoPause, CockpitFit, ConfigSaver, Frame, KeyboardInjector, LiveDynoGenerator, LiveStatus, OsdHost,
+    PauseInputs,
+};
 use fh6_win::{ForegroundReader, OverlayHandle};
 use std::fmt::Write as _;
 use std::io;
@@ -31,6 +35,9 @@ const FALLBACK_REFRESH: Duration = Duration::from_micros(16_667);
 const BENCH_WARMUP: Duration = Duration::from_secs(2);
 /// Longest `dt` a cluster sees (after a hide, a stall or a debugger pause).
 const MAX_DT: f32 = 0.1;
+/// After the OSD closes, keep drawing its working config until the saved file has been
+/// reloaded (so nothing flickers back), for at most this long.
+const FOLLOW_SAVE: Duration = Duration::from_secs(2);
 
 /// Cross-thread controls for the render thread.
 #[derive(Debug, Default)]
@@ -88,6 +95,18 @@ pub struct RenderOptions {
     pub stats: bool,
     /// Run this long, then stop and report.
     pub bench: Option<Duration>,
+    /// Open the OSD at start (`--open-osd`).
+    pub open_osd: bool,
+}
+
+/// What the OSD needs from the app.
+pub struct OsdSetup {
+    /// Saves OSD edits to `config.json` (none: edits stay in memory).
+    pub saver: Option<ConfigSaver>,
+    /// Sends the auto-pause ESC.
+    pub injector: Box<dyn KeyboardInjector>,
+    /// Camera files and scrim rows (Phase 8 backend, or config-only).
+    pub fit: Box<dyn CockpitFit>,
 }
 
 /// Everything the render thread owns or reads.
@@ -116,6 +135,8 @@ pub struct RenderSetup {
     pub game_process: String,
     /// Run once when a benchmark finishes (asks the app to quit).
     pub on_bench_done: Box<dyn FnOnce() + Send>,
+    /// The OSD's saver, key injector and cockpit-fit backend.
+    pub osd: OsdSetup,
 }
 
 /// What the render thread measured, returned when it ends.
@@ -165,24 +186,6 @@ pub fn spawn(setup: RenderSetup) -> io::Result<(JoinHandle<RenderSummary>, Threa
         .spawn(move || run(setup))?;
     let thread = handle.thread().clone();
     Ok((handle, thread))
-}
-
-/// The theme `cfg` selects for `view` (hood uses `BonnetHudStyle`, the rest
-/// `CockpitHudStyle`, then `HudStyle`).
-pub fn theme_for(cfg: &AppConfig, view: View) -> ClusterTheme {
-    let style = match view {
-        View::Hood => cfg.bonnet_hud_style.as_str(),
-        View::Cockpit | View::Chase => {
-            if !cfg.cockpit_hud_style.trim().is_empty() {
-                cfg.cockpit_hud_style.as_str()
-            } else if !cfg.hud_style.trim().is_empty() {
-                cfg.hud_style.as_str()
-            } else {
-                "LiquidGlass"
-            }
-        }
-    };
-    fh6_render::dispatch::style_to_theme(style)
 }
 
 /// Whether to draw the live dyno instead of the received packet. The demo, the bench and the
@@ -242,6 +245,97 @@ struct Loop {
     last_update: Instant,
     refraction: Option<RefractionSource>,
     refraction_retry: Instant,
+    /// `ClusterFont` resolved against the loaded faces.
+    font_override: Option<FontId>,
+}
+
+/// The OSD as the render thread runs it: the host, the working config being edited, the
+/// auto-pause state and the saver.
+struct Osd {
+    host: OsdHost,
+    /// The working copy edits land in.
+    edit: AppConfig,
+    /// The working config the frame draws with (a new `Arc` per edit, so caches refresh).
+    working: Option<Arc<AppConfig>>,
+    was_open: bool,
+    /// After closing: draw `working` until the saved file is reloaded or this passes.
+    follow_until: Option<Instant>,
+    pause: AutoPause,
+    injector: Box<dyn KeyboardInjector>,
+    saver: Option<ConfigSaver>,
+    epoch: Instant,
+    fonts_listed: bool,
+}
+
+impl Osd {
+    /// The open edge: snapshot the config, discard the opening press, pause mid-race.
+    fn opened(&mut self, cfg: &Arc<AppConfig>, view: View, input: &InputShared, pause: PauseInputs) {
+        let _ = input.take_edges();
+        self.edit = (**cfg).clone();
+        self.working = Some(Arc::clone(cfg));
+        self.follow_until = None;
+        let anchor_x = match view {
+            View::Hood => cfg.bonnet_anchor_x,
+            View::Cockpit | View::Chase => cfg.cockpit_anchor_x,
+        } as f32;
+        self.host.open(cfg, view, anchor_x);
+        if self.pause.on_open(&mut *self.injector, pause) {
+            tracing::info!("OSD opened mid-race: ESC sent to pause the game");
+        }
+        tracing::info!(?view, "OSD opened");
+    }
+
+    /// The close edge: flush the save, schedule the resume, lift the settings focus.
+    fn closed(&mut self, now: Instant, input: &InputShared) {
+        input.set_settings_focused(false);
+        if let Some(saver) = &self.saver {
+            saver.flush();
+        }
+        self.pause.on_close(now - self.epoch);
+        self.follow_until = Some(now + FOLLOW_SAVE);
+        tracing::info!("OSD closed");
+    }
+
+    /// The config to draw this frame: the working copy while open (and briefly after), else
+    /// the live one.
+    fn config_for_frame(&mut self, live: &Arc<AppConfig>, open: bool, now: Instant) -> Arc<AppConfig> {
+        if open {
+            if let Some(w) = &self.working {
+                return Arc::clone(w);
+            }
+        }
+        if let (Some(until), Some(w)) = (self.follow_until, &self.working) {
+            if now < until && **w != **live {
+                return Arc::clone(w);
+            }
+            self.follow_until = None;
+            self.working = None;
+        }
+        Arc::clone(live)
+    }
+
+    /// One frame of controller input while open. Returns true when the OSD asked to close.
+    fn navigate(&mut self, input: &InputShared, now: Instant) -> bool {
+        let (pressed, released) = input.take_edges();
+        let nav = NavInput {
+            held: input.buttons(),
+            pressed,
+            released,
+            now: now - self.epoch,
+            toggle_mask: self.edit.osd_toggle_mask,
+            hold_ms: self.edit.osd_hold_ms,
+        };
+        let out = self.host.step(&nav, &mut self.edit);
+        input.set_settings_focused(out.settings_focus);
+        if out.changed {
+            let snapshot = Arc::new(self.edit.clone());
+            if let Some(saver) = &self.saver {
+                saver.save(Arc::clone(&snapshot));
+            }
+            self.working = Some(snapshot);
+        }
+        out.close
+    }
 }
 
 fn new_kit(ctx: &GpuContext, resources: &KitResources) -> Option<Kit> {
@@ -318,7 +412,7 @@ impl Loop {
         let theme = match self.theme_cache {
             Some((p, v, t)) if p == ptr && v == view => t,
             _ => {
-                let t = theme_for(cfg, view);
+                let t = fh6_osd::theme_for_view(cfg, view);
                 self.theme_cache = Some((ptr, view, t));
                 t
             }
@@ -362,15 +456,29 @@ impl Loop {
             .get_brand_palette_for_ordinal(&car_ordinal.to_string())
             .map(|b| b.display_name.clone())
             .unwrap_or_default();
-        self.logo = Logo {
-            image: None,
-            brand_name: brand,
-            custom_name: cfg.custom_driver_name.clone(),
+        // `ShowLogo: false` empties the logo zone (no image, wordmark or name).
+        self.logo = if model::show_logo(cfg) {
+            Logo {
+                image: None,
+                brand_name: brand,
+                custom_name: cfg.custom_driver_name.clone(),
+            }
+        } else {
+            Logo::default()
         };
         if let Some(kit) = self.gpu.as_mut().and_then(|g| g.kit.as_mut()) {
             kit.set_palette(self.palette);
+            self.font_override = model::cluster_font(cfg).and_then(|family| kit.fonts().find(family, 600, false));
         }
         self.palette_cache = Some(key);
+    }
+
+    /// Creates the OSD carousel's thumbnail clusters when the selection moved.
+    fn prepare_osd(&mut self, host: &mut OsdHost, cfg: &AppConfig) {
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        let assets = self.resources.assets.clone();
+        host.prepare(kit, &gpu.ctx.device, &gpu.ctx.queue, assets.as_deref(), cfg);
     }
 
     /// Starts, polls or stops the optional refraction capture (`"GlassRefraction": true`).
@@ -417,7 +525,14 @@ impl Loop {
 
     /// Records and presents one frame at `opacity`. With `draw` false, presents a fully
     /// transparent frame (hide). `None` when nothing was presented.
-    fn render(&mut self, opacity: f32, layout: &Layout, draw: bool, stats_on: bool) -> Option<FrameOutcome> {
+    fn render(
+        &mut self,
+        opacity: f32,
+        layout: &Layout,
+        draw: bool,
+        stats_on: bool,
+        osd: Option<&OsdFrame<'_>>,
+    ) -> Option<FrameOutcome> {
         let gpu = self.gpu.as_mut()?;
         let Gpu { ctx, surface, kit } = gpu;
         let Some(kit) = kit.as_mut() else {
@@ -442,11 +557,24 @@ impl Loop {
             });
             return result.ok();
         };
+        // The OSD dims the game through the kit's underlay (free in the resolve); a hide frame
+        // and the normal dash have none.
+        kit.set_underlay(match osd {
+            Some(o) if draw => fh6_osd::draw::underlay(o.host.anim.open.progress()),
+            _ => 0.0,
+        });
         {
             let mut p = kit.begin_frame(layout);
             if draw {
+                if let Some(o) = osd {
+                    fh6_osd::draw::live_scrim(&mut p, layout, o.host.anim.open.progress());
+                }
                 if let Some(active) = self.active.as_ref() {
                     active.cluster.draw(&mut p, layout);
+                }
+                if let Some(o) = osd {
+                    let name = self.active.as_ref().map_or("", |a| model::theme_label(a.theme));
+                    o.host.draw(&mut p, o.cfg, o.frame, o.now, name, o.status);
                 }
                 if stats_on {
                     draw_stats(&mut p, &self.stat_lines, self.size);
@@ -476,6 +604,15 @@ impl Loop {
             }
         }
     }
+}
+
+/// What one OSD frame draws with.
+struct OsdFrame<'a> {
+    host: &'a OsdHost,
+    cfg: &'a AppConfig,
+    frame: Frame,
+    now: Duration,
+    status: LiveStatus,
 }
 
 /// The `--stats` lines in the top-left corner, in target pixels.
@@ -512,6 +649,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         resources,
         game_process,
         on_bench_done,
+        osd: osd_setup,
     } = setup;
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
@@ -561,8 +699,24 @@ fn run(setup: RenderSetup) -> RenderSummary {
         last_update: Instant::now(),
         refraction: None,
         refraction_retry: Instant::now(),
+        font_override: None,
     };
     lp.adopt(gpu, surface);
+    let mut osd = Osd {
+        host: OsdHost::new(&lp.resources.tokens, osd_setup.fit),
+        edit: AppConfig::default(),
+        working: None,
+        was_open: false,
+        follow_until: None,
+        pause: AutoPause::new(),
+        injector: osd_setup.injector,
+        saver: osd_setup.saver,
+        epoch: Instant::now(),
+        fonts_listed: false,
+    };
+    if options.open_osd {
+        input.set_osd_open(true);
+    }
     let mut visibility = VisibilityController::default();
     let mut dyno = LiveDynoGenerator::new();
     let mut last_seq = 0u64;
@@ -621,12 +775,38 @@ fn run(setup: RenderSetup) -> RenderSummary {
             continue;
         }
 
-        let cfg = config.current();
+        let live_cfg = config.current();
         let frame = telemetry.latest();
         let fresh = !frame.is_stale(wake);
         let bypass = options.demo || options.bench.is_some();
-        let live_preview = input.osd_open();
         let race_on = frame.data.is_race_on == 1;
+        let game_foreground = foreground.is_game_foreground();
+        let camera_view = View::from_camera_index(i32::try_from(input.camera_index()).unwrap_or(3));
+
+        // OSD edges: open snapshots the config (and pauses mid-race); close flushes the save.
+        let osd_open = input.osd_open();
+        let pause_inputs = PauseInputs {
+            racing: fresh && race_on,
+            game_foreground,
+            auto_pause: live_cfg.osd_auto_pause_game,
+        };
+        if osd_open && !osd.was_open {
+            osd.opened(&live_cfg, camera_view, &input, pause_inputs);
+        } else if !osd_open && osd.was_open {
+            osd.closed(wake, &input);
+        }
+        osd.was_open = osd_open;
+        if osd.pause.poll(&mut *osd.injector, wake - osd.epoch, pause_inputs) {
+            tracing::info!("OSD closed: ESC sent to resume the game");
+        }
+        if !osd.fonts_listed {
+            if let Some(kit) = lp.gpu.as_ref().and_then(|g| g.kit.as_ref()) {
+                osd.host.set_fonts(kit.fonts().families());
+                osd.fonts_listed = true;
+            }
+        }
+        let cfg = osd.config_for_frame(&live_cfg, osd_open, wake);
+        let live_preview = osd_open;
         let synthetic = uses_dyno(bypass, live_preview, fresh, race_on);
         let synth_data;
         let data = if synthetic {
@@ -639,7 +819,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             VisibilityInputs {
                 race_on,
                 stream_fresh: fresh,
-                game_foreground: foreground.is_game_foreground(),
+                game_foreground,
                 user_hidden: control.user_hidden(),
                 live_preview,
                 bypass,
@@ -649,14 +829,18 @@ fn run(setup: RenderSetup) -> RenderSummary {
         // Only a packet that is actually drawn counts toward the latency stats.
         let new_packet = !synthetic && fresh && frame.seq != last_seq;
         last_seq = frame.seq;
-        let view = View::from_camera_index(i32::try_from(input.camera_index()).unwrap_or(3));
-        let layout = Layout::from_config(&cfg, &lp.resources.tokens, view, lp.size);
+        let osd_frame = Frame::new(lp.size);
 
         if vis.opacity <= 0.0 {
+            let layout = Layout::from_config(&cfg, &lp.resources.tokens, camera_view, lp.size);
+            if osd_open {
+                // Hidden (the game lost focus): input meant for another window is dropped.
+                let _ = input.take_edges();
+            }
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
                 blank_presented = matches!(
-                    lp.render(0.0, &layout, false, false),
+                    lp.render(0.0, &layout, false, false, None),
                     Some(FrameOutcome::Presented { .. })
                 );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
@@ -671,29 +855,42 @@ fn run(setup: RenderSetup) -> RenderSummary {
         // within one frame of the 250 ms trigger (packets and focus changes also unpark).
         keep_ticking = true;
         let cluster_moving = lp.active.as_ref().is_some_and(|a| a.cluster.animating());
-        if !(new_packet || vis.animating || synthetic || cluster_moving || lp.active.is_none()) {
+        if !(new_packet || vis.animating || synthetic || cluster_moving || osd_open || lp.active.is_none()) {
             continue;
         }
 
         let build_start = Instant::now();
+        // Controller input lands in the working config; this very frame shows it.
+        let mut cfg = cfg;
+        if osd_open {
+            if osd.navigate(&input, build_start) {
+                input.set_osd_open(false);
+            }
+            cfg = osd.config_for_frame(&live_cfg, true, build_start);
+            lp.prepare_osd(&mut osd.host, &cfg);
+        }
+        // The OSD's live view shows the view being edited, gliding into the live zone.
+        let view = if osd_open { osd.host.edit_view() } else { camera_view };
+        let base_layout = Layout::from_config(&cfg, &lp.resources.tokens, view, lp.size);
+        let layout = if osd_open {
+            osd.host.live_layout(&base_layout, osd_frame)
+        } else {
+            base_layout
+        };
         lp.ensure_cluster(&cfg, view);
         lp.ensure_palette(&cfg, data.car_ordinal);
         lp.update_refraction(&cfg, &layout, &game_process);
         let update_dt = (build_start - lp.last_update).as_secs_f32().min(MAX_DT);
         lp.last_update = build_start;
         let signals = lp.smoother.update(data, &cfg, &lp.resources.tokens, update_dt);
+        let font_override = lp.font_override;
         let fonts = lp
             .gpu
             .as_ref()
             .and_then(|g| g.kit.as_ref())
-            .map(|k| k.font_choice(None));
+            .map(|k| k.font_choice(font_override));
         if let (Some(active), Some(fonts)) = (lp.active.as_mut(), fonts) {
-            let reduced_flash = cfg
-                .extra
-                .get("ReducedFlash")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false);
-            active.cluster.update(&FrameInput {
+            let input_frame = FrameInput {
                 telemetry: data,
                 signals: &signals,
                 dt: update_dt,
@@ -704,12 +901,32 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 fonts,
                 logo: &lp.logo,
                 view,
-                reduced_flash,
-            });
+                reduced_flash: model::reduced_flash(&cfg),
+            };
+            active.cluster.update(&input_frame);
+            if osd_open {
+                if let Some(kit) = lp.gpu.as_ref().and_then(|g| g.kit.as_ref()) {
+                    osd.host.update(&input_frame, kit, osd_frame, &cfg);
+                }
+            }
         }
         let built = build_start.elapsed();
 
-        if let Some(FrameOutcome::Presented { timings, at }) = lp.render(vis.opacity, &layout, true, options.stats) {
+        let stats_on = options.stats || model::show_stats(&cfg);
+        let osd_draw = osd_open.then(|| OsdFrame {
+            host: &osd.host,
+            cfg: &cfg,
+            frame: osd_frame,
+            now: build_start - osd.epoch,
+            status: if synthetic {
+                LiveStatus::Dyno
+            } else {
+                LiveStatus::Telemetry
+            },
+        });
+        if let Some(FrameOutcome::Presented { timings, at }) =
+            lp.render(vis.opacity, &layout, true, stats_on, osd_draw.as_ref())
+        {
             lp.frames += 1;
             lp.stats.cpu_frame.record(built + timings.cpu());
             lp.stats.acquire_wait.record(timings.acquire_wait);
@@ -732,7 +949,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
                     }
                 }
             }
-            if options.stats && lp.frames.is_multiple_of(30) {
+            if stats_on && lp.frames.is_multiple_of(30) {
                 refresh_stat_lines(&mut lp);
             }
         }
@@ -785,13 +1002,21 @@ mod tests {
 
     #[test]
     fn theme_follows_the_view() {
-        let cfg = AppConfig {
+        let theme_for = fh6_osd::theme_for_view;
+        let mut cfg = AppConfig {
             cockpit_hud_style: "LiquidGlass".into(),
             bonnet_hud_style: "Gt7HoodPro".into(),
             ..AppConfig::default()
         };
         assert_eq!(theme_for(&cfg, View::Cockpit), ClusterTheme::LiquidGlass);
         assert_eq!(theme_for(&cfg, View::Hood), ClusterTheme::Gt7HoodPro);
+        assert_eq!(
+            theme_for(&cfg, View::Chase),
+            ClusterTheme::LiquidGlass,
+            "chase follows cockpit"
+        );
+        cfg.extra.insert(model::KEY_CHASE.into(), "RetroCyber".into());
+        assert_eq!(theme_for(&cfg, View::Chase), ClusterTheme::RetroCyber);
         let empty = AppConfig {
             cockpit_hud_style: String::new(),
             hud_style: String::new(),

@@ -614,6 +614,18 @@ impl Fonts {
         self.faces.get(usize::from(font.0)).map(|f| &f.desc)
     }
 
+    /// The distinct family names of the loaded faces, in load order (the OSD's font list).
+    #[must_use]
+    pub fn families(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for f in &self.faces {
+            if !out.iter().any(|n| n.eq_ignore_ascii_case(&f.desc.family)) {
+                out.push(f.desc.family.clone());
+            }
+        }
+        out
+    }
+
     /// Number of loaded faces.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -1077,6 +1089,16 @@ mod tests {
             assert!(f.glyph(0, ch).is_some(), "{ch} generated");
         }
         assert!(f.atlas.dirty.len() > 50, "atlas has uploads pending");
+    }
+
+    #[test]
+    fn families_lists_each_family_once() {
+        let f = fonts();
+        let fams = f.families();
+        assert!(!fams.is_empty());
+        let first = &fams[0];
+        assert_eq!(fams.iter().filter(|n| n.eq_ignore_ascii_case(first)).count(), 1);
+        assert!(f.find(first, 400, false).is_some());
     }
 
     #[test]

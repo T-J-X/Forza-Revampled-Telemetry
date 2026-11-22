@@ -232,6 +232,13 @@ impl Kit {
         self.renderer.set_bloom(on);
     }
 
+    /// Sets a premultiplied black underlay of `alpha` (0..1) under the whole target, applied in
+    /// the clear and the resolve (so a full-screen dim, such as behind the OSD, costs no shape
+    /// pass). It scales with the frame opacity. 0 (the default) turns it off.
+    pub fn set_underlay(&mut self, alpha: f32) {
+        self.renderer.set_underlay(alpha);
+    }
+
     /// Enables GPU timestamp queries; false when the device lacks `TIMESTAMP_QUERY`.
     pub fn set_gpu_timing(&mut self, on: bool) -> bool {
         self.renderer.set_timing(on)

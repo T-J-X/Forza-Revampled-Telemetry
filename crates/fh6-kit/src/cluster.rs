@@ -288,7 +288,13 @@ impl SignalSmoother {
             _ => 0.0,
         };
         self.last_rpm = Some(rpm);
-        let shift_rpm = max_rpm * tokens.rev_stages.shift_pct.clamp(0.5, 1.0);
+        // The OSD's shift point (`ShiftPointPct`, 0.80..1.00) overrides the tokens' value.
+        let shift_pct = config
+            .extra
+            .get("ShiftPointPct")
+            .and_then(serde_json::Value::as_f64)
+            .map_or(tokens.rev_stages.shift_pct, |v| (v as f32).clamp(0.80, 1.0));
+        let shift_rpm = max_rpm * finite_or(shift_pct, 0.97).clamp(0.5, 1.0);
         Signals {
             race_on: data.is_race_on == 1,
             speed: match unit {
@@ -466,5 +472,24 @@ mod tests {
         assert_eq!(sig.gear, Gear::Forward(3));
         assert!((sig.throttle - 1.0).abs() < 1e-5);
         assert!(sig.speed > 40.0);
+    }
+
+    #[test]
+    fn shift_point_follows_the_osd_setting() {
+        let data = FH6TelemetryData {
+            engine_max_rpm: 9000.0,
+            current_engine_rpm: 4500.0,
+            ..Default::default()
+        };
+        let t = Tokens::default();
+        let mut cfg = AppConfig::default();
+        let tokens_rpm = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
+        assert!((tokens_rpm - 9000.0 * t.rev_stages.shift_pct).abs() < 1e-2);
+        cfg.extra.insert("ShiftPointPct".into(), serde_json::Value::from(0.90));
+        let osd_rpm = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
+        assert!((osd_rpm - 8100.0).abs() < 1e-2);
+        cfg.extra.insert("ShiftPointPct".into(), serde_json::Value::from(0.10));
+        let clamped = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
+        assert!((clamped - 7200.0).abs() < 1e-2, "clamped to 80%");
     }
 }

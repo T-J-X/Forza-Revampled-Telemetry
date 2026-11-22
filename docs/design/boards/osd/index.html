@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FH6 WheelDash v2 · 09 OSD</title>
+<!-- Phase 9 OSD board. Pure HTML, no script. The images are real 4K kit renders (960x540 downsamples) from `preview-export`. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=Titillium+Web:wght@400;600;700&display=swap">
+<style>
+:root{--bg:#05070A;--panel:#0B1018;--ink:#F4F7FB;--muted:rgba(244,247,251,.62);--line:rgba(255,255,255,.10);--accent:#38BDF8}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Titillium Web',sans-serif}
+header{padding:40px 48px 8px}h1{font:400 26px Michroma,sans-serif;letter-spacing:.04em;margin:0}
+h2{font:600 13px 'Titillium Web';letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin:36px 48px 12px}
+p,li{color:var(--muted);max-width:1100px}
+.wrap{padding:0 48px 48px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:16px;padding:0 48px}
+figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+figure img{display:block;width:100%;height:auto;background:#000}
+figcaption{padding:10px 14px;font-size:14px;color:var(--ink)}
+table{border-collapse:collapse;margin:0 48px;max-width:1100px}
+td,th{border-bottom:1px solid var(--line);padding:6px 14px 6px 0;text-align:left;font-size:14px;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+code{color:var(--accent)}
+</style></head><body>
+<header>
+<h1>09 · OSD</h1>
+<p>The controller-first Liquid Glass OSD: the real selected cluster live on the left (live dyno while the game is paused, live telemetry when it flows), a glass control panel on the right, five tabs on LB/RB. Extends the Phase 3 direction (<a href="../../OSD_DIRECTION.md" style="color:var(--accent)">OSD_DIRECTION.md</a>). Spec: <a href="../../OSD.md" style="color:var(--accent)">OSD.md</a>.</p>
+</header>
+
+<h2>States (4K renders, GPU 1.18–1.32 ms each)</h2>
+<div class="grid">
+<figure><img src="../../osd/01_cluster_carousel.png" alt="Cluster tab with carousel"><figcaption>Cluster · carousel of live thumbnails, focus echo in the live zone</figcaption></figure>
+<figure><img src="../../osd/02_cluster_hood_view.png" alt="Editing the hood view"><figcaption>Cluster · editing the Hood view (the live view follows)</figcaption></figure>
+<figure><img src="../../osd/03_colour_custom_hue.png" alt="Custom colour, hue"><figcaption>Colour · custom palette, hue slider on a spectrum track</figcaption></figure>
+<figure><img src="../../osd/04_colour_random.png" alt="Random palette"><figcaption>Colour · random palette, re-roll and lock</figcaption></figure>
+<figure><img src="../../osd/05_type_logo.png" alt="Type and logo"><figcaption>Type &amp; logo · font, logo, custom name</figcaption></figure>
+<figure><img src="../../osd/06_fit_fov.png" alt="FOV with schematic"><figcaption>Fit &amp; camera · FOV with the driving-position schematic and the camera notice</figcaption></figure>
+<figure><img src="../../osd/07_fit_cluster_height.png" alt="Cluster height"><figcaption>Fit &amp; camera · cluster height with the default-height line</figcaption></figure>
+<figure><img src="../../osd/08_fit_dash_blocker.png" alt="Dash blocker rows"><figcaption>Fit &amp; camera · dash blocker rows, scrolled (rows fade at the edges)</figcaption></figure>
+<figure><img src="../../osd/09_controls.png" alt="Controls"><figcaption>Controls · OSD button, hold time, auto-pause, stats</figcaption></figure>
+<figure><img src="../../osd/10_keyboard.png" alt="On-screen keyboard"><figcaption>On-screen keyboard · RB types, LB deletes, Menu done, View cancel</figcaption></figure>
+<figure><img src="../../osd/11_remap.png" alt="Remapper"><figcaption>Remapper · hold the new button 1 s; A/B/X/Y and the D-pad ignored</figcaption></figure>
+</div>
+
+<h2>Grid and type (4K units)</h2>
+<table>
+<tr><th>Element</th><th>Value</th></tr>
+<tr><td>Panel</td><td>x 2380–3700, y 140–2020, radius 56; right-aligned on wider screens. Glass tint alpha 64, frost 0.9, backdrop σ 28, crown sheen 28/255 ending above the tabs, OLED black 0.62 underneath.</td></tr>
+<tr><td>Text edge / value edge</td><td>One left text edge at 2488; every value, slider track and toggle ends at 3552; chevrons in the gutter to 3592.</td></tr>
+<tr><td>Tabs</td><td>Cap 30 (floor 26), y 276; accent underline 6 px on the <code>fast</code> spring, blooming.</td></tr>
+<tr><td>Rows</td><td>116 px (sliders 164, carousel 340, info 124); section headings 18 cap caps +24% tracking, 76 px above. Labels and values 30 cap; help 26 cap.</td></tr>
+<tr><td>Focus</td><td>White 0.07 lift, 3 px accent inner rim in a bloom layer, glow σ 14. Accent = palette accent unless within 25° of the warning red, then primary, then sapphire.</td></tr>
+<tr><td>Live zone</td><td>"LIVE VIEW" label, cluster name 54 cap, status 26 cap; focus echo: label 18 caps, value 110 cap, slider mirror 720 px, help 26 cap. Feathered black pools behind the echo (0.45) and the cluster (0.35).</td></tr>
+<tr><td>Hint bar</td><td>Keycaps 22 cap in 52 px chips, text 26 cap at y 1896; the gearbox line 22 cap at 1972.</td></tr>
+<tr><td>Dim</td><td>Kit underlay 0.62 black (applied in the resolve, free on the GPU).</td></tr>
+</table>
+
+<h2>Navigation</h2>
+<table>
+<tr><th>Input</th><th>Browse</th><th>Keyboard</th><th>Remap</th></tr>
+<tr><td>D-pad</td><td>Up/down move (wrap on a press, stop while held); left/right adjust, repeat 280 ms then 65 ms, 25 ms after 900 ms; sliders ×4 after 1.2 s, ×10 after 2.5 s</td><td>Move on the key grid</td><td>Ignored</td></tr>
+<tr><td>LB / RB</td><td>Previous / next tab</td><td>Delete / type</td><td>Capturable (not alone)</td></tr>
+<tr><td>View</td><td>Back (on release when it is the toggle button and held under the hold time)</td><td>Cancel</td><td>Capturable</td></tr>
+<tr><td>Menu</td><td>Back</td><td>Done</td><td>Capturable</td></tr>
+<tr><td>A B X Y</td><td colspan="3">Never read: stripped before any input is seen (manual gearbox).</td></tr>
+</table>
+
+<div class="wrap"><p>Motion: open 200 ms (fade + 64 px slide), cluster glide to the live zone on the <code>default</code> spring, focus ring and underline on <code>fast</code>, scroll on <code>default</code>, 150 ms row crossfade on a tab change.</p></div>
+</body></html>
