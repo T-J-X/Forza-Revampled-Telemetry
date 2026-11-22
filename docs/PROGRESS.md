@@ -9,14 +9,11 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 |---|---|
 | 1 Clean Rust repository | ✅ 2026-11-20 (public: T-J-X/Forza-Revampled-Telemetry) |
 | 2 Program kit (`program/`, ONBOARDING, council agents 5–6) | ✅ 2026-11-20 |
-<<<<<<< HEAD
-| 3 Design system & art direction | ◐ started 2026-11-20 |
+| 3 Design system & art direction | ✅ merged 2026-11-22 (see `program/phases/03-design-system/HANDOVER.md`; Figma partly blocked by the Starter plan, HTML boards are the reference) |
 | 4 Engine: a working exe | ✅ 2026-11-21 (branch `claude/phase-4-engine-b8ee7b`, see `program/phases/04-engine/HANDOVER.md`) |
-=======
-| 3 Design system & art direction | ◐ 2026-11-21: all repo deliverables done on branch `claude/phase-3-design-system-449d2f` (PR T-J-X/Forza-Revampled-Telemetry#1), awaiting conductor review. Open: Figma library and render placement (blocked: Starter MCP cap, desktop MCP unavailable) and the "clearly better than references" bar (final verdict "matches"). Handover: [program/phases/03-design-system/HANDOVER.md](../program/phases/03-design-system/HANDOVER.md). |
-| 4 Engine: a working exe | ◐ started 2026-11-20 |
->>>>>>> claude/phase-3-design-system-449d2f
-| 5–11 | ☐ waiting on dependencies |
+| 5 GPU render kit | ◐ started 2026-11-21 |
+| 6 Assets, logos & fonts | ◐ started 2026-11-22 |
+| 7–11 | ☐ waiting on dependencies |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -148,7 +145,6 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-20 | Motorsport default font from an OFL pack; users can add their own fonts | TJX's request; the OFL licence is safe for a public repo |
 | 2026-11-20 | The repo is Rust only. Skill eval fixtures (C/Python/shell) and the TS hook plugin are untracked. Blender bpy lives inside the Rust tool `asset-forge` | TJX: "this is all rust", lightweight, 0 ms |
 | 2026-11-20 | Commits are authored by `TJX <TJX@Ngage.com>`, with no co-author trailer | TJX's instruction for the public repo |
-<<<<<<< HEAD
 | 2026-11-21 | Phase 4: overlay presented with wgpu 30 on DX12 through a DirectComposition swapchain (`Dx12SwapchainKind::DxgiFromVisual`), premultiplied alpha, Mailbox, frame latency 1 | ADR 0001: the only transparent Windows route with no CPU copy |
 | 2026-11-21 | New dependency `wgpu` 30.0.2 (default features off; `dx12`, `wgsl`, `std`, `parking_lot`) | The GPU renderer for v2; pure Rust (no C build) |
 | 2026-11-21 | New dependency `bytemuck` 1.21 (`derive`) | Casts instance arrays to bytes for buffer uploads without `unsafe`; already in wgpu's tree |
@@ -170,7 +166,6 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-21 | UDP: the port that published last owns the stream until silent for 50 ms; the other port's copies are dropped (replaces payload/timestamp dedupe) | Payload compare dropped a paused game's genuine repeats and their forwards, and a lagging thread could reorder values; review verification |
 | 2026-11-21 | wgpu errors and device loss set a flag instead of panicking; the render loop drops and recreates the device once a second; a failed surface configure is `GpuError::DeviceFailed` | wgpu's default handlers panic the render thread; an unconfigured surface panics in `get_current_texture` |
 | 2026-11-21 | `AppWindow` state is an `Rc` shared by the window and each dispatched message | A handler dropping its own window freed the state it was running from; safe API must stay sound |
-=======
 | 2026-11-21 | Phase 3: the Figma master is `0zOEwnJ8dEj1kQ7QwPGEH0` (Starter: 3 pages organised with Sections, per-family palettes as variables because only 1 mode is allowed) | Created for v2; the legacy keys were never the v2 master |
 | 2026-11-21 | Phase 3 visuals are pure-SVG HTML boards in `docs/design/boards/`, rendered to PNG with headless Edge; the generator script stays outside the repo | Figma's Starter MCP cap blocked rendering in Figma, and the repo is Rust-only |
 | 2026-11-21 | `data/figma_tokens.json` schema v3 (3.2.0): colour roles, palette modes, OFL type scale, glow, glass, light, motion, layout, states, components, families, accessibility; legacy keys kept; `colors`/`grid` names avoided so `fh6-render::tokens` still parses | One token source for Figma, the kit and every cluster (docs/design/TOKENS.md) |
@@ -182,4 +177,3 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-21 | ADAS chase eye raised to (0, 3.4, −6.0) m with 8° pitch | Critique: the old eye (0, 1.85, −3.4) hid the road behind the ego car |
 | 2026-11-21 | Classic dials default to a symmetric 270° face; shift-at-12 is an optional per-car Track mode | A linear 270° face rotated to put shift at 12 o'clock turns lopsided |
 | 2026-11-21 | Catalog: 29 rebuilds + 19 new concepts, pattern-setters LiquidGlass, Gt7HoodPro, PorscheAnalog, BoschDdu, TeslaAdas, RetroCyber, KineticLiquidMetal (build order in CATALOG.md) | Defaults first, then one pattern-setter per family so helpers exist before siblings |
->>>>>>> claude/phase-3-design-system-449d2f
