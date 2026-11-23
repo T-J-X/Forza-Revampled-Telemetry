@@ -439,6 +439,12 @@ pub struct EditState {
     pub fonts: Vec<String>,
     /// The last camera change's outcome.
     pub camera: CameraApply,
+    /// The current car's profile (`car_profiles.json`) overrides the focused row: the live view
+    /// shows the profile's value, the row the global one (the host sets this every frame).
+    pub profile_override: bool,
+    /// The anchor height the live view really uses for the edited view (a car profile may move
+    /// it); `None` = the config's own anchor.
+    pub live_anchor_y: Option<f32>,
 }
 
 impl Default for EditState {
@@ -450,6 +456,8 @@ impl Default for EditState {
             preset: 0,
             fonts: Vec::new(),
             camera: CameraApply::NextLaunch,
+            profile_override: false,
+            live_anchor_y: None,
         }
     }
 }
@@ -682,9 +690,15 @@ pub fn is_camera_row(row: RowId) -> bool {
     )
 }
 
+/// Shown under a row whose value the current car's profile overrides.
+pub const PROFILE_OVERRIDE_NOTE: &str = "This car's profile overrides this setting";
+
 /// A one-line explanation shown under the focused row.
 #[must_use]
 pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
+    if edit.profile_override {
+        return Some(PROFILE_OVERRIDE_NOTE);
+    }
     if is_camera_row(row) {
         return Some(edit.camera.notice());
     }

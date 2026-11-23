@@ -510,12 +510,13 @@ fn camera_schematic(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Ro
 
 /// A dashed line where the cluster sits at height offset 0, across the live zone.
 fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
-    // The edited view's anchor (Phase 8 per-view placement).
-    let y = match inp.ctl.edit.view {
+    // The edited view's anchor (Phase 8 per-view placement); a car profile may move it, and the
+    // line follows what the live view really uses.
+    let y = inp.ctl.edit.live_anchor_y.unwrap_or(match inp.ctl.edit.view {
         View::Hood => inp.cfg.bonnet_anchor_y as f32,
         View::Chase => inp.cfg.chase_anchor_y as f32,
         View::Cockpit => inp.cfg.cockpit_anchor_y as f32,
-    };
+    });
     let x1 = PANEL.min.x + inp.frame.ox - 120.0;
     let mut x = 200.0;
     while x < x1 {

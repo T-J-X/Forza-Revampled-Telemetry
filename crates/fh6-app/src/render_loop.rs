@@ -511,6 +511,11 @@ impl Loop {
         if let Some(kit) = self.gpu.as_mut().and_then(|g| g.kit.as_mut()) {
             kit.set_palette(self.palette);
             self.font_override = model::cluster_font(cfg).and_then(|family| kit.fonts().find(family, 600, false));
+            // A face from the pack or the user folder is rasterised on first use: do it now, so
+            // the first frame in the new font has every digit and letter.
+            if let Some(font) = self.font_override {
+                kit.fonts_mut().ensure_preloaded(font);
+            }
         }
         self.palette_cache = Some(key);
     }
@@ -927,13 +932,17 @@ fn run(setup: RenderSetup) -> RenderSummary {
         let build_start = Instant::now();
         // Controller input lands in the working config; this very frame shows it.
         let mut cfg = cfg;
+        // The OSD rows show and edit the global config; the live view shows what this car really
+        // gets (its profile on top), and a row the profile overrides says so.
+        let mut rows_cfg = Arc::clone(&cfg);
         if osd_open {
             if osd.navigate(&input, build_start) {
                 input.set_osd_open(false);
             }
-            let edited = osd.config_for_frame(&live_cfg, true, build_start);
-            cfg = car_config.resolve(&edited, &profiles.current(), data.car_ordinal);
-            lp.prepare_osd(&mut osd.host, &cfg);
+            rows_cfg = osd.config_for_frame(&live_cfg, true, build_start);
+            cfg = car_config.resolve(&rows_cfg, &profiles.current(), data.car_ordinal);
+            osd.host.note_profile(&rows_cfg, &cfg);
+            lp.prepare_osd(&mut osd.host, &rows_cfg);
         }
         // The OSD's live view shows the view being edited, gliding into the live zone.
         let view = if osd_open { osd.host.edit_view() } else { camera_view };
@@ -972,7 +981,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             active.cluster.update(&input_frame);
             if osd_open {
                 if let Some(kit) = lp.gpu.as_ref().and_then(|g| g.kit.as_ref()) {
-                    osd.host.update(&input_frame, kit, osd_frame, &cfg);
+                    osd.host.update(&input_frame, kit, osd_frame, &rows_cfg);
                 }
             }
         }
@@ -986,7 +995,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         let stats_on = options.stats || model::show_stats(&cfg);
         let osd_draw = osd_open.then(|| OsdFrame {
             host: &osd.host,
-            cfg: &cfg,
+            cfg: &rows_cfg,
             frame: osd_frame,
             now: build_start - osd.epoch,
             status: if synthetic {
@@ -994,7 +1003,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             } else {
                 LiveStatus::Telemetry
             },
-            blocker: osd.host.blocker_focused(&cfg),
+            blocker: osd.host.blocker_focused(&rows_cfg),
         });
         if let Some(FrameOutcome::Presented { timings, at }) =
             lp.render(vis.opacity, &layout, true, stats_on, scrim, osd_draw.as_ref())

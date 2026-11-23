@@ -79,6 +79,26 @@ impl OsdHost {
         )
     }
 
+    /// Tells the OSD what the live view really shows. `base` is the config being edited (the
+    /// global `config.json`); `effective` is `base` with the current car's profile applied
+    /// (pass `base` twice when there is none). When the focused row reads differently in the
+    /// two, its help line says the car's profile overrides it. No allocation.
+    pub fn note_profile(&mut self, base: &AppConfig, effective: &AppConfig) {
+        let fit = &*self.fit;
+        let overridden = self.ctl.focused_row(base, fit).is_some_and(|row| {
+            let (mut global, mut car) = (model::Line::new(), model::Line::new());
+            model::format_value(row, self.ctl.ctx(base, fit), &mut global);
+            model::format_value(row, self.ctl.ctx(effective, fit), &mut car);
+            global.as_str() != car.as_str() || model::toggle_value(row, base) != model::toggle_value(row, effective)
+        });
+        self.ctl.edit.profile_override = overridden;
+        self.ctl.edit.live_anchor_y = Some(match self.ctl.edit.view {
+            View::Cockpit => effective.cockpit_anchor_y,
+            View::Hood => effective.bonnet_anchor_y,
+            View::Chase => effective.chase_anchor_y,
+        } as f32);
+    }
+
     /// Sets the font families the Font row offers (from the loaded faces).
     pub fn set_fonts(&mut self, fonts: Vec<String>) {
         self.ctl.edit.fonts = fonts;
@@ -221,5 +241,60 @@ impl OsdHost {
     #[must_use]
     pub fn animating(&self) -> bool {
         self.anim.open.running() || self.anim.tab_fade.running()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fit::{ConfigOnlyFit, SCRIM_ROWS};
+    use crate::model::{RowId, PROFILE_OVERRIDE_NOTE};
+
+    #[test]
+    fn a_row_the_car_profile_overrides_says_so() {
+        let mut host = OsdHost::new(&Tokens::default(), Box::new(ConfigOnlyFit));
+        let base = AppConfig::default();
+        host.open(&base, View::Cockpit, base.cockpit_anchor_x as f32);
+        // The car's profile sets its own blocker opacity and binnacle anchor.
+        let car = AppConfig {
+            oem_dash_opaque_pct: 95,
+            cockpit_anchor_y: 1820,
+            ..base.clone()
+        };
+        let opacity = SCRIM_ROWS
+            .iter()
+            .position(|r| r.label == "Dash blocker")
+            .map(|i| RowId::Scrim(i as u8));
+        let opacity = opacity.expect("opacity row");
+        assert!(host.focus_row(Tab::Fit, opacity, &base));
+
+        host.note_profile(&base, &car);
+        assert_eq!(model::help(opacity, &host.ctl.edit), Some(PROFILE_OVERRIDE_NOTE));
+        assert_eq!(
+            host.ctl.edit.live_anchor_y,
+            Some(1820.0),
+            "the default-height line follows the car"
+        );
+
+        // A row the profile leaves alone keeps its own help; no profile, no note.
+        assert!(host.focus_row(Tab::Fit, RowId::ClusterScale, &base));
+        host.note_profile(&base, &car);
+        assert_eq!(model::help(RowId::ClusterScale, &host.ctl.edit), Some("Applies now"));
+        assert!(host.focus_row(Tab::Fit, opacity, &base));
+        host.note_profile(&base, &base);
+        assert_ne!(model::help(opacity, &host.ctl.edit), Some(PROFILE_OVERRIDE_NOTE));
+        assert_eq!(host.ctl.edit.live_anchor_y, Some(1835.0));
+
+        // A toggle the profile flips is caught too.
+        let auto = AppConfig {
+            camera_patch_auto: true,
+            ..base.clone()
+        };
+        assert!(host.focus_row(Tab::Fit, RowId::CameraPatch, &base));
+        host.note_profile(&base, &auto);
+        assert_eq!(
+            model::help(RowId::CameraPatch, &host.ctl.edit),
+            Some(PROFILE_OVERRIDE_NOTE)
+        );
     }
 }

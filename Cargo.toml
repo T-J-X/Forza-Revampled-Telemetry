@@ -41,3 +41,18 @@ windows = "0.62"
 wgpu = { version = "30.0.2", default-features = false, features = ["dx12", "webgpu", "wgsl", "std", "parking_lot"] }
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"
+
+# Loading a font face shapes 4,624 kerning pairs (rustybuzz) and rasterises about 70 MTSDF
+# glyphs (fdsm on nalgebra). Unoptimised that is about 5 s per face, which every kit test and
+# every debug start pays; optimised it is well under 0.2 s. Keep these fast in debug builds.
+[profile.dev.package.rustybuzz]
+opt-level = 3
+
+[profile.dev.package.ttf-parser]
+opt-level = 3
+
+[profile.dev.package.fdsm]
+opt-level = 3
+
+[profile.dev.package.nalgebra]
+opt-level = 3
