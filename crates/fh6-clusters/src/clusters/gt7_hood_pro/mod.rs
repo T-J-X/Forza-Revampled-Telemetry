@@ -58,7 +58,7 @@ use crate::common::{ShiftLights, VirtualLight};
 use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
+    deg, vec2, Affine, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
     ImagePaint, ImageWrap, LayerOptions, Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring,
     Stroke, TextStyle, Tokens, VAlign, Vec2, View,
 };
@@ -100,6 +100,18 @@ const GRAIN_FLOW: [f32; 2] = [80.0, 900.0];
 const GRAIN_ALPHA: f32 = 0.9;
 /// How much the grain dims the ribbon body before adding its filaments (at the head).
 const GRAIN_DIM: f32 = 0.38;
+/// Hood: strength of the radial pads under the G and pedal groups (centre alpha 0.55 x this).
+const HOOD_PAD: f32 = 0.9;
+/// Hood wing channel: extra width over the ribbon, blur and opacity.
+const CHANNEL_PAD: f32 = 10.0;
+const CHANNEL_BLUR: f32 = 4.0;
+const CHANNEL_ALPHA: f32 = 0.38;
+/// Hood keyline: opacity of the black copies, and their offset per unit of cap height (tokens
+/// `type.keyline` 6 px at an 84 px cap).
+const KEYLINE_ALPHA: f32 = 0.85;
+const KEYLINE_PER_CAP: f32 = 0.07;
+/// Hood: the unlit diamonds and the slip capsules sit on a dark lens.
+const HOOD_LENS: f32 = 0.5;
 /// Width of the apex blade (px).
 const BLADE_W: f32 = 8.0;
 /// Smallest cap of the micro-labels (MPH, THR, BRK): the hood has no scrim behind them.
@@ -590,6 +602,20 @@ impl Cluster for Gt7HoodPro {
             },
         );
         dimming_pad(p, g.speed, g.speed_cap * 1.6, 1.0, &pal);
+        // Hood (no scrim, bright road and sky behind): feathered pools under the G and pedal
+        // groups and a soft dark channel under each wing, so every rank reads over daylight.
+        if g.keyline {
+            // Elliptical pads (feathered to 0, no edge) under the G group and the pedals, kept
+            // below the wings' glow so they never cut into it.
+            let g_left = g.gball.x - g.gball_r * 1.2;
+            let g_right = g.gread.x + 70.0;
+            let g_pad = vec2((g_left + g_right) * 0.5, g.gball.y + 6.0);
+            elliptic_pad(p, g_pad, vec2((g_right - g_left) * 0.5, g.gball_r * 1.35), &pal);
+            let (top, bottom) = (g.pedal_y[0] - 10.0, g.pedal_y[1] + 44.0);
+            let pedals = vec2((g.pedal_x[0] + g.pedal_x[1]) * 0.5, (top + bottom) * 0.5);
+            elliptic_pad(p, pedals, vec2(92.0, (bottom - top) * 0.5), &pal);
+            self.draw_channel(p, &pal);
+        }
 
         // Back plane (0 px): hairline, scale, ribbons, comets, the apex fuse and the diamonds.
         self.draw_scale(p, g, &pal);
@@ -684,6 +710,9 @@ impl Gt7HoodPro {
                 if k == 0 && tick.label > 0 {
                     let c = a + n * (len + 6.0 + g.numeral_cap * 0.6);
                     let cells = if tick.label >= 10 { 2 } else { 1 };
+                    if g.keyline {
+                        keyline_number(p, c, i64::from(tick.label), cells, &numeral, roles.oled_black);
+                    }
                     p.number(c, i64::from(tick.label), cells, &numeral, None);
                 }
             }
@@ -833,7 +862,12 @@ impl Gt7HoodPro {
         for (i, q) in pts.iter().enumerate() {
             if self.diamond_color(i, pal).is_none() {
                 let shape = Shape::Polygon { points: q };
-                p.fill(&shape, roles.ink.with_alpha(1.0 / 255.0));
+                let lens = if g.keyline {
+                    roles.oled_black.with_alpha(HOOD_LENS)
+                } else {
+                    roles.ink.with_alpha(1.0 / 255.0)
+                };
+                p.fill(&shape, lens);
                 p.stroke(&shape, roles.ink.with_alpha(0.12), Stroke::rim_px(1.0));
             }
         }
@@ -990,6 +1024,9 @@ impl Gt7HoodPro {
         for c in Corner::ALL {
             let r = g.tyre_rect(c);
             let shape = Shape::round_rect(r, r.width() * 0.5);
+            if g.keyline {
+                p.fill(&shape, roles.oled_black.with_alpha(HOOD_LENS));
+            }
             p.fill(&shape, self.tyre_fill[c.index()].value());
             let reach = r.height() * 0.5;
             p.stroke(
@@ -1039,7 +1076,11 @@ impl Gt7HoodPro {
                 let fill = Rect::from_xywh(track.min.x, track.max.y - fh, g.pedal_w, fh);
                 p.fill(&Shape::round_rect(fill, radius), color);
             }
-            p.text(vec2(x, g.pedal_y[1] + 12.0), name, &label);
+            let at = vec2(x, g.pedal_y[1] + 12.0);
+            if g.keyline {
+                keyline_text(p, at, name, &label, roles.oled_black);
+            }
+            p.text(at, name, &label);
         }
     }
 
@@ -1086,10 +1127,78 @@ impl Gt7HoodPro {
             .paint(roles.ink.fade(0.8))
             .tracking(self.tracking)
             .align(Align::Left, VAlign::Baseline);
-        p.text(
-            vec2(cells.max.x + 14.0, g.speed.y + g.speed_cap * 0.5),
-            self.sig.unit.label(),
-            &unit,
+        let at = vec2(cells.max.x + 14.0, g.speed.y + g.speed_cap * 0.5);
+        if g.keyline {
+            keyline_text(p, at, self.sig.unit.label(), &unit, roles.oled_black);
+        }
+        p.text(at, self.sig.unit.label(), &unit);
+    }
+
+    /// Hood: a soft dark channel under each wing's whole length (opaque round-capped segments in
+    /// one blurred layer at [`CHANNEL_ALPHA`], so the joins never double up), so the unlit wing
+    /// still reads as hardware and the lit ribbon
+    /// keeps its contrast over a bright sky.
+    fn draw_channel(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let wings = self.wings();
+        let opts = LayerOptions {
+            blur: Some(CHANNEL_BLUR),
+            opacity: CHANNEL_ALPHA,
+            ..LayerOptions::default()
+        };
+        p.layer(opts, |p| {
+            for (hair, w) in wings.hair.iter().zip(wings.side.iter()) {
+                for i in 1..HAIR_POINTS {
+                    let (t0, t1) = (
+                        (i - 1) as f32 / (HAIR_POINTS - 1) as f32,
+                        i as f32 / (HAIR_POINTS - 1) as f32,
+                    );
+                    p.fill(
+                        &Shape::Line {
+                            a: hair[i - 1],
+                            b: hair[i],
+                            width_a: w.width_at(t0) + CHANNEL_PAD,
+                            width_b: w.width_at(t1) + CHANNEL_PAD,
+                            cap: Cap::Round,
+                        },
+                        pal.roles.oled_black,
+                    );
+                }
+            }
+        });
+    }
+}
+
+/// Hood: a dimming pad stretched to an ellipse with half-axes `half` around `center`.
+fn elliptic_pad(p: &mut Painter<'_>, center: Vec2, half: Vec2, pal: &Palette) {
+    let r = half.y.max(1.0);
+    p.scoped(|p| {
+        p.translate(center);
+        p.transform(&Affine::scale_xy(half.x / r, 1.0));
+        dimming_pad(p, Vec2::ZERO, r, HOOD_PAD, pal);
+    });
+}
+
+/// Hood keyline: eight black copies of a text run around `pos` (tokens `type.keyline`), so a
+/// micro-label reads over a bright road or sky. The radius follows the cap height.
+fn keyline_text(p: &mut Painter<'_>, pos: Vec2, text: &str, style: &TextStyle, black: Color) {
+    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
+    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
+    for i in 0..8 {
+        p.text(pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0), text, &key);
+    }
+}
+
+/// [`keyline_text`] for a tabular number.
+fn keyline_number(p: &mut Painter<'_>, pos: Vec2, value: i64, cells: u8, style: &TextStyle, black: Color) {
+    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
+    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
+    for i in 0..8 {
+        p.number(
+            pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0),
+            value,
+            cells,
+            &key,
+            None,
         );
     }
 }
