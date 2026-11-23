@@ -62,7 +62,7 @@ cargo test --workspace                                    every suite ok, 0 fail
 | `preview-export` 60-frame sequence, hood (final) | GPU p50 0.269–0.272 ms, p99 0.289–0.296 ms (two runs) |
 | Hood states | 0.25–0.31 ms. Single-frame spikes of 1.3–2.6 ms landed on a different state in each run while the shared GPU was 36% busy with the other cluster chats, so they are contention, not the cluster |
 | Before the hood-legibility layers | p50 0.17 ms. The two blurred channel layers and the pad shadows cost about 0.13 ms |
-| Live demo, 60 s, `--stats` | 3789 frames presented (63 fps on a synthetic stream). The cluster's own build step: p50 0.007 ms, p99 0.049 ms. Host CPU per frame: p50 0.96 ms, p99 4.25 ms (the shared upload / record / submit cost the pilot also reports, not this cluster) |
+| Live demo, 60 s, `--stats`, final code (assets and hood layers) | 4173 frames presented (69.6 fps on a synthetic stream). The cluster's own build step: p50 0.007 ms, p99 0.041 ms. Host CPU per frame: p50 1.10 ms, p99 2.44 ms, of which upload / record / submit is p50 0.77 ms. That is the shared host cost the pilot also reports, not this cluster; the 1 ms CPU target is a host item. The first-pass run read p50 0.96 / p99 4.25 ms |
 
 The first draft's hairline was one arc of a ~4000 px circle, and the kit evaluated it over a full-screen quad: 0.88 ms. It is now 8-segment polyline chunks (0.17 ms).
 
