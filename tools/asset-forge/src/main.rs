@@ -13,6 +13,10 @@ mod blender;
 mod comfy;
 mod ctx;
 mod error;
+// The hero library is shared: each cluster recipe uses the parts it needs, so not every builder
+// has a caller inside this binary at any one time.
+#[allow(dead_code)]
+mod hero;
 mod img;
 mod ktx2w;
 mod ledger;
@@ -86,13 +90,24 @@ fn run(args: &[String]) -> Result<()> {
             println!("ledger and contact sheet updated");
             Ok(())
         }
+        Some("hero-demo") => hero::demo::run(&paths, args.iter().any(|a| a == "--preview")),
+        Some("hero-versus") => {
+            let (Some(board), Some(after)) = (args.get(1), args.get(2)) else {
+                return Err(ForgeError::Usage("asset-forge hero-versus <board.png> <after.png> [out.png]".into()));
+            };
+            let out = args.get(3).map_or_else(
+                || paths.root.join("docs/handover-shots/asset-pipeline-v2-vs-penpot.png"),
+                std::path::PathBuf::from,
+            );
+            hero::demo::versus(std::path::Path::new(board), std::path::Path::new(after), &out).map(|p| println!("wrote {}", p.display()))
+        }
         Some("sheet") => {
             let mut ledger = ledger::Ledger::load(&paths.assets())?;
             ledger.save()?;
             sheet::write(&paths, &ledger)
         }
         _ => Err(ForgeError::Usage(
-            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>] | sheet".into(),
+            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>] | sheet | hero-demo [--preview] | hero-versus <board.png> <after.png> [out.png]".into(),
         )),
     }
 }
