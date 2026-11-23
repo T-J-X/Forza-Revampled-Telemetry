@@ -57,7 +57,8 @@ program/             this build program: roadmap, per-phase MASTER_PROMPT / AGEN
 - Display: LG C1 55" 4K OLED at 3840x2160.
 - **Blender 5.3:** `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe`. Run headless with `blender.exe -b -P script.py`.
 - **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. It has no models until Phase 6 installs them.
-- **Figma:** the **Figma desktop app is open** on this machine, and the Figma MCP tools (`use_figma`, `create_new_file`, `get_screenshot`, …) are connected. Load `figma:figma-use` before the first `use_figma` call. Use real Figma; HTML boards are only a fallback. The master file key is recorded in `docs/design/FIGMA.md` from Phase 3.
+- **Penpot** (the design tool since 2026-11-23): Penpot's hosted MCP is registered at user scope as the `penpot` server (`execute_code`, `high_level_overview`, `penpot_api_info`, `export_shape`). It only reaches the design file while that file is **open in a browser tab and connected** (File → MCP Server → Connect), so the tab must stay open. Call `high_level_overview` once before the first `execute_code`. Setup, limits and the master file are in `docs/design/PENPOT.md`. Never ask for the MCP key or write it into a file. HTML boards are the fallback.
+- **Figma** is the read-only legacy master (`docs/design/FIGMA.md`): read it for history, never write to it. Its Starter plan and View seat block writes.
 - **context7 MCP** for crate docs; the **built-in browser** for viewing `mockups/index.html` and HTML boards.
 
 ## 5. How a chat works

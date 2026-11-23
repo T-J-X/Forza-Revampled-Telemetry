@@ -15,7 +15,7 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 | Any drawing: clusters, OSD, scrim, mockups | `fh6-hmi-design-rules` (project skill), then `aesthetic` | The project skill wins on anchors, OLED black and the rank order. |
 | Before merging or pushing a branch | `requesting-code-review`, `/code-review`, `/simplify` | |
 | Cleaning up folders and finding duplicates | `file-organizer` | Never touch the deploy targets. |
-| Pulling tokens or layouts from Figma | `figma:figma-use`, `figma:figma-design-to-code` | Figma needs `/mcp` authorisation first. |
+| Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). The `figma:*` skills only read the legacy Figma master. |
 | Critiquing mockups in `mockups/` | the `ui-ux-designer` agent, or `design:design-critique` | |
 
 If a skill doesn't load on its own, type `/<skill-name>`.
@@ -25,10 +25,11 @@ If a skill doesn't load on its own, type `/<skill-name>`.
 | MCP | Use for | Don't use for |
 |---|---|---|
 | **context7** (`.mcp.json`) | Crate docs before first use of an API: `windows` 0.58, `tiny-skia` 0.11, `ab_glyph`, `ttf-parser`, `serde`/`serde_json`, `arc-swap`, `png`, `thiserror` | Design decisions |
-| **Figma** | Reading tokens, layout and exports from the master file into `data/figma_tokens.json` | Writing to Figma without TJX asking. The master file key is an open question in `docs/PROGRESS.md`. |
+| **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/figma_tokens.json`, and PNG/SVG checks with `export_shape` (`docs/design/PENPOT.md`) | Importing images from a local path (the hosted MCP can't; TJX drags them in), or putting the MCP key in any file or in `.mcp.json` |
+| **Figma** (legacy) | Reading the legacy master `0zOEwnJ8dEj1kQ7QwPGEH0` (`docs/design/FIGMA.md`) | Any write: the Starter plan's MCP cap and the View seat block it |
 | **Built-in browser** | Opening `mockups/index.html` to inspect the 4K exports | Anything that needs a sign-in |
 
-Token flow: Figma → `data/figma_tokens.json` → `fh6-render::tokens` → every cluster. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/figma_tokens.json` and log it in `docs/PROGRESS.md`.
+Token flow: `data/figma_tokens.json` (the source of truth; the file name is historical) → `fh6-render::tokens` / `fh6-kit` → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/figma_tokens.json` and log it in `docs/PROGRESS.md`.
 
 ## 3. Rust rendering and input laws (v2 GPU renderer)
 

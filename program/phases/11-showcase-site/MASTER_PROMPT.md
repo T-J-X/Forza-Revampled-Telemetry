@@ -12,7 +12,7 @@ A static site that has:
 It is built from the same Rust/WASM code, with no framework needed. The page logic is Rust compiled to WASM; HTML and CSS are the only non-Rust parts (ONBOARDING rule 8).
 
 ## Steps
-1. **Design** in Figma on page `11 · Showcase`, critiqued until it's excellent.
+1. **Design** in Penpot on page `11 · Showcase` (`docs/design/PENPOT.md`), critiqued until it's excellent.
 2. **Build** a `site/` output from `tools/web-preview` and the configurator crates (`cargo run -p site-build`), compressing renders to WebP or AVIF and videos to MP4/WebM.
 3. **Deploy with Vercel:**
    - Use the `vercel:vercel-cli` and `vercel:deploy` skills. Check login with `vercel whoami`.

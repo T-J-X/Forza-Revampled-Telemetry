@@ -2,7 +2,7 @@
 
 The controller-first Liquid Glass OSD, as built in `crates/fh6-osd` and drawn with the render kit. It extends the Phase 3 direction ([OSD_DIRECTION.md](OSD_DIRECTION.md)). The board with every state is [boards/osd/index.html](boards/osd/index.html); the images in [osd/](osd/) are real 4K kit renders (960×540 downsamples) from `cargo run --release -p preview-export` (full size in `mockups/osd/`).
 
-Figma: the page could not be built. The remote Figma MCP answered `get_metadata` once in this phase, then returned the Starter-plan tool-call limit on the first `use_figma` call (see [FIGMA.md](FIGMA.md)). As in Phase 3, the board is the reference until the Figma file is finished by hand or on a paid plan.
+Design file: Phase 9 could not build the page in Figma. The remote Figma MCP answered `get_metadata` once, then returned the Starter-plan tool-call limit on the first `use_figma` call (see [FIGMA.md](FIGMA.md)). On 2026-11-23 design work moved to Penpot ([PENPOT.md](PENPOT.md)); the OSD page there is pending, for the separate "Build the Penpot design-system master file" session. Until it is built, the board is the reference.
 
 ## Layout
 - **Live zone (left, about 60%).** The real selected cluster at its real height and scale, gliding from its normal anchor to the live-zone centre (`(2380 + extra width) / 2`) when the OSD opens. Header: "LIVE VIEW", the cluster name, and the data source ("Game paused · live dyno" or "Live telemetry") with the edited view. Under the header, a **focus echo**: the focused row's label and value in 110 px type, a slider mirror, the row's help line. Camera rows add a side-view schematic (eye at seat height, FOV wedge, wheel); cluster height adds a dashed default-height line.

@@ -1,6 +1,6 @@
 # TOKENS: the FH6 WheelDash v2 design tokens
 
-`data/figma_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Figma mirrors it as variables and styles (see [FIGMA.md](FIGMA.md)). `fh6-render::tokens` / `fh6-kit` read it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
+`data/figma_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)); the read-only legacy Figma master holds a v3.1 copy as variables and styles ([FIGMA.md](FIGMA.md)). `fh6-render::tokens` / `fh6-kit` read it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
 
 - **Version:** 3.1.0 (schema v3, 2026-11-20). v1 keys are kept for the current tiny-skia code.
 - **Units:** every size is in **4K pixels at cluster scale 1.0**. Multiply by the user scale (0.70–1.40). The one exception: specular rims are always exactly 1 px, snapped to the pixel grid.
@@ -167,5 +167,5 @@ Reduced flash (nothing above 3 Hz), text floor 12 px cap, colour independence (e
 
 ## Changing tokens
 1. Edit `data/figma_tokens.json` (UTF-8, no BOM, valid JSON; `node -e` or `cargo test` must parse it).
-2. Mirror the change in the Figma variables (FIGMA.md lists the collections).
+2. Mirror the change into the Penpot token sets with `execute_code` (PENPOT.md, "Tokens"). The legacy Figma variables are not updated.
 3. Log the change in `docs/PROGRESS.md` and, if it changes a rule, here.

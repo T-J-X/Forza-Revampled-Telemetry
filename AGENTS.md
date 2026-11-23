@@ -95,7 +95,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 **Background:** 20 years in automotive competitive intelligence. Benchmarks production clusters from Apple CarPlay Ultra (iOS 26 Liquid Glass), Tesla FSD v14/v15 ("Mind of Car" 3D ADAS view), Polyphony Digital's *Gran Turismo 7* hood/bumper HUD, Bosch Motorsport DDU 10/11, the Porsche 992 GT3 Chrono, and CD Projekt Red's *Cyberpunk 2077* Quadra Turbo-R V-Tech VFD.
 
 **Responsibilities:**
-- Before any cluster style is coded or redesigned, run a reference pass. Use web search, the Figma MCP, `docs/specs/`, and a critique of the current `mockups/` output. The pass explains why a style looks "semi-okay" rather than bespoke OEM studio grade.
+- Before any cluster style is coded or redesigned, run a reference pass. Use web search, the Penpot MCP (`docs/design/PENPOT.md`; Figma is the read-only legacy master), `docs/specs/`, and a critique of the current `mockups/` output. The pass explains why a style looks "semi-okay" rather than bespoke OEM studio grade.
 - Write concrete optical, typographic and proportional upgrade specs for the Systems lead and the Design Council, so no gauge reads as a flat rectangle.
 
 ## Agent 1: Principal Automotive HMI & Sim-Racing UI/UX Architect (`@HMI_UX_Lead`)

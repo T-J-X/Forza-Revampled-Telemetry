@@ -24,4 +24,4 @@
 <anything not done, with the reason>
 
 ## What the next phases must know
-<APIs, file locations, gotchas, Figma node IDs>
+<APIs, file locations, gotchas, Penpot board IDs>

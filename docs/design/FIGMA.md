@@ -1,6 +1,8 @@
-# FIGMA: master file and HTML boards
+# FIGMA: legacy master file (read-only) and HTML boards
 
-Phase 3 works in two places:
+> **Legacy since 2026-11-23.** New design work goes to Penpot: see [PENPOT.md](PENPOT.md) for the setup, the hosted MCP's limits and the master file. This file is kept as history. Read the Figma master for reference, never write to it; the "Blocked" to-do list below now lives in PENPOT.md ("Carried over from Figma"). The HTML boards section below is still current.
+
+Phase 3 worked in two places:
 1. **The Figma master file** holds the token foundations (variables, text styles, effect styles) and the frame skeleton for templates and heroes.
 2. **HTML boards** (`docs/design/boards/`) are the rendered source of every visual: pure SVG inside HTML, no script, rendered to the PNGs in `docs/design/`. They are the authoritative pixels until the Figma file is completed (see "Blocked" below).
 

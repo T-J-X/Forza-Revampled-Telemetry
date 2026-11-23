@@ -2,7 +2,7 @@
 
 | When | Skills / tools |
 |---|---|
-| Design | `aesthetic`, `design-superpowers:design`, `figma:figma-use`, `figma:figma-generate-design`, `design:design-critique` |
+| Design | `aesthetic`, `design-superpowers:design`, the `penpot` MCP (`docs/design/PENPOT.md`: `high_level_overview` once, then `execute_code`, `export_shape`), `design:design-critique` |
 | Deploy | `vercel:vercel-cli`, `vercel:deploy`, `vercel:deployments-cicd`, `vercel:cdn-caching`, `vercel:verification`, `vercel:status`, `engineering:deploy-checklist` |
 | Copy | `design:ux-copy` |
 | Testing | `anthropic-skills:built-in-browser` |
