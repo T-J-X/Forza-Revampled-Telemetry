@@ -33,6 +33,26 @@ pub enum ClusterTheme {
     CymaticResonanceField = 26,
     KineticLiquidMetal = 27,
     ShibuyaChromaticPrisma = 28,
+    // Phase 7 next-gen concepts (catalog rows 30-48). Append only; never renumber.
+    LumenEtch = 29,
+    VernierLoupe = 30,
+    DichroicLouvre = 31,
+    FibreOpticCorona = 32,
+    ApertureNine = 33,
+    AeroSmokeTunnel = 34,
+    RattrapanteSector = 35,
+    SapphireMystery = 36,
+    RackFocus = 37,
+    BionicSpaceframe = 38,
+    GeodesicWell = 39,
+    Lightpainter = 40,
+    TreadSeismograph = 41,
+    StarSailOrigami = 42,
+    ArcLadderCascade = 43,
+    AuroraVeil = 44,
+    IsochromaticLoadPath = 45,
+    AbyssalShearBloom = 46,
+    HarmonographDrive = 47,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -76,6 +96,25 @@ impl ClusterTheme {
             ClusterTheme::CymaticResonanceField => "CymaticResonanceField",
             ClusterTheme::KineticLiquidMetal => "KineticLiquidMetal",
             ClusterTheme::ShibuyaChromaticPrisma => "ShibuyaChromaticPrisma",
+            ClusterTheme::LumenEtch => "LumenEtch",
+            ClusterTheme::VernierLoupe => "VernierLoupe",
+            ClusterTheme::DichroicLouvre => "DichroicLouvre",
+            ClusterTheme::FibreOpticCorona => "FibreOpticCorona",
+            ClusterTheme::ApertureNine => "ApertureNine",
+            ClusterTheme::AeroSmokeTunnel => "AeroSmokeTunnel",
+            ClusterTheme::RattrapanteSector => "RattrapanteSector",
+            ClusterTheme::SapphireMystery => "SapphireMystery",
+            ClusterTheme::RackFocus => "RackFocus",
+            ClusterTheme::BionicSpaceframe => "BionicSpaceframe",
+            ClusterTheme::GeodesicWell => "GeodesicWell",
+            ClusterTheme::Lightpainter => "Lightpainter",
+            ClusterTheme::TreadSeismograph => "TreadSeismograph",
+            ClusterTheme::StarSailOrigami => "StarSailOrigami",
+            ClusterTheme::ArcLadderCascade => "ArcLadderCascade",
+            ClusterTheme::AuroraVeil => "AuroraVeil",
+            ClusterTheme::IsochromaticLoadPath => "IsochromaticLoadPath",
+            ClusterTheme::AbyssalShearBloom => "AbyssalShearBloom",
+            ClusterTheme::HarmonographDrive => "HarmonographDrive",
         }
     }
 }
@@ -118,6 +157,26 @@ impl ClusterTheme {
             ClusterTheme::CymaticResonanceField => (255, 0, 128),
             ClusterTheme::KineticLiquidMetal => (56, 189, 248),
             ClusterTheme::ShibuyaChromaticPrisma => (255, 214, 0),
+            // New concepts: the family default primary (tokens paletteModes.familyDefaults).
+            ClusterTheme::LumenEtch => (56, 189, 248),
+            ClusterTheme::VernierLoupe => (56, 189, 248),
+            ClusterTheme::DichroicLouvre => (56, 189, 248),
+            ClusterTheme::FibreOpticCorona => (56, 189, 248),
+            ClusterTheme::ApertureNine => (0, 210, 255),
+            ClusterTheme::AeroSmokeTunnel => (0, 210, 255),
+            ClusterTheme::RattrapanteSector => (255, 122, 26),
+            ClusterTheme::SapphireMystery => (255, 122, 26),
+            ClusterTheme::RackFocus => (0, 180, 255),
+            ClusterTheme::BionicSpaceframe => (0, 180, 255),
+            ClusterTheme::GeodesicWell => (59, 130, 246),
+            ClusterTheme::Lightpainter => (59, 130, 246),
+            ClusterTheme::TreadSeismograph => (59, 130, 246),
+            ClusterTheme::StarSailOrigami => (0, 245, 212),
+            ClusterTheme::ArcLadderCascade => (0, 245, 212),
+            ClusterTheme::AuroraVeil => (0, 245, 212),
+            ClusterTheme::IsochromaticLoadPath => (154, 216, 255),
+            ClusterTheme::AbyssalShearBloom => (154, 216, 255),
+            ClusterTheme::HarmonographDrive => (154, 216, 255),
         }
     }
 
@@ -152,6 +211,70 @@ impl ClusterTheme {
             ClusterTheme::CymaticResonanceField,
             ClusterTheme::KineticLiquidMetal,
             ClusterTheme::ShibuyaChromaticPrisma,
+            ClusterTheme::LumenEtch,
+            ClusterTheme::VernierLoupe,
+            ClusterTheme::DichroicLouvre,
+            ClusterTheme::FibreOpticCorona,
+            ClusterTheme::ApertureNine,
+            ClusterTheme::AeroSmokeTunnel,
+            ClusterTheme::RattrapanteSector,
+            ClusterTheme::SapphireMystery,
+            ClusterTheme::RackFocus,
+            ClusterTheme::BionicSpaceframe,
+            ClusterTheme::GeodesicWell,
+            ClusterTheme::Lightpainter,
+            ClusterTheme::TreadSeismograph,
+            ClusterTheme::StarSailOrigami,
+            ClusterTheme::ArcLadderCascade,
+            ClusterTheme::AuroraVeil,
+            ClusterTheme::IsochromaticLoadPath,
+            ClusterTheme::AbyssalShearBloom,
+            ClusterTheme::HarmonographDrive,
         ]
+    }
+}
+
+impl ClusterTheme {
+    /// The theme whose config name is `name` (case-insensitive, surrounding spaces ignored).
+    /// Unlike the config dispatch, an unknown name is `None`, so command-line tools can reject it.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        let name = name.trim();
+        Self::all()
+            .iter()
+            .copied()
+            .find(|t| t.name().eq_ignore_ascii_case(name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ClusterTheme;
+
+    #[test]
+    fn numbering_is_dense_and_stable() {
+        // Existing config values must never move: the numeric value is the index in all().
+        for (i, t) in ClusterTheme::all().iter().enumerate() {
+            assert_eq!(*t as usize, i, "{t}");
+        }
+        assert_eq!(ClusterTheme::ShibuyaChromaticPrisma as u8, 28);
+        assert_eq!(ClusterTheme::LumenEtch as u8, 29);
+        assert_eq!(ClusterTheme::HarmonographDrive as u8, 47);
+        assert_eq!(ClusterTheme::all().len(), 48);
+    }
+
+    #[test]
+    fn names_round_trip() {
+        for t in ClusterTheme::all() {
+            assert_eq!(ClusterTheme::from_name(t.name()), Some(*t));
+            assert_eq!(ClusterTheme::from_name(&t.name().to_lowercase()), Some(*t));
+        }
+        assert_eq!(ClusterTheme::from_name("nope"), None);
+    }
+
+    #[test]
+    fn serde_uses_the_variant_name() {
+        let json = serde_json::to_string(&ClusterTheme::VernierLoupe).unwrap_or_default();
+        assert_eq!(json, "\"VernierLoupe\"");
     }
 }

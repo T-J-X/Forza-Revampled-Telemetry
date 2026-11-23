@@ -1,0 +1,14 @@
+# Rack Focus (`RackFocus`): brief
+
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 38 (RackFocus — build #33 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+
+- **Family:** Race Dash (Design Council 3B), spec [docs/design/families/race-dash.md](../../../../../docs/design/families/race-dash.md), hero frames [docs/design/heroes/race-dash/](../../../../../docs/design/heroes/race-dash/)
+- **Kind:** new · **View:** cockpit+hood · **Build order:** 33
+
+An obsidian monolith with three focal planes and no frame: a 1400×500 slab implied only by a 1 px `light`-driven top rim and an 18/255 crescent along its upper edge. Plane 0 (sharp, no parallax): 10 slim 34 px pods, the `race` 800 gear at cap 250, speed in `display` 600 at cap 112 beside it. Plane 1 (±2 px): a 60-segment bar with per-car numerals. Plane 2 (±4 px): corner-ticked Titillium Web tiles for laps, tyres, G-ball and inputs, plus shy alarm lamps. Depth is optical, not boxed: planes separate by parallax and a 10% dimming step, never by plates. Only ranks 1–3 glow.
+
+- **Signature moment:** The rack focus: when combined /G/ ≥ 0.85 g or brake ≥ 0.35 (release below 0.5 g for 400 ms, minimum hold 1.2 s), plane 2 pulls out of focus (σ 0 → 8 px), scales to 0.97 and dims to 35% over 300 ms on the emphasized-decelerate curve, leaving gear, speed and shift lights razor-sharp through the apex; on corner exit it racks back in over 300 ms. Lit alarms are exempt and stay sharp. The outgoing gear defocuses as it leaves; the incoming one is never blurred.
+- **Telemetry:** acceleration_x/z → combined G for the focus trigger, light azimuth and parallax; brake → focus trigger; rpm + car-profile thresholds → pods, strobe and bar; gear, speed_ms → plane 0; tyre temps ×4, combined slip, lap fields with a synthesised distance-based delta, accel/brake/clutch → plane 2 tiles; LIM, FUEL and synthesised TC/ABS → lamps.
+- **References:** Cinema rack-focus / follow-focus grammar; Lucid Gravity Zen theme; BMW Panoramic iDrive shy-tech; GT7 'Race Info Only' HUD density setting
+- **Phase 6 assets:** procedural only (shared blue-noise dither tile; MSDF Saira Condensed and Titillium Web)
+- **Risk:** Design: data vanishing when wanted (mid-corner tyre temps), and the focus change itself drawing the eye. Avoid: user thresholds in the OSD, critical alarms exempt, at most one transition per 1.2 s, ranks 1–3 never touched. Perf: plane 2 renders to a half-res 720×260 target, a separable 9-tap Gaussian with σ animated by mip blend ≈0.04 ms, composite ≈0.01 ms, bloom on ranks 1–3 ≈0.12 ms; ≈0.2 ms total. Hood [4]: the slab widens to 1760×400 and plane 2 tiles move to the wings.

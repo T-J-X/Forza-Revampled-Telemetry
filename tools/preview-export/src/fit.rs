@@ -1,8 +1,9 @@
 //! `--fit`: the cockpit fit review (Phase 8). Composites the kit scrim, its lip wash and a
 //! cluster over `assets/reference/cockpit_with_wheel.jpg` upscaled to 4K, exactly as the overlay
 //! would sit over the game frame:
-//! 3 clusters (Liquid Glass and Analog, the two kit clusters so far, plus Analog at user scale
-//! 1.25 to check that the dome scales with the cluster)
+//! 3 clusters (the Liquid Glass pilot and the Porsche Analog scaffold, whose brackets mark the
+//! view envelope, plus that scaffold at user scale 1.25 to check that the dome scales with the
+//! cluster)
 //! x 3 scrim opacities (0, 50, 100%) x 2 cluster heights (0 and +170 px)
 //! -> `mockups/fit/<cluster>_scrim<pct>_h<height>.png` plus a crop around the dome, a thumbnail
 //! and a script-free `mockups/fit/index.html`. Two extra frames put Liquid Glass over the
@@ -35,7 +36,7 @@ const CLUSTERS: [(&str, ClusterTheme, f32); 3] = [
 ];
 
 /// Decodes a reference photo and resizes it to 4K (Catmull-Rom), as opaque RGBA8.
-fn background(root: &Path, file: &str) -> Result<RgbaImage> {
+pub(crate) fn background(root: &Path, file: &str) -> Result<RgbaImage> {
     let path = root.join("assets/reference").join(file);
     let img = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let rgba = img
@@ -49,7 +50,7 @@ fn background(root: &Path, file: &str) -> Result<RgbaImage> {
 }
 
 /// Premultiplied `top` over opaque `bottom`, in encoded space (what DWM does).
-fn composite(top: &RgbaImage, bottom: &RgbaImage) -> RgbaImage {
+pub(crate) fn composite(top: &RgbaImage, bottom: &RgbaImage) -> RgbaImage {
     let mut out = bottom.clone();
     for (o, t) in out.pixels.chunks_exact_mut(4).zip(top.pixels.chunks_exact(4)) {
         let a = f32::from(t[3]) / 255.0;

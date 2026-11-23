@@ -5,12 +5,13 @@
 //! configurator is half-way through writing it) is ignored and the previous config stays live.
 use crate::config::AppConfig;
 use crate::profiles::{profiles_path_for, CarProfilesFile, ProfilesHandle};
+use crate::theme::ClusterTheme;
 use arc_swap::ArcSwap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -21,6 +22,9 @@ pub type ConfigNotify = Arc<dyn Fn() + Send + Sync>;
 #[derive(Clone)]
 pub struct ConfigHandle {
     live: Arc<ArcSwap<AppConfig>>,
+    /// A cluster style forced for this run (`FH6_WheelDash --cluster`), applied to every
+    /// published config so hot reloads keep it.
+    forced_style: Arc<OnceLock<ClusterTheme>>,
 }
 
 impl std::fmt::Debug for ConfigHandle {
@@ -34,6 +38,7 @@ impl ConfigHandle {
     pub fn fixed(cfg: AppConfig) -> Self {
         Self {
             live: Arc::new(ArcSwap::from_pointee(cfg)),
+            forced_style: Arc::new(OnceLock::new()),
         }
     }
 
@@ -42,9 +47,39 @@ impl ConfigHandle {
         self.live.load_full()
     }
 
-    fn publish(&self, cfg: AppConfig) {
+    /// Forces `theme` as the style of every view for the rest of the run (the cockpit, hood and
+    /// chase styles and the legacy `HudStyle`), including every later hot reload. Used by
+    /// `FH6_WheelDash --cluster <Name>` to review one cluster live; the file is never written.
+    /// Only the first call takes effect.
+    pub fn force_cluster_style(&self, theme: ClusterTheme) {
+        let _ = self.forced_style.set(theme);
+        let cfg = (*self.current()).clone();
+        self.publish(cfg);
+    }
+
+    fn publish(&self, mut cfg: AppConfig) {
+        if let Some(theme) = self.forced_style.get() {
+            force_style(&mut cfg, *theme);
+        }
         self.live.store(Arc::new(cfg));
     }
+}
+
+/// Sets every view's style to `theme`.
+fn force_style(cfg: &mut AppConfig, theme: ClusterTheme) {
+    let name = theme.name();
+    for s in [
+        &mut cfg.hud_style,
+        &mut cfg.cockpit_hud_style,
+        &mut cfg.bonnet_hud_style,
+        &mut cfg.chase_hud_style,
+    ] {
+        s.clear();
+        s.push_str(name);
+    }
+    cfg.cockpit_hud_style_typed = theme;
+    cfg.bonnet_hud_style_typed = theme;
+    cfg.chase_hud_style_typed = theme;
 }
 
 /// Watches a config file and republishes it when its modification time or size changes.
@@ -193,5 +228,28 @@ impl Drop for ConfigWatcher {
             thread.thread().unpark();
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_forced_style_survives_every_publish() {
+        let base = AppConfig {
+            cockpit_hud_style: "LiquidGlass".into(),
+            ..AppConfig::default()
+        };
+        let handle = ConfigHandle::fixed(base.clone());
+        handle.force_cluster_style(ClusterTheme::VernierLoupe);
+        let cfg = handle.current();
+        assert_eq!(cfg.cockpit_hud_style, "VernierLoupe");
+        assert_eq!(cfg.bonnet_hud_style, "VernierLoupe");
+        assert_eq!(cfg.chase_hud_style, "VernierLoupe");
+        assert_eq!(cfg.cockpit_hud_style_typed, ClusterTheme::VernierLoupe);
+        // A hot reload of the file keeps the override.
+        handle.publish(base);
+        assert_eq!(handle.current().cockpit_hud_style, "VernierLoupe");
     }
 }

@@ -820,7 +820,9 @@ impl Fonts {
         if let Some(g) = f.glyphs.get(&ch) {
             return Some((face, g));
         }
-        if face != 0 {
+        // Fall back to the embedded face only once this face's preload set exists: a deferred
+        // face must report its glyphs missing so they get generated, not borrow the fallback's.
+        if face != 0 && f.preloaded {
             if let Some(g) = self.faces.first().and_then(|f| f.glyphs.get(&ch)) {
                 return Some((0, g));
             }
@@ -942,6 +944,20 @@ impl Fonts {
     pub(crate) fn generate_missing(&mut self, missing: &[(u16, char)]) -> usize {
         let mut added = 0;
         for &(face, ch) in missing {
+            // A deferred face is used for the first time: rasterise its preload set too.
+            if self.faces.get(usize::from(face)).is_some_and(|f| !f.preloaded) {
+                let before = self.faces.get(usize::from(face)).map_or(0, |f| f.glyphs.len());
+                self.ensure_preloaded(FontId(face));
+                let after = self.faces.get(usize::from(face)).map_or(0, |f| f.glyphs.len());
+                added += after.saturating_sub(before);
+                if self
+                    .faces
+                    .get(usize::from(face))
+                    .is_some_and(|f| f.glyphs.contains_key(&ch))
+                {
+                    continue;
+                }
+            }
             let target = if self
                 .faces
                 .get(usize::from(face))
@@ -958,7 +974,11 @@ impl Fonts {
             let after = self.faces.get(usize::from(target)).map_or(0, |f| f.glyphs.len());
             if after > before {
                 added += 1;
-            } else if let Some(f) = self.faces.get_mut(usize::from(target)) {
+            } else if let Some(f) = self
+                .faces
+                .get_mut(usize::from(target))
+                .filter(|f| !f.glyphs.contains_key(&ch))
+            {
                 // Not in any face: remember an empty glyph so it is not retried every frame.
                 f.glyphs.insert(
                     ch,
@@ -1303,6 +1323,24 @@ mod tests {
         assert_ne!(light, semibold);
         assert_eq!(f.faces[usize::from(light.0)].desc.weight, 300);
         assert_eq!(f.faces[usize::from(semibold.0)].desc.weight, 600);
+
+        // A deferred face found with `find` reports its glyphs missing (it does not borrow the
+        // fallback's) and the first generate pass rasterises its preload set.
+        let condensed = f.find("Saira Condensed", 800, false).unwrap();
+        let style = TextStyle::new(condensed, 100.0);
+        assert!(
+            f.glyph(condensed.0, '4').is_none(),
+            "a deferred face borrows the fallback glyph"
+        );
+        f.generate_missing(&[(condensed.0, '4')]);
+        assert!(f.faces[usize::from(condensed.0)].preloaded);
+        assert_eq!(f.glyph(condensed.0, '4').map(|(face, _)| face), Some(condensed.0));
+        let w4 = f.measure("4", &style).width;
+        let fallback4 = f.measure("4", &TextStyle::new(FontId::FALLBACK, 100.0)).width;
+        assert!(
+            (w4 - fallback4).abs() > 1.0,
+            "its own advance: {w4} vs the fallback {fallback4}"
+        );
 
         // Using a face rasterises its preload set once.
         f.set_role(FontRole::Display, semibold);

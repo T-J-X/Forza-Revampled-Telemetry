@@ -13,8 +13,12 @@
 //!
 //! `--fit` renders only the Phase 8 cockpit fit review into `mockups/fit/` (see `fit.rs`).
 //!
+//! `--cluster <Name>` renders only one catalog cluster's review set into `mockups/<Theme>/`
+//! (4 states per view at 4K, crops, in-cockpit composites, the 60-frame sequence; `cluster.rs`).
+//!
 //! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
+mod cluster;
 mod fit;
 mod gallery;
 mod osd;
@@ -46,6 +50,7 @@ struct Args {
     fit: bool,
     frames: u32,
     out: Option<PathBuf>,
+    cluster: Option<String>,
     backdrop: Option<PathBuf>,
 }
 
@@ -55,6 +60,7 @@ fn parse_args() -> Result<Args> {
         fit: false,
         frames: 30,
         out: None,
+        cluster: None,
         backdrop: None,
     };
     let mut it = std::env::args().skip(1);
@@ -64,9 +70,12 @@ fn parse_args() -> Result<Args> {
             "--fit" => args.fit = true,
             "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
+            "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
             "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
             "-h" | "--help" => {
-                println!("preview-export [--legacy] [--fit] [--frames N] [--out DIR] [--backdrop PNG]");
+                println!(
+                    "preview-export [--legacy] [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
+                );
                 std::process::exit(0);
             }
             other => return Err(format!("unknown argument {other:?}").into()),
@@ -94,6 +103,11 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
+    // GPU validation errors and font warnings arrive as tracing events: show them.
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(std::io::stderr)
+        .try_init();
     let args = parse_args()?;
     let root = workspace_root();
     let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));
@@ -126,6 +140,9 @@ fn run() -> Result<()> {
         brand_name: String::new(),
         custom_name: cfg.custom_driver_name.clone(),
     };
+    if let Some(name) = args.cluster.as_deref() {
+        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing);
+    }
     if args.fit {
         fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames)?;
         println!("Fit review written to {}", out.join("fit").display());
@@ -166,7 +183,7 @@ fn run() -> Result<()> {
                 });
                 t += DT;
             }
-            // Render twice: the first frame may queue glyphs that only appear on the next.
+            // Repeat the frame until every glyph it uses is in the atlas (16 are added per frame).
             let mut img = RgbaImage {
                 width: 0,
                 height: 0,
@@ -174,11 +191,16 @@ fn run() -> Result<()> {
             };
             let mut stats = fh6_kit::FrameStats::default();
             let mut gpu_ms = None;
-            for _ in 0..2 {
+            let mut missing = 1;
+            for _ in 0..16 {
+                if missing == 0 {
+                    break;
+                }
                 {
                     let mut p = kit.begin_frame(&layout);
                     cluster.draw(&mut p, &layout);
                 }
+                missing = kit.scene().missing_glyph_count();
                 let mut encoder = ctx.device.create_command_encoder(&Default::default());
                 stats = kit.render(
                     &ctx.device,
@@ -308,7 +330,11 @@ mod legacy {
     }
 
     pub fn clusters(out: &Path) -> Result<()> {
-        for &theme in ClusterTheme::all() {
+        // The 19 concepts new in Phase 7 never had a v1 renderer.
+        for &theme in ClusterTheme::all()
+            .iter()
+            .filter(|t| fh6_clusters::create_cluster(**t).is_some())
+        {
             let cfg = AppConfig {
                 current_camera_index: 3,
                 cockpit_hud_style_typed: theme,

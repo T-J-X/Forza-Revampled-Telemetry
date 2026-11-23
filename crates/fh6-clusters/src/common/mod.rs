@@ -2,6 +2,24 @@
 //!
 //! Each component keeps its own animation state (`update`) and draws with the kit (`draw`), so a
 //! cluster composes them in a few lines and every family gets the same token behaviour.
+pub mod adas_road;
+pub mod bezel;
+pub mod gball;
+pub mod glass_plate;
+pub mod hero_gear;
+pub mod label;
+pub mod liquid;
+pub mod needle_dial;
+pub mod race;
+pub mod ribbon;
+pub mod scaffold;
+pub mod seg7;
+pub mod shift;
+pub mod signed_bar;
+pub mod speed;
+pub mod tach;
+pub mod tyre_slip;
+
 use fh6_kit::{
     vec2, Align, Color, FontId, Gear, LayerOptions, Painter, Palette, Rect, Shape, Signals, Spring, SpringSpec, Strobe,
     TextStyle, Tokens, VAlign,
@@ -12,7 +30,8 @@ use fh6_kit::{
 /// unlit pods neutral, the limiter strobes 10 Hz on the strip only.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShiftLights {
-    /// Number of pods (odd, so there is a centre pod).
+    /// Number of pods. Odd counts land on one centre pod; even counts (the Liquid Glass 16-pill
+    /// strip) land on the two centre pods together.
     pub count: u32,
     level: f32,
     over_shift: bool,
@@ -28,7 +47,7 @@ impl ShiftLights {
     #[must_use]
     pub fn new(count: u32) -> Self {
         Self {
-            count: count.max(3) | 1,
+            count: count.max(2),
             level: 0.0,
             over_shift: false,
             strobe_on: false,
@@ -64,10 +83,12 @@ impl ShiftLights {
 
     /// The colour of pod `i`, or `None` when it is unlit (or strobed off).
     fn pod_color(&self, i: usize, palette: &Palette) -> Option<Color> {
-        let half = (self.count / 2) as f32;
+        let half = (self.count.saturating_sub(1)) as f32 * 0.5;
         let k = (i as f32 - half).abs();
-        // 0 for the outermost pods, 1 for the centre pod: pods light outside-in.
-        let rank = 1.0 - k / half.max(1.0);
+        // Distance of the centre pod(s) from the middle: 0 (odd count) or 0.5 (even count).
+        let k_min = if self.count.is_multiple_of(2) { 0.5 } else { 0.0 };
+        // 0 for the outermost pods, 1 for the centre pod(s): pods light outside-in.
+        let rank = 1.0 - (k - k_min) / (half - k_min).max(0.5);
         let lit = self.level > 0.0 && self.level >= rank - 1e-4;
         if !lit {
             return None;

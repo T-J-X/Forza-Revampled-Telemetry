@@ -1,6 +1,11 @@
-//! fh6-clusters: the cluster registry (contract v2, [`registry::REGISTRY`]), the kit clusters
-//! ([`kit`]), shared components ([`common`]) and the 29 v1 tiny-skia clusters kept as references
-//! for their Phase 7 rebuilds.
+//! fh6-clusters: the cluster catalog ([`catalog::CATALOG`]), the cluster registry (contract v2,
+//! [`registry::REGISTRY`]), one module per catalog cluster ([`clusters`]), shared components
+//! ([`common`]), the two Phase 5 kit samples ([`kit`]) and the 29 v1 tiny-skia clusters
+//! ([`legacy`]) kept as references for their Phase 7 rebuilds.
+//!
+//! Phase 7 rule: a cluster chat edits only `src/clusters/<snake_name>/` (and its own assets and
+//! goldens). The catalog, registry, theme enum, golden harness and `common/` are shared and are
+//! changed only by the conductor.
 
 use fh6_core::config::CameraViewMode;
 use fh6_core::ClusterTheme;
@@ -11,11 +16,14 @@ use std::sync::OnceLock;
 use tiny_skia::{Pixmap, PixmapPaint, Rect, Transform};
 use tiny_skia::{PixmapMut as LegacyPixmap, Rect as LegacyRect};
 
+pub mod catalog;
 pub mod clusters;
 pub mod common;
 pub mod draw_ext;
 pub mod kit;
+pub mod legacy;
 pub mod registry;
+pub mod review;
 
 /// The v1 tiny-skia cluster interface. It is kept only so the 29 v1 clusters stay buildable as
 /// references for their Phase 7 rebuilds; new clusters implement [`fh6_kit::Cluster`] and
@@ -47,7 +55,7 @@ impl LegacyClusterRenderer for BoschDduRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::bosch_ddu::render(pixmap, bounds, data, config);
+        legacy::bosch_ddu::render(pixmap, bounds, data, config);
     }
 }
 pub struct Gt7HoodProRenderer;
@@ -62,7 +70,7 @@ impl LegacyClusterRenderer for Gt7HoodProRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::gt7_hood_pro::render(pixmap, bounds, data, config);
+        legacy::gt7_hood_pro::render(pixmap, bounds, data, config);
     }
 }
 pub struct PorscheAnalogRenderer;
@@ -77,7 +85,7 @@ impl LegacyClusterRenderer for PorscheAnalogRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::porsche_analog::render(pixmap, bounds, data, config);
+        legacy::porsche_analog::render(pixmap, bounds, data, config);
     }
 }
 pub struct DriftGlassRenderer;
@@ -92,7 +100,7 @@ impl LegacyClusterRenderer for DriftGlassRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::drift_glass::render(pixmap, bounds, data, config);
+        legacy::drift_glass::render(pixmap, bounds, data, config);
     }
 }
 pub struct LiquidGlassRenderer;
@@ -107,7 +115,7 @@ impl LegacyClusterRenderer for LiquidGlassRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::liquid_glass::render(pixmap, bounds, data, config);
+        legacy::liquid_glass::render(pixmap, bounds, data, config);
     }
 }
 pub struct RetroCyberRenderer;
@@ -122,7 +130,7 @@ impl LegacyClusterRenderer for RetroCyberRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::retro_cyber::render(pixmap, bounds, data, config);
+        legacy::retro_cyber::render(pixmap, bounds, data, config);
     }
 }
 pub struct SynthwaveOutrunRenderer;
@@ -137,7 +145,7 @@ impl LegacyClusterRenderer for SynthwaveOutrunRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::synthwave_outrun::render(pixmap, bounds, data, config);
+        legacy::synthwave_outrun::render(pixmap, bounds, data, config);
     }
 }
 pub struct F35HelmetHmdRenderer;
@@ -152,7 +160,7 @@ impl LegacyClusterRenderer for F35HelmetHmdRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::f35_helmet_hmd::render(pixmap, bounds, data, config);
+        legacy::f35_helmet_hmd::render(pixmap, bounds, data, config);
     }
 }
 pub struct ValkyrieLmp1Renderer;
@@ -167,7 +175,7 @@ impl LegacyClusterRenderer for ValkyrieLmp1Renderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::valkyrie_lmp1::render(pixmap, bounds, data, config);
+        legacy::valkyrie_lmp1::render(pixmap, bounds, data, config);
     }
 }
 pub struct EvaBioSyncRenderer;
@@ -182,7 +190,7 @@ impl LegacyClusterRenderer for EvaBioSyncRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::eva_bio_sync::render(pixmap, bounds, data, config);
+        legacy::eva_bio_sync::render(pixmap, bounds, data, config);
     }
 }
 pub struct ChronoMultiverseRenderer;
@@ -197,7 +205,7 @@ impl LegacyClusterRenderer for ChronoMultiverseRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::chrono_multiverse::render(pixmap, bounds, data, config);
+        legacy::chrono_multiverse::render(pixmap, bounds, data, config);
     }
 }
 pub struct AmgMbuxSuperscreenRenderer;
@@ -212,7 +220,7 @@ impl LegacyClusterRenderer for AmgMbuxSuperscreenRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::amg_mbux_superscreen::render(pixmap, bounds, data, config);
+        legacy::amg_mbux_superscreen::render(pixmap, bounds, data, config);
     }
 }
 pub struct WindshieldHudRenderer;
@@ -227,7 +235,7 @@ impl LegacyClusterRenderer for WindshieldHudRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::windshield_hud::render(pixmap, bounds, data, config);
+        legacy::windshield_hud::render(pixmap, bounds, data, config);
     }
 }
 pub struct TeslaAdasRenderer;
@@ -242,7 +250,7 @@ impl LegacyClusterRenderer for TeslaAdasRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::tesla_adas::render(pixmap, bounds, data, config);
+        legacy::tesla_adas::render(pixmap, bounds, data, config);
     }
 }
 pub struct LegacyDigitalRenderer;
@@ -257,7 +265,7 @@ impl LegacyClusterRenderer for LegacyDigitalRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::legacy_digital::render(pixmap, bounds, data, config);
+        legacy::legacy_digital::render(pixmap, bounds, data, config);
     }
 }
 
@@ -273,7 +281,7 @@ impl LegacyClusterRenderer for ChronoEventHorizonRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::chrono_event_horizon::render(pixmap, bounds, data, config);
+        legacy::chrono_event_horizon::render(pixmap, bounds, data, config);
     }
 }
 pub struct NeuralCyberSynapseRenderer;
@@ -288,7 +296,7 @@ impl LegacyClusterRenderer for NeuralCyberSynapseRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::neural_cyber_synapse::render(pixmap, bounds, data, config);
+        legacy::neural_cyber_synapse::render(pixmap, bounds, data, config);
     }
 }
 pub struct Gt7ModularTripodRenderer;
@@ -303,7 +311,7 @@ impl LegacyClusterRenderer for Gt7ModularTripodRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::gt7_modular_tripod::render(pixmap, bounds, data, config);
+        legacy::gt7_modular_tripod::render(pixmap, bounds, data, config);
     }
 }
 pub struct ArNavWayfinderRenderer;
@@ -318,7 +326,7 @@ impl LegacyClusterRenderer for ArNavWayfinderRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::ar_nav_wayfinder::render(pixmap, bounds, data, config);
+        legacy::ar_nav_wayfinder::render(pixmap, bounds, data, config);
     }
 }
 pub struct SolarisWarpCoreRenderer;
@@ -333,7 +341,7 @@ impl LegacyClusterRenderer for SolarisWarpCoreRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::solaris_warp_core::render(pixmap, bounds, data, config);
+        legacy::solaris_warp_core::render(pixmap, bounds, data, config);
     }
 }
 
@@ -349,7 +357,7 @@ impl LegacyClusterRenderer for VisionSpatialGlassRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::vision_spatial_glass::render(pixmap, bounds, data, config);
+        legacy::vision_spatial_glass::render(pixmap, bounds, data, config);
     }
 }
 pub struct GlyphDotMatrixRenderer;
@@ -364,7 +372,7 @@ impl LegacyClusterRenderer for GlyphDotMatrixRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::glyph_dot_matrix::render(pixmap, bounds, data, config);
+        legacy::glyph_dot_matrix::render(pixmap, bounds, data, config);
     }
 }
 pub struct AeroPlasmaBladeRenderer;
@@ -379,7 +387,7 @@ impl LegacyClusterRenderer for AeroPlasmaBladeRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::aero_plasma_blade::render(pixmap, bounds, data, config);
+        legacy::aero_plasma_blade::render(pixmap, bounds, data, config);
     }
 }
 pub struct CymaticResonanceFieldRenderer;
@@ -394,7 +402,7 @@ impl LegacyClusterRenderer for CymaticResonanceFieldRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::cymatic_resonance_field::render(pixmap, bounds, data, config);
+        legacy::cymatic_resonance_field::render(pixmap, bounds, data, config);
     }
 }
 pub struct KineticLiquidMetalRenderer;
@@ -409,7 +417,7 @@ impl LegacyClusterRenderer for KineticLiquidMetalRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::kinetic_liquid_metal::render(pixmap, bounds, data, config);
+        legacy::kinetic_liquid_metal::render(pixmap, bounds, data, config);
     }
 }
 pub struct ShibuyaChromaticPrismaRenderer;
@@ -424,7 +432,7 @@ impl LegacyClusterRenderer for ShibuyaChromaticPrismaRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::shibuya_chromatic_prisma::render(pixmap, bounds, data, config);
+        legacy::shibuya_chromatic_prisma::render(pixmap, bounds, data, config);
     }
 }
 pub struct BugattiTourbillonRenderer;
@@ -439,7 +447,7 @@ impl LegacyClusterRenderer for BugattiTourbillonRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::bugatti_tourbillon::render(pixmap, bounds, data, config);
+        legacy::bugatti_tourbillon::render(pixmap, bounds, data, config);
     }
 }
 pub struct PaganiHorologerieRenderer;
@@ -454,7 +462,7 @@ impl LegacyClusterRenderer for PaganiHorologerieRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::pagani_horologerie::render(pixmap, bounds, data, config);
+        legacy::pagani_horologerie::render(pixmap, bounds, data, config);
     }
 }
 pub struct KoenigseggGyroRenderer;
@@ -469,7 +477,7 @@ impl LegacyClusterRenderer for KoenigseggGyroRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::koenigsegg_gyro::render(pixmap, bounds, data, config);
+        legacy::koenigsegg_gyro::render(pixmap, bounds, data, config);
     }
 }
 pub struct LfaV10NurburgringRenderer;
@@ -484,7 +492,7 @@ impl LegacyClusterRenderer for LfaV10NurburgringRenderer {
         data: &fh6_core::FH6TelemetryData,
         config: &fh6_core::AppConfig,
     ) {
-        clusters::lfa_v10_nurburgring::render(pixmap, bounds, data, config);
+        legacy::lfa_v10_nurburgring::render(pixmap, bounds, data, config);
     }
 }
 
@@ -519,6 +527,8 @@ pub fn create_cluster(theme: ClusterTheme) -> Option<Box<dyn LegacyClusterRender
         ClusterTheme::PaganiHorologerie => Some(Box::new(PaganiHorologerieRenderer)),
         ClusterTheme::BugattiTourbillon => Some(Box::new(BugattiTourbillonRenderer)),
         ClusterTheme::KoenigseggGyro => Some(Box::new(KoenigseggGyroRenderer)),
+        // The 19 concepts new in Phase 7 never had a v1 renderer.
+        _ => None,
     }
 }
 
@@ -554,7 +564,9 @@ pub fn render_cluster(
         }
     }
 
-    let mut renderer = create_cluster(theme).expect("unknown cluster theme");
+    let Some(mut renderer) = create_cluster(theme) else {
+        return;
+    };
     if (scale - 1.0).abs() < f32::EPSILON {
         renderer.render(pixmap, bounds, data, config);
     } else {

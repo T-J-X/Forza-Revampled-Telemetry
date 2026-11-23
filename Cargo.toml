@@ -54,5 +54,14 @@ opt-level = 3
 [profile.dev.package.fdsm]
 opt-level = 3
 
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
 [profile.dev.package.nalgebra]
 opt-level = 3

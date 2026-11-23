@@ -17,14 +17,14 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 |---|---|---|
 | `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail | std, serde, arc-swap, thiserror |
 | `crates/fh6-render` | Theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
-| `crates/fh6-clusters` | The cluster registry (`registry::REGISTRY`, contract v2), kit clusters (`kit/`), shared components (`common/`), and the 29 v1 tiny-skia clusters behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
+| `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), the two Phase 5 samples (`kit/`), and the 29 v1 tiny-skia clusters (`legacy/`) behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
 | `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
 | `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
 | `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
 | `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
 | `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
 | `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, OSD wiring (the remapper moved to fh6-osd), status server (no `unsafe`) | all crates |
-| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
+| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
 | `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-gpu, fh6-kit, fh6-clusters |
@@ -48,9 +48,12 @@ cargo fmt --all -- --check
 cargo run -p parity-dump -- tests/golden/packets
 cargo run -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 10
 cargo run --release -p preview-export
+cargo run --release -p preview-export -- --cluster LiquidGlass
 cargo run -p fh6-app --bin FH6_WheelDash
+cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster LiquidGlass --stats
 cargo run --release -p bench-render -- --frames 600
 cargo test -p fh6-clusters --test golden_images
+cargo test -p fh6-clusters liquid_glass
 cargo build -p fh6-kit --target wasm32-unknown-unknown
 ```
 
@@ -195,7 +198,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 - **Gate every change:**
   - `cargo check`, `cargo test`, `cargo clippy -D warnings` and `cargo fmt --check` across the workspace. Report the real output, and compare against the known reds above.
   - **Golden telemetry:** the `golden_telemetry` test, plus `parity-dump` on `tests/golden/packets`, must cover all 20 packets. Never edit a golden `.json` to make a test pass.
-  - **Mockups:** `cargo run --release -p preview-export` renders all 29 clusters × 4 states, the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Use them for visual review.
+  - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Use them for visual review.
 - **Deploy:** only on TJX's GO, and with a SHA256 parity check after copying. There are two targets:
   1. `E:\SteamLibrary\steamapps\common\ForzaHorizon6\`, in `mediapc\Camera\` (camera files) and `WheelDash\` (binaries, `config.json`, assets)
   2. `%USERPROFILE%\Downloads\FH6 Ultimate Camera\` (distribution mirror)

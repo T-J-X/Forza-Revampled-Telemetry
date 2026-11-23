@@ -199,7 +199,8 @@ impl Targets {
                 cap,
                 SCENE_FORMAT,
                 1,
-                U::TEXTURE_BINDING | U::COPY_DST,
+                // RENDER_ATTACHMENT: cleared by a pass when a glass layer is drawn first.
+                rt | U::COPY_DST,
             ),
             depth: Tex::new(device, "fh6-kit depth", cap, DEPTH_FORMAT, 1, U::RENDER_ATTACHMENT),
             pyr: Tex::new(device, "fh6-kit pyramid", half, SCENE_FORMAT, PYRAMID_LEVELS, rt),
@@ -1184,9 +1185,20 @@ impl Renderer {
                         offs.post,
                     );
                 } else if let Some(t) = self.targets.as_ref() {
-                    // Nothing is drawn yet, so the backdrop is empty.
-                    encoder.clear_texture(&t.backdrop.texture_ref, &wgpu::ImageSubresourceRange::default());
-                    encoder.clear_texture(&t.bpyr.texture_ref, &wgpu::ImageSubresourceRange::default());
+                    // Nothing is drawn yet, so the backdrop is empty. Cleared with render passes:
+                    // `clear_texture` needs the optional CLEAR_TEXTURE feature (absent on WebGPU),
+                    // which made a cluster whose first draw is its glass fail validation.
+                    for view in std::iter::once(&t.backdrop.full).chain(t.bpyr.mips.iter()) {
+                        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("fh6-kit clear backdrop"),
+                            color_attachments: &[Some(color_attachment(view, true))],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        }));
+                        stats.passes += 1;
+                    }
                 }
             }
             let into_layer = seg.blur_px > 0.0;

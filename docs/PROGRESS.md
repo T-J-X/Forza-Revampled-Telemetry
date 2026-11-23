@@ -15,7 +15,8 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
 | 8 Cockpit fit | ✅ 2026-11-22 (branch `claude/phase-8-cockpit-fit-7daeb6`, see `program/phases/08-cockpit-fit/HANDOVER.md`) |
 | 9 Controller-first Liquid Glass OSD | ✅ 2026-11-23 (branch `claude/phase-9-osd-1fcc97`, merged with Phases 6 and 8; see `program/phases/09-osd/HANDOVER.md`) |
-| 7, 10, 11 | ☐ waiting on dependencies (7 setup started) |
+| 7 Cluster factory: setup (07-00) | ✅ 2026-11-23 (branch `claude/exciting-napier-8fa678`, see `program/phases/07-cluster-factory/HANDOVER.md`): 48 scaffolds, registry, `common/` helpers, per-cluster tooling, the LiquidGlass pilot; cluster chats next (Gt7HoodPro, PorscheAnalog, BoschDdu) |
+| 7 Cluster chats, 10, 11 | ☐ waiting |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -37,6 +38,22 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after the Phase 7 setup, 2026-11-23)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings (the `tools/web-preview` manifest note, as on main) |
+| `cargo test --workspace` | ✅ 597 passed, 0 failed (1 ignored), merged with Phase 9 |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit -p fh6-clusters --target wasm32-unknown-unknown` | ✅ |
+
+What the Phase 7 setup added:
+- **Cluster factory:** `fh6_clusters::catalog` (48 rows as data), the generated `registry`, one module per cluster under `clusters/<snake>/` (scaffold until its chat builds it), v1 clusters moved to `legacy/`.
+- **Shared components:** 17 modules in `fh6_clusters::common` (glass plate, light ribbon, shift lights, hero gear, tabular speed, labels, tachs, needle dial, bezel, ADAS road, G-ball, tyre slip, signed bar, race tiles, seven-segment, liquid metal), documented in `docs/kit/README.md` §12.
+- **Per-cluster tooling:** `preview-export --cluster <Name>` (4 states per view, crops, composites, 60-frame sequence, GPU p50 / p99), a golden test per catalog row (260 goldens), `FH6_WheelDash --demo --cluster <Name>`, `web-preview ?cluster=<Name>`.
+- **Kit:** (font-pack loading is Phase 9's, adopted in the merge) `Scene::missing_glyph_count`, the glass-first backdrop cleared without `CLEAR_TEXTURE`.
+- **Pilot:** Liquid Glass rebuilt on the kit (cockpit sequence GPU p50 0.227 / p99 0.238 ms; hood 0.44 ms); critique a conditional pass at 7.5/10 (glass material debt in shared code).
 ## State of the code (after Phase 9, 2026-11-23)
 | Check | Result |
 |---|---|
@@ -286,3 +303,9 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-23 | OSD rows edit the global config; the live view shows the car's profile on top, and an overridden row says so | Per-car editing needs a save target per row; Phase 10 owns per-car profiles in the configurator |
 | 2026-11-23 | Branch review fixes: no OSD (and no ESC) while the overlay is hidden from the tray; the dyno keeps the last raced car's profile; the Cockpit FOV row reads the wheel-less FOV the patcher writes; the chase glide starts from `ChaseAnchorX`; no per-frame assets clone; the car-profile log line fires only on a car or profiles change | Found by an adversarially verified review of the branch |
 | 2026-11-23 | Design tool moves from Figma to Penpot. Penpot's official hosted MCP is registered at user scope as `penpot` (key kept out of the repo and `.mcp.json`); setup, limits (the file tab must stay open, no local-path image import, limited export) and the master-file plan are in `docs/design/PENPOT.md`. Figma stays the read-only legacy master; `data/figma_tokens.json` and the `FigmaTokens` loader keep their names | Figma's View seat on a Starter team hits the remote MCP call cap and can't use the desktop Dev Mode MCP; TJX has an unlimited Penpot plan |
+| 2026-11-23 | Phase 7: cluster chats own only `clusters/<snake>/`, their goldens, assets, recipe and their own `CATALOG.md` status cell; `catalog.rs`, `registry.rs`, `ClusterTheme`, `common/`, the harness, kit and tools are frozen for them | Up to 3 parallel cluster chats merge without conflicts |
+| 2026-11-23 | Dependencies (`tools/preview-export`): `tracing` and `tracing-subscriber` (workspace versions, already used by `fh6-app`) | wgpu validation errors were invisible in headless renders; no new crate enters the lockfile |
+| 2026-11-23 | Dev profile: `rustybuzz`, `ttf-parser`, `fdsm`, `png`, `miniz_oxide`, `fdeflate` built at opt-level 3 | Golden and component tests load the 64-face font pack in seconds instead of minutes (one font test took 244 s) |
+| 2026-11-23 | Merging main (Phase 9): Phase 9's `Fonts::load_dir` (manifest, variable instances, deferred preload) replaces the Phase 7 lazy loader; Phase 7 keeps `Scene::missing_glyph_count` and the review tools' repeat-until-complete glyph loop | One loader; Phase 9's reads the pack as Phase 6 ships it |
+| 2026-11-23 | v1 tiny-skia clusters moved to `fh6-clusters/src/legacy/`; every catalog row has a kit module (scaffold until built) and a golden | `clusters/<x>.rs` and `clusters/<x>/mod.rs` cannot coexist; v1 stays reachable until each rebuild lands |
+| 2026-11-23 | Phase 7 designs in Penpot (TJX switched from Figma to an unlimited Penpot plan): one page `07 · <Name>` per cluster; `data/figma_tokens.json` stays the token source of truth; the HTML board stays alongside | The Figma Starter caps blocked every Figma page; the hosted Penpot MCP has no call cap |

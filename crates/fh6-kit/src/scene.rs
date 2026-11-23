@@ -307,6 +307,13 @@ impl Scene {
         self.segments.len()
     }
 
+    /// Glyphs drawn this frame that are not in the atlas yet. The renderer generates up to 16 per
+    /// frame; offline renders (goldens, `preview-export`) repeat a frame until this is 0.
+    #[must_use]
+    pub fn missing_glyph_count(&self) -> usize {
+        self.missing_glyphs.len()
+    }
+
     /// Items dropped because a fixed capacity was reached (0 in a healthy frame).
     #[must_use]
     pub fn dropped(&self) -> u32 {
