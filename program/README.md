@@ -18,7 +18,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 | 6 | Assets, logos & fonts | 3 | 5 | high | ✅ merged 2026-11-22 |
 | 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | setup high; pattern-setters (★) xhigh; other clusters high | ◐ setup chat started 2026-11-22 |
 | 8 | Cockpit fit: dash blocker, camera, seat, FOV | 4, 5 | 7, 9 | high | ✅ merged 2026-11-22 |
-| 9 | Liquid Glass OSD | 5, 3 | 7, 8 | high | ◐ running |
+| 9 | Liquid Glass OSD | 5, 3 | 7, 8 | high | ✅ merged 2026-11-23 |
 | 10 | Configurator (`index.html`) & release | 7 (pattern-setters at least), 8, 9 | the rest of 7 | high | ☐ |
 | 11 | Showcase site on Vercel (optional) | 10 | none | medium | ☐ |
 

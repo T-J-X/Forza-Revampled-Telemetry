@@ -1,6 +1,6 @@
 # HANDOVER: Phase 7 setup · Cluster factory (chat 07-00)
 
-**Chat / branch:** `claude/exciting-napier-8fa678`  **Date:** 2026-11-23  **Result:** ✅ complete. The pilot's critique is a conditional pass, and Figma uses the recorded fallback.
+**Chat / branch:** `claude/exciting-napier-8fa678`  **Date:** 2026-11-23  **Result:** ✅ complete. The pilot's critique is a conditional pass, and the design tool moved to Penpot mid-phase (pages not made yet: this session has no Penpot tools).
 
 ## Exit criteria
 | Criterion (MASTER_PROMPT) | Met? | Evidence |
@@ -12,7 +12,7 @@
 | `cargo test -p fh6-clusters <name>` runs its golden test | ✅ | `tests/golden_images.rs`: one test per catalog row (49 tests including the coverage check), 260 goldens |
 | `FH6_WheelDash --demo --cluster <Name>` | ✅ | `--cluster` in `fh6-app` args; `ConfigHandle::force_cluster_style` survives hot reloads (test `a_forced_style_survives_every_publish`); verified live with LiquidGlass |
 | Catalog ordered, first 3 `next` | ✅ | `CATALOG.md` build-order table: LiquidGlass ✅ (pilot), then Gt7HoodPro, PorscheAnalog and BoschDdu `next` |
-| Figma pages with node IDs | ◐ fallback | The Figma MCP still returns the Starter-plan tool-call limit and `figma-desktop` refuses the connection. Recorded in `CATALOG.md` "Design boards (Figma fallback)": each cluster's board is `mockups/<Name>/index.html`, plus the zone table in its `mod.rs`. |
+| Design pages with IDs | ◐ pending (Penpot) | Figma never worked (Starter-plan call cap, `figma-desktop` refused). On 2026-11-23 TJX switched to Penpot (unlimited). This session started before the `penpot` MCP was registered, so the Penpot master file and the 48 `07 · <Name>` pages are being built by the "Build the Penpot design-system master file" session. **Pending from that session:** the file ID and the row → page / board ID table (it records them in `docs/design/PENPOT.md` on its branch); fill the CATALOG "Design board" column from it. `CATALOG.md` "Design boards (Penpot)" and the Phase 7 prompts are switched to Penpot; the HTML board `mockups/<Name>/index.html` stays in use alongside. |
 | Pilot to the `CLUSTER_PROMPT.md` exit bar | ✅ / critique ◐ | `clusters/liquid_glass/HANDOVER.md`: module, goldens, renders, sequence, live demo and GPU numbers are all done. Four critique rounds went 6 → 7.5/10 with every hierarchy, limiter and motion finding closed; the remaining gap is glass material in shared code (see Known issues). |
 | `cargo test` / `clippy -D warnings` green | ✅ | see "Verification output" |
 
@@ -30,7 +30,7 @@
   - `web-preview ?cluster=<Theme>`
   - bench-render scenario names
 - **Kit fixes:**
-  - The font pack loads recursively and lazily (`MAX_FACES` 128, `FontSet::warm`, kerning measured on first use).
+  - Font loading: superseded in the merge by Phase 9's loader, plus the deferred-face fix described under Known issues.
   - `Scene::missing_glyph_count`.
   - The glass-first backdrop is cleared with render passes instead of `clear_texture` (that needs the `CLEAR_TEXTURE` feature).
 - **`fh6-core`:** `ClusterTheme::from_name`; Phase 9's `name()` / dispatch refactor adopted verbatim, so the merge is mechanical; the `ConfigHandle` forced style.
@@ -46,7 +46,7 @@
 $ cargo check --workspace
     Finished `dev` profile [unoptimized + debuginfo] (only the web-preview manifest note, as on main)
 $ cargo test --workspace
-    569 passed, 0 failed, 1 ignored (fh6-clusters lib 168; golden_images 49 incl. 260 goldens; component shots 6 suites)
+    597 passed, 0 failed, 1 ignored, on the tree merged with main 71994b2 (fh6-clusters lib 168; golden_images 49 incl. 260 goldens; component shots 6 suites; Phase 9 OSD suites)
 $ cargo clippy --workspace --all-targets -- -D warnings
     Finished `dev` profile (clean, no warnings)
 $ cargo fmt --all -- --check
@@ -67,10 +67,10 @@ preview-export `--cluster LiquidGlass`: cockpit sequence GPU p50 0.227 ms / p99 
 - **v1 clusters moved to `legacy/`.** `clusters/<x>.rs` and `clusters/<x>/mod.rs` cannot coexist; the v1 code stays reachable behind `LegacyClusterRenderer` until each rebuild lands.
 - **Adopted Phase 9's `theme.rs` `name()` and `dispatch.rs` verbatim,** then appended the 19 variants. This keeps the merge mechanical (see the merge notes).
 - **`--cluster` forces the style through `ConfigHandle`** (a `OnceLock` applied on every publish), so hot reloads cannot undo it.
-- **Fonts load lazily.** Preloading the 64-face pack overflowed the atlas and took seconds; faces now load on first use and kerning is measured lazily. The review tools repeat a frame until no glyph is missing.
+- **Faces are rasterised on first use** (Phase 9's deferred preload, fixed so `find` faces work). A new face's glyphs appear one frame late, so the review tools repeat a frame until no glyph is missing (`Scene::missing_glyph_count`).
 - **The dev profile builds `rustybuzz`, `ttf-parser`, `fdsm`, `png`, `miniz_oxide` and `fdeflate` at opt-level 3,** so the golden tests load fonts in seconds instead of minutes.
 - **Goldens cover every catalog row now** (the scaffold renders). Each cluster chat overwrites only its own. Total size is 27 MB in `tests/golden/images/` (260 PNGs).
-- **Figma fallback:** HTML boards plus the zone table in each `mod.rs` (`CATALOG.md`).
+- **Design tool:** Phase 7 docs now point at Penpot (one page per cluster). Until the pages exist, the board is the HTML board plus the zone table in each `mod.rs`.
 - **`ShiftLights` accepts even counts** (the 16-pill strip lights the two centre pods together). `PodStyle` gained `unlit_rim`, defaulting to the old 0.12, so other clusters are unchanged.
 - **The pilot's design calls** are in its own `HANDOVER.md`.
 
@@ -79,12 +79,16 @@ preview-export `--cluster LiquidGlass`: cockpit sequence GPU p50 0.227 ms / p99 
   - `GlassPlate` needs a per-azimuth rim (100% within ±35° of the light, ≤8% opposite) and a tinted fresnel ramp.
   - The kit needs a smooth-union between shapes (the pendant bulge) and self-lensing of layers drawn after a glass layer (glass-first clusters refract nothing).
 - **Second reviews missing:** `common/adas_road.rs`, `seg7.rs` and `liquid.rs` were built but their second review was cut by the usage limit. The first cluster chat that uses one of them should look harder.
-- **Merge conflicts with Phase 9** (`claude/phase-9-osd-1fcc97`):
-  - `fh6-core/src/theme.rs`: the `name()` arms (keep both lists)
-  - `fh6-app/src/args.rs` (`--cluster` beside Phase 9's flags)
-  - `tools/preview-export/src/main.rs` and `gallery.rs` (badges)
-  - the `AGENTS.md` rows
-  - `dispatch.rs` should merge cleanly.
+- **Main is merged in** (Phase 9, `71994b2`):
+  - **Conflicts resolved:** `Cargo.toml` (dev opt-levels united), `theme.rs` (both lists), `preview-export` (`--cluster` and `--backdrop` together), `AGENTS.md` and `PROGRESS.md`.
+  - **`text.rs` is Phase 9's loader** (fonts.json manifest, variable instances, deferred preload), which replaces the Phase 7 lazy loader.
+  - **The OSD's `theme_label`** gained the 19 new themes.
+- **Kit fix made in the merge (`fh6-kit/src/text.rs`).** Phase 9's deferred preload had a bug: a face found with `Fonts::find` (not bound to a role) borrowed the fallback face's glyphs forever, so it was never rasterised. Every cluster that picks its own faces drew them in the fallback font, and tabular figures were lost.
+  - `glyph()` now falls back only for preloaded faces.
+  - `generate_missing` preloads a deferred face on first use and never blanks a glyph that the preload added.
+  - A regression test sits in `load_dir_reads_the_font_pack_with_a_deferred_preload`.
+  - The OSD binds roles, so it was not affected.
+  - All 260 goldens were regenerated afterwards.
 - **Per-car profiles can still override `--cluster`:** a car profile's `CockpitHudStyle` wins when that car loads. Fine for the demo (car ordinal 0); worth a guard if it bites.
 - **Live CPU per frame** is p50 1.44 / p99 3.66 ms on a desktop without the stand-in game, against the 1 ms target. This is pre-existing host cost (upload + record + submit) and is not caused by the clusters.
 - **`tools/web-preview` manifest note** ("unused dependency `fh6-clusters`" on native builds): it is used only on wasm32. It is a warning and is on main too.

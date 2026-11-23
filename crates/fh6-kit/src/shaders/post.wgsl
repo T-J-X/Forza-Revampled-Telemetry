@@ -19,7 +19,8 @@ struct Params {
     intensity: f32,
     src_lod: f32,
     base_lod: f32,
-    // Resolve: overall opacity, work origin in target px, bloom enabled.
+    // Resolve: overall opacity, work origin in target px, bloom enabled (and `sigma` is the
+    // black underlay alpha).
     opacity: f32,
     bloom_on: f32,
     origin: vec2<f32>,
@@ -122,6 +123,9 @@ fn fs_resolve(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         rgb = encode(covered / a) * a;
     }
     rgb = rgb + encode(excess) * (1.0 - a);
-    let out_a = a;
-    return vec4<f32>(min(rgb, vec3<f32>(1.0)), out_a) * pp.opacity;
+    let out = vec4<f32>(min(rgb, vec3<f32>(1.0)), a) * pp.opacity;
+    // Underlay (`sigma` in the resolve): premultiplied black under everything drawn, so a
+    // full-screen dim costs nothing in the shape pass. Black adds no colour, only alpha.
+    let u = clamp(pp.sigma, 0.0, 1.0) * pp.opacity;
+    return vec4<f32>(out.rgb, out.a + u * (1.0 - out.a));
 }

@@ -1,6 +1,6 @@
 # Cluster catalog
 
-Phase 3 (design system) wrote this catalog: **29 rebuilds** and **19 new next-gen cockpit concepts** across **7 families**, with one pattern-setter per family (★) and a build order. Phase 7 setup (chat 07-00) scaffolded every row, ordered the build queue, built the pilot and keeps the status column; the Figma column records the design board, because the Figma MCP is capped (see [Design boards](#design-boards-figma-fallback)). Every row obeys [docs/design/TOKENS.md](../../../docs/design/TOKENS.md), [COMPONENTS.md](../../../docs/design/COMPONENTS.md) and its family spec in [docs/design/families/](../../../docs/design/families/).
+Phase 3 (design system) wrote this catalog: **29 rebuilds** and **19 new next-gen cockpit concepts** across **7 families**, with one pattern-setter per family (★) and a build order. Phase 7 setup (chat 07-00) scaffolded every row, ordered the build queue, built the pilot and keeps the status column; the design-board column records each cluster's board (see [Design boards](#design-boards-penpot)). Every row obeys [docs/design/TOKENS.md](../../../docs/design/TOKENS.md), [COMPONENTS.md](../../../docs/design/COMPONENTS.md) and its family spec in [docs/design/families/](../../../docs/design/families/).
 
 Status: ☐ todo · next · ◐ in progress · ✅ done
 
@@ -93,13 +93,13 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 
 The start prompt for row *n* is: *"You are the cluster chat for `<Name>` (catalog row `<n>`). Read `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."*
 
-## Design boards (Figma fallback)
-The plan was one Figma **Section** per cluster on page `03 · OSD · Configurator · Scrim · Catalog` (`1:5`) of the master file `0zOEwnJ8dEj1kQ7QwPGEH0`, each holding a 3840×2160 frame with the binnacle guide. On 2026-11-22 the Figma MCP still answered every call (`get_metadata`, `use_figma`) with *"You've reached the Figma MCP tool call limit on the Starter plan"*, and the `figma-desktop` server refused the connection, exactly as in Phase 3 ([FIGMA.md](../../../docs/design/FIGMA.md)). No Section or node ID exists, so the column above names the board instead.
+## Design boards (Penpot)
+On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited plan), so Phase 7 designs there. The Figma Starter workarounds are gone. (Before: the Figma MCP answered every call with the Starter-plan tool-call limit and `figma-desktop` refused the connection, so no Figma Section or node ID was ever made; see [FIGMA.md](../../../docs/design/FIGMA.md).)
 
-Until the plan is upgraded or the cap resets, a cluster's design board is:
-- **The brief and targets:** its `spec.md`, its family spec and template (`docs/design/families/`) and the family hero frames (`docs/design/heroes/<family>/`, sources in `docs/design/boards/heroes/`).
-- **The live board:** `cargo run --release -p preview-export -- --cluster <Theme>` writes `mockups/<Theme>/index.html`: the 4 states at 4K per view over OLED black, 1:1 crops, the cockpit composite over the reference photo with the scrim, the 60-frame sequence and measured badges. Design in code against it, and run the critique on its PNGs.
-- If Figma comes back, create the Section named `07 · <Theme>` with a 3840×2160 frame (binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540)), place the four state PNGs on it and write the node ID into this table.
+- **One Penpot page per cluster:** `07 · <Theme>` in the Penpot master file, holding a 3840×2160 board with the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). The file ID and page IDs go in `docs/design/PENPOT.md`; each row's page / board ID goes in the "Design board" column below, next to its HTML board.
+- **Not created yet.** The setup chat's session started before the `penpot` MCP was registered, so it has no Penpot tools. There is no Penpot master file yet either (Phase 3's foundations are half done in Figma). A Penpot session has to create the master file (tokens and themes mirroring `data/figma_tokens.json`, which stays the source of truth) and the 48 pages, then fill this column. Until then a cluster chat creates its own page when its session has the `penpot` tools.
+- **The HTML board stays in use alongside Penpot:** `cargo run --release -p preview-export -- --cluster <Theme>` writes `mockups/<Theme>/index.html` (the 4 states at 4K per view over OLED black, 1:1 crops, the cockpit composite over the reference photo with the scrim, the 60-frame sequence and measured badges). The hosted Penpot MCP cannot import local images, so the renders are reviewed there, not pasted into Penpot.
+- **The brief and targets:** each row's `spec.md`, its family spec and template (`docs/design/families/`) and the family hero frames (`docs/design/heroes/<family>/`).
 
 ## Index
 | # | Theme | Module | Kind | Family | View | Build order | Design board | Status |

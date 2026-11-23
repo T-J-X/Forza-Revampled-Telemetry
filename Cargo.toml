@@ -42,8 +42,9 @@ wgpu = { version = "30.0.2", default-features = false, features = ["dx12", "webg
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"
 
-# Font shaping (kerning), MTSDF glyph generation and PNG decoding run at startup. Optimise them
-# in dev and test builds too, so the golden tests load the Phase 6 font pack in seconds.
+# Loading a font face shapes 4,624 kerning pairs (rustybuzz) and rasterises about 70 MTSDF
+# glyphs (fdsm on nalgebra). Unoptimised that is about 5 s per face, which every kit test and
+# every debug start pays; optimised it is well under 0.2 s. Keep these fast in debug builds.
 [profile.dev.package.rustybuzz]
 opt-level = 3
 
@@ -60,4 +61,7 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.nalgebra]
 opt-level = 3

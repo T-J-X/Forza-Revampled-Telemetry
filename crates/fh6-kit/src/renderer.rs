@@ -301,6 +301,8 @@ pub(crate) struct Renderer {
     timer: Option<GpuTimer>,
     timing_enabled: bool,
     bloom_enabled: bool,
+    /// Premultiplied black floor under the whole target (0 = none), see `Kit::set_underlay`.
+    underlay: f32,
     globals: Vec<Globals>,
     post: Vec<PostParams>,
     started: Stamp,
@@ -631,6 +633,7 @@ impl Renderer {
             timer,
             timing_enabled: false,
             bloom_enabled: true,
+            underlay: 0.0,
             globals: Vec::with_capacity(MAX_SEGMENTS),
             post: Vec::with_capacity(MAX_POST),
             started: Stamp::now(),
@@ -639,6 +642,11 @@ impl Renderer {
 
     /// Turns GPU timestamp queries on (when the device supports them).
     /// Turns the bloom passes on or off (a quality setting; layers still record emissive).
+    /// Sets the black underlay alpha (0..1) applied by the clear and the resolve.
+    pub(crate) fn set_underlay(&mut self, alpha: f32) {
+        self.underlay = if alpha.is_finite() { alpha.clamp(0.0, 1.0) } else { 0.0 };
+    }
+
     pub(crate) fn set_bloom(&mut self, on: bool) {
         self.bloom_enabled = on;
     }
@@ -1080,7 +1088,7 @@ impl Renderer {
                 });
             drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("fh6-kit clear"),
-                color_attachments: &[Some(color_attachment(output, true))],
+                color_attachments: &[Some(output_attachment(output, self.underlay * opacity.clamp(0.0, 1.0)))],
                 depth_stencil_attachment: None,
                 timestamp_writes: ts,
                 occlusion_query_set: None,
@@ -1343,6 +1351,8 @@ impl Renderer {
             opacity: opacity.clamp(0.0, 1.0),
             bloom_on: if bloom_on { 1.0 } else { 0.0 },
             origin: [wx as f32, wy as f32],
+            // The resolve reads `sigma` as the underlay alpha.
+            sigma: self.underlay,
             ..zero_params()
         };
         if let Some(offset) = self.push_post(offs.post, params) {
@@ -1359,7 +1369,7 @@ impl Renderer {
                     });
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("fh6-kit resolve"),
-                    color_attachments: &[Some(color_attachment(output, true))],
+                    color_attachments: &[Some(output_attachment(output, self.underlay * opacity.clamp(0.0, 1.0)))],
                     depth_stencil_attachment: None,
                     timestamp_writes: ts,
                     occlusion_query_set: None,
@@ -1462,6 +1472,24 @@ fn texel_copy(texture: &wgpu::Texture) -> wgpu::TexelCopyTextureInfo<'_> {
 fn blur_level(sigma_px: f32) -> u32 {
     let s = sigma_px.max(0.5);
     ((s / 2.0).log2().ceil().max(1.0) as u32).min(PYRAMID_LEVELS)
+}
+
+/// The caller's target, cleared to the premultiplied black underlay (`alpha` 0 = transparent).
+fn output_attachment(view: &wgpu::TextureView, alpha: f32) -> wgpu::RenderPassColorAttachment<'_> {
+    wgpu::RenderPassColorAttachment {
+        view,
+        depth_slice: None,
+        resolve_target: None,
+        ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(wgpu::Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: f64::from(alpha),
+            }),
+            store: wgpu::StoreOp::Store,
+        },
+    }
 }
 
 fn color_attachment(view: &wgpu::TextureView, clear: bool) -> wgpu::RenderPassColorAttachment<'_> {

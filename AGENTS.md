@@ -7,7 +7,7 @@
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
 
-**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The tiny-skia rows below (scrim, OSD, v1 clusters) are kept until their rebuilds in Phases 7–9.
+**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The scrim (Phase 8) and the OSD (Phase 9) draw with the kit too; the v1 tiny-skia clusters are kept until their rebuilds in Phase 7.
 
 ---
 
@@ -19,12 +19,12 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `crates/fh6-render` | Theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
 | `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), the two Phase 5 samples (`kit/`), and the 29 v1 tiny-skia clusters (`legacy/`) behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
 | `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
-| `crates/fh6-osd` | Unified OSD (4 tabs, live dyno preview, config binding, hold toggle) | fh6-core, fh6-render, fh6-clusters |
-| `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle`, Guide edge detection | fh6-core, `windows` |
-| `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding | fh6-core, `windows`, raw-window-handle |
+| `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
+| `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
+| `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
 | `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
-| `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, remapper, status server (no `unsafe`) | all crates |
-| `tools/preview-export` | Headless 4K GPU renders of every cluster × 4 states, thumbnails, measured badges, scrim and OSD → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
+| `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, OSD wiring (the remapper moved to fh6-osd), status server (no `unsafe`) | all crates |
+| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
 | `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-gpu, fh6-kit, fh6-clusters |
@@ -112,8 +112,8 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
   - **Wheel-less Cockpit `[3]`:** the cluster sits in the black steering-column gap, anchored at `(1920, 1835)` in 4K. The in-car 3D factory binnacle behind it is masked by the domed OEM scrim (`OemDashOpaquePct`, 0–100%), so two dials never fight for attention.
   - **Hood `[4]`:** reached by pressing `RB` from `[3]`, anchored at `(1920, 1760)`. The scrim is forced to 0%, and `BonnetHudStyle` (default `Gt7HoodPro`) takes over: a wider, lower, frameless swept tach, a central gear/speed pod, 4-corner tyre-slip bars and a G meter.
 - **Translucent OLED OSD:**
-  - Opening it pauses the game (ESC via `SendInput` while `IsRaceOn == 1`) and shows a glass OSD (alpha 28..45) in the upper viewport. The live cluster keeps animating at the bottom, driven by the dyno preview.
-  - Toggle: hold View `0x0020` for 400 ms by default (`osd_toggle_mask`, `osd_hold_ms`), remappable in OSD tab 3.
+  - Opening it pauses the game (ESC via `SendInput` while `IsRaceOn == 1`, the game is in front and auto-pause is on) and shows the full-screen OSD (`docs/design/OSD.md`): the real cluster live on the left, driven by the dyno preview, and a glass control panel on the right.
+  - Toggle: hold View `0x0020` for 400 ms by default (`osd_toggle_mask`, `osd_hold_ms`), remappable in the OSD Controls tab.
   - Navigate only with the D-pad and LB/RB, never A/B/X/Y.
 
 ## Agent 2: Principal Rust Systems, Win32/XInput & Real-Time Graphics Engineer (`@Rust_Systems_Lead`)

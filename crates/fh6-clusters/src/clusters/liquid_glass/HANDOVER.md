@@ -5,7 +5,7 @@
 ## Exit criteria (`CLUSTER_PROMPT.md`)
 | Criterion | Met? | Evidence |
 |---|---|---|
-| Design board has 4 states per view | ✅ (HTML board; Figma is blocked, see `CATALOG.md`) | `mockups/LiquidGlass/index.html`: 4 states × cockpit and hood, crops, cockpit composites, 60-frame sequence |
+| Design board has 4 states per view | ◐ HTML board (the Penpot page `07 · LiquidGlass` waits for a Penpot session, see `CATALOG.md`) | `mockups/LiquidGlass/index.html`: 4 states × cockpit and hood, crops, cockpit composites, 60-frame sequence |
 | Module complete, no TODOs, goldens pass | ✅ | `mod.rs` (zone table `Geom`, `Faces`, `Paths`); `cargo test -p fh6-clusters liquid_glass`: 3 unit tests + the golden test (8 images) pass |
 | 4K renders + 60-frame sequence in `mockups/LiquidGlass/` | ✅ | `cargo run --release -p preview-export -- --cluster LiquidGlass` |
 | Live demo verified, GPU under 0.5 ms recorded | ✅ | `FH6_WheelDash --demo --cluster LiquidGlass --stats` ran for 60 s with the scrim and brand palette; GPU numbers below |
@@ -14,7 +14,7 @@
 
 ## What it is
 A 1240 × 360 sapphire squircle (n 5; 1560 × 260 on the hood) with no wallpaper. The ranks:
-1. The gear, in Saira Condensed 800 at cap 196, clipped to a 240 px lens with a dimming pad. It blooms only on the limiter.
+1. The gear, in Saira Condensed 700 at cap 196, clipped to a 240 px lens with a dimming pad. It blooms only on the limiter.
 2. Tabular speed (Saira 200, cap 108, no ghost 8s), with the unit on its baseline.
 3. A thin light pipe (4 → 8 px, outside the bloom) round the rim, ending in a meniscus bead that follows the orb intensity law.
 4. A shallow pendant bulge on the bottom rim (r 28) with the caustic G spot, which defocuses with body slip, and a 0.5 g reference ring.
@@ -55,7 +55,7 @@ Live demo, desktop with no stand-in game, release, 60 s: the cluster was stable,
   - Every must-fix was worked: see "What it is" and "My calls".
 - **Round 2:** an independent `ui-ux-designer` review of the fixed renders scored **6.5/10, not passing**.
   - It asked for a bigger gear and lens, a taller capsule so it stops reading as the car's rear-view mirror, a darker body, darker off pills and a more visible light-run.
-  - All of these were applied in round 3 (1240 × 360, lens 240, gear 196 at weight 800, centre backing, streak 230 px at full white).
+  - All of these were applied in round 3 (1240 × 360, lens 240, gear 196 at weight 800 (back to 700 after the Phase 9 merge, see My calls), centre backing, streak 230 px at full white).
 - **Round 3:** the same reviewer scored **7/10** and said the hierarchy was fixed but the material was not.
   - **The root cause:** the kit blends in linear light, so a 3% ink fill shows as about 19% grey on screen, and a 50% black backing barely darkens anything.
   - **Fixed:** the off pills are now near-black (`PodStyle::unlit_rim`, new); the body has a linear 0.94 black backing in the centre; the pipe warms to the shift colour at the limiter; the idle caustic is a soft glow; the comet head glows 6 px.
@@ -72,6 +72,8 @@ Live demo, desktop with no stand-in game, release, 60 s: the cluster was stable,
 - **Grip uses body slip, not tyre combined slip.** Tyre slip is not verified against `tests/golden/packets`; `Signals::slip_deg` comes from the velocity vector, which is verified.
 - **Distance (the caustic phase) is integrated from speed.** The distance field is not verified.
 - **Capsule exponent is 5, not 4.** At n 4 the hood's 6:1 capsule pinched its ends into points.
+- **The gear is Saira Condensed 700, as the brief says.** Round 3 tried 800, but before the Phase 9 merge the kit was silently drawing the gear in the fallback face. With the real ExtraBold rendered, 800 reads as block digits.
+- **The speed is Saira 300, not 200.** The merged loader makes the variable Saira only at 300, 400, 500 and 600.
 - **The light-run speed is 5000 px/s,** so it still meets in about 350 ms on the taller capsule.
 - **The pipe is outside the bloom.** It is rank 3, and its Gaussian halo leaking onto OLED black read as a game HUD.
 - **The gear is clipped to its lens,** so the tokens' 1.12 / 24 px entry can never reach the rim.

@@ -10,6 +10,8 @@ pub mod car_brands;
 #[cfg(windows)]
 pub mod foreground;
 #[cfg(windows)]
+pub mod keyboard;
+#[cfg(windows)]
 pub mod monitor;
 #[cfg(windows)]
 pub mod overlay;

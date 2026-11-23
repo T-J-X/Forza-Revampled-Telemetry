@@ -4,7 +4,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 - its module directory `crates/fh6-clusters/src/clusters/<snake_name>/` (`mod.rs`, private submodules, `spec.md`, `README.md`, `HANDOVER.md`)
 - its goldens `tests/golden/images/<Name>_*.png` and `<Name>_hood_*.png`
 - its assets `assets/clusters/<snake_name>/` and its recipe `tools/asset-forge/src/recipes/<snake_name>.rs`
-- its design board (a Figma Section if the Figma MCP answers, otherwise the HTML board; see "Design boards" in `CATALOG.md`)
+- its design board: the Penpot page `07 · <Name>` (see "Design boards" in `CATALOG.md`), plus its HTML board `mockups/<Name>/index.html`
 - its own row in `CATALOG.md` (the status cell only)
 
 **Edit nothing outside them.** The catalog table (`catalog.rs`), the registry, `ClusterTheme`, `common/`, the golden harness, the kit and the tools are shared. If a shared helper or the kit needs a change, write it in your handover so the conductor can schedule it.
@@ -27,15 +27,15 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 
 ## Steps
 1. **Design first, on your board.**
-   - With Figma: follow the family template and tokens on your Section. Make the 4 states at 4K over the cockpit reference photo, plus the motion notes.
-   - Without Figma (the current state, see `CATALOG.md`): write the layout as a zone table at the top of your `mod.rs` (zones, sizes and positions in local 4K px, as the pilot's `Geom`), then design in code against `mockups/<Name>/index.html`.
+   - In Penpot (the `penpot` MCP, see `SKILLS.md`): create your page `07 · <Name>` in the Phase 7 Penpot file (`docs/design/PENPOT.md` has its ID; if there is none yet, the conductor schedules it) with a 3840×2160 board and the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). Follow the family template and the tokens (Penpot tokens mirror `data/figma_tokens.json`, which stays the source of truth). Make the 4 states per view at 4K, plus the motion notes, and write the page and board IDs into your row of `CATALOG.md`.
+   - Also write the layout as a zone table at the top of your `mod.rs` (zones, sizes and positions in local 4K px, as the pilot's `Geom`), then design in code against `mockups/<Name>/index.html`.
    - For Liquid Glass, fluid, abstract or sci-fi designs, plan the bespoke assets now.
    - Run `design:design-critique` on the frames, and iterate until it clears the bar above.
 2. **Bespoke assets** (Blender and ComfyUI via `cargo run -p asset-forge`).
    - Local tools on this machine (write them as `%USERPROFILE%` paths in any repo file):
-     - Blender 5.3: `%USERPROFILE%DocumentsDash_Toolslender-5.3.0-windows-x64`
-     - ComfyUI portable: `%USERPROFILE%DocumentsDash_ToolsComfyUI_windows_portable`
-     - Figma Desktop with the `figma-desktop` MCP, when it is open (otherwise use the HTML board).
+     - Blender 5.3: `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64`
+     - ComfyUI portable: `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable`
+     - Penpot through the `penpot` MCP (hosted; TJX keeps the Penpot file open with File → MCP Server connected).
    - Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
    - Outputs go to `assets/clusters/<snake_name>/`, with a row in `assets/clusters/<snake_name>/ASSETS.md`.
    - "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.

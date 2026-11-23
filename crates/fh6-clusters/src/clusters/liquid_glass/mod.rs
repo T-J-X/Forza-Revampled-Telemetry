@@ -4,7 +4,7 @@
 //! One monolithic sapphire capsule (a 1240 × 360 squircle, n 5; 1560 × 260 on the hood) at the
 //! regular glass tint over a dark backing, with no wallpaper: the 1 px light-driven rim, the
 //! fresnel band and a thin crown sheen define it.
-//! - Rank 1: 16 glass pills on an offset curve of the crown, and the gear (Saira Condensed 800,
+//! - Rank 1: 16 glass pills on an offset curve of the crown, and the gear (Saira Condensed 700,
 //!   cap 196) clipped to a 240 px lens with a dimming pad; it blooms only on the limiter.
 //! - Rank 2: tabular speed on the left (Saira 200, cap 108, no ghost 8s), unit on its baseline.
 //! - Rank 3: a light pipe 14 px inside the rim from lower-left over the crown to lower-right,
@@ -253,11 +253,7 @@ impl LiquidGlass {
         let display = setup.fonts.role(FontRole::Display);
         let text = setup.fonts.role(FontRole::Text);
         let faces = Faces {
-            gear: setup
-                .fonts
-                .find("Saira Condensed", 800, false)
-                .or_else(|| setup.fonts.find("Saira Condensed", 700, false))
-                .unwrap_or(display),
+            gear: setup.fonts.find("Saira Condensed", 700, false).unwrap_or(display),
             speed: setup.fonts.find("Saira", 200, false).unwrap_or(display),
             metric: setup.fonts.find("Saira", 400, false).unwrap_or(display),
             label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
