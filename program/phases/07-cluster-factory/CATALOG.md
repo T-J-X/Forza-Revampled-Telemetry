@@ -55,12 +55,12 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
 | 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
 | 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
-| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | next |
+| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 15 | `KoenigseggGyro` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 16 | `ValkyrieLmp1` | rebuild | Race Dash | cockpit+hood | high | ◐ |
-| 17 | `Gt7ModularTripod` | rebuild | Race Dash | cockpit+hood | high | ☐ |
+| 17 | `Gt7ModularTripod` | rebuild | Race Dash | cockpit+hood | high | next |
 | 18 | `WindshieldHud` | rebuild | ADAS & HUD | raised HUD | high | ☐ |
 | 19 | `F35HelmetHmd` | rebuild | ADAS & HUD | cockpit+hood | high | ☐ |
 | 20 | `ArNavWayfinder` | rebuild | ADAS & HUD | cockpit+hood | high | ☐ |
@@ -283,6 +283,8 @@ A hypercar endurance wheel face, not a panel: a 1440×420 forged-carbon yoke (ch
 - **Risk:** Design: delta-mode LEDs mistaken for shift lights. Avoid: 40% intensity, centre-out pattern only, a same-frame switch at stage 1 with 120 rpm hysteresis, an OSD toggle, and a dark crown in free roam. Perf: 240-point trace from a fixed ring buffer as one SDF strip ≈0.02 ms; forged carbon one textured pass ≈0.03 ms; bloom on crown, well tach and gear ≈0.12 ms; ≈0.22 ms total. Hood [4]: shoulders spread to the 1760×400 envelope and the trace shortens to 3 s. Needs distance, lap and slip-ratio fields added to the fh6-core decoder.
 
 #### Gt7ModularTripod — build #17 · cockpit+hood
+**TJX override (2026-11-23): build the real GT7 in-car multi-function meter, not the capsule/prism concept below.** Reference: `mockups/references/gt7_multifunction_meter.webp` (local only, gitignored; copyrighted, never commit it). It has detached floating elements over the scene with no backing panel: a left round speedometer (thin white scale, light numerals, inset fuel sub-gauge, odometer box); a right round tachometer (red arc from the shift zone, inset boost sub-gauge in ×100 kPa); a central trapezoid pod with a dense tick rev bar (one accent colour) over big squared speed and gear digits with an MT tag; under it a D-pad-paged centre panel (Brake Balance, Radar and other pages, page dots, ◀ ▶) flanked by slim vertical input bars; a tyre-diagram block at the far left; circled telltale icons along the bottom. Monochrome white and grey, one accent, translucent dark panels, thin precise lines. Pages show only decoded telemetry (no brake balance or radar data exists, so pick honest pages: G, inputs, power and torque, trail). The sections below are background only; where they conflict, the real GT7 meter wins.
+
 Three machined black-anodised aluminium capsules: a 600×480 centre module and two 360×280 satellites yawed 9° toward the driver by a homography and set one depth layer back. Each capsule is a thin spun-grain ring with a 3 px polished 45° chamfer lit by `light`, around a true-black cavity. Rank 1: one floating 36 px strip of 11 pods (3+5+3) bridging all three tops, plus the `race` 800 gear at cap 228 centre. Rank 2: speed, cap 112, beneath it. Rank 3: a 60-segment arch tach cresting over the gear. Rank 4: each satellite is a three-faced prism of pages (left TYRES / G / INPUTS, right LAP / POWER / TRIP), with two shy lamps on its outer edge.
 
 - **Signature moment:** Prism page turn: an event rolls a satellite's triangular prism 120° about its horizontal axis on the `default` spring (237 ms); the two visible faces foreshorten by cos θ and shade by dot(n, L) from the cluster light, like a trackside three-sided rotating billboard. Brake >0.5 with combined slip flips the left to TYRES; a completed lap flips the right to LAP; at most one turn per 2.5 s, never on the centre module. The outside-in fill jumps the two capsule gaps to land on the centre pod; at the limiter the strip strobes while the arch tach's last 6 segments hold a steady `shift`.

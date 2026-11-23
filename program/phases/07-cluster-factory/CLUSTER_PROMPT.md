@@ -43,7 +43,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
      - Adaptive tint, depending on what's behind the glass.
      - Clear, not murky: almost no tint or frost, no texture painted inside the glass, thin crisp specular rims. It reads as glass because of how it bends and catches light, not because it is coloured. Separate floating pieces (capsules, pills, discs) that merge and split in motion, never one big slab with blobs stuck on (TJX: the first attempt looked like "liquid ass", not Apple glass).
      Blender and ComfyUI only add to this (environment and caustic maps, normal detail); they never replace the optics. If the kit lacks an optic you need, stop and report it in your handover, because the conductor schedules kit work.
-   - **Race Dash and motorsport family: pure professional.** Benchmark real motorsport displays: MoTeC C1xx, Bosch DDU 10/11, AiM MXS, Cosworth, F1 and LMP steering-wheel displays.
+   - **Race Dash and motorsport family: pure professional.** Benchmark real motorsport displays: MoTeC C1xx, Bosch DDU 10/11, AiM MXS, Cosworth, F1 and LMP steering-wheel displays, and the Gran Turismo 7 in-car multi-function meter (TJX: "an insane example"; local reference `mockups/references/gt7_multifunction_meter.webp`, never committed). The GT7 meter: detached floating round gauges and a central speed/gear pod with a dense tick rev bar, a D-pad-paged centre panel, thin precise white lines and one accent colour.
      - Black, high contrast, exact data, strict grid alignment and tabular figures.
      - The shift lights and limiter behave like the real hardware.
      - No ornamental glow or sci-fi effects.
