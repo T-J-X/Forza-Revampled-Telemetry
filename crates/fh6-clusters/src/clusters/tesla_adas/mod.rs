@@ -44,8 +44,9 @@ use crate::common::ShiftLights;
 use fh6_kit::cluster::Setup;
 use fh6_kit::math::{smoothstep, vec3};
 use fh6_kit::{
-    vec2, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId, ImagePaint,
-    LayerOptions, Layout, Painter, Palette, Rect, Shape, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    vec2, Align, BlendMode, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId,
+    ImagePaint, LayerOptions, Layout, Painter, Palette, Rect, Shape, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
+    View,
 };
 use scene::{Scene, SceneGeom, SceneInput};
 
@@ -54,7 +55,11 @@ const G: f32 = 9.80665;
 /// LED cap atlas cell and the lens inside it (render px; the recipe's `CAP_CELL` / `CAP_LENS_PX`).
 const CAP_CELL: [f32; 2] = [288.0, 128.0];
 const CAP_LENS: [f32; 2] = [240.0, 88.0];
-/// LED cap atlas cell and the lens inside it (render px; the recipe's `CAP_CELL` / `CAP_LENS_PX`).const CAP_CELL: [f32; 2] = [288.0, 128.0];const CAP_LENS: [f32; 2] = [240.0, 88.0];
+/// How strongly the off cap's bevel and specular are added over a lit cap.
+const CAP_SPECULAR: f32 = 0.8;
+/// A lit cap's core mix toward white; less at the limiter, so the strobe stays a saturated alarm.
+const CAP_CORE: f32 = 0.25;
+const CAP_CORE_LIMITER: f32 = 0.10;
 /// The pod count (catalog brief).
 const PODS: u32 = 10;
 /// Width of the comet at the head of the rev ribbon (px).
@@ -430,8 +435,21 @@ impl TeslaAdas {
             match self.shift.color_of(i, pal) {
                 Some(color) => {
                     let shape = Shape::round_rect(pod, pod.height() * 0.5);
-                    p.glow(&shape, color, Glow::new(6.0, 0.55));
-                    p.layer(LayerOptions::bloom(), |p| lens(p, true, color));
+                    // A tight glow (under 0.6x the 22 px gap) and no bloom, so neighbours never merge.
+                    p.glow(&shape, color, Glow::new(4.0, 0.40));
+                    // The diffuser, its core toward white; then the off cap added on top: black
+                    // adds nothing, so only its bevel rim and specular land on the lit lens and the
+                    // two states read as one object.
+                    let core = if self.shift.over_shift() {
+                        CAP_CORE_LIMITER
+                    } else {
+                        CAP_CORE
+                    };
+                    lens(p, true, color.lerp(Color::WHITE.with_alpha(color.a), core));
+                    p.scoped(|p| {
+                        p.set_blend(BlendMode::Add);
+                        lens(p, false, Color::WHITE.fade(CAP_SPECULAR));
+                    });
                 }
                 None => lens(p, false, Color::WHITE),
             }

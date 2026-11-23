@@ -9646,11 +9646,11 @@
       "alpha": "straight",
       "tileable": false,
       "dims": "1536x512",
-      "bytes": 386804,
+      "bytes": 357788,
       "generator": "comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5, 1536 x 640) seed=1507 prompt=\"photograph of an empty dark asphalt road at night seen from a low camera behind a car, the road surface fills the frame and recedes straight to a vanishing point at the top centre, fine aggregate texture, faint cold blue sheen, moody, minimal\"",
       "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
       "clusters": "TeslaAdas",
-      "qa": "the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate → 1536 x 512; luminance → alpha over white (tinted live to near-black), a far-to-near fade (0 at the top) and side feathers baked in",
+      "qa": "the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate → 1536 x 512; luminance → alpha over white (tinted live to near-black), a far-to-near fade (0 at the top), a fade-out over the bottom 20% (the band edge) and side feathers baked in",
       "thumb": "assets/_thumbs/tesla_adas__asphalt.png"
     },
     {
@@ -9790,7 +9790,7 @@
       "alpha": "straight",
       "tileable": false,
       "dims": "576x128",
-      "bytes": 36199,
+      "bytes": 37848,
       "generator": "blender:tesla_adas::CAPS (Cycles 128 spp, OptiX denoise, AgX; pill lens 6.0 x 2.2 x 0.7 with a bevelled rim: clear-coated smoked acrylic off, a back-lit white diffuser on; softbox above-front + cool strip below + studio.exr) seed=153",
       "licence": "MIT (asset-forge)",
       "clusters": "TeslaAdas",

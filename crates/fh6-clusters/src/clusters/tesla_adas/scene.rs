@@ -19,8 +19,8 @@ use fh6_kit::math::{finite_or, smoothstep, vec3, Mat4, Vec3};
 use fh6_kit::mesh::{MeshData, MeshDraw, MeshId, MeshShading};
 use fh6_kit::perspective::{Camera25, RoadCurve};
 use fh6_kit::{
-    vec2, Affine, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect,
-    Shape, Spring, TextStyle, Tokens, VAlign, Vec2,
+    vec2, Affine, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, LayerOptions, Painter,
+    Palette, Rect, Shape, Spring, TextStyle, Tokens, VAlign, Vec2,
 };
 
 /// Standard gravity (m/s^2).
@@ -64,7 +64,11 @@ const UNDERGLOW_SIGMA: f32 = 0.22;
 /// The baked underglow pool: its size in local px (asset-forge `tesla_adas::POOL_LOCAL`, centred on
 /// the ego's ground centre) and its peak alpha.
 const POOL_LOCAL: [f32; 2] = [480.0, 240.0];
-const POOL_ALPHA: f32 = 0.75;
+const POOL_ALPHA: f32 = 0.22;
+/// How far the pool dips while the carpet is amber (a drift), so the two never merge.
+const POOL_DRIFT_DIP: f32 = 0.75;
+/// The road surface's soft edge (local px).
+const ROAD_FEATHER_PX: f32 = 10.0;
 /// The pool atlas: 11 yaw cells from -50 to +50 degrees, 4 per row (asset-forge `POOL_YAWS`).
 const POOL_CELLS: usize = 11;
 const POOL_COLS: usize = 4;
@@ -74,11 +78,11 @@ const POOL_YAW_STEP: f32 = 10.0;
 const ASPHALT_LEVEL: f32 = 0.060;
 /// The horizon haze: alpha at the vanishing point, its tint toward the primary, and its radii
 /// (fractions of the band's width and height).
-const HAZE_ALPHA: f32 = 0.22;
+const HAZE_ALPHA: f32 = 0.06;
 const HAZE_TINT: f32 = 0.45;
-const HAZE_RADII: [f32; 2] = [0.40, 0.17];
+const HAZE_RADII: [f32; 2] = [0.17, 0.09];
 /// The haze centre below the horizon (fraction of the band height): it reaches 0 before the band top.
-const HAZE_DROP: f32 = 0.08;
+const HAZE_DROP: f32 = 0.02;
 /// The road fill reaches this far past the outer edge lines (metres).
 const ROAD_SHOULDER: f32 = 0.6;
 /// Traffic contact shadows: a ground ellipse 1.1x the car's width and 0.95x its length, 50% black.
@@ -919,12 +923,9 @@ impl Scene {
             };
             let tint = body.intensity(level.min(1.0)).fade(fade);
             let grid = [TRAFFIC_COLS, TRAFFIC_ELEVATIONS.len()];
-            let near_col = if tc < 0.5 { c0 } else { c1 };
-            for (cell, w) in [((c0, r0), 1.0), ((c1, r0), tc), ((near_col, r1), tr)] {
-                if w > 0.004 {
-                    sprite(p, img, grid, cell, mirror, rect, tint.fade(w));
-                }
-            }
+            // The nearest cell, opaque: a blend of two headings reads as a double exposure.
+            let cell = (if tc < 0.5 { c0 } else { c1 }, if tr < 0.5 { r0 } else { r1 });
+            sprite(p, img, grid, cell, mirror, rect, tint);
         }
     }
 
@@ -971,14 +972,14 @@ impl Scene {
                     .then(&Affine::rotate(-self.roll.value().to_radians()))
                     .then(&Affine::translate(q)),
             );
-            sprite(p, img, grid, cell(i0), false, rect, tint);
-            if t > 0.004 {
-                sprite(p, img, grid, cell(i1), false, rect, tint.fade(t));
-            }
+            let near = if t < 0.5 { i0 } else { i1 };
+            sprite(p, img, grid, cell(near), false, rect, tint);
             if let (Some(mask), true) = (lamps, lamp > 0.02) {
-                p.set_blend(BlendMode::Add);
-                let near = if t < 0.5 { i0 } else { i1 };
-                sprite(p, mask, grid, cell(near), false, rect, pal.roles.warning.fade(lamp));
+                // The lit lenses, bloomed: the glow comes from the lamps themselves.
+                p.layer(LayerOptions::bloom(), |p| {
+                    p.set_blend(BlendMode::Add);
+                    sprite(p, mask, grid, cell(near), false, rect, pal.roles.warning.fade(lamp));
+                });
             }
         });
     }
@@ -1029,19 +1030,23 @@ impl Scene {
         let far_x = f.lane_point(0.0, f.z_far * 0.8).map_or(f.vp.center().x, |q| q.x);
         let vanish = vec2(far_x, f.cam.horizon_y + HAZE_DROP * f.vp.height());
         let haze = pal.roles.ink.lerp(pal.primary, HAZE_TINT);
-        p.scoped(|p| {
-            p.transform(
-                &Affine::scale_xy(HAZE_RADII[0] * f.vp.width(), HAZE_RADII[1] * f.vp.height())
-                    .then(&Affine::translate(vanish)),
-            );
-            p.fill(
-                &Shape::circle(Vec2::ZERO, 1.0),
-                Gradient::radial(Vec2::ZERO, 1.0)
-                    .stop(0.0, haze.with_alpha(HAZE_ALPHA))
-                    .stop(0.35, haze.with_alpha(HAZE_ALPHA * 0.45))
-                    .stop(1.0, haze.with_alpha(0.0)),
-            );
-        });
+        let (rx, ry) = (HAZE_RADII[0] * f.vp.width(), HAZE_RADII[1] * f.vp.height());
+        // Two half-ellipses: the upper one fades twice as fast, so the haze sits on the road.
+        let upper = Rect::from_points(vec2(f.vp.min.x, vanish.y - ry), vec2(f.vp.max.x, vanish.y));
+        let lower = Rect::from_points(vec2(f.vp.min.x, vanish.y), vec2(f.vp.max.x, vanish.y + ry));
+        for (half, scale_y) in [(upper, 0.5), (lower, 1.0)] {
+            p.scoped(|p| {
+                p.clip(half, 0.0);
+                p.transform(&Affine::scale_xy(rx, ry * scale_y).then(&Affine::translate(vanish)));
+                p.fill(
+                    &Shape::circle(Vec2::ZERO, 1.0),
+                    Gradient::radial(Vec2::ZERO, 1.0)
+                        .stop(0.0, haze.with_alpha(HAZE_ALPHA))
+                        .stop(0.35, haze.with_alpha(HAZE_ALPHA * 0.45))
+                        .stop(1.0, haze.with_alpha(0.0)),
+                );
+            });
+        }
     }
 
     /// The road surface between the outer edges (the ComfyUI asphalt plate, near-black; or a faint
@@ -1072,7 +1077,16 @@ impl Scene {
                 // the road polygon cuts it to the carriageway (it is texture, lit near-black).
                 Some(img) => {
                     let rect = Rect::from_points(vec2(f.vp.min.x, f.cam.horizon_y), f.vp.max);
-                    p.fill(&road, ImagePaint::new(img, rect).tint(ink.intensity(ASPHALT_LEVEL)));
+                    // Feathered out past the edges (the plate fades out at the band bottom itself).
+                    p.glow(
+                        &road,
+                        ImagePaint::new(img, rect).tint(ink.intensity(ASPHALT_LEVEL)),
+                        Glow {
+                            sigma: ROAD_FEATHER_PX,
+                            intensity: 1.0,
+                            fill_inside: true,
+                        },
+                    );
                 }
                 None => p.fill(
                     &road,
@@ -1113,7 +1127,8 @@ impl Scene {
                     let uv = Rect::from_xywh((i % POOL_COLS) as f32 * cu, (i / POOL_COLS) as f32 * cv, cu, cv);
                     let paint = ImagePaint {
                         uv,
-                        ..ImagePaint::new(img, rect).tint(color.fade(POOL_ALPHA * w))
+                        ..ImagePaint::new(img, rect)
+                            .tint(color.fade(POOL_ALPHA * (1.0 - POOL_DRIFT_DIP * self.drift.clamp(0.0, 1.0)) * w))
                     };
                     p.fill(&Shape::rect(rect), paint);
                 }
@@ -1473,13 +1488,9 @@ impl Scene {
                     None => ok = false,
                 }
             }
-            if ok {
-                // With the sprite, its emission mask lights the lenses: the spill stays a halo.
-                let (alpha, spread) = if self.ego_sprite(f).is_some() {
-                    (0.40, 5.0)
-                } else {
-                    (0.85, 11.0)
-                };
+            // With the sprite, its bloomed emission mask is the glow.
+            if ok && self.ego_sprite(f).is_none() {
+                let (alpha, spread) = (0.85, 11.0);
                 p.glow(
                     &Shape::Polygon { points: &q },
                     pal.roles.warning.fade(alpha * lamp),

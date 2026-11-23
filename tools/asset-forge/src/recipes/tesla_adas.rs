@@ -5,12 +5,17 @@
 //!   (cockpit and hood: the same eye, pitch and focal length as `tesla_adas::COCKPIT` / `HOOD`) at
 //!   11 yaw angles from −50° to +50°. The car is invisible to the camera but still blocks light,
 //!   so each pool carries the real tyre and sill shadows in true perspective for that yaw. Post:
-//!   luminance → alpha over white with a hard black point, softened; 4 × 3 atlas cells.
+//!   luminance → alpha over white with a hard black point, softened, mirrored; 4 × 3 atlas cells.
+//! - **Studio-lit car sprites** (Blender, Cycles): the Phase 6 glTF cars with car-studio materials
+//!   and lighting. The ego through each chase camera at the same 11 yaws (plus a tail-lamp
+//!   emission mask); each traffic body over a 4 elevation × 5 relative-heading grid.
+//! - **LED caps** (Blender, Cycles): the shift-light pill lens, off (smoked acrylic) and on (a
+//!   back-lit diffuser, tinted live).
 //! - **Asphalt plate** (ComfyUI: SDXL base 1.0 + 4x-UltraSharp): a dark road surface receding to a
 //!   central vanishing point, used as the road fill between the edge lines. Post: the part below
 //!   the horizon, luminance → alpha over white, a near-to-far fade baked in.
 //!
-//! Both keep a procedural fallback in the cluster (`setup.assets` may be `None`).
+//! Each keeps a procedural fallback in the cluster (`setup.assets` may be `None`).
 use crate::comfy::{self, Comfy};
 use crate::ctx::{Ctx, Format, Spec};
 use crate::error::{tool_err, Result};
@@ -316,7 +321,9 @@ for state in ('off', 'on'):
     area_light('under', (0.0, h * 3.0, -d * 2.0 + d * 4.0), (0.0, 0.0, 0.0), w * 1.2, float(P['rim']), color=(0.8, 0.9, 1.0), size_y=h * 0.3)
     rx, ry = P['cell']
     resolution(sc, rx, ry)
-    view(sc, 'AgX', exposure=float(P['exposure']))
+    # The lit diffuser in Standard (linear to 1.0), so its radial falloff survives: AgX would
+    # compress the hot centre and the rim into one flat tone.
+    view(sc, 'AgX' if state == 'off' else 'Standard', exposure=float(P['exposure']))
     cd = bpy.data.cameras.new('front')
     cd.type = 'ORTHO'
     cd.ortho_scale = float(P['span'])
@@ -385,14 +392,14 @@ pub const CAP_LENS_PX: [usize; 2] = [240, 88];
 /// The shift-light LED caps: a 2-cell atlas, off (left) and on (right).
 fn caps(ctx: &mut Ctx) -> Result<()> {
     let params = json!({
-        "seed": 153, "samples": 128, "world": 0.5, "lens": [6.0, 2.2, 0.7], "hot": 3.0, "emit": 0.5,
+        "seed": 153, "samples": 128, "world": 0.5, "lens": [6.0, 2.2, 0.7], "hot": 0.7, "emit": 0.45,
         "key": 60.0, "rim": 15.0, "exposure": 0.0, "cell": CAP_CELL, "span": 7.2
     });
     let fp = fingerprint(&[
         recipes::PRELUDE.as_bytes(),
         CAPS.as_bytes(),
         params.to_string().as_bytes(),
-        b"led-caps-v1",
+        b"led-caps-v2",
     ]);
     ctx.job("tesla_adas/led_caps", &fp, |ctx| {
         let out = ctx.scratch("tesla_adas_caps")?;
@@ -716,7 +723,7 @@ fn asphalt(ctx: &mut Ctx) -> Result<()> {
         &ASPHALT_SEED.to_le_bytes(),
         b"1536x640",
     ]);
-    let fp = fingerprint(&[gen_fp.as_bytes(), b"asphalt-post-v2"]);
+    let fp = fingerprint(&[gen_fp.as_bytes(), b"asphalt-post-v3"]);
     ctx.job("tesla_adas/asphalt", &fp, |ctx| {
         let raw_path = ctx.scratch("comfy")?.join("tesla_adas_asphalt.png");
         let raw_fp_path = raw_path.with_extension("fp");
@@ -756,7 +763,7 @@ fn asphalt(ctx: &mut Ctx) -> Result<()> {
         let small = sym.resize(ASPHALT_SIZE[0], ASPHALT_SIZE[1], false);
         // Texture only, the lighting comes from the cluster: near (bottom) full, far (top) 0.
         let mask = to_light_mask(&small, 1, 0.0, 1.0, |u, v| {
-            img::smoothstep(0.0, 0.85, v) * img::smoothstep(0.0, 0.08, u) * img::smoothstep(0.0, 0.08, 1.0 - u)
+            img::smoothstep(0.0, 0.85, v) * (1.0 - img::smoothstep(0.80, 1.0, v)) * img::smoothstep(0.0, 0.08, u) * img::smoothstep(0.0, 0.08, 1.0 - u)
         });
         ctx.image(
             "tesla_adas/asphalt",
@@ -774,7 +781,7 @@ fn asphalt(ctx: &mut Ctx) -> Result<()> {
             .alpha("straight")
             .space("linear")
             .licence("CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)")
-            .qa("the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate → 1536 x 512; luminance → alpha over white (tinted live to near-black), a far-to-near fade (0 at the top) and side feathers baked in"),
+            .qa("the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate → 1536 x 512; luminance → alpha over white (tinted live to near-black), a far-to-near fade (0 at the top), a fade-out over the bottom 20% (the band edge) and side feathers baked in"),
         )
     })
 }
