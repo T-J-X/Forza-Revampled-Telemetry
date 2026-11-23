@@ -54,8 +54,8 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | high | ☐ |
 | 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
 | 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
-| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | next |
-| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | ☐ |
+| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
+| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | next |
 | 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 15 | `KoenigseggGyro` | rebuild | Classic Analog | cockpit | high | ☐ |
