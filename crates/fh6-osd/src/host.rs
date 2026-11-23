@@ -107,6 +107,8 @@ impl OsdHost {
     /// The OSD opened: browse mode, editing `view`; the cluster glides from `anchor_x_4k`.
     pub fn open(&mut self, cfg: &AppConfig, view: View, anchor_x_4k: f32) {
         self.ctl.open(cfg, view);
+        // The camera rows say from the start whether the camera patch will write them.
+        self.ctl.edit.camera = self.fit.camera_changed(cfg);
         self.anim.reset(anchor_x_4k);
         self.last_tab = self.ctl.tab();
     }

@@ -49,7 +49,7 @@ Measured costs of individual pieces (back-to-back A/B on an idle GPU): panel bac
 ## Reproduce
 
 ```
-cargo build --release -p preview-export -p fh6-app -p fh6-stand-in -p mock-udp
+cargo build --release -p preview-export -p fh6-app -p stand-in-game -p mock-udp
 cargo run --release -p preview-export                     # GPU table, mockups/osd/
 target/release/fh6-stand-in.exe                           # separate terminal
 target/release/FH6_WheelDash.exe --demo --open-osd --game-process fh6-stand-in.exe --config <copy of data/config.json> --bench-seconds 12 --bench-out osd-open.md

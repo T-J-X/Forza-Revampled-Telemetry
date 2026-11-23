@@ -235,8 +235,12 @@ pub static SCRIM_ROWS: &[FitRow] = &[
 pub struct ConfigOnlyFit;
 
 impl CockpitFit for ConfigOnlyFit {
-    fn camera_changed(&mut self, _cfg: &AppConfig) -> CameraApply {
-        CameraApply::NextLaunch
+    fn camera_changed(&mut self, cfg: &AppConfig) -> CameraApply {
+        if cfg.camera_patch_auto {
+            CameraApply::NextLaunch
+        } else {
+            CameraApply::PatchOff
+        }
     }
 }
 
