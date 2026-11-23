@@ -13,7 +13,7 @@ New design work goes to **Penpot**, through Penpot's official hosted MCP: Phase 
    ```
    claude mcp add --transport http --scope user penpot "https://design.penpot.app/mcp/stream?userToken=<your key>"
    ```
-3. Open the design file in the browser and choose **File → MCP Server → Connect**.
+3. Open the design file in the browser, open the main menu (**⋮** beside the file name) and choose **MCP server → Connect**. It is a top-level entry next to File, Edit and View, not inside File. When it's connected, the toolbar shows a green **● MCP** badge and the submenu offers Disconnect and Manage.
 4. **Keep that tab open**, then start a new Claude session (MCP servers load at session start).
 
 **The key is a secret.** A chat never asks for it, and it never goes into a file in this repo or into the repo's `.mcp.json`. User scope keeps it in TJX's own Claude config. If it leaks, revoke it under Integrations and create a new one.
@@ -26,12 +26,12 @@ New design work goes to **Penpot**, through Penpot's official hosted MCP: Phase 
 5. Changes apply asynchronously: `await penpot.waitForLayoutUpdate()` before reading back what you just changed.
 6. Check the result with `export_shape`, then critique it (`fh6-hmi-design-rules`, `design:design-critique`).
 7. Design to code: `penpot.generateStyle(shapes, { type: "css" })` and `penpot.generateMarkup` (through `execute_code`) give exact values; the Rust side still takes every value from tokens.
-8. If `execute_code` answers *"No Penpot instance connected for user token"*, the file tab is closed or not connected. Ask TJX to open the file and choose **File → MCP Server → Connect**, then retry. (This is what the tools answered on 2026-11-23, when this doc was written: the MCP was registered and `high_level_overview` worked, but no file tab was connected.)
+8. If `execute_code` answers *"No Penpot instance connected for user token"*, the file tab is closed or not connected. Ask TJX to open the file and choose **⋮ → MCP server → Connect**, then retry. (This is what the tools answered on 2026-11-23, when this doc was written: the MCP was registered and `high_level_overview` worked, but no file tab was connected.)
 
 ## Limits of the hosted MCP
 | Limit | Work-around |
 |---|---|
-| **The tab must stay open.** The MCP only reaches the file while it is open in a browser tab and connected. Closing or reloading the tab, or the machine sleeping, drops the connection. | Keep the tab open for the whole design session; reconnect with File → MCP Server → Connect. |
+| **The tab must stay open.** The MCP only reaches the file while it is open in a browser tab and connected. Closing or reloading the tab, or the machine sleeping, drops the connection. | Keep the tab open for the whole design session; reconnect with ⋮ → MCP server → Connect. |
 | **One live tab per key.** Every chat that uses the key drives the same connected tab, and so shares its active page. | Prefer one Penpot design chat at a time. When chats run in parallel, each `execute_code` call first opens the chat's own page (`await penpot.openPage(...)`) and touches nothing outside it; never assume the active page. |
 | **No image import from a local path.** The hosted server has no `import_image` tool, so `execute_code` cannot place `docs/design/heroes/*.png`, `mockups/` renders or `assets/reference/*.jpg`. | TJX drags the PNG into the file by hand (or uses Penpot's image import in the UI); the chat then positions and names it with `execute_code`. |
 | **Limited export.** `export_shape` takes one shape ID (or `selection` / `page`) and returns a PNG or SVG to the chat for review, or a shape's raw image fill as PNG. It has no PDF, no scale setting and no batch. | Use it to look at a board. For files kept in the repo, export from the Penpot UI, or keep using `preview-export` and the HTML boards. |
