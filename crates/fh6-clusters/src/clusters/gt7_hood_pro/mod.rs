@@ -48,7 +48,7 @@
 //! | Z4 | G puck · THR/BRK | r 58 at (620, 72) · x −656 / −584, y 14..130 | r 66 at (540, 70), readout under it · x −576 / −504 |
 //! | Z5 | rpm numerals | Titillium 600 cap 22 under the left wing | cap 24 |
 use crate::common::gball::GBall;
-use crate::common::glass_plate::{dimming_pad, squircle, squircle_point};
+use crate::common::glass_plate::{squircle, squircle_point};
 use crate::common::hero_gear::HeroGear;
 use crate::common::ribbon::{PathRibbon, RibbonStyle};
 use crate::common::shift::LimiterCue;
@@ -58,7 +58,7 @@ use crate::common::{ShiftLights, VirtualLight};
 use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    deg, vec2, Affine, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
+    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
     ImagePaint, ImageWrap, LayerOptions, Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring,
     Stroke, TextStyle, Tokens, VAlign, Vec2, View,
 };
@@ -100,17 +100,25 @@ const GRAIN_FLOW: [f32; 2] = [80.0, 900.0];
 const GRAIN_ALPHA: f32 = 0.9;
 /// How much the grain dims the ribbon body before adding its filaments (at the head).
 const GRAIN_DIM: f32 = 0.38;
-/// Hood: strength of the radial pads under the G and pedal groups (centre alpha 0.55 x this).
-const HOOD_PAD: f32 = 0.9;
+/// Opacity of the soft pads under the text groups (speed; on the hood also G and pedals).
+const TEXT_PAD: f32 = 0.3;
+/// Hood wing channel under the unlit span.
+const CHANNEL_UNLIT: f32 = 0.1;
+/// How far the full channel runs ahead of the comet (local px; longer leaves a dark knot ahead
+/// of the orb where the two blurred layers meet).
+const CHANNEL_LEAD: f32 = 10.0;
+/// Hood: the unlit diamond lens, and the dark lens behind a lit diamond.
+const DIAMOND_LENS: f32 = 0.2;
+const LIT_LENS: f32 = 0.5;
 /// Hood wing channel: extra width over the ribbon, blur and opacity.
-const CHANNEL_PAD: f32 = 10.0;
+const CHANNEL_PAD: f32 = 8.0;
 const CHANNEL_BLUR: f32 = 4.0;
 const CHANNEL_ALPHA: f32 = 0.38;
 /// Hood keyline: opacity of the black copies, and their offset per unit of cap height (tokens
 /// `type.keyline` 6 px at an 84 px cap).
 const KEYLINE_ALPHA: f32 = 0.85;
 const KEYLINE_PER_CAP: f32 = 0.07;
-/// Hood: the unlit diamonds and the slip capsules sit on a dark lens.
+/// Hood: the slip capsules sit on a dark lens.
 const HOOD_LENS: f32 = 0.5;
 /// Width of the apex blade (px).
 const BLADE_W: f32 = 8.0;
@@ -583,7 +591,7 @@ impl Cluster for Gt7HoodPro {
         self.brake.update(sig.brake, dt);
     }
 
-    fn draw(&self, p: &mut Painter<'_>, _layout: &Layout) {
+    fn draw(&self, p: &mut Painter<'_>, layout: &Layout) {
         let g = geom(self.view);
         let pal = self.palette;
         let shift_px = self.parallax.value();
@@ -601,19 +609,40 @@ impl Cluster for Gt7HoodPro {
                 color: pal.roles.oled_black.with_alpha(0.45),
             },
         );
-        dimming_pad(p, g.speed, g.speed_cap * 1.6, 1.0, &pal);
-        // Hood (no scrim, bright road and sky behind): feathered pools under the G and pedal
-        // groups and a soft dark channel under each wing, so every rank reads over daylight.
+        // Soft rounded-rectangle pads (text box + 24 px, 32 px feather, <= 0.30, clipped to the
+        // envelope) under the speed and, on the hood (no scrim, bright road and sky behind), under
+        // the G and pedal groups, plus the soft dark channel under the wings.
+        let env = layout.envelope;
+        let half = g.speed_cap * 0.5;
+        soft_pad(
+            p,
+            Rect::from_points(
+                vec2(g.speed.x - g.speed_cap * 1.3, g.speed.y - half),
+                vec2(g.speed.x + g.speed_cap * 2.1, g.speed.y + half),
+            ),
+            env,
+            TEXT_PAD,
+            &pal,
+        );
         if g.keyline {
-            // Elliptical pads (feathered to 0, no edge) under the G group and the pedals, kept
-            // below the wings' glow so they never cut into it.
-            let g_left = g.gball.x - g.gball_r * 1.2;
-            let g_right = g.gread.x + 70.0;
-            let g_pad = vec2((g_left + g_right) * 0.5, g.gball.y + 6.0);
-            elliptic_pad(p, g_pad, vec2((g_right - g_left) * 0.5, g.gball_r * 1.35), &pal);
-            let (top, bottom) = (g.pedal_y[0] - 10.0, g.pedal_y[1] + 44.0);
-            let pedals = vec2((g.pedal_x[0] + g.pedal_x[1]) * 0.5, (top + bottom) * 0.5);
-            elliptic_pad(p, pedals, vec2(92.0, (bottom - top) * 0.5), &pal);
+            let reach = g.gball_r * 1.06;
+            soft_pad(
+                p,
+                Rect::from_points(g.gball - Vec2::splat(reach), vec2(g.gread.x + 64.0, g.gball.y + reach)),
+                env,
+                TEXT_PAD,
+                &pal,
+            );
+            soft_pad(
+                p,
+                Rect::from_points(
+                    vec2(g.pedal_x[0] - 36.0, g.pedal_y[0]),
+                    vec2(g.pedal_x[1] + 36.0, g.pedal_y[1] + 32.0),
+                ),
+                env,
+                TEXT_PAD,
+                &pal,
+            );
             self.draw_channel(p, &pal);
         }
 
@@ -863,12 +892,26 @@ impl Gt7HoodPro {
             if self.diamond_color(i, pal).is_none() {
                 let shape = Shape::Polygon { points: q };
                 let lens = if g.keyline {
-                    roles.oled_black.with_alpha(HOOD_LENS)
+                    roles.oled_black.with_alpha(DIAMOND_LENS)
                 } else {
                     roles.ink.with_alpha(1.0 / 255.0)
                 };
                 p.fill(&shape, lens);
                 p.stroke(&shape, roles.ink.with_alpha(0.12), Stroke::rim_px(1.0));
+            }
+        }
+        // Hood: a dark lens behind each lit diamond (1.3x, 0.5 black), so additive light still
+        // reads over a bright sky.
+        if g.keyline {
+            for (i, q) in pts.iter().enumerate() {
+                if self.diamond_color(i, pal).is_some() {
+                    let c = g.diamond_rect(i).center();
+                    let mut big = [Vec2::ZERO; 4];
+                    for (b, v) in big.iter_mut().zip(q.iter()) {
+                        *b = c + (*v - c) * 1.3;
+                    }
+                    p.fill(&Shape::Polygon { points: &big }, roles.oled_black.with_alpha(LIT_LENS));
+                }
             }
         }
         p.scoped(|p| {
@@ -1134,47 +1177,63 @@ impl Gt7HoodPro {
         p.text(at, self.sig.unit.label(), &unit);
     }
 
-    /// Hood: a soft dark channel under each wing's whole length (opaque round-capped segments in
-    /// one blurred layer at [`CHANNEL_ALPHA`], so the joins never double up), so the unlit wing
-    /// still reads as hardware and the lit ribbon
-    /// keeps its contrast over a bright sky.
+    /// Hood: a soft dark channel under each wing (opaque round-capped segments in a blurred
+    /// layer, so the joins never double up). Under the lit span, plus [`CHANNEL_LEAD`] past the comet, it
+    /// sits at [`CHANNEL_ALPHA`] so the ribbon (and the `shift` arch at the lock) keeps its
+    /// contrast over a bright sky; under the unlit span it is a faint [`CHANNEL_UNLIT`] trace,
+    /// so the empty part of the tach never out-contrasts the lit part.
     fn draw_channel(&self, p: &mut Painter<'_>, pal: &Palette) {
         let wings = self.wings();
-        let opts = LayerOptions {
-            blur: Some(CHANNEL_BLUR),
-            opacity: CHANNEL_ALPHA,
-            ..LayerOptions::default()
-        };
-        p.layer(opts, |p| {
-            for (hair, w) in wings.hair.iter().zip(wings.side.iter()) {
-                for i in 1..HAIR_POINTS {
-                    let (t0, t1) = (
-                        (i - 1) as f32 / (HAIR_POINTS - 1) as f32,
-                        i as f32 / (HAIR_POINTS - 1) as f32,
-                    );
-                    p.fill(
-                        &Shape::Line {
-                            a: hair[i - 1],
-                            b: hair[i],
-                            width_a: w.width_at(t0) + CHANNEL_PAD,
-                            width_b: w.width_at(t1) + CHANNEL_PAD,
-                            cap: Cap::Round,
-                        },
-                        pal.roles.oled_black,
-                    );
+        for (lit, opacity) in [(true, CHANNEL_ALPHA), (false, CHANNEL_UNLIT)] {
+            let opts = LayerOptions {
+                blur: Some(CHANNEL_BLUR),
+                opacity,
+                ..LayerOptions::default()
+            };
+            p.layer(opts, |p| {
+                for (hair, w) in wings.hair.iter().zip(wings.side.iter()) {
+                    let edge = w.fraction().min(FILL_MAX) + CHANNEL_LEAD / w.length().max(1.0);
+                    for i in 1..HAIR_POINTS {
+                        let (t0, t1) = (
+                            (i - 1) as f32 / (HAIR_POINTS - 1) as f32,
+                            i as f32 / (HAIR_POINTS - 1) as f32,
+                        );
+                        if (t0 < edge) != lit {
+                            continue;
+                        }
+                        p.fill(
+                            &Shape::Line {
+                                a: hair[i - 1],
+                                b: hair[i],
+                                width_a: w.width_at(t0) + CHANNEL_PAD,
+                                width_b: w.width_at(t1) + CHANNEL_PAD,
+                                cap: Cap::Round,
+                            },
+                            pal.roles.oled_black,
+                        );
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 }
 
-/// Hood: a dimming pad stretched to an ellipse with half-axes `half` around `center`.
-fn elliptic_pad(p: &mut Painter<'_>, center: Vec2, half: Vec2, pal: &Palette) {
-    let r = half.y.max(1.0);
+/// A soft rounded-rectangle pad under a text group: `rect` grown by 24 px, a 32 px feather
+/// (Gaussian edge, no visible rim), black at `alpha`, clipped to the view's envelope so it
+/// never bleeds past the cluster.
+fn soft_pad(p: &mut Painter<'_>, rect: Rect, envelope: Rect, alpha: f32, pal: &Palette) {
+    let r = rect.expand(24.0);
     p.scoped(|p| {
-        p.translate(center);
-        p.transform(&Affine::scale_xy(half.x / r, 1.0));
-        dimming_pad(p, Vec2::ZERO, r, HOOD_PAD, pal);
+        p.clip(envelope, 0.0);
+        p.shadow(
+            &Shape::round_rect(r, r.height().min(r.width()) * 0.5),
+            Shadow {
+                offset: Vec2::ZERO,
+                sigma: 16.0,
+                spread: 0.0,
+                color: pal.roles.oled_black.with_alpha(alpha),
+            },
+        );
     });
 }
 
