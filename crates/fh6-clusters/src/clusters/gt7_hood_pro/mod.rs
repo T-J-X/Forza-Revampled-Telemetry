@@ -58,9 +58,9 @@ use crate::common::{ShiftLights, VirtualLight};
 use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, LayerOptions,
-    Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
-    View,
+    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
+    ImagePaint, ImageWrap, LayerOptions, Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring,
+    Stroke, TextStyle, Tokens, VAlign, Vec2, View,
 };
 
 /// The diamond strip (`modern11`).
@@ -89,6 +89,17 @@ const STROBE_HOLD_S: f32 = 0.1;
 /// Share of each wing (from the tip) that keeps its own colour under the lock; the rest turns
 /// `shift`.
 const LOCK_FROM: f32 = 0.55;
+/// The Blender pod lens covers the pod plus a 2% margin on each side.
+const POD_LENS_MARGIN: f32 = 1.04;
+/// The ribbon grain tile in local px (stretched along the wing, so several filaments cross the
+/// ribbon's width).
+const GRAIN_TILE: Vec2 = vec2(640.0, 240.0);
+/// Grain flow speed (local px/s): at idle, plus this much more at the shift rpm.
+const GRAIN_FLOW: [f32; 2] = [80.0, 900.0];
+/// Peak opacity of the additive grain at the ribbon head.
+const GRAIN_ALPHA: f32 = 0.9;
+/// How much the grain dims the ribbon body before adding its filaments (at the head).
+const GRAIN_DIM: f32 = 0.38;
 /// Width of the apex blade (px).
 const BLADE_W: f32 = 8.0;
 /// Smallest cap of the micro-labels (MPH, THR, BRK): the hood has no scrim behind them.
@@ -369,6 +380,12 @@ pub struct Gt7HoodPro {
     sweep_t: f32,
     sweep_up: bool,
     reduced_flash: bool,
+    /// The Blender pod lens (`assets/clusters/gt7_hood_pro/pod_lens.png`), when present.
+    pod_lens: Option<ImageId>,
+    /// The ComfyUI ribbon grain tile (`ribbon_grain.png`), when present.
+    grain: Option<ImageId>,
+    /// How far the grain has flowed (local px, wrapped to the tile width).
+    grain_phase: f32,
     micro_cap: f32,
     tracking: f32,
 }
@@ -390,6 +407,8 @@ impl Gt7HoodPro {
             role_display: display,
         };
         let clear = palette.roles.ink.with_alpha(2.0 / 255.0);
+        let pod_lens = load_asset(setup, "pod_lens.png");
+        let grain = load_asset(setup, "ribbon_grain.png");
         Self {
             faces,
             sig: Signals::default(),
@@ -416,6 +435,9 @@ impl Gt7HoodPro {
             sweep_t: -1.0,
             sweep_up: true,
             reduced_flash: false,
+            pod_lens,
+            grain,
+            grain_phase: 0.0,
             micro_cap: t.type_scale.micro_label.max(MICRO_MIN_CAP),
             tracking: t.type_scale.label_tracking,
         }
@@ -514,6 +536,8 @@ impl Cluster for Gt7HoodPro {
         self.parallax.update(self.parallax_target, dt);
 
         self.reduced_flash = input.reduced_flash;
+        // The grain flows towards the crest, faster as the revs build.
+        self.grain_phase = (self.grain_phase + dt * (GRAIN_FLOW[0] + GRAIN_FLOW[1] * target)) % GRAIN_TILE.x;
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.lock.update(self.shift.over_shift(), LOCK_RAMP_S, dt);
         self.gear.update(sig.gear, self.lock.held(), dt);
@@ -599,6 +623,7 @@ impl Cluster for Gt7HoodPro {
             || self.gball.animating()
             || self.tyres.animating()
             || self.sweep_t >= 0.0
+            || (self.grain.is_some() && self.wings().side[0].fraction() > 0.002)
             || (self.parallax.value() - self.parallax_target).abs() > 1e-3
             || !self.throttle.settled(self.sig.throttle, 1e-3)
             || !self.brake.settled(self.sig.brake, 1e-3)
@@ -764,6 +789,13 @@ impl Gt7HoodPro {
                 );
             });
         }
+        // The ComfyUI light grain flowing through both ribbons towards the crest (last, so it
+        // shows over the lock tint too).
+        if let Some(grain) = self.grain {
+            for (k, (w, &f)) in wings.side.iter().zip(fill.iter()).enumerate() {
+                self.draw_grain(p, w, f, grain, k, lock, pal);
+            }
+        }
     }
 
     /// The colour of diamond `i` this frame: the shared outside-in fill, and on the limiter
@@ -913,7 +945,15 @@ impl Gt7HoodPro {
         let roles = pal.roles;
         let lock = self.lock.level();
         let pod = squircle(g.pod, g.pod_size, POD_N);
-        p.fill(&pod, roles.oled_black.with_alpha(0.92));
+        match self.pod_lens {
+            // The Blender lens (black glass, rolled bevel, baked speculars) laid 1:1 over the pod;
+            // the texture carries a 2% margin on each side.
+            Some(lens) => {
+                let rect = Rect::from_center_size(g.pod, g.pod_size * POD_LENS_MARGIN);
+                p.fill(&pod, ImagePaint::new(lens, rect));
+            }
+            None => p.fill(&pod, roles.oled_black.with_alpha(0.92)),
+        }
         let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
         let reach = g.pod_size.length() * 0.5;
         let calm = 1.0 - lock;
@@ -1051,6 +1091,86 @@ impl Gt7HoodPro {
             self.sig.unit.label(),
             &unit,
         );
+    }
+}
+
+/// Loads `name` from `assets/clusters/gt7_hood_pro/` when the assets folder is known and the
+/// file exists (the cluster draws its procedural look otherwise).
+fn load_asset(setup: &mut Setup<'_>, name: &str) -> Option<ImageId> {
+    let path = setup.assets?.join("clusters").join("gt7_hood_pro").join(name);
+    if !path.is_file() {
+        return None;
+    }
+    setup.images.load_file(setup.device, setup.queue, &path, None).ok()
+}
+
+impl Gt7HoodPro {
+    /// The light grain inside one wing's fill, so the ribbon reads as a tube of light filaments
+    /// rather than a flat stroke: the tube body is first dimmed by [`GRAIN_DIM`], then the
+    /// repeating tile adds its filaments back on top (both butt-capped, so nothing stacks into
+    /// dots). It flows towards the crest (the left wing's grain moves right, the right wing's
+    /// left) and is tinted by the palette; under the lock the inner arch's grain turns `shift`.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_grain(
+        &self,
+        p: &mut Painter<'_>,
+        w: &PathRibbon,
+        f: f32,
+        grain: ImageId,
+        side: usize,
+        lock: f32,
+        pal: &Palette,
+    ) {
+        const STEPS: usize = 32;
+        if f <= 0.002 {
+            return;
+        }
+        let gain = if side == 0 { 1.0 } else { RIGHT_GAIN };
+        let dir = if side == 0 { -1.0 } else { 1.0 };
+        let tile = Rect::from_xywh(dir * self.grain_phase, 0.0, GRAIN_TILE.x, GRAIN_TILE.y);
+        let mut prev = w.point_at(0.0);
+        for k in 1..=STEPS {
+            let (t0, t1) = (f * (k - 1) as f32 / STEPS as f32, f * k as f32 / STEPS as f32);
+            let q = w.point_at(t1);
+            p.fill(
+                &Shape::Line {
+                    a: prev,
+                    b: q,
+                    width_a: w.width_at(t0) * 0.8,
+                    width_b: w.width_at(t1) * 0.8,
+                    cap: Cap::Butt,
+                },
+                pal.roles
+                    .oled_black
+                    .with_alpha(GRAIN_DIM * (0.35 + 0.65 * t1 / f.max(1e-3))),
+            );
+            prev = q;
+        }
+        p.scoped(|p| {
+            p.set_blend(BlendMode::Add);
+            let mut prev = w.point_at(0.0);
+            for k in 1..=STEPS {
+                let (t0, t1) = (f * (k - 1) as f32 / STEPS as f32, f * k as f32 / STEPS as f32);
+                let q = w.point_at(t1);
+                let lit = pal.primary.lerp(pal.roles.ink, 0.45);
+                let s = ((t1 - LOCK_FROM) / 0.2).clamp(0.0, 1.0) * lock;
+                // Brighter towards the head, as the ribbon's own light is.
+                let a = GRAIN_ALPHA * gain * (0.35 + 0.65 * t1 / f.max(1e-3));
+                let mut paint = ImagePaint::new(grain, tile).tint(lit.lerp(pal.shift, s).fade(a));
+                paint.wrap = ImageWrap::Repeat;
+                p.fill(
+                    &Shape::Line {
+                        a: prev,
+                        b: q,
+                        width_a: w.width_at(t0) * 0.8,
+                        width_b: w.width_at(t1) * 0.8,
+                        cap: Cap::Butt,
+                    },
+                    paint,
+                );
+                prev = q;
+            }
+        });
     }
 }
 
