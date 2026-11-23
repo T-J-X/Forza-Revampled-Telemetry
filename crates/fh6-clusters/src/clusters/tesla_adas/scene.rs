@@ -28,7 +28,7 @@ const G: f32 = 9.80665;
 /// 6-object cap counts the ego and leaves headroom).
 const ROAD_USERS: usize = 4;
 /// Carpet alpha at the ego and the tone beyond the stop point (family spec: 0.55, 35%).
-const CARPET_NEAR_ALPHA: f32 = 0.55;
+const CARPET_NEAR_ALPHA: f32 = 0.40;
 const BRAKE_ZONE_TONE: f32 = 0.35;
 /// Carpet half width (metres): the ego's track plus a hand's width.
 const CARPET_HALF_WIDTH: f32 = 1.05;
@@ -58,8 +58,8 @@ const HORIZON_FADE_FRAC: f32 = 0.18;
 /// Ground plane alpha at the ego (linear ink; about 6% luminance on screen).
 const GROUND_ALPHA: f32 = 0.006;
 /// Underglow alpha and its sigma as a fraction of the ego's on-screen width.
-const UNDERGLOW_ALPHA: f32 = 0.55;
-const UNDERGLOW_SIGMA: f32 = 0.30;
+const UNDERGLOW_ALPHA: f32 = 0.40;
+const UNDERGLOW_SIGMA: f32 = 0.22;
 /// Ego body: light neutral tinted 15% by the brand (the brand-pearl twin).
 const EGO_TINT: f32 = 0.15;
 /// Traffic body (`#8C929C` at 0.70 over black, drawn opaque) and a blind-spot ghost's level.
@@ -91,7 +91,7 @@ const ROLL_DEG_PER_G: f32 = 2.5;
 const ROLL_MAX_DEG: f32 = 3.0;
 /// Upshift wake: duration (s) and band length (fraction of the carpet on screen).
 const WAKE_S: f32 = 0.25;
-const WAKE_BAND: f32 = 0.22;
+const WAKE_BAND: f32 = 0.40;
 /// Ambient traffic loop of the adjacent lanes (z metres) and the lead car's range.
 const WRAP_NEAR: f32 = -14.0;
 const WRAP_FAR: f32 = 78.0;
@@ -892,15 +892,16 @@ impl Scene {
             let k = (self.wake_t / WAKE_S).clamp(0.0, 1.0);
             let start = offset(EGO_Z + self.ego_nose());
             let o1 = start + (1.0 - start) * k;
-            let (o0, o2) = ((o1 - WAKE_BAND).max(0.0), (o1 + 0.3 * WAKE_BAND).min(1.0));
-            let a = 0.8 * (1.0 - k) * (1.0 - 0.5 * k);
+            let (o0, o2) = ((o1 - WAKE_BAND).max(0.0), (o1 + 0.04).min(1.0));
+            let a = 0.7 * (1.0 - k) * (1.0 - 0.4 * k);
             let accent = pal.accent.lerp(pal.roles.ink, 0.55);
             if o2 > o0 + 1e-3 && a > 0.004 {
                 let band = Gradient::linear(vec2(0.0, y_near), vec2(0.0, y_far))
                     .stop(0.0, accent.with_alpha(0.0))
                     .stop(o0, accent.with_alpha(0.0))
-                    .stop(o1.max(o0 + 1e-4), accent.with_alpha(a))
-                    .stop(o2.max(o1 + 2e-4), accent.with_alpha(0.0))
+                    .stop((o1 - 0.03).max(o0 + 1e-4), accent.with_alpha(a))
+                    .stop(o1.max(o0 + 2e-4), accent.with_alpha((a * 1.4).min(0.9)))
+                    .stop(o2.max(o1 + 3e-4), accent.with_alpha(0.0))
                     .stop(1.0, accent.with_alpha(0.0));
                 p.fill(&shape, band);
             }
@@ -984,8 +985,8 @@ impl Scene {
             *slot = q;
         }
         let k = self.stop_alpha * f.depth_fade(z) * f.edge_fade(pts[3]).max(0.35);
-        let color = pal.roles.caution;
-        let w = f.line_width(2.0, z).max(1.5);
+        let color = pal.roles.caution.fade(0.8);
+        let w = f.line_width(3.0, z).max(2.0);
         for pair in pts.windows(2) {
             let fade = f.side_fade((pair[0] + pair[1]) * 0.5);
             p.fill(
@@ -1012,17 +1013,28 @@ impl Scene {
             .paint(color.fade(self.stop_alpha))
             .align(Align::Left, VAlign::Baseline)
             .tabular();
-        let anchor = f.lane_point(CARPET_HALF_WIDTH + 0.5, z).unwrap_or(pts[4]);
-        let pos = vec2(anchor.x + 6.0, anchor.y - 6.0);
+        // The distance, left of the line's left end (clear of the in-path car and its brackets).
+        let width = p.fonts().tabular_cell(&style) * f32::from(cells) + 4.0 + p.measure("m", &style).width;
+        let pos = vec2(pts[0].x - 12.0 - width, pts[0].y + 6.0);
         if f.vp.contains(pos) {
             let set = p.number(pos, metres, cells, &style, None);
             p.text(vec2(set.max.x + 4.0, pos.y), "m", &style);
         }
     }
 
-    /// 3-step blind-spot arcs beside the ego (primary, caution, warning), crossfaded.
+    /// 3-step blind-spot arcs beside the ego, crossfaded: primary at 40%, caution at 70%, then
+    /// caution at 90% alongside (no glow: the steps stay quieter than the brake bar). Red stays reserved for the brake bar and the redline.
     fn draw_proximity(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
-        let colors = [pal.primary_text, pal.roles.caution, pal.roles.warning];
+        let colors = [
+            pal.primary_text.fade(0.4),
+            pal.roles.caution.fade(0.7),
+            pal.roles.caution.fade(0.9),
+        ];
+        // Blind-spot arcs only while moving: a parked ego next to parked traffic is not a warning.
+        let moving = smoothstep(3.0, 6.0, self.speed);
+        if moving <= 0.004 {
+            return;
+        }
         let ego_x = f.road.center_x(EGO_Z);
         for (fade, side) in self.proximity.iter().zip([-1.0f32, 1.0]) {
             for (level, weight) in [(fade.from, 1.0 - fade.t), (fade.to, fade.t)] {
@@ -1045,7 +1057,7 @@ impl Scene {
                     if !ok {
                         continue;
                     }
-                    let k = weight * (1.0 - 0.22 * f32::from(ring)) * f.edge_fade(pts[7]);
+                    let k = moving * weight * (1.0 - 0.22 * f32::from(ring)) * f.edge_fade(pts[7]);
                     let width = f.line_width(3.0 + f32::from(level), EGO_Z);
                     // Two chunks of 7 segments (a long polyline evaluates its whole bounding box).
                     for chunk in [&pts[..8], &pts[7..]] {
@@ -1054,9 +1066,6 @@ impl Scene {
                             width,
                             closed: false,
                         };
-                        if level == 3 {
-                            p.glow(&arc, color.fade(0.5 * k), Glow::new(6.0, 1.0));
-                        }
                         p.fill(&arc, color.fade(k));
                     }
                 }
@@ -1082,7 +1091,7 @@ impl Scene {
         let c = f.cam.project(vec3(f.road.center_x(u.z) + offset, 0.0, u.z))?;
         let fade = f.car_fade(u.z) * f.side_fade(c);
         let level = if self.lead() == Some(i) {
-            0.9
+            0.78
         } else if u.lane == 0 {
             TRAFFIC_LEVEL
         } else {
@@ -1105,7 +1114,7 @@ impl Scene {
     /// The ego's tail-light bar in the ego's model space: `[half width, bottom, top, z]`.
     fn lamp_box(&self) -> [f32; 4] {
         let d = self.models[Kind::Ego.index()].dims;
-        [d[0] * 0.5 * 0.70, d[2] * 0.56, d[2] * 0.62, -d[1] * 0.5 - 0.03]
+        [d[0] * 0.5 * 0.62, d[2] * 0.56, d[2] * 0.62, -d[1] * 0.5 - 0.03]
     }
 
     /// The 2D overlays of the cars, drawn before the meshes: the brake light's spill (the body
@@ -1179,7 +1188,13 @@ impl Scene {
             let Some((m, level, fade)) = self.traffic_pose(&f, i) else {
                 continue;
             };
-            let body = if lead == Some(i) { pal.primary_text } else { neutral };
+            // The lead car is light clay with a 20% brand tint: its brackets mark it, so the
+            // saturated hue stays with the path carpet.
+            let body = if lead == Some(i) {
+                pal.roles.ink.lerp(pal.primary, 0.2)
+            } else {
+                neutral
+            };
             // Opaque and darkened (not translucent), so a body never shows its own back faces.
             draw(
                 p,

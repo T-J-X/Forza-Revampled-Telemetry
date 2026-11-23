@@ -7,11 +7,11 @@
 //! | Zone | Element | Cockpit | Hood |
 //! |---|---|---|---|
 //! | Z1 | 10 pill pods, outside-in onto the centre pair | 60 × 22 at y −296, pitch 82 | 52 × 18 at y −208, pitch 70 |
-//! | Z3 | 4 px rev ribbon, primary → accent, 12 px white comet, redline share | ±640 at y −268 | ±760 at y −189 |
+//! | Z3 | 6 px (hood 3 px) rev ribbon, primary → accent, 12 px white comet, redline share | ±640 at y −270 | ±760 at y −189 |
 //! | Z1 | gear (Saira Condensed 800) in a 1 px vertical pill, n+1 above / n−1 below as ghosts | cap 170 at (0, −144), pill ±72 × −258..−30 | cap 96 at (0, −100), pill ±52 × −176..−24 |
 //! | Z2 | speed (Saira Light, no ghost 8s), unit below | cap 112 at (−380, −150) | cap 84 at (−470, −100) |
 //! | Z5 | rpm and the shy SLIP / LIM chips | (380, −178) cap 44, chips y −112 | (470, −122) cap 36, chips y −70 |
-//! | Z4 | chase-cam road scene ([`scene`]): glTF clay cars, carpet, lanes, arcs | 1440 × 280 from (−720, −40), 8° pitch | 1760 × 180 from (−880, 0), 8° pitch |
+//! | Z4 | chase-cam road scene ([`scene`]): glTF clay cars, carpet, lanes, arcs | 1440 × 260 from (−720, −20), 8° pitch | 1760 × 180 from (−880, 0), 8° pitch |
 //!
 //! Signature moments:
 //! - **Brake dive:** in the frame the brake passes 5% the ego twin's tail bar lights warning red,
@@ -102,9 +102,9 @@ const COCKPIT: Geom = Geom {
     pods_y: -296.0,
     pod_size: vec2(60.0, 22.0),
     pod_pitch: 82.0,
-    ribbon_y: -268.0,
+    ribbon_y: -270.0,
     ribbon_half: 640.0,
-    ribbon_px: 4.0,
+    ribbon_px: 6.0,
     gear: vec2(0.0, -144.0),
     gear_cap: 170.0,
     pill: Rect {
@@ -125,14 +125,15 @@ const COCKPIT: Geom = Geom {
     halo: None,
     scene: SceneGeom {
         viewport: Rect {
-            min: vec2(-720.0, -40.0),
+            min: vec2(-720.0, -20.0),
             max: vec2(720.0, 240.0),
         },
         eye: EYE,
         pitch_deg: 8.0,
-        // A 33° vertical field over the 280 px band (tokens `components.adasRoad`).
-        focal: 472.6,
-        horizon_frac: 0.07,
+        // About the tokens' 33° field (`components.adasRoad`), the horizon 22 px below the band's
+        // top so the far road and the lead car sit clear of the gear pill.
+        focal: 440.0,
+        horizon_frac: 0.085,
     },
 };
 
@@ -222,6 +223,10 @@ pub struct TeslaAdas {
     rev: Spring,
     rev_target: f32,
     red_from: f32,
+    caution_from: f32,
+    /// A copy of the shared gear glyph's entry spring (same spec, same steps), so the 1.12 entry
+    /// scale can be cancelled inside the pill.
+    entry: Spring,
     speed: TabularSpeed,
     rpm: f32,
     unit: &'static str,
@@ -259,6 +264,8 @@ impl TeslaAdas {
             rev: Spring::new(springs.snap, 0.0),
             rev_target: 0.0,
             red_from: 1.0,
+            caution_from: 1.0,
+            entry: Spring::new(springs.fast, 0.0),
             speed: TabularSpeed::new(),
             rpm: 0.0,
             unit: "MPH",
@@ -300,14 +307,25 @@ impl Cluster for TeslaAdas {
             }
         }
         self.roll.update(0.0, dt);
+        // Mirror `GearGlyph`'s entry: reset on the change (1 up, -1 down), then one step.
+        if self.gear.since_change() == 0.0 {
+            self.entry.reset(if self.gear.was_upshift() { 1.0 } else { -1.0 });
+        }
+        self.entry.update(0.0, dt);
 
         self.rev_target = Self::rev_fraction(sig.rpm, sig.idle_rpm, sig.max_rpm);
         self.rev.update(self.rev_target, dt);
-        self.red_from = if sig.shift_rpm >= 1.0 {
-            Self::rev_fraction(sig.shift_rpm, sig.idle_rpm, sig.max_rpm)
-        } else {
-            1.0
+        // The ribbon warms with the pods: caution from the first amber pod, red from the first
+        // red pod (the palette's rev stages are fractions of the shift rpm).
+        let stage_x = |stage: f32| {
+            if sig.shift_rpm >= 1.0 {
+                Self::rev_fraction(stage * sig.shift_rpm, sig.idle_rpm, sig.max_rpm)
+            } else {
+                1.0
+            }
         };
+        self.caution_from = stage_x(self.palette.stages[1]);
+        self.red_from = stage_x(self.palette.stages[2]);
         self.speed.update(sig.speed);
         self.rpm = if sig.rpm.is_finite() { sig.rpm.max(0.0) } else { 0.0 };
         self.unit = sig.unit.label();
@@ -352,6 +370,16 @@ impl Cluster for TeslaAdas {
         self.draw_readouts(p, g, &pal);
         // The clay cars last: no 2D draw may follow a mesh draw (kit renderer debt, HANDOVER).
         self.scene.draw_meshes(p, &g.scene, &pal);
+        // Kit debt guard: the renderer does not re-bind the shape instance buffer after a mesh
+        // draw, so a host draw after this cluster in the same segment (the `--stats` text, the
+        // OSD) fails wgpu validation and drops the device. A segment break starts a new render
+        // pass, which binds it again. A blurred layer is the only break that needs no backdrop;
+        // its single draw is a 1 px dot of near-zero black (invisible on any background). Remove
+        // once `Renderer` re-binds slot 0 after `Meshes::record`.
+        let dot = g.scene.viewport.max - Vec2::splat(2.0);
+        p.layer(LayerOptions::blurred(0.5), |p| {
+            p.fill(&Shape::circle(dot, 0.5), pal.roles.oled_black.with_alpha(1.0 / 255.0));
+        });
     }
 
     fn animating(&self) -> bool {
@@ -360,6 +388,7 @@ impl Cluster for TeslaAdas {
             || self.gear.animating()
             || self.scene.animating()
             || !self.roll.settled(0.0, 0.05)
+            || !self.entry.settled(0.0, 1e-3)
             || !self.rev.settled(self.rev_target, 1e-3)
     }
 }
@@ -387,7 +416,16 @@ impl TeslaAdas {
             let fill = Gradient::linear(vec2(-half, y), vec2(half, y))
                 .stop(0.0, pal.primary.intensity(0.55))
                 .stop(1.0, pal.accent);
-            p.fill(&line(-half, head, w), fill);
+            let caution = x_at(self.caution_from);
+            p.fill(&line(-half, head.min(caution), w), fill);
+            // Past the first amber pod the fill turns caution, past the first red pod warning,
+            // so the ribbon tells the same story as the pods.
+            if head > caution {
+                p.fill(&line(caution, head.min(red), w), pal.roles.caution);
+            }
+            if head > red {
+                p.fill(&line(red, head, w), pal.roles.warning);
+            }
             let tail = (head - COMET_PX).max(-half);
             let ink = pal.roles.ink;
             p.fill(
@@ -426,8 +464,13 @@ impl TeslaAdas {
         let roll = self.roll.value();
         let (up, down) = neighbours(self.gear.gear());
         p.scoped(|p| {
-            p.clip(g.pill.inset(1.0), radius - 1.0);
-
+            // The glyph keeps the shared 24 px roll but not its 1.12 entry scale, so it stays
+            // inside a straight-edged window 10 px inside the pill.
+            p.clip(g.pill.inset(10.0), 0.0);
+            let s = self.entry.value();
+            p.translate(g.gear);
+            p.scale(1.0 / (1.0 + 0.12 * s.abs()));
+            p.translate(-g.gear);
             self.gear.draw(p, g.gear, self.faces.gear, g.gear_cap, pal);
             let pulse = self.gear.pulse();
             if pulse > 0.01 {
@@ -436,11 +479,15 @@ impl TeslaAdas {
                     self.gear.draw_with(p, g.gear, self.faces.gear, g.gear_cap, c);
                 });
             }
+        });
+        p.scoped(|p| {
+            p.clip(g.pill.inset(4.0), radius - 4.0);
+            // The neighbours wait until the glyph has settled, then fade in (never under it).
             let ghost = TextStyle::new(self.faces.label, g.ghost_cap)
                 .paint(
                     roles
                         .ink_label
-                        .fade(0.6 * smoothstep(0.08, 0.22, self.gear.since_change())),
+                        .fade(0.6 * smoothstep(0.18, 0.32, self.gear.since_change())),
                 )
                 .align(Align::Center, VAlign::CapMiddle);
             if let Some(n) = up {
@@ -458,15 +505,15 @@ impl TeslaAdas {
 
         self.speed
             .draw(p, g.speed, self.faces.speed, g.speed_cap, roles.ink, None);
-        self.speed.draw_unit(
-            p,
-            vec2(g.speed.x, g.unit_y),
-            self.unit,
-            self.faces.label,
-            self.micro_cap,
-            self.tracking,
-            pal,
-        );
+        // The unit sits under the digits' right edge (the units cell is always lit, so it never
+        // drifts away from a short figure such as "0").
+        let digits = TextStyle::new(self.faces.speed, g.speed_cap).tabular();
+        let right = g.speed.x + 1.5 * p.fonts().tabular_cell(&digits);
+        let unit = TextStyle::new(self.faces.label, self.micro_cap)
+            .paint(roles.ink_label)
+            .tracking(self.tracking)
+            .align(Align::Right, VAlign::CapTop);
+        p.text(vec2(right, g.unit_y), self.unit, &unit);
 
         // Rpm in 50s (a steady figure), 80% ink, its label under it.
         let rpm = ((self.rpm / 50.0).round() * 50.0).clamp(0.0, 99_999.0) as i64;

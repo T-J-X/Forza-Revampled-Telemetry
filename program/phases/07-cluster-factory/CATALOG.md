@@ -46,7 +46,7 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ◐ |
 | 3 | ★ `PorscheAnalog` | pattern-setter | Classic Analog | cockpit | high | ◐ |
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
-| 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
+| 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ✅ |
 | 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ◐ |
 | 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
 | 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | medium | next |
@@ -118,7 +118,7 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 | 12 | ★ BoschDdu | [`bosch_ddu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | rebuild | Race Dash | cockpit | 4 | `mockups/BoschDdu/index.html` | next |
 | 13 | ValkyrieLmp1 | [`valkyrie_lmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | rebuild | Race Dash | cockpit+hood | 16 | `mockups/ValkyrieLmp1/index.html` | ☐ |
 | 14 | Gt7ModularTripod | [`gt7_modular_tripod`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/) | rebuild | Race Dash | cockpit+hood | 17 | `mockups/Gt7ModularTripod/index.html` | ☐ |
-| 15 | ★ TeslaAdas | [`tesla_adas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | rebuild | ADAS & HUD | cockpit+hood | 5 | `mockups/TeslaAdas/index.html` | ☐ |
+| 15 | ★ TeslaAdas | [`tesla_adas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | rebuild | ADAS & HUD | cockpit+hood | 5 | `mockups/TeslaAdas/index.html` (Penpot page not created: HTML board fallback) | ✅ |
 | 16 | WindshieldHud | [`windshield_hud`](../../../crates/fh6-clusters/src/clusters/windshield_hud/) | rebuild | ADAS & HUD | raised HUD | 18 | `mockups/WindshieldHud/index.html` | ☐ |
 | 17 | ArNavWayfinder | [`ar_nav_wayfinder`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/) | rebuild | ADAS & HUD | cockpit+hood | 20 | `mockups/ArNavWayfinder/index.html` | ☐ |
 | 18 | F35HelmetHmd | [`f35_helmet_hmd`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/) | rebuild | ADAS & HUD | cockpit+hood | 19 | `mockups/F35HelmetHmd/index.html` | ☐ |
