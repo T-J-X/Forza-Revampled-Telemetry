@@ -2,18 +2,17 @@
 
 **Chat / branch:** TeslaAdas cluster chat, `claude/cluster-teslaadas-2bf6d5`
 **Date:** 2026-11-23
-**Result:** ◐ built, verified, and through the "materials must dominate" pass.
-- **Critique:** 8.5/10 in round 7. Verdict: "physical and rendered". No cluster-level must-fix is left.
-- **Why ◐ and not ✅:** the critic still marks the strict bar FAIL, because one reference, Rivian R1, renders a fully lit 3D world rather than objects on OLED black. Whether that clause applies to an OLED-black overlay is a scope call for the conductor or TJX (see **Decision needed**). Everything else on the exit bar is met.
+**Result:** ✅ built, verified, and through the "materials must dominate" pass.
+- **Critique:** round 7, 8.5/10, verdict "physical and rendered". It is a clean pass under the conductor's ruling on the Rivian clause (below). No cluster-level must-fix is left.
 
-## Decision needed (conductor / TJX)
-The critic's words: Rivian "renders a fully lit world with environment reflections; this is rendered objects on OLED black". It calls the gap architectural, not polish, and adds that "a full environment would break the OLED-black and scrim rules".
-- It scores the rest as beaten or on par:
+## Decided (conductor): out of scope, OLED-black rule
+The critic noted that Rivian R1 "renders a fully lit world with environment reflections; this is rendered objects on OLED black". The conductor ruled the lit-environment part out of scope: off pixels must be true black `#000000` on the OLED (AGENTS.md and the HMI rules), so a fully lit 3D world is ruled out by design.
+- Rivian is judged only on the quality of the rendered objects, their lighting and their motion.
+- The other references:
   - Taycan: beaten.
   - Tesla FSD v14: beaten as a cluster, with car quality matched.
   - Lucid Gravity: on par to beaten.
-- **If the Rivian clause is out of scope** for an OLED-black overlay, round 7 is a clean pass, and the CATALOG cell can go to ✅.
-- **If it is in scope,** the work needed is a lit environment behind the road (sky, terrain, reflections). That conflicts with family rule 1 (true black) and with the scrim, so it needs a design decision before any build.
+- Round 7 therefore counts as a clean pass, and the CATALOG cell is ✅.
 
 ## Exit criteria (`CLUSTER_PROMPT.md`)
 | Criterion | Met? | Evidence |
@@ -108,7 +107,7 @@ A frameless diorama in the column gap. The zone table is at the top of `mod.rs`.
 - **Round 7: 8.5/10, "physical and rendered".**
   - No cluster-level must-fix is left.
   - Its two nice-to-haves (a saturated limiter core, the pool at 0.22) are applied.
-  - Strict FAIL only on Rivian R1 (see Decision needed).
+  - The critic marked a strict FAIL only on Rivian R1's lit environment, which the conductor ruled out of scope (OLED-black rule), so round 7 is a clean pass.
 
 ## My calls
 - **Sprites rather than meshes for the cars.** The kit mesh pass is one colour per mesh with one light, no textures and no MSAA, so it cannot show paint, glass or reflections. Pre-rendered Blender sprites through the exact cluster cameras give studio lighting at a fraction of the cost: sequence p50 fell from about 0.29 to 0.19 ms. The meshes stay as the fallback.
