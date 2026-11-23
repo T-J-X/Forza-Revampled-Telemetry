@@ -3,8 +3,9 @@
 //! `OsdHost` the overlay uses, with the live dyno feeding the live cluster and the carousel.
 use crate::{rel, Result, DT, H, THUMB_FACTOR, W};
 use fh6_clusters::registry;
-use fh6_core::{AppConfig, CarDatabase};
+use fh6_core::{AppConfig, CarDatabase, ScrimFit};
 use fh6_gpu::GpuContext;
+use fh6_kit::scrim::Wash;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
 use fh6_osd::model::{self, RowId, Tab};
@@ -21,10 +22,9 @@ struct OsdState {
 }
 
 fn focus(host: &mut OsdHost, cfg: &AppConfig, tab: Tab, row: RowId) {
-    host.ctl.set_tab(tab);
-    let rows = model::rows(tab, host.ctl.ctx(cfg, host.fit()));
-    let i = rows.as_slice().iter().position(|r| *r == row).unwrap_or(0);
-    host.ctl.set_focus_index(i);
+    if !host.focus_row(tab, row, cfg) {
+        eprintln!("OSD preview: {row:?} is not on {tab:?} with this config; focusing the first row");
+    }
 }
 
 fn press(host: &mut OsdHost, cfg: &mut AppConfig, t_ms: u64, held: u16, pressed: u16) {
@@ -96,7 +96,7 @@ const STATES: &[OsdState] = &[
         name: "07_fit_cluster_height",
         caption: "Fit & camera · cluster height slider and default-height line",
         setup: |h, c| {
-            c.extra.insert(model::KEY_HEIGHT.into(), 64.into());
+            c.cockpit_height_offset_px = 64.0;
             focus(h, c, Tab::Fit, RowId::ClusterHeight);
             Duration::ZERO
         },
@@ -121,8 +121,7 @@ const STATES: &[OsdState] = &[
         name: "10_keyboard",
         caption: "On-screen keyboard for the custom name",
         setup: |h, c| {
-            h.ctl.set_tab(Tab::Type);
-            h.ctl.set_focus_index(2);
+            focus(h, c, Tab::Type, RowId::CustomName);
             h.ctl.start_keyboard(c);
             press(h, c, 0, 0, LB);
             press(h, c, 20, RIGHT, RIGHT);
@@ -282,6 +281,11 @@ pub fn render_all(
         }
         let layout = host.live_layout(&base, frame);
         let name = model::theme_label(theme);
+        // As in the overlay: the real dash blocker under the live cluster while a blocker row
+        // has focus (Hood and chase resolve to opacity 0, so the soft pool stays).
+        let blocker = Some(ScrimFit::from_config(&cfg, view.fit_view()))
+            .filter(|fit| host.blocker_focused(&cfg) && fit.visible())
+            .map(|fit| (fit, Wash::from_config(&cfg, palette.primary)));
         let mut img = RgbaImage {
             width: 0,
             height: 0,
@@ -296,7 +300,8 @@ pub fn render_all(
         for f in 0..frames {
             {
                 let mut p = kit.begin_frame(&layout);
-                draw::live_scrim(&mut p, &layout, host.anim.open.progress());
+                let backing = blocker.as_ref().map(|(fit, wash)| (fit, *wash));
+                draw::live_backing(&mut p, &layout, host.anim.open.progress(), backing);
                 cluster.draw(&mut p, &layout);
                 host.draw(&mut p, &cfg, frame, now, name, LiveStatus::Dyno);
             }

@@ -28,7 +28,7 @@ pub mod saver;
 
 pub use draw::{Frame, LiveStatus};
 pub use dyno::LiveDynoGenerator;
-pub use fit::{CameraApply, CockpitFit, ConfigOnlyFit, FitRow};
+pub use fit::{CameraApply, CockpitFit, ConfigOnlyFit, FitRow, SCRIM_ROWS};
 pub use host::OsdHost;
 pub use model::{theme_for_view, Tab};
 pub use nav::{Mode, NavInput, NavOutput, OsdController};

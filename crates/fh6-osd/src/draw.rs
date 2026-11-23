@@ -8,7 +8,8 @@ use crate::keyboard::{self, Key};
 use crate::model::{self, EditState, Line, RowId, RowKind, RowList, Tab, MAX_ROWS};
 use crate::nav::{Mode, OsdController};
 use crate::remap;
-use fh6_core::{AppConfig, ClusterTheme};
+use fh6_core::{AppConfig, ClusterTheme, ScrimFit};
+use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
     deg, vec2, Affine, Align, Cluster, Color, FontId, FontRole, Fonts, Glass, Glow, Gradient, LayerOptions, Layout,
     Painter, Palette, Rect, Shape, Stroke, TextStyle, VAlign, Vec2, View,
@@ -296,6 +297,19 @@ pub fn live_scrim(p: &mut Painter<'_>, layout: &Layout, open: f32) {
     p.restore();
 }
 
+/// What sits under the live cluster: the real dash blocker (Phase 8 dome and wash, in the
+/// layout's local units) while a blocker row has focus, so its shape and fit can be judged
+/// against the cluster; otherwise the soft pool that keeps the cluster legible.
+pub fn live_backing(p: &mut Painter<'_>, layout: &Layout, open: f32, blocker: Option<(&ScrimFit, Wash)>) {
+    match blocker {
+        Some((fit, wash)) => {
+            scrim::draw_scrim(p, fit);
+            scrim::draw_wash(p, fit, wash);
+        }
+        None => live_scrim(p, layout, open),
+    }
+}
+
 /// The live layout: the cluster at its real height and scale, gliding to the live zone.
 #[must_use]
 pub fn live_layout(base: &Layout, anim: &OsdAnim, frame: Frame) -> Layout {
@@ -496,9 +510,11 @@ fn camera_schematic(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Ro
 
 /// A dashed line where the cluster sits at height offset 0, across the live zone.
 fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
+    // The edited view's anchor (Phase 8 per-view placement).
     let y = match inp.ctl.edit.view {
         View::Hood => inp.cfg.bonnet_anchor_y as f32,
-        _ => inp.cfg.cockpit_anchor_y as f32,
+        View::Chase => inp.cfg.chase_anchor_y as f32,
+        View::Cockpit => inp.cfg.cockpit_anchor_y as f32,
     };
     let x1 = PANEL.min.x + inp.frame.ox - 120.0;
     let mut x = 200.0;

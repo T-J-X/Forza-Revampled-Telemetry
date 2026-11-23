@@ -12,8 +12,6 @@ use std::fmt::{self, Write as _};
 
 // ----- config keys kept in `extra` -------------------------------------------------------
 
-/// Cluster height offset in 4K px (±240), read by `Layout::from_config`.
-pub const KEY_HEIGHT: &str = "ClusterHeightOffsetPx";
 /// Gentle limiter pulse instead of the 10 Hz strobe.
 pub const KEY_REDUCED_FLASH: &str = "ReducedFlash";
 /// Optional world refraction behind glass.
@@ -28,8 +26,6 @@ pub const KEY_LOGO: &str = "ShowLogo";
 pub const KEY_STATS: &str = "ShowStats";
 /// Shift point as a fraction of the redline (absent = the tokens' value).
 pub const KEY_SHIFT: &str = "ShiftPointPct";
-/// Cluster for the chase cameras (absent = the cockpit cluster).
-pub const KEY_CHASE: &str = "ChaseHudStyle";
 
 /// The shift point shown when `ShiftPointPct` is absent (tokens `revStages.shiftPct`).
 pub const DEFAULT_SHIFT_PCT: f64 = 0.97;
@@ -241,7 +237,9 @@ pub enum RowId {
     SeatHeight,
     /// Steering wheel offset.
     WheelOffset,
-    /// Cluster height offset.
+    /// Write the camera values to the game's camera files (`CameraPatchAuto`).
+    CameraPatch,
+    /// Cluster height offset for the edited view (`CockpitHeightOffsetPx` and siblings).
     ClusterHeight,
     /// Cluster scale.
     ClusterScale,
@@ -554,12 +552,15 @@ pub fn rows(tab: Tab, ctx: Ctx<'_>) -> RowList {
                 RowId::FovChase,
                 RowId::SeatHeight,
                 RowId::WheelOffset,
+                RowId::CameraPatch,
                 RowId::ClusterHeight,
                 RowId::ClusterScale,
             ] {
                 r.push(id);
             }
-            for i in 0..ctx.fit.scrim_rows().len().min(MAX_ROWS - 8) {
+            // Keep one slot for the resync action.
+            let room = MAX_ROWS.saturating_sub(r.len() + 1);
+            for i in 0..ctx.fit.scrim_rows().len().min(room) {
                 r.push(RowId::Scrim(i as u8));
             }
             if ctx.fit.can_resync() {
@@ -602,9 +603,12 @@ pub fn kind(row: RowId, fit: &dyn CockpitFit) -> RowKind {
             Some(f) => RowKind::Slider(SliderSpec::new(f.min, f.max, f.step, f.decimals, f.unit)),
             None => RowKind::Info,
         },
-        RowId::PaletteLock | RowId::GlassRefraction | RowId::ShowLogo | RowId::AutoPause | RowId::Stats => {
-            RowKind::Toggle
-        }
+        RowId::PaletteLock
+        | RowId::GlassRefraction
+        | RowId::ShowLogo
+        | RowId::CameraPatch
+        | RowId::AutoPause
+        | RowId::Stats => RowKind::Toggle,
         RowId::Reroll | RowId::CustomName | RowId::Resync | RowId::OsdButton => RowKind::Action,
         RowId::FactorySwatches => RowKind::Info,
     }
@@ -638,6 +642,7 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
         RowId::FovChase => "Chase FOV",
         RowId::SeatHeight => "Seat height",
         RowId::WheelOffset => "Wheel offset",
+        RowId::CameraPatch => "Camera patch",
         RowId::ClusterHeight => "Cluster height",
         RowId::ClusterScale => "Cluster scale",
         RowId::Scrim(i) => fit.scrim_rows().get(usize::from(i)).map_or("Dash blocker", |f| f.label),
@@ -693,7 +698,9 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
         RowId::PaletteLock => "Off: a new palette for every car",
         RowId::GlassRefraction => "Lets the game show through glass clusters",
         RowId::CustomName => "Right opens the keyboard",
-        RowId::ClusterHeight | RowId::ClusterScale => "Applies now",
+        RowId::CameraPatch => "Writes FOV and seat to the game's camera files",
+        RowId::ClusterHeight => "Applies now, to the view you edit",
+        RowId::ClusterScale => "Applies now",
         RowId::OsdButton => "Right, then hold the new button for 1 second",
         RowId::AutoPause => "Sends Esc when the OSD opens mid-race",
         _ => return None,
@@ -718,7 +725,8 @@ pub fn theme_for_view(cfg: &AppConfig, view: View) -> ClusterTheme {
     let style = match view {
         View::Hood if !cfg.bonnet_hud_style.trim().is_empty() => cfg.bonnet_hud_style.as_str(),
         View::Hood => "Gt7HoodPro",
-        View::Chase => extra_str(cfg, KEY_CHASE).unwrap_or_else(cockpit),
+        View::Chase if !cfg.chase_hud_style.trim().is_empty() => cfg.chase_hud_style.as_str(),
+        View::Chase => cockpit(),
         View::Cockpit => cockpit(),
     };
     fh6_render::dispatch::style_to_theme(style)
@@ -737,7 +745,7 @@ pub fn set_theme_for_view(cfg: &mut AppConfig, view: View, theme: ClusterTheme) 
             cfg.bonnet_hud_style_typed = theme;
         }
         View::Chase => {
-            set_extra(cfg, KEY_CHASE, Value::String(name));
+            cfg.chase_hud_style = name;
             cfg.chase_hud_style_typed = theme;
         }
     }
@@ -828,7 +836,11 @@ pub fn slider_value(row: RowId, ctx: Ctx<'_>) -> f32 {
         RowId::FovChase => cfg.chase_near_fov,
         RowId::SeatHeight => cfg.driver_seat_height_m * 1000.0,
         RowId::WheelOffset => cfg.steering_wheel_offset_y_m * 1000.0,
-        RowId::ClusterHeight => extra_f64(cfg, KEY_HEIGHT, 0.0) as f32,
+        RowId::ClusterHeight => match ctx.edit.view {
+            View::Cockpit => cfg.cockpit_height_offset_px,
+            View::Hood => cfg.bonnet_height_offset_px,
+            View::Chase => cfg.chase_height_offset_px,
+        },
         RowId::ClusterScale => cfg.cluster_scale * 100.0,
         RowId::HoldTime => cfg.osd_hold_ms as f32,
         RowId::Scrim(i) => ctx.fit.scrim_rows().get(usize::from(i)).map_or(0.0, |f| (f.get)(cfg)),
@@ -862,11 +874,19 @@ fn set_slider(row: RowId, v: f32, cfg: &mut AppConfig, edit: &mut EditState, fit
         RowId::FovChase => {
             let delta = cfg.chase_far_fov - cfg.chase_near_fov;
             cfg.chase_near_fov = v;
-            cfg.chase_far_fov = (v + delta).clamp(30.0, 120.0);
+            // The patcher clamps every FOV to 40–110 when it writes the camera file.
+            cfg.chase_far_fov = (v + delta).clamp(40.0, 110.0);
         }
         RowId::SeatHeight => cfg.driver_seat_height_m = v / 1000.0,
         RowId::WheelOffset => cfg.steering_wheel_offset_y_m = v / 1000.0,
-        RowId::ClusterHeight => set_extra(cfg, KEY_HEIGHT, Value::from(v.round() as i64)),
+        RowId::ClusterHeight => {
+            let v = v.round();
+            match edit.view {
+                View::Cockpit => cfg.cockpit_height_offset_px = v,
+                View::Hood => cfg.bonnet_height_offset_px = v,
+                View::Chase => cfg.chase_height_offset_px = v,
+            }
+        }
         RowId::ClusterScale => cfg.cluster_scale = (v / 100.0 * 100.0).round() / 100.0,
         RowId::HoldTime => cfg.osd_hold_ms = (v.round() as u32).clamp(200, 1000),
         RowId::Scrim(i) => {
@@ -934,6 +954,7 @@ pub fn toggle_value(row: RowId, cfg: &AppConfig) -> bool {
         RowId::PaletteLock => cfg.extra.get(KEY_SEED).is_some_and(|v| v.as_u64().is_some()),
         RowId::GlassRefraction => extra_bool(cfg, KEY_REFRACTION, false),
         RowId::ShowLogo => show_logo(cfg),
+        RowId::CameraPatch => cfg.camera_patch_auto,
         RowId::AutoPause => cfg.osd_auto_pause_game,
         RowId::Stats => show_stats(cfg),
         _ => false,
@@ -1018,6 +1039,11 @@ pub fn adjust(
                 }
                 RowId::GlassRefraction => set_extra(cfg, KEY_REFRACTION, Value::Bool(on)),
                 RowId::ShowLogo => set_extra(cfg, KEY_LOGO, Value::Bool(on)),
+                RowId::CameraPatch => {
+                    cfg.camera_patch_auto = on;
+                    // The camera rows' notice follows the patch state.
+                    edit.camera = fit.camera_changed(cfg);
+                }
                 RowId::AutoPause => cfg.osd_auto_pause_game = on,
                 RowId::Stats => set_extra(cfg, KEY_STATS, Value::Bool(on)),
                 _ => return Effect::default(),
@@ -1040,7 +1066,7 @@ pub fn adjust(
                 Effect::CHANGED
             }
             RowId::Resync => {
-                fit.resync();
+                fit.resync(cfg);
                 Effect::default()
             }
             _ => Effect::default(),
@@ -1167,7 +1193,8 @@ mod tests {
         let e = adjust(RowId::FovCockpit, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert!(!e.changed, "already at max");
         adjust(RowId::ClusterHeight, -1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cfg.extra.get(KEY_HEIGHT).and_then(Value::as_i64), Some(-4));
+        assert_eq!(cfg.cockpit_height_offset_px, -4.0, "edits the edited view (cockpit)");
+        assert_eq!(cfg.bonnet_height_offset_px, 0.0);
         let mut line = Line::new();
         format_value(RowId::ClusterHeight, ctx(&cfg, &edit), &mut line);
         assert_eq!(line.as_str(), "-4 px");
@@ -1196,6 +1223,90 @@ mod tests {
             set_theme_for_view(&mut cfg, View::Hood, *t);
             assert_eq!(theme_for_view(&cfg, View::Hood), *t);
         }
+    }
+
+    /// A backend that offers the resync action and records the camera it was asked for.
+    struct ResyncFit(Option<i32>);
+
+    impl CockpitFit for ResyncFit {
+        fn camera_changed(&mut self, cfg: &AppConfig) -> CameraApply {
+            if cfg.camera_patch_auto {
+                CameraApply::NextLaunch
+            } else {
+                CameraApply::PatchOff
+            }
+        }
+        fn can_resync(&self) -> bool {
+            true
+        }
+        fn resync(&mut self, cfg: &AppConfig) {
+            self.0 = Some(cfg.resync_camera_index);
+        }
+    }
+
+    #[test]
+    fn fit_tab_binds_the_cockpit_fit_keys() {
+        let mut cfg = AppConfig::default();
+        let mut edit = EditState::default();
+        let mut fit = ResyncFit(None);
+
+        // Cluster height is per view: it edits the view being edited and leaves the others.
+        edit.view = View::Hood;
+        adjust(RowId::ClusterHeight, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.bonnet_height_offset_px, 4.0);
+        assert_eq!(cfg.cockpit_height_offset_px, 0.0);
+        edit.view = View::Chase;
+        adjust(RowId::ClusterHeight, -1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.chase_height_offset_px, -4.0);
+        assert!(
+            !cfg.extra.contains_key("ClusterHeightOffsetPx"),
+            "the old free-form key is gone"
+        );
+
+        // The chase cluster goes to the typed key the render loop reads.
+        set_theme_for_view(&mut cfg, View::Chase, ClusterTheme::RetroCyber);
+        assert_eq!(cfg.chase_hud_style, "RetroCyber");
+        assert!(!cfg.extra.contains_key("ChaseHudStyle"));
+
+        // The camera patch switch drives the notice under the camera rows.
+        assert!(!toggle_value(RowId::CameraPatch, &cfg), "off by default");
+        adjust(RowId::FovCockpit, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(help(RowId::FovCockpit, &edit), Some(CameraApply::PatchOff.notice()));
+        assert!(adjust(RowId::CameraPatch, 1, 1, &mut cfg, &mut edit, &mut fit).changed);
+        assert!(cfg.camera_patch_auto);
+        assert_eq!(help(RowId::SeatHeight, &edit), Some(CameraApply::NextLaunch.notice()));
+
+        // Every dash-blocker row and the resync action fit on the tab.
+        let r = rows(
+            Tab::Fit,
+            Ctx {
+                cfg: &cfg,
+                edit: &edit,
+                fit: &fit,
+            },
+        );
+        let scrim = r.as_slice().iter().filter(|r| matches!(r, RowId::Scrim(_))).count();
+        assert_eq!(scrim, crate::fit::SCRIM_ROWS.len());
+        assert_eq!(r.as_slice().last(), Some(&RowId::Resync));
+        cfg.resync_camera_index = 4;
+        adjust(RowId::Resync, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(fit.0, Some(4));
+        adjust(RowId::Resync, -1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(fit.0, Some(4), "left does nothing on an action row");
+
+        // A blocker row writes its Phase 8 key inside its range.
+        cfg.oem_dash_feather_px = 240.0;
+        let feather = crate::fit::SCRIM_ROWS
+            .iter()
+            .position(|f| f.label == "Edge feather")
+            .map(|i| RowId::Scrim(i as u8));
+        let feather = feather.expect("feather row");
+        assert!(
+            !adjust(feather, 1, 10, &mut cfg, &mut edit, &mut fit).changed,
+            "already at max"
+        );
+        adjust(feather, -1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.oem_dash_feather_px, 236.0);
     }
 
     #[test]

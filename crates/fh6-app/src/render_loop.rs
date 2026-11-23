@@ -610,9 +610,14 @@ impl Loop {
             let mut p = kit.begin_frame(layout);
             if draw {
                 if let Some(o) = osd {
-                    // The cluster glides to the OSD's live zone: its own feathered pool replaces
-                    // the dash blocker, which belongs at the binnacle.
-                    fh6_osd::draw::live_scrim(&mut p, layout, o.host.anim.open.progress());
+                    // The cluster glides to the OSD's live zone. Under it: the real dash blocker
+                    // while a blocker row has focus (it follows the cluster), else a soft pool.
+                    let blocker = if o.blocker {
+                        scrim.as_ref().map(|(fit, wash)| (fit, *wash))
+                    } else {
+                        None
+                    };
+                    fh6_osd::draw::live_backing(&mut p, layout, o.host.anim.open.progress(), blocker);
                 } else if let Some((fit, wash)) = scrim {
                     // Game frame, scrim, wash, cluster (SCRIM_FIT §3).
                     scrim::draw_scrim(&mut p, &fit);
@@ -662,6 +667,8 @@ struct OsdFrame<'a> {
     frame: Frame,
     now: Duration,
     status: LiveStatus,
+    /// A dash-blocker row has focus: draw the real blocker under the live cluster.
+    blocker: bool,
 }
 
 /// The `--stats` lines in the top-left corner, in target pixels.
@@ -987,6 +994,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             } else {
                 LiveStatus::Telemetry
             },
+            blocker: osd.host.blocker_focused(&cfg),
         });
         if let Some(FrameOutcome::Presented { timings, at }) =
             lp.render(vis.opacity, &layout, true, stats_on, scrim, osd_draw.as_ref())
@@ -1077,9 +1085,9 @@ mod tests {
         assert_eq!(
             theme_for(&cfg, View::Chase),
             ClusterTheme::LiquidGlass,
-            "chase follows cockpit"
+            "an empty ChaseHudStyle follows the cockpit"
         );
-        cfg.extra.insert(model::KEY_CHASE.into(), "RetroCyber".into());
+        cfg.chase_hud_style = "RetroCyber".into();
         assert_eq!(theme_for(&cfg, View::Chase), ClusterTheme::RetroCyber);
         let empty = AppConfig {
             cockpit_hud_style: String::new(),
@@ -1087,16 +1095,10 @@ mod tests {
             ..AppConfig::default()
         };
         assert_eq!(theme_for(&empty, View::Cockpit), ClusterTheme::LiquidGlass);
-        assert_eq!(
-            theme_for(&cfg, View::Chase),
-            ClusterTheme::LiquidGlass,
-            "chase falls back"
-        );
-        let chase = AppConfig {
-            chase_hud_style: "Gt7HoodPro".into(),
-            ..cfg
-        };
-        assert_eq!(theme_for(&chase, View::Chase), ClusterTheme::Gt7HoodPro);
+        // The OSD writes the chase cluster to the typed Phase 8 key.
+        fh6_osd::model::set_theme_for_view(&mut cfg, View::Chase, ClusterTheme::Gt7HoodPro);
+        assert_eq!(cfg.chase_hud_style, "Gt7HoodPro");
+        assert_eq!(theme_for(&cfg, View::Chase), ClusterTheme::Gt7HoodPro);
     }
 
     #[test]

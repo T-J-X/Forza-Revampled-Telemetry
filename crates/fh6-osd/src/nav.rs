@@ -256,6 +256,16 @@ impl OsdController {
         self.focus[self.tab.index()] = i;
     }
 
+    /// Jumps to `tab` and focuses `row` there (previews, tests). Returns false, focusing the
+    /// first row, when the tab does not show that row with this config.
+    pub fn focus_row(&mut self, tab: Tab, row: RowId, cfg: &AppConfig, fit: &dyn CockpitFit) -> bool {
+        self.tab = tab;
+        let rows = model::rows(tab, self.ctx(cfg, fit));
+        let found = rows.as_slice().iter().position(|r| *r == row);
+        self.set_focus_index(found.unwrap_or(0));
+        found.is_some()
+    }
+
     /// The focused row.
     #[must_use]
     pub fn focused_row(&self, cfg: &AppConfig, fit: &dyn CockpitFit) -> Option<RowId> {
@@ -573,8 +583,7 @@ mod tests {
     #[test]
     fn held_slider_accelerates() {
         let mut r = Rig::new();
-        r.ctl.set_tab(Tab::Fit);
-        r.ctl.set_focus_index(5); // Cluster height
+        assert!(r.ctl.focus_row(Tab::Fit, RowId::ClusterHeight, &r.cfg, &r.fit));
         assert_eq!(r.ctl.focused_row(&r.cfg, &r.fit), Some(RowId::ClusterHeight));
         r.frame(0, RIGHT, 0);
         let one = model::slider_value(RowId::ClusterHeight, r.ctl.ctx(&r.cfg, &r.fit));
@@ -626,8 +635,7 @@ mod tests {
     #[test]
     fn right_on_custom_name_opens_the_keyboard_and_menu_saves() {
         let mut r = Rig::new();
-        r.ctl.set_tab(Tab::Type);
-        r.ctl.set_focus_index(2);
+        assert!(r.ctl.focus_row(Tab::Type, RowId::CustomName, &r.cfg, &r.fit));
         let o = r.tap(0, RIGHT);
         assert!(!o.changed);
         assert_eq!(r.ctl.mode(), Mode::Keyboard);

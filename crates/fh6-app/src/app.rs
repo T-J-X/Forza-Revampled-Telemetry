@@ -203,8 +203,8 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         osd: render_loop::OsdSetup {
             saver,
             injector: Box::new(WinKeyboard(fh6_win::keyboard::SendInputKeyboard::new())),
-            // Phase 8 replaces this with its camera-patcher backend.
-            fit: Box::new(fh6_osd::ConfigOnlyFit),
+            // Camera rows report the Phase 8 camera sync status; Resync drives the camera ring.
+            fit: Box::new(crate::osd_fit::PatcherFit::new(camera.clone(), Arc::clone(&input))),
         },
     })
     .map_err(io_err("starting the render thread"))?;

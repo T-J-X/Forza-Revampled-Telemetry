@@ -63,6 +63,22 @@ impl OsdHost {
         &*self.fit
     }
 
+    /// Jumps to `tab` and focuses `row` there (previews, tests); false when the tab does not
+    /// show that row with this config.
+    pub fn focus_row(&mut self, tab: Tab, row: crate::model::RowId, cfg: &AppConfig) -> bool {
+        self.ctl.focus_row(tab, row, cfg, &*self.fit)
+    }
+
+    /// Whether a dash-blocker row has focus (the live view then shows the real blocker under
+    /// the cluster, see [`draw::live_backing`]).
+    #[must_use]
+    pub fn blocker_focused(&self, cfg: &AppConfig) -> bool {
+        matches!(
+            self.ctl.focused_row(cfg, &*self.fit),
+            Some(crate::model::RowId::Scrim(_))
+        )
+    }
+
     /// Sets the font families the Font row offers (from the loaded faces).
     pub fn set_fonts(&mut self, fonts: Vec<String>) {
         self.ctl.edit.fonts = fonts;
