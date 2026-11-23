@@ -49,8 +49,8 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 3 | ★ `PorscheAnalog` | pattern-setter | Classic Analog | cockpit | high | ◐ |
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
 | 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
-| 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ◐ |
-| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | next |
+| 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ✅ |
+| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
 | 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | high | ☐ |
 | 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
 | 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
@@ -124,7 +124,7 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 | 16 | WindshieldHud | [`windshield_hud`](../../../crates/fh6-clusters/src/clusters/windshield_hud/) | rebuild | ADAS & HUD | raised HUD | 18 | `mockups/WindshieldHud/index.html` | ☐ |
 | 17 | ArNavWayfinder | [`ar_nav_wayfinder`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/) | rebuild | ADAS & HUD | cockpit+hood | 20 | `mockups/ArNavWayfinder/index.html` | ☐ |
 | 18 | F35HelmetHmd | [`f35_helmet_hmd`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/) | rebuild | ADAS & HUD | cockpit+hood | 19 | `mockups/F35HelmetHmd/index.html` | ☐ |
-| 19 | ★ RetroCyber | [`retro_cyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | rebuild | Sci-Fi | cockpit+hood | 6 | `mockups/RetroCyber/index.html` | ☐ |
+| 19 | ★ RetroCyber | [`retro_cyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | rebuild | Sci-Fi | cockpit+hood | 6 | Penpot `07 · RetroCyber` (`6fe75c5e-bb22-8084-8008-fd924684ddca`) · `mockups/RetroCyber/index.html` | ✅ |
 | 20 | SynthwaveOutrun | [`synthwave_outrun`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/) | rebuild | Sci-Fi | cockpit+hood | 21 | `mockups/SynthwaveOutrun/index.html` | ☐ |
 | 21 | EvaBioSync | [`eva_bio_sync`](../../../crates/fh6-clusters/src/clusters/eva_bio_sync/) | rebuild | Sci-Fi | cockpit | 22 | `mockups/EvaBioSync/index.html` | ☐ |
 | 22 | ChronoEventHorizon | [`chrono_event_horizon`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/) | rebuild | Sci-Fi | cockpit | 27 | `mockups/ChronoEventHorizon/index.html` | ☐ |

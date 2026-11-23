@@ -7,6 +7,7 @@ pub mod classic;
 pub mod fluid;
 pub mod glass;
 pub mod gt7_hood_pro;
+pub mod retro_cyber;
 pub mod scifi;
 
 /// Shared helpers: argument loading, scene reset, Cycles on the GPU, cameras, data passes
