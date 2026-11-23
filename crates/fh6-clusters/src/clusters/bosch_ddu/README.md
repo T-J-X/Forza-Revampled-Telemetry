@@ -2,7 +2,7 @@
 
 Catalog row 12 · `ClusterTheme::BoschDdu` (config value `"BoschDdu"`) · Race Dash · cockpit · build #4 · ★ pattern-setter.
 
-Status: **scaffold** (Phase 7 setup). `mod.rs` draws the shared under-construction frame from `common::scaffold` until the cluster chat replaces it.
+Status: **built** (Phase 7 cluster chat; final critique 8.5/10, PASS). Bespoke assets: `assets/clusters/bosch_ddu/` (Blender housing on a ComfyUI carbon weave). See `HANDOVER.md` for what it is, the derived lamps, perf and the shared change requests.
 
 ## Files this cluster owns
 - `crates/fh6-clusters/src/clusters/bosch_ddu/`: `mod.rs` (the `Cluster` impl and `make`), `spec.md` (the brief), this README, `HANDOVER.md`, and any private submodules.

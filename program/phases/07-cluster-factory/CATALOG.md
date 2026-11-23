@@ -47,7 +47,7 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 1 | ★ `LiquidGlass` | pilot | Liquid Glass | cockpit+hood | xhigh | ✅ |
 | 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ✅ |
 | 3 | ★ `PorscheAnalog` | pattern-setter | Classic Analog | cockpit | high | ◐ |
-| 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
+| 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ✅ |
 | 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
 | 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ✅ |
 | 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
@@ -117,7 +117,7 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 | 9 | BugattiTourbillon | [`bugatti_tourbillon`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/) | rebuild | Classic Analog | cockpit | 14 | `mockups/BugattiTourbillon/index.html` | ☐ |
 | 10 | LfaV10Nurburgring | [`lfa_v10_nurburgring`](../../../crates/fh6-clusters/src/clusters/lfa_v10_nurburgring/) | rebuild | Classic Analog | cockpit | 12 | `mockups/LfaV10Nurburgring/index.html` | ☐ |
 | 11 | KoenigseggGyro | [`koenigsegg_gyro`](../../../crates/fh6-clusters/src/clusters/koenigsegg_gyro/) | rebuild | Classic Analog | cockpit | 15 | `mockups/KoenigseggGyro/index.html` | ☐ |
-| 12 | ★ BoschDdu | [`bosch_ddu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | rebuild | Race Dash | cockpit | 4 | `mockups/BoschDdu/index.html` | next |
+| 12 | ★ BoschDdu | [`bosch_ddu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | rebuild | Race Dash | cockpit | 4 | Penpot `07 · BoschDdu` `b568ed3f-64cd-806f-8008-fd94834f5850` | ✅ |
 | 13 | ValkyrieLmp1 | [`valkyrie_lmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | rebuild | Race Dash | cockpit+hood | 16 | `mockups/ValkyrieLmp1/index.html` | ☐ |
 | 14 | Gt7ModularTripod | [`gt7_modular_tripod`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/) | rebuild | Race Dash | cockpit+hood | 17 | `mockups/Gt7ModularTripod/index.html` | ☐ |
 | 15 | ★ TeslaAdas | [`tesla_adas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | rebuild | ADAS & HUD | cockpit+hood | 5 | `mockups/TeslaAdas/index.html` | ☐ |
