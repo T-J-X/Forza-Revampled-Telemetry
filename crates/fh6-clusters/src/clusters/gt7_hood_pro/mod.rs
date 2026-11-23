@@ -101,7 +101,7 @@ const GRAIN_ALPHA: f32 = 0.9;
 /// How much the grain dims the ribbon body before adding its filaments (at the head).
 const GRAIN_DIM: f32 = 0.38;
 /// Opacity of the soft pads under the text groups (speed; on the hood also G and pedals).
-const TEXT_PAD: f32 = 0.3;
+const TEXT_PAD: f32 = 0.2;
 /// Hood wing channel under the unlit span.
 const CHANNEL_UNLIT: f32 = 0.1;
 /// How far the full channel runs ahead of the comet (local px; longer leaves a dark knot ahead
@@ -609,7 +609,7 @@ impl Cluster for Gt7HoodPro {
                 color: pal.roles.oled_black.with_alpha(0.45),
             },
         );
-        // Soft rounded-rectangle pads (text box + 24 px, 32 px feather, <= 0.30, clipped to the
+        // Soft rounded-rectangle pads (text box + 24 px, 32 px feather, 0.20, clipped to the
         // envelope) under the speed and, on the hood (no scrim, bright road and sky behind), under
         // the G and pedal groups, plus the soft dark channel under the wings.
         let env = layout.envelope;
