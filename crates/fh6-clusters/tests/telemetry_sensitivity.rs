@@ -120,7 +120,10 @@ fn telemetry_sensitivity_all_clusters() {
             },
         ),
     ];
-    for theme in ClusterTheme::all().iter().filter(|t| fh6_clusters::create_cluster(**t).is_some()) {
+    for theme in ClusterTheme::all()
+        .iter()
+        .filter(|t| fh6_clusters::create_cluster(**t).is_some())
+    {
         let hashes: Vec<u64> = regimes
             .iter()
             .map(|(_, d)| {

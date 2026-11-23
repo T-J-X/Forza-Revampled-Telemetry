@@ -74,9 +74,7 @@ impl Gpu {
         let mut img = None;
         for _ in 0..16 {
             let missing = {
-                let mut p = self.kit.begin_frame(layout);
-                draw(&mut p, layout);
-                drop(p);
+                draw(&mut self.kit.begin_frame(layout), layout);
                 self.kit.scene().missing_glyph_count()
             };
             let mut encoder = self.ctx.device.create_command_encoder(&Default::default());

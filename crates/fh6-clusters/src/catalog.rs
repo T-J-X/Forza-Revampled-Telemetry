@@ -760,7 +760,12 @@ mod tests {
     fn snake_names_match_the_theme_names() {
         for e in &CATALOG {
             let joined: String = e.snake.split('_').collect();
-            assert!(joined.eq_ignore_ascii_case(e.theme.name()), "{} vs {}", e.snake, e.theme);
+            assert!(
+                joined.eq_ignore_ascii_case(e.theme.name()),
+                "{} vs {}",
+                e.snake,
+                e.theme
+            );
             assert_eq!(find(e.snake).map(|f| f.theme), Some(e.theme));
             assert_eq!(find(e.theme.name()).map(|f| f.theme), Some(e.theme));
         }

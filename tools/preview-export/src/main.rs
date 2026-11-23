@@ -321,7 +321,10 @@ mod legacy {
 
     pub fn clusters(out: &Path) -> Result<()> {
         // The 19 concepts new in Phase 7 never had a v1 renderer.
-        for &theme in ClusterTheme::all().iter().filter(|t| fh6_clusters::create_cluster(**t).is_some()) {
+        for &theme in ClusterTheme::all()
+            .iter()
+            .filter(|t| fh6_clusters::create_cluster(**t).is_some())
+        {
             let cfg = AppConfig {
                 current_camera_index: 3,
                 cockpit_hud_style_typed: theme,

@@ -23,7 +23,9 @@
 //! [`RoadCurve`]. [`AdasInput::from_signals`] passes `Signals::yaw_rate` through unchanged, so the
 //! caller verifies the Forza sign once and negates it if needed. The ego's drift yaw uses only the
 //! slip magnitude, turned into the bend by the curvature's sign (tokens `egoHeading`) and eased out
-//! on a straight, so the (equally unverified) slip sign is never used.
+//! on a straight, so the (equally unverified) slip sign is never used. In reverse the packet's slip
+//! angle is measured against the reversed velocity (about 180 degrees), so it says nothing about a
+//! drift there: the ego stays on its path and no drift is shown.
 use fh6_kit::math::{finite_or, smoothstep, vec3, Vec3};
 use fh6_kit::perspective::{Camera25, RoadCurve, MAX_KAPPA};
 use fh6_kit::{
@@ -47,6 +49,8 @@ pub const MAX_ROAD_USERS: usize = 6;
 pub const MIN_CURVE_SPEED: f32 = 3.0;
 /// Deceleration of the braking-distance estimate `v^2 / (2 a)` in m/s^2 (COMPONENTS §10).
 pub const BRAKE_DECEL: f32 = 9.0;
+/// Longest step (seconds) [`AdasRoad::update`] advances: a host hitch never jumps the scene.
+pub const MAX_DT: f32 = 0.25;
 
 /// Where the horizon sits, as a fraction of the viewport's height from its top. The band is the
 /// lower crop of the pitched frame (an off-axis lens: the optical centre sits above the viewport's
@@ -79,9 +83,10 @@ const CARPET_NEAR_ALPHA: f32 = 0.55;
 const BRAKE_ZONE_TONE: f32 = 0.35;
 /// Carpet half width (metres): the ego's track plus a hand's width.
 const CARPET_HALF_WIDTH: f32 = 1.05;
-/// Depth where the carpet reaches its full alpha (the ego's front bumper, 2.25 m ahead of its
-/// centre); it fades in from the ego's centre.
-const CARPET_FULL_Z: f32 = EGO_Z + 2.0;
+/// Distance past the ego's centre (metres) where the carpet reaches its full alpha (by the ego's
+/// front bumper, 2.25 m ahead of its centre); it fades in from the ego's centre. A carpet shorter
+/// than 20 m reaches it at 10% of its length instead, so its stops stay ordered.
+const CARPET_FULL_AHEAD: f32 = 2.0;
 /// Underglow alpha inside the pool.
 const UNDERGLOW_ALPHA: f32 = 0.55;
 /// The underglow ellipse's semi-axes as multiples of the body's half width and half length.
@@ -90,9 +95,9 @@ const UNDERGLOW_AXES: [f32; 2] = [1.22, 1.10];
 const UNDERGLOW_POINTS: usize = 24;
 /// Points per carpet side (2 x 32 = tokens `carpet.segments`).
 const CARPET_SAMPLES: usize = 32;
-/// Shortest carpet past the ego (metres) when a tight bend in a narrow band shortens it (keeps
-/// [`carpet_depths`] ordered).
-const CARPET_MIN_AHEAD: f32 = 17.0;
+/// Shortest carpet past the ego (metres) when a tight bend in a narrow band shortens it: it still
+/// reaches well past the ego's front bumper.
+const CARPET_MIN_AHEAD: f32 = 6.0;
 /// Far end of the drawn road (metres) on a straight; lines and carpet reach zero alpha there.
 const Z_FAR: f32 = 85.0;
 /// Depth where the lines start to dissolve towards the horizon (on a straight; scaled with the
@@ -191,6 +196,7 @@ pub struct AdasInput {
     pub underglow: Underglow,
     /// True in reverse gear. The packet's speed is a magnitude, so in reverse the scene runs the
     /// dashes backwards and mirrors the predicted curvature (`kappa = yawRate / v` with `v` < 0).
+    /// The slip angle is ignored in reverse (it reads about 180 degrees against the velocity).
     pub reverse: bool,
 }
 
@@ -657,13 +663,13 @@ fn reach(kappa: f32) -> f32 {
     (REACH_HEADING_TAN / k).clamp(REACH_MIN, Z_FAR)
 }
 
-/// The carpet's gradient stop depths for a road drawn to `z_far`: full alpha by the ego's front
-/// bumper, three stops scaled with the reach, zero at the far end (ordered for any `z_far` from
-/// [`REACH_MIN`] to [`Z_FAR`]).
+/// The carpet's gradient stop depths for a carpet drawn to `z_far`: full alpha by the ego's front
+/// bumper (or 10% of a short carpet), three stops scaled with the length, zero at the far end
+/// (strictly ordered for any `z_far` past the ego).
 fn carpet_depths(z_far: f32) -> [f32; 5] {
-    let ahead = z_far - EGO_Z;
+    let ahead = (z_far - EGO_Z).max(1e-2);
     [
-        CARPET_FULL_Z,
+        EGO_Z + CARPET_FULL_AHEAD.min(0.1 * ahead),
         EGO_Z + 0.12 * ahead,
         EGO_Z + 0.28 * ahead,
         EGO_Z + 0.52 * ahead,
@@ -725,8 +731,7 @@ impl Scene3 {
 
     /// Where the carpet ends: the road's far end, or nearer where either carpet edge would enter
     /// the viewport's side fade (a tight bend in a narrow band), so the carpet has dissolved
-    /// before the clip. Never nearer than [`CARPET_MIN_AHEAD`] past the ego (its stops stay
-    /// ordered).
+    /// before the clip. Never nearer than [`CARPET_MIN_AHEAD`] past the ego.
     fn carpet_far(&self) -> f32 {
         let min_far = (EGO_Z + CARPET_MIN_AHEAD).min(self.z_far);
         for i in 1..CARPET_SAMPLES {
@@ -878,25 +883,29 @@ impl AdasRoad {
 
     /// Advances the scene by `dt` seconds: curvature, drift yaw, brake lights and light on the
     /// tokens' springs, dash scrolling and traffic from the speed, step crossfades. In reverse
-    /// ([`AdasInput::reverse`]) the dashes run backwards and the curvature is mirrored.
+    /// ([`AdasInput::reverse`]) the dashes run backwards, the curvature is mirrored and the slip
+    /// angle is ignored. A hitch longer than [`MAX_DT`] seconds advances [`MAX_DT`].
     pub fn update(&mut self, input: &AdasInput, dt: f32) {
-        let dt = finite_or(dt, 0.0).clamp(0.0, 0.25);
+        let dt = finite_or(dt, 0.0).clamp(0.0, MAX_DT);
         let signed = finite_or(input.speed_ms, 0.0);
         let v = signed.abs();
-        let dir = if input.reverse || signed < 0.0 { -1.0 } else { 1.0 };
+        let reverse = input.reverse || signed < 0.0;
+        let dir = if reverse { -1.0 } else { 1.0 };
         self.speed = v;
         self.travelled = (self.travelled + dir * v * dt).rem_euclid(DASH_PERIOD);
+        // Reversing, the packet's slip reads about 180 degrees against the velocity: no drift.
+        let slip = if reverse { 0.0 } else { finite_or(input.slip_deg, 0.0) };
 
         self.kappa_target = dir * curvature(input.yaw_rate, v);
         self.kappa.update(self.kappa_target, dt);
-        self.yaw_target = ego_yaw(self.kappa_target, input.slip_deg);
+        self.yaw_target = ego_yaw(self.kappa_target, slip);
         self.yaw.update(self.yaw_target, dt);
         self.brake_target = finite_or(input.brake, 0.0).clamp(0.0, 1.0);
         self.brake.update(self.brake_target, dt);
         self.light_target = (finite_or(input.g_lat, 0.0) / 1.5).clamp(-1.0, 1.0);
         self.light.update(self.light_target, dt);
 
-        let slip = finite_or(input.slip_deg, 0.0).abs();
+        let slip = slip.abs();
         self.drifting = if self.drifting {
             slip >= DRIFT_SLIP_OFF_DEG && v >= DRIFT_OFF_SPEED
         } else {
@@ -969,7 +978,9 @@ impl AdasRoad {
         let s = Scene3::new(viewport, self.kappa.value());
         p.scoped(|p| {
             p.clip(viewport, 0.0);
+            // Ground first (carpet, the underglow's light pool, markings), then the cars.
             self.draw_carpet(p, &s, palette);
+            self.draw_underglow(p, &s, palette);
             self.draw_lanes(p, &s, palette);
             self.draw_proximity(p, &s, palette);
             self.draw_cars(p, &s, palette);
@@ -1015,8 +1026,9 @@ impl AdasRoad {
         // Stops along the depth: fade in under the ego, full by its front bumper, the tone step
         // at the braking point, zero at the far end (8 stops at most).
         let mut grad = Gradient::linear(vec2(0.0, y_near), vec2(0.0, y_far)).stop(0.0, tone.with_alpha(0.0));
-        let mut split = !(z_brake > CARPET_FULL_Z && z_brake < far);
-        for z in carpet_depths(far) {
+        let depths = carpet_depths(far);
+        let mut split = !(z_brake > depths[0] && z_brake < far);
+        for z in depths {
             if !split && z_brake < z {
                 let a = alpha(z_brake - 1e-3);
                 grad = grad
@@ -1198,21 +1210,21 @@ impl AdasRoad {
             }
         }
         if let (Some((bounds, fade)), Some(gap)) = (lead_marker, self.lead_gap()) {
-            draw_lead_marker(p, bounds, gap, in_path.fade(fade));
+            draw_lead_marker(p, bounds, gap, in_path.fade(fade), s.vp.max.x);
         }
     }
 
-    /// The ego: underglow, shaded body tinted by the brand, rim, brake lights.
-    fn draw_ego(&self, p: &mut Painter<'_>, s: &Scene3, pal: &Palette, light: Vec3) {
+    /// The underglow under the ego: a Gaussian of the distance to a ground ellipse under the car
+    /// (sigma 30% of the car's width), primary, caution (assist) or the shift colour (limiter),
+    /// crossfaded. It is light on the ground, so it is drawn before the markings and every car.
+    fn draw_underglow(&self, p: &mut Painter<'_>, s: &Scene3, pal: &Palette) {
         let ego = s.place(0.0, EGO_Z, CarKind::Coupe, self.yaw.value());
-        // Underglow: a Gaussian of the distance to a ground ellipse under the car, sigma 30% of
-        // the car's width.
         let mut pool = [Vec2::ZERO; UNDERGLOW_POINTS];
         for (slot, v) in pool.iter_mut().zip(ego.underglow_pool()) {
-            match s.cam.project(v) {
-                Some(q) => *slot = q,
-                None => return,
-            }
+            let Some(q) = s.cam.project(v) else {
+                return;
+            };
+            *slot = q;
         }
         let width_px = s.cam.fx * ego.body.width / s.ego_depth;
         let glow_color = pal
@@ -1228,6 +1240,11 @@ impl AdasRoad {
                 fill_inside: true,
             },
         );
+    }
+
+    /// The ego: shaded body tinted by the brand, rim, brake lights.
+    fn draw_ego(&self, p: &mut Painter<'_>, s: &Scene3, pal: &Palette, light: Vec3) {
+        let ego = s.place(0.0, EGO_Z, CarKind::Coupe, self.yaw.value());
         let body = pal.roles.ink.lerp(pal.primary, EGO_TINT);
         let look = Look {
             body,
@@ -1355,8 +1372,10 @@ fn draw_car(p: &mut Painter<'_>, s: &Scene3, car: &Placed, look: &Look, light: V
     Some(bounds)
 }
 
-/// FSD corner brackets around the lead car and its distance in the aviation face.
-fn draw_lead_marker(p: &mut Painter<'_>, bounds: Rect, gap_m: f32, color: Color) {
+/// FSD corner brackets around the lead car and its distance in the aviation face, right of the
+/// brackets, or left of them when it would pass `right_limit` (the viewport's clip, so the label
+/// is never cut in a tight bend).
+fn draw_lead_marker(p: &mut Painter<'_>, bounds: Rect, gap_m: f32, color: Color, right_limit: f32) {
     let r = bounds.expand(7.0);
     let arm = (r.width().min(r.height()) * 0.32).clamp(7.0, 22.0);
     let width = 2.5;
@@ -1390,9 +1409,17 @@ fn draw_lead_marker(p: &mut Painter<'_>, bounds: Rect, gap_m: f32, color: Color)
     } else {
         1
     };
-    let pos = vec2(r.max.x + cap * 0.5, r.min.y + cap * 0.1);
+    let space = cap * 0.3;
+    let width = p.fonts().tabular_cell(&style) * f32::from(cells) + space + p.measure("m", &style).width;
+    let right = r.max.x + cap * 0.5;
+    let x = if right + width <= right_limit {
+        right
+    } else {
+        r.min.x - cap * 0.5 - width
+    };
+    let pos = vec2(x, r.min.y + cap * 0.1);
     let set = p.number(pos, metres, cells, &style, None);
-    p.text(vec2(set.max.x + cap * 0.3, pos.y), "m", &style);
+    p.text(vec2(set.max.x + space, pos.y), "m", &style);
 }
 
 #[cfg(test)]
@@ -1699,11 +1726,19 @@ mod tests {
             ..forward
         };
         let (mut f, mut r) = (AdasRoad::new(&t, 2), AdasRoad::new(&t, 2));
-        f.update(&forward, 0.5);
-        r.update(&reverse, 0.5);
-        assert!((f.travelled - 2.0).abs() < 1e-4, "forward {}", f.travelled);
-        assert!((r.travelled - (DASH_PERIOD - 2.0)).abs() < 1e-4, "reverse {}", r.travelled);
+        f.update(&forward, MAX_DT);
+        r.update(&reverse, MAX_DT);
+        assert!((f.travelled - 1.0).abs() < 1e-4, "forward {}", f.travelled);
+        assert!(
+            (r.travelled - (DASH_PERIOD - 1.0)).abs() < 1e-4,
+            "reverse {}",
+            r.travelled
+        );
         assert!(f.kappa_target > 0.0 && (r.kappa_target + f.kappa_target).abs() < 1e-6);
+        // A hitch advances at most MAX_DT.
+        let mut h = AdasRoad::new(&t, 2);
+        h.update(&forward, 2.0);
+        assert_eq!(h.travelled, f.travelled);
         // A negative speed counts as reverse too.
         let mut n = AdasRoad::new(&t, 2);
         n.update(
@@ -1711,7 +1746,7 @@ mod tests {
                 speed_ms: -4.0,
                 ..forward
             },
-            0.5,
+            MAX_DT,
         );
         assert_eq!((n.travelled, n.kappa_target), (r.travelled, r.kappa_target));
         let sig = Signals {
@@ -1719,7 +1754,43 @@ mod tests {
             ..Signals::default()
         };
         assert!(AdasInput::from_signals(&sig).reverse);
-        assert!(!AdasInput::from_signals(&Signals::default()).reverse, "neutral is not reverse");
+        assert!(
+            !AdasInput::from_signals(&Signals::default()).reverse,
+            "neutral is not reverse"
+        );
+    }
+
+    #[test]
+    fn reverse_ignores_the_180_degree_slip() {
+        // Reversing straight, the packet's slip is measured against the reversed velocity.
+        let t = Tokens::default();
+        let mut road = AdasRoad::new(&t, 4);
+        let backing = AdasInput {
+            speed_ms: 8.0,
+            yaw_rate: 0.3,
+            slip_deg: 178.0,
+            reverse: true,
+            ..AdasInput::default()
+        };
+        for _ in 0..60 {
+            road.update(&backing, DT);
+        }
+        assert!(!road.drifting && road.drift == 0.0, "no drift in reverse");
+        assert_eq!(road.yaw_target, 0.0);
+        assert!(road.yaw.value().abs() < 1e-6, "ego stays on its path");
+        // The same slip going forwards is a spin: drift shown, yaw clamped into the bend.
+        let mut spin = AdasRoad::new(&t, 4);
+        for _ in 0..60 {
+            spin.update(
+                &AdasInput {
+                    reverse: false,
+                    ..backing
+                },
+                DT,
+            );
+        }
+        assert!(spin.drifting);
+        assert!((spin.yaw_target - MAX_EGO_YAW_DEG.to_radians()).abs() < 1e-6);
     }
 
     #[test]
@@ -1760,24 +1831,45 @@ mod tests {
         // A tight bend in a narrow band: it ends where it would enter the side fade, never
         // nearer than the minimum, and its stops stay ordered.
         let narrow = Rect::from_xywh(-200.0, -50.0, 400.0, 290.0);
-        for k in [0.03f32, 0.06, MAX_KAPPA, -MAX_KAPPA] {
+        let mut cut_by_fade = 0;
+        for k in [0.01f32, 0.02, -0.03, 0.06, MAX_KAPPA, -MAX_KAPPA] {
             let s = Scene3::new(narrow, k);
             let far = s.carpet_far();
-            assert!(far < s.z_far && far >= EGO_Z + CARPET_MIN_AHEAD - 1e-3, "kappa {k}: {far}");
+            assert!(
+                far < s.z_far && far >= EGO_Z + CARPET_MIN_AHEAD - 1e-3,
+                "kappa {k}: {far}"
+            );
             let d = carpet_depths(far);
             assert!(d.windows(2).all(|w| w[0] < w[1]), "kappa {k}: {d:?}");
+            // No hard clip: every drawn carpet point before its zero-alpha far end is inside the
+            // viewport's width.
+            for i in 0..CARPET_SAMPLES - 1 {
+                for o in [-CARPET_HALF_WIDTH, CARPET_HALF_WIDTH] {
+                    let q = s.lane_point(o, carpet_z(i, far)).expect("in front");
+                    assert!(q.x > narrow.min.x && q.x < narrow.max.x, "kappa {k}, {i}: {q:?}");
+                }
+            }
+            // Where the side fade (not the minimum) shortened it, the last sample before its
+            // far end is clear of the fade.
+            if far > EGO_Z + CARPET_MIN_AHEAD + 1e-3 {
+                cut_by_fade += 1;
+                let prev = (1..CARPET_SAMPLES)
+                    .map(|i| carpet_z(i, s.z_far))
+                    .take_while(|&z| z < far)
+                    .last()
+                    .unwrap_or(EGO_Z);
+                for o in [-CARPET_HALF_WIDTH, CARPET_HALF_WIDTH] {
+                    let q = s.lane_point(o, prev).expect("in front");
+                    assert!(s.side_fade(q) >= 1.0, "kappa {k}, {o}: {q:?}");
+                }
+            }
         }
-        // Where it is shortened by the side fade (not the minimum), the far edge is inside.
-        let s = Scene3::new(narrow, 0.03);
-        let far = s.carpet_far();
-        let prev = (1..CARPET_SAMPLES)
-            .map(|i| carpet_z(i, s.z_far))
-            .take_while(|&z| z < far)
-            .last()
-            .unwrap_or(EGO_Z);
-        for o in [-CARPET_HALF_WIDTH, CARPET_HALF_WIDTH] {
-            let q = s.lane_point(o, prev).expect("in front");
-            assert!(s.side_fade(q) >= 1.0, "{o}: {q:?}");
+        assert_eq!(cut_by_fade, 3, "the side fade decides in the gentler bends");
+        // Short carpets keep strictly ordered stops.
+        for ahead in [0.5f32, CARPET_MIN_AHEAD, 12.0, 19.9, 20.0, 40.0] {
+            let d = carpet_depths(EGO_Z + ahead);
+            assert!(d.windows(2).all(|w| w[0] < w[1]), "{ahead}: {d:?}");
+            assert!(d[0] > EGO_Z && d[4] == EGO_Z + ahead);
         }
     }
 
@@ -1871,7 +1963,7 @@ mod tests {
         assert!(road.curvature().is_finite() && road.curvature() == 0.0);
         assert!(road.yaw.value().is_finite() && road.brake.value().is_finite());
         assert!(road.light.value().is_finite() && road.travelled.is_finite());
-        assert!(road.lead_gap().map_or(true, f32::is_finite));
+        assert!(road.lead_gap().into_iter().all(f32::is_finite));
     }
 
     #[test]

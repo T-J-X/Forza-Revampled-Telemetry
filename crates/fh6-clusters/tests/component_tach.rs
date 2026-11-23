@@ -246,6 +246,24 @@ fn tach_bar_race_dash() {
     assert!(n > 4 && b > r + 80.0, "idle cell lit in primary ({n} px, r {r} b {b})");
     let (n, _) = lit(&img, cell(0, 5));
     assert!(n == 0, "idle cell 6 unlit ({n} px)");
+    // Lit cells are top-lit lenses (a glint at the top edge, a shade toward the bottom), not
+    // flat tiles.
+    let band = |row: usize, i: u32, from: f32, to: f32| {
+        let r = bars[row].cell_rect(bar_rect(row), i);
+        Rect::from_xywh(
+            r.min.x + r.width() * 0.2,
+            r.min.y + r.height() * from,
+            r.width() * 0.6,
+            r.height() * (to - from),
+        )
+    };
+    let luma = |c: [f32; 3]| c[0] + c[1] + c[2];
+    let (_, top) = lit(&img, band(2, 10, 0.08, 0.3));
+    let (_, bottom) = lit(&img, band(2, 10, 0.7, 0.92));
+    assert!(
+        luma(top) > luma(bottom) + 60.0,
+        "lit cell is a top-lit lens (top {top:?}, bottom {bottom:?})"
+    );
     // Redline: low cells primary, the caution band amber, the head red.
     let (n, [r, _, b]) = lit(&img, cell(2, 20));
     assert!(n > 4 && b > r + 80.0, "redline low cells primary ({n} px, r {r} b {b})");

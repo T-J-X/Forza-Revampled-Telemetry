@@ -101,27 +101,25 @@ fn to_px(p: Vec2, scale: f32) -> (i64, i64) {
     )
 }
 
-/// Bright-pixel count and the mean colour of bright pixels in a local rect.
-fn lit(img: &RgbaImage, r: Rect, scale: f32) -> (u32, [f32; 3]) {
+/// Count of hot (`shift`-orange: red well above green and blue) pixels in a local rect.
+fn hot(img: &RgbaImage, r: Rect, scale: f32) -> u32 {
     let (x0, y0) = to_px(r.min, scale);
     let (x1, y1) = to_px(r.max, scale);
     let mut n = 0u32;
-    let mut sum = [0.0f32; 3];
     for y in y0.max(0)..y1.min(i64::from(img.height)) {
         for x in x0.max(0)..x1.min(i64::from(img.width)) {
             let i = ((y as u32 * img.width + x as u32) * 4) as usize;
-            let px = &img.pixels[i..i + 4];
-            let (r, g, b, a) = (px[0], px[1], px[2], px[3]);
-            if a > 40 && u32::from(r) + u32::from(g) + u32::from(b) > 150 {
+            let (r, g, b) = (
+                i32::from(img.pixels[i]),
+                i32::from(img.pixels[i + 1]),
+                i32::from(img.pixels[i + 2]),
+            );
+            if r > 60 && r > g + 30 && r > b + 40 {
                 n += 1;
-                sum[0] += f32::from(r);
-                sum[1] += f32::from(g);
-                sum[2] += f32::from(b);
             }
         }
     }
-    let k = 1.0 / n.max(1) as f32;
-    (n, [sum[0] * k, sum[1] * k, sum[2] * k])
+    n
 }
 
 /// Non-black pixel count (any channel above 12) in a local rect.
@@ -227,8 +225,15 @@ fn liquid_states() {
 
     // Telemetry state of each part.
     let [idle, cruise, limiter] = [&parts[0], &parts[1], &parts[2]];
-    assert!(idle.pool.tilt().abs() < 1e-4 && idle.channel.tilt().abs() < 1e-4, "idle is level");
-    assert!(cruise.pool.tilt() > 0.1, "a right turn raises the left side: {}", cruise.pool.tilt());
+    assert!(
+        idle.pool.tilt().abs() < 1e-4 && idle.channel.tilt().abs() < 1e-4,
+        "idle is level"
+    );
+    assert!(
+        cruise.pool.tilt() > 0.1,
+        "a right turn raises the left side: {}",
+        cruise.pool.tilt()
+    );
     assert!(cruise.channel.tilt() > 0.1, "the meniscus leans with the pool");
     assert!(limiter.channel.limiter() > 0.95, "hot glow at the limiter");
     assert!(limiter.channel.droplet_count() > 0, "droplets leave the meniscus");
@@ -279,11 +284,27 @@ fn liquid_states() {
     // Idle: a bead rests in the closed end; the tube is empty at 50%.
     let idle_mid = coverage(&img, probe(0, 0.5), HALF);
     assert!(filled > 3 * idle_mid.max(1), "idle tube empty at 50% ({idle_mid} px)");
-    // Limiter: the redline end glows in `shift` (orange: red well above blue).
-    let (n, [r, g, b]) = lit(&img, probe(2, 0.96), HALF);
-    assert!(n > 4 && r > b + 80.0 && r > g, "limiter end glows hot ({n} px, {r} {g} {b})");
-    let (n, [r, _, b]) = lit(&img, probe(1, 0.96), HALF);
-    assert!(n == 0 || b + 40.0 > r, "no hot glow off the limiter ({n} px, r {r} b {b})");
+    // Limiter: the redline end glows in `shift` (orange) round the dark column; none at cruise.
+    let glow_box = |col: usize| {
+        let r = probe(col, 0.96);
+        r.expand(r.width() * 0.5)
+    };
+    // (The box also holds the warning redline band and numeral, the same in both states.)
+    let limiter_hot = hot(&img, glow_box(2), HALF);
+    let cruise_hot = hot(&img, glow_box(1), HALF);
+    assert!(
+        limiter_hot > 2 * cruise_hot + 60,
+        "limiter end glows hot ({limiter_hot} px vs {cruise_hot} px off the limiter)"
+    );
+    let inside = hot(&img, probe(1, 0.96), HALF);
+    assert!(inside < 4, "no hot glow in the tube off the limiter ({inside} px)");
+    // The mercury itself stays metal under the glow: the column's centre line is not orange.
+    let (ch, _) = geometry(vec2(COLUMNS[2], STATE_Y), SIZE);
+    let core = Rect::from_center_size(
+        Vec2::polar(ch.center, ch.radius(), parts[2].channel.angle_at(0.9)),
+        Vec2::splat(ch.column * 0.8),
+    );
+    assert!(hot(&img, core, HALF) < 4, "the column is not tinted by the glow");
 
     // Cruise pool: the surface line rises on the left in a right turn.
     let (_, pool) = geometry(vec2(COLUMNS[1], STATE_Y), SIZE);
@@ -307,8 +328,8 @@ fn liquid_states() {
     }
 
     // The family rule: thin streaks, not chrome slabs. Near-white stays under 15% of the
-    // lit pixels in each procedural composite.
-    for (col, cx) in COLUMNS.iter().take(3).enumerate() {
+    // lit pixels in each composite, the flipbook one included.
+    for (col, cx) in COLUMNS.iter().enumerate() {
         let r = Rect::from_center_size(vec2(*cx, STATE_Y), Vec2::splat(900.0));
         let (x0, y0) = to_px(r.min, HALF);
         let (x1, y1) = to_px(r.max, HALF);
@@ -326,7 +347,11 @@ fn liquid_states() {
             }
         }
         let share = white as f32 / on.max(1) as f32;
-        assert!(share < 0.15, "column {col}: near-white {:.1}% of lit pixels", share * 100.0);
+        assert!(
+            share < 0.15,
+            "column {col}: near-white {:.1}% of lit pixels",
+            share * 100.0
+        );
     }
 }
 
@@ -363,18 +388,71 @@ fn liquid_true_size() {
         // Droplets fly inside the composite.
         let (ch, _) = geometry(vec2(*cx, TRUE_Y), 1.0);
         for (c, r) in part.channel.droplets(&ch) {
-            assert!(r > 0.0 && (c - ch.center).length() < ch.outer + 120.0, "droplet at {c:?}");
+            assert!(
+                r > 0.0 && (c - ch.center).length() < ch.outer + 120.0,
+                "droplet at {c:?}"
+            );
+            // They leave the redline end (lower right) and never cross the gear glyph's box.
+            let d = c - ch.center;
+            assert!(d.x > 60.0 && d.y > 0.0, "droplet off the limiter end: {d:?}");
         }
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Detail: 3 target px per local unit (1.5x the 4K panel), the limiter end on the left (meniscus,
+// detaching droplets, hot glass, pool droplets) and the cruise meniscus on the right (tilted cap,
+// softbox line, specular).
+
+/// Target px per local unit of the detail shot.
+const DETAIL: f32 = 3.0;
+
 #[test]
-fn zz_debug_droplets() {
-    let tokens = support::gpu().tokens.clone();
-    let part = settle(&tokens, STATES[2]);
-    let ch = ChannelGeometry::fluid_family().at(Vec2::ZERO);
-    for (c, r) in part.channel.droplets(&ch) {
-        eprintln!("channel drop {c:?} r {r}");
+fn liquid_detail() {
+    let mut gpu = support::gpu();
+    let center = vec2(support::W as f32 * 0.5, support::H as f32 * 0.5);
+    let layout = Layout::centered(center, DETAIL, (support::W, support::H));
+    let palette = Palette::family(&gpu.tokens, FAMILY);
+    gpu.kit.set_palette(palette);
+    let tokens = gpu.tokens.clone();
+    let limiter = settle(&tokens, STATES[2]);
+    let cruise = settle(&tokens, STATES[1]);
+
+    // Place each composite so the part under review sits in its half of the frame, each half
+    // clipped so the two never overlap.
+    let fam = ChannelGeometry::fluid_family();
+    let tip = |part: &Settled| Vec2::polar(Vec2::ZERO, fam.radius(), part.channel.angle_at(part.channel.fraction()));
+    let (limiter_tip, cruise_tip) = (vec2(-120.0, -20.0), vec2(200.0, -30.0));
+    let limiter_at = limiter_tip - tip(&limiter);
+    let cruise_at = cruise_tip - tip(&cruise);
+    let half_w = support::W as f32 * 0.5 / DETAIL;
+    let half_h = support::H as f32 * 0.5 / DETAIL;
+    let left = Rect::from_xywh(-half_w, -half_h, half_w - 4.0, 2.0 * half_h);
+    let right = Rect::from_xywh(4.0, -half_h, half_w - 4.0, 2.0 * half_h);
+
+    let img = gpu.render(&layout, |p, _| {
+        for (clip, part, at, name) in [
+            (left, &limiter, limiter_at, "LIMITER END"),
+            (right, &cruise, cruise_at, "CRUISE MENISCUS"),
+        ] {
+            p.save();
+            p.clip(clip, 0.0);
+            draw_composite(p, part, at, 1.0, &palette, None);
+            caption(p, vec2(clip.center().x, 150.0), name, 12.0, &palette);
+            p.restore();
+        }
+    });
+    let path = support::save_shot("liquid_detail", &img);
+    assert!(path.exists(), "{}", path.display());
+
+    // Both tips draw liquid where the reading is.
+    for at in [limiter_tip, cruise_tip] {
+        let r = Rect::from_center_size(at, Vec2::splat(30.0));
+        assert!(coverage(&img, r, DETAIL) > 400, "meniscus at {at:?} draws");
     }
-    eprintln!("light {}", part.light.angle().to_degrees());
+    // The hot glass at the limiter end is `shift` (orange), the cruise end has none.
+    let probe = |at: Vec2| Rect::from_center_size(at, Vec2::splat(90.0));
+    let limiter_hot = hot(&img, probe(limiter_tip), DETAIL);
+    assert!(limiter_hot > 400, "hot glass at the limiter end ({limiter_hot} px)");
+    assert_eq!(hot(&img, probe(cruise_tip), DETAIL), 0, "no hot glass at cruise");
 }

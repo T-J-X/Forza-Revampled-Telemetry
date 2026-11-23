@@ -178,9 +178,10 @@ fn adas_road_states() {
 
     // State assumptions the shot relies on.
     assert!(
-        !roads[0].animating() || roads[0].curvature().abs() < 1e-6,
-        "idle is still"
+        !roads[0].animating(),
+        "a parked, settled scene lets the host stop rendering"
     );
+    assert_eq!(roads[0].curvature(), 0.0, "idle is straight");
     assert!((roads[1].curvature() - 0.12 / 31.0).abs() < 4e-4, "cruise bends right");
     assert!(roads[1].lead_gap().is_some(), "cruise has an in-path lead car");
     assert!(
@@ -305,11 +306,28 @@ fn adas_road_native_band() {
     gpu.kit.set_palette(palette);
     let tokens = gpu.tokens.clone();
     let cases = cases();
-    let shown = [&cases[1], &cases[3]];
+    // Tight bends (a 33 m radius at 15 m/s) in narrow 400 px viewports: the stress case for the
+    // dissolve, where the predicted road leaves the band through its sides.
+    let tight = |yaw_rate: f32| Case {
+        title: "TIGHT BEND NARROW",
+        sig: Signals {
+            speed_ms: 15.0,
+            yaw_rate,
+            slip_deg: 4.0,
+            g_lat: 0.7 * yaw_rate.signum(),
+            ..cases[1].sig
+        },
+        underglow: None,
+        seed: 7,
+    };
+    let (tight_right, tight_left) = (tight(0.45), tight(-0.45));
+    let shown = [&cases[1], &cases[3], &tight_right, &tight_left];
     let roads: Vec<AdasRoad> = shown.iter().map(|c| settle(&tokens, c, c.seed)).collect();
     let bands = [
         Rect::from_xywh(BAND.0, -440.0, BAND.2, BAND.3),
         Rect::from_xywh(BAND.0, 80.0, BAND.2, BAND.3),
+        Rect::from_xywh(-940.0, -440.0, 400.0, BAND.3),
+        Rect::from_xywh(540.0, 80.0, 400.0, BAND.3),
     ];
     let img = gpu.render(&layout, |p, _| {
         for (road, band) in roads.iter().zip(bands) {
@@ -323,5 +341,13 @@ fn adas_road_native_band() {
         assert!(n > 1500, "band {i} draws a scene ({n} px)");
         let outside = Rect::from_xywh(band.min.x, band.max.y + 2.0, band.width(), 60.0);
         assert_eq!(count(&img, &layout, outside, lit), 0, "band {i} stays in its viewport");
+        // No viewport box: the 4 px columns just inside the side clips hold nothing brighter
+        // than a dissolving hairline (a clipped carpet, car or label would be far brighter).
+        let bright = |r: f32, g: f32, b: f32| r + g + b > 90.0;
+        for x in [band.min.x, band.max.x - 4.0] {
+            let column = Rect::from_xywh(x, band.min.y, 4.0, band.height());
+            let n = count(&img, &layout, column, bright);
+            assert_eq!(n, 0, "band {i}: a hard edge at x {x} ({n} px)");
+        }
     }
 }

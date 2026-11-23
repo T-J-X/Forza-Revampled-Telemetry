@@ -33,6 +33,12 @@ const BEZEL_X: [f32; 6] = [-1600.0, -960.0, -320.0, 320.0, 960.0, 1600.0];
 const CAVITY: Vec2 = Vec2::new(400.0, 240.0);
 /// Circular cavity radius for the bezel row.
 const CAVITY_R: f32 = 170.0;
+/// Frameless demo: the rule's y and width, and the falloff depth.
+const RULE_Y: f32 = BEZEL_Y + CAVITY.y * 0.5 - 30.0;
+/// See [`RULE_Y`].
+const RULE_W: f32 = 6.0;
+/// See [`RULE_Y`].
+const FALLOFF: f32 = 48.0;
 
 /// The car's signals at `rpm`, climbing at `rate` rpm/s.
 fn signals(tokens: &Tokens, rpm: f32, rate: f32, g_lat: f32) -> Signals {
@@ -265,13 +271,15 @@ fn classic_needle_dial_and_bezels() {
                     let speed = TextStyle::new(display, 150.0)
                         .paint(palette.roles.ink)
                         .align(Align::Center, VAlign::CapMiddle);
-                    p.text(form.center() + vec2(0.0, 0.0), "118", &speed);
+                    p.text(form.center(), "118", &speed);
+                    // A rule from edge to edge (its round caps end just inside the rounded
+                    // cavity edge).
                     let r = rect_at(x);
                     p.fill(
-                        &fh6_kit::Shape::line(vec2(r.min.x, r.max.y - 30.0), vec2(r.max.x, r.max.y - 30.0), 6.0),
+                        &fh6_kit::Shape::line(vec2(r.min.x + RULE_W, RULE_Y), vec2(r.max.x - RULE_W, RULE_Y), RULE_W),
                         palette.primary,
                     );
-                    Bezel::draw_falloff(p, *form, &palette, 48.0);
+                    Bezel::draw_falloff(p, *form, &palette, FALLOFF);
                 }
                 _ => {}
             }
@@ -367,6 +375,27 @@ fn classic_needle_dial_and_bezels() {
     let zone = dials[2].dial.logo_zone(vec2(DIAL_X[2], DIAL_Y), FACE_R);
     let mark = luma(mean(&img, zone, |_| true));
     assert!(mark > 1.0, "wordmark drawn in the logo zone ({mark})");
+
+    // Frameless falloff: the rule dissolves to near black at the cavity edge (even on screen,
+    // not just in linear light), while the middle of the rule still reads.
+    let r = rect_at(BEZEL_X[5]);
+    let rule = |x: f32| {
+        luma(mean(
+            &img,
+            Rect::from_center_size(vec2(x, RULE_Y), vec2(6.0, 6.0)),
+            |_| true,
+        ))
+    };
+    let (edge, inside, middle) = (
+        rule(r.min.x + 6.0),
+        rule(r.min.x + FALLOFF * 0.5),
+        rule(r.center().x + 60.0),
+    );
+    assert!(middle > 40.0, "the rule reads inside the cavity ({middle})");
+    assert!(
+        edge < middle * 0.15 && edge < inside && inside < middle,
+        "falloff ramps to black at the edge ({edge} < {inside} < {middle})"
+    );
 }
 
 /// A 2x close-up of the materials: the limiter dial and the blip's afterimage at R 460 in

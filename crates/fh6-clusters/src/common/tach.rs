@@ -2,9 +2,11 @@
 //! of §5 (one non-flashing cue per family; the 10 Hz strobe stays on the shift strip).
 //!
 //! The three variants share one fill model: the rpm fraction from [`Signals`] on the tokens'
-//! `ribbon` spring with velocity feed-forward, and a limiter amount on the `snap` spring that
-//! switches on at the shift rpm and off 120 rpm below it, so the cue never flickers while the
-//! engine bounces off the limiter. `update` and `draw` allocate nothing.
+//! `ribbon` spring with velocity feed-forward (the shown fill only moves toward the measured rpm
+//! and never passes it, so the lead cannot show revs the engine does not have), and a limiter
+//! amount on the `snap` spring that switches on at the shift rpm and off 120 rpm below it, so the
+//! cue never flickers while the engine bounces off the limiter. `update` and `draw` allocate
+//! nothing.
 use fh6_kit::{
     deg, vec2, Align, Axis, Bloom, Cap, Color, FontId, Glow, Gradient, LayerOptions, Paint, Painter, Palette, Rect,
     SegmentedBar, Shape, Signals, Spring, Stroke, TextStyle, TickRing, Tokens, VAlign, Vec2,
@@ -123,9 +125,16 @@ fn fill_layer(tokens: &Tokens, cue: LimiterCue, k: f32) -> (LayerOptions, f32) {
 
 /// The fill state every variant shares: the rpm fraction on the `ribbon` spring and the limiter
 /// amount on the `snap` spring.
+///
+/// The shown fill is the spring's value held between the previously shown fill and the measured
+/// rpm fraction: it only ever moves toward the measured rpm and never passes it. Without that, the
+/// feed-forward lead (a smoothed rpm rate that is still large after an upshift drop) and the
+/// spring's momentum would show revs the engine does not have, for example a bar dipping three
+/// cells below the new rpm for 200 ms after every upshift.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct FillModel {
     level: Spring,
+    shown: f32,
     limiter: Spring,
     target: f32,
     limiter_on: bool,
@@ -133,10 +142,17 @@ struct FillModel {
     shift_ratio: f32,
 }
 
+/// `value` held within the span from `from` to `target` (either order).
+fn approach(from: f32, value: f32, target: f32) -> f32 {
+    let (lo, hi) = if from <= target { (from, target) } else { (target, from) };
+    finite(value).clamp(lo, hi)
+}
+
 impl FillModel {
     fn new(tokens: &Tokens) -> Self {
         Self {
             level: Spring::new(tokens.springs.ribbon, 0.0),
+            shown: 0.0,
             limiter: Spring::new(tokens.springs.snap, 0.0),
             target: 0.0,
             limiter_on: false,
@@ -158,6 +174,7 @@ impl FillModel {
             0.0
         };
         self.level.update_tracking(self.target, rate, dt);
+        self.shown = approach(self.shown, self.level.value(), self.target);
         if sig.shift_rpm >= 1.0 {
             if sig.shift_fraction >= 1.0 {
                 self.limiter_on = true;
@@ -180,7 +197,7 @@ impl FillModel {
 
     /// The shown rpm fraction, 0..=1.
     fn fraction(&self) -> f32 {
-        self.level.value().clamp(0.0, 1.0)
+        self.shown.clamp(0.0, 1.0)
     }
 
     /// The limiter cue amount, 0..=1.
@@ -743,16 +760,18 @@ impl TachBar {
                 fill_with_cue(p, &lit_bar, paint.into(), cue, k);
             });
             // Lens optics on every lit cell (also the steady ink cue): a glint fading down from
-            // the top edge and a shade toward the bottom, so a cell reads as a lit lens.
+            // the top edge and a shade toward the bottom, so a cell reads as a lit lens. Drawn
+            // per cell: the kit samples a bar's paint once at each cell centre, so this gradient
+            // on the bar shape would collapse to its (transparent) middle.
             let x = rect.min.x;
-            p.fill(
-                &lit_bar,
-                Gradient::linear(vec2(x, rect.min.y), vec2(x, rect.max.y))
-                    .stop(0.0, roles.ink.fade(BAR_LIT_GLINT))
-                    .stop(BAR_GLINT_HEIGHT, roles.ink.fade(0.0))
-                    .stop(0.55, roles.oled_black.fade(0.0))
-                    .stop(1.0, roles.oled_black.fade(BAR_LENS_SHADE)),
-            );
+            let lens = Gradient::linear(vec2(x, rect.min.y), vec2(x, rect.max.y))
+                .stop(0.0, roles.ink.fade(BAR_LIT_GLINT))
+                .stop(BAR_GLINT_HEIGHT, roles.ink.fade(0.0))
+                .stop(0.55, roles.oled_black.fade(0.0))
+                .stop(1.0, roles.oled_black.fade(BAR_LENS_SHADE));
+            for i in 0..self.lit() {
+                p.fill(&Shape::round_rect(self.cell_rect(rect, i), radius), lens);
+            }
         }
 
         if let Some(i) = self.peak_segment() {
@@ -1347,55 +1366,146 @@ mod tests {
         assert_eq!(bar.peak_segment(), None);
         assert!(!bar.animating(), "nothing moves at a steady rpm");
     }
+    /// Feeds engine rpm with the rate `SignalSmoother` derives from it (the per-frame
+    /// difference with 40 ms smoothing), so the feed-forward sees what it sees in the game.
+    struct Feed {
+        fill: FillModel,
+        rate: fh6_kit::Smoothed<f32>,
+        last: f32,
+    }
+
+    impl Feed {
+        fn settled(tokens: &Tokens, rpm: f32) -> Self {
+            let mut feed = Self {
+                fill: FillModel::new(tokens),
+                rate: fh6_kit::Smoothed::new(0.0, 0.04),
+                last: rpm,
+            };
+            for _ in 0..60 {
+                feed.step(tokens, rpm);
+            }
+            feed
+        }
+
+        /// One frame at `rpm`; returns the shown fraction.
+        fn step(&mut self, tokens: &Tokens, rpm: f32) -> f32 {
+            let rate = self.rate.update((rpm - self.last) / DT, DT);
+            self.last = rpm;
+            self.fill.update(
+                &Signals {
+                    rpm_rate: rate,
+                    ..sig(tokens, rpm)
+                },
+                DT,
+            );
+            self.fill.fraction()
+        }
+    }
 
     #[test]
-    fn zz_experiment_upshift_undershoot() {
+    fn an_upshift_drop_never_shows_the_fill_below_the_new_rpm() {
         let t = Tokens::default();
-        let mut f = FillModel::new(&t);
-        let mut rate_s = fh6_kit::Smoothed::new(0.0f32, 0.04);
-        let mut last = 8400.0f32;
-        for _ in 0..60 {
-            let s = Signals { rpm_rate: rate_s.update(0.0, DT), ..sig(&t, 8400.0) };
-            f.update(&s, DT);
+        let mut feed = Feed::settled(&t, 8400.0);
+        let target = 6000.0 / LIMITER;
+        let mut frames_to_land = None;
+        for frame in 0..40 {
+            let shown = feed.step(&t, 6000.0);
+            assert!(
+                shown >= target - 1e-6,
+                "frame {frame}: shown {shown} below the rpm {target}"
+            );
+            assert!(
+                lit_segments(shown, BAR_SEGMENTS) >= lit_segments(target, BAR_SEGMENTS),
+                "frame {frame}: a bar cell drops below the rpm"
+            );
+            if frames_to_land.is_none() && (shown - target).abs() < 1e-4 {
+                frames_to_land = Some(frame + 1);
+            }
         }
-        let mut min = 1.0f32;
+        assert!(
+            frames_to_land.is_some_and(|n| n <= 3),
+            "lands on the new rpm within 50 ms: {frames_to_land:?}"
+        );
+    }
+
+    #[test]
+    fn a_downshift_blip_never_shows_the_fill_above_the_rpm() {
+        let t = Tokens::default();
+        let mut feed = Feed::settled(&t, 5000.0);
+        let target = 7500.0 / LIMITER;
+        for frame in 0..40 {
+            let shown = feed.step(&t, 7500.0);
+            assert!(
+                shown <= target + 1e-6,
+                "frame {frame}: shown {shown} above the rpm {target}"
+            );
+        }
+        assert!((feed.fill.fraction() - target).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_lift_after_a_pull_falls_monotonically_and_keeps_up() {
+        let t = Tokens::default();
+        let mut feed = Feed::settled(&t, 3000.0);
+        let mut rpm = 3000.0;
+        let mut peak_target = 0.0f32;
+        while rpm < 8000.0 {
+            rpm += 6000.0 * DT;
+            feed.step(&t, rpm);
+            peak_target = peak_target.max(rpm / LIMITER);
+        }
+        let mut last = feed.fill.fraction();
+        assert!(last <= peak_target + 1e-6, "never ahead of the pull");
         for frame in 0..30 {
-            let rpm = 6000.0;
-            let rate = rate_s.update((rpm - last) / DT, DT);
-            last = rpm;
-            let s = Signals { rpm_rate: rate, ..sig(&t, rpm) };
-            f.update(&s, DT);
-            min = min.min(f.fraction());
-            eprintln!("frame {frame} rate {rate:.0} frac {:.4} lit45 {}", f.fraction(), lit_segments(f.fraction(), 45));
+            rpm -= 8000.0 * DT;
+            let shown = feed.step(&t, rpm);
+            assert!(
+                shown <= last + 1e-6,
+                "frame {frame}: the fill rises during a lift ({last} -> {shown})"
+            );
+            last = shown;
         }
-        eprintln!("target {:.4} ({} cells) min {:.4} ({} cells)", 6000.0 / LIMITER, lit_segments(6000.0 / LIMITER, 45), min, lit_segments(min, 45));
-        for w in [0.04f32, 0.06, 0.1] {
-            let run = |from: f32, to: f32, ramp: f32| {
-                let mut sp = Spring::new(t.springs.ribbon, from / LIMITER);
-                let mut rs = fh6_kit::Smoothed::new(0.0f32, 0.04);
-                let mut rpm = from;
-                let mut last = from;
-                let mut min = 1.0f32;
-                let mut max_lag = 0.0f32;
-                let mut below = 0;
-                for frame in 0..60 {
-                    if ramp != 0.0 { rpm += ramp * DT; } else if frame == 1 { rpm = to; }
-                    let rate = rs.update((rpm - last) / DT, DT);
-                    last = rpm;
-                    let target = rpm / LIMITER;
-                    let err = (target - sp.value()).abs();
-                    let g = (1.0 - err / w).clamp(0.0, 1.0);
-                    sp.update_tracking(target, rate / LIMITER * g, DT);
-                    min = min.min(sp.value());
-                    if frame > 20 { max_lag = max_lag.max((target - sp.value()).abs()); }
-                    if lit_segments(sp.value(), 45) < lit_segments(target, 45) { below += 1; }
-                }
-                (min, max_lag, below)
-            };
-            let (min, _, below) = run(8400.0, 6000.0, 0.0);
-            let (_, lag6k, _) = run(2000.0, 0.0, 6000.0);
-            let (_, lag20k, _) = run(1000.0, 0.0, 20000.0);
-            eprintln!("w {w}: step min {:.4} ({} cells, {below} frames below) lag6k {:.5} lag20k {:.5} (frame {:.5})", min, lit_segments(min, 45), lag6k, lag20k, 20000.0*DT/LIMITER);
+        let lag = feed.fill.fraction() - rpm / LIMITER;
+        let one_frame = 8000.0 * DT / LIMITER;
+        assert!((0.0..one_frame).contains(&lag), "lag {lag} vs one frame {one_frame}");
+    }
+
+    #[test]
+    fn a_pull_right_after_an_upshift_stays_honest_and_catches_up() {
+        let t = Tokens::default();
+        let mut feed = Feed::settled(&t, 8400.0);
+        let mut rpm = 6000.0;
+        let one_frame = 6000.0 * DT / LIMITER;
+        for frame in 0..24 {
+            let shown = feed.step(&t, rpm);
+            let target = rpm / LIMITER;
+            if frame >= 1 {
+                assert!(
+                    shown <= target + 1e-6,
+                    "frame {frame}: shown {shown} ahead of the rpm {target}"
+                );
+            }
+            if frame >= 7 {
+                assert!(target - shown < one_frame, "frame {frame}: lag {}", target - shown);
+            }
+            rpm += 6000.0 * DT;
+        }
+    }
+
+    #[test]
+    fn a_fast_blip_ramp_is_tracked_without_lag() {
+        let t = Tokens::default();
+        let mut feed = Feed::settled(&t, 2000.0);
+        let mut rpm = 2000.0;
+        let rate = 20_000.0;
+        for frame in 0..18 {
+            rpm += rate * DT;
+            let shown = feed.step(&t, rpm);
+            let lag = rpm / LIMITER - shown;
+            assert!(lag >= -1e-6, "frame {frame}: never ahead of the rpm ({lag})");
+            if frame >= 3 {
+                assert!(lag < 1e-3, "frame {frame}: lag {lag}");
+            }
         }
     }
 

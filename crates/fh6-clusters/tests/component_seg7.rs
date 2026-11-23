@@ -8,10 +8,13 @@
 //!    decimal point in the secondary phosphor, a matte (rank 4) lap time with a colon;
 //! 3. the white hero gear on the gear bay's diagonal glass with cyan ghosts, matte as HeroGear asks
 //!    outside the limiter: the 3 -> 4 re-strike mid-sequence, 4 settled, the diagonal `N` at 72%,
-//!    reverse in `warning`, and 5 at the limiter with its soft phosphor glow.
+//!    reverse in `warning`, and 5 at the limiter with the soft glow (`Emission::Soft`).
 //!
 //! Bottom right: the `segment` TabularSpeed convenience at the spec cap of 120, straight on the
 //! transparent overlay (no cavity), to show the ghosts hold the same 7% there.
+//!
+//! A second shot, `seg7_true_size.png`, renders the RetroCyber sizes at 1 target px per 4K px,
+//! where the bloom radius (fixed in device px) relates to the digits as it does on the display.
 mod support;
 
 use fh6_clusters::common::seg7::{
@@ -20,7 +23,7 @@ use fh6_clusters::common::seg7::{
 };
 use fh6_clusters::common::SpeedReadout;
 use fh6_kit::testing::RgbaImage;
-use fh6_kit::{vec2, Align, FontRole, Gear, Palette, Rect, Shape, Signals, TextStyle, VAlign, Vec2};
+use fh6_kit::{vec2, Align, FontRole, Gear, Layout, Palette, Rect, Shape, Signals, TextStyle, VAlign, Vec2};
 
 /// Shot scale: target px per local (4K) px.
 const SCALE: f32 = support::H as f32 / 2160.0;
@@ -141,7 +144,7 @@ fn seg7_shot() {
     // HeroGear (COMPONENTS.md §1): a soft glow only while the limiter is active.
     let gear_emission = |sig: &Signals| {
         if sig.rpm >= sig.shift_rpm {
-            Emission::Bloom
+            Emission::Soft
         } else {
             Emission::Matte
         }
@@ -309,4 +312,131 @@ fn seg7_shot() {
         .filter(|&(x, y)| img.pixel(x, y).is_some_and(|px| px[1] > 128))
         .count();
     assert!(lit_count > 2000, "speed row lit pixels: {lit_count}");
+
+    // The soft limiter glow keeps the white 5 crisp: its unlit segment e stays a dim ghost
+    // instead of drowning in the halo.
+    let g5 = vec2(gear_x[4], gear_y);
+    let e5 = segment_pixel(&img, &gear_geom, g5, 4);
+    assert!(
+        e5[1] < 70 && e5[1] > e5[0],
+        "limiter 5's ghost e stays a cyan ghost: {e5:?}"
+    );
+}
+
+/// Mean RGB of a 3 x 3 block around the local point `p` under `layout`.
+fn mean_rgb(img: &RgbaImage, layout: &Layout, p: Vec2) -> [f32; 3] {
+    let t = layout.to_target(p);
+    let (x, y) = (t.x.round().max(1.0) as u32, t.y.round().max(1.0) as u32);
+    let mut sum = [0.0; 3];
+    for dy in 0..3 {
+        for dx in 0..3 {
+            let px = img.pixel(x + dx - 1, y + dy - 1).unwrap_or([0; 4]);
+            for (s, v) in sum.iter_mut().zip(px) {
+                *s += f32::from(v) / 9.0;
+            }
+        }
+    }
+    sum
+}
+
+/// The centre of segment `index` of the digit centred at `center`.
+fn segment_center(geom: &Seg7Geometry, center: Vec2, index: usize) -> Vec2 {
+    let pts = geom.segment(center, index);
+    pts.iter().fold(Vec2::ZERO, |s, p| s + *p) * (1.0 / pts.len() as f32)
+}
+
+/// The RetroCyber sizes at true 4K scale (sci-fi.md: ghost-888 speed at cap 120, the 236 px bay
+/// gear) plus 90 px rpm and boost readouts, in one opaque cavity under the 2 px scanlines.
+#[test]
+fn seg7_true_size_shot() {
+    let mut gpu = support::gpu();
+    let center = vec2(support::W as f32 * 0.5, support::H as f32 * 0.5);
+    let layout = Layout::centered(center, 1.0, (support::W, support::H));
+    let palette = Palette::family(&gpu.tokens, "sciFi");
+    gpu.kit.set_palette(palette);
+    let tokens = gpu.tokens.clone();
+    let dt = support::DT;
+
+    let speed_geom = Seg7Geometry::new(120.0);
+    let gear_geom = Seg7Geometry::new(236.0);
+    let small_geom = Seg7Geometry::new(90.0);
+    let mut speed = Seg7Number::<3>::new(&tokens, Reveal::Instant);
+    let mut idle = Seg7Number::<3>::new(&tokens, Reveal::Instant);
+    let mut rpm = Seg7Number::<4>::new(&tokens, Reveal::Instant);
+    let mut boost = Seg7Number::<3>::new(&tokens, Reveal::Instant)
+        .with_separator(Separator::Decimal { places: 1 })
+        .with_phosphor(Phosphor::Secondary);
+    let gear = Seg7Digit::new(&tokens, Reveal::Sequence)
+        .with_segments(Segments::Diagonal)
+        .with_phosphor(Phosphor::Ink)
+        .with_ghost(Phosphor::Primary);
+    let (mut cruise_gear, mut limiter_gear) = (gear, gear);
+    let mut readout = SpeedReadout::new();
+    for _ in 0..30 {
+        readout.update(152.2);
+        speed.update(readout.value(), dt);
+        idle.update(0, dt);
+        rpm.update(7980, dt);
+        boost.update(147, dt);
+        cruise_gear.update_gear(Gear::Forward(4), dt);
+        limiter_gear.update_gear(Gear::Forward(5), dt);
+    }
+    rpm.set_phosphor(Phosphor::Accent);
+
+    let cavity = Rect::from_xywh(-930.0, -500.0, 1860.0, 1000.0);
+    let (speed_at, idle_at) = (vec2(-600.0, -250.0), vec2(-600.0, 220.0));
+    let (gear_at, limiter_at) = (vec2(-110.0, -230.0), vec2(-110.0, 230.0));
+    let (rpm_at, boost_at) = (vec2(480.0, -250.0), vec2(480.0, 220.0));
+    let img = gpu.render(&layout, |p, _| {
+        let pal = *p.palette();
+        p.fill(&Shape::rect(cavity), pal.roles.oled_black);
+        speed.draw(p, speed_at, &speed_geom, &pal, Emission::Bloom);
+        idle.draw(p, idle_at, &speed_geom, &pal, Emission::Bloom);
+        cruise_gear.draw(p, gear_at, &gear_geom, &pal, Emission::Matte);
+        limiter_gear.draw(p, limiter_at, &gear_geom, &pal, Emission::Soft);
+        rpm.draw(p, rpm_at, &small_geom, &pal, Emission::Bloom);
+        boost.draw(p, boost_at, &small_geom, &pal, Emission::Bloom);
+        draw_scanlines(p, cavity, &pal);
+    });
+    let path = support::save_shot("seg7_true_size", &img);
+    let shot = path.display();
+
+    // The leading ghost 8 of 152 at 7% of the phosphor, lit digits at full phosphor.
+    let lit_green = f32::from(palette.primary_text.to_srgb8()[1]);
+    let ghost_green = GHOST_LEVEL * lit_green;
+    let ghost = mean_rgb(
+        &img,
+        &layout,
+        segment_center(&speed_geom, idle.cell_center(idle_at, &speed_geom, 0), 6),
+    );
+    assert!(
+        ghost[1] > ghost_green * 0.5 && ghost[1] < ghost_green * 2.0,
+        "ghost 8: {ghost:?} vs {ghost_green} ({shot})"
+    );
+    let lit = mean_rgb(
+        &img,
+        &layout,
+        segment_center(&speed_geom, speed.cell_center(speed_at, &speed_geom, 1), 0),
+    );
+    assert!(lit[1] > 180.0, "lit segment a of 5: {lit:?}");
+
+    // Crisp digits: the halo stays short, so the lit 0's counters stay black (the per-segment
+    // halos add up inside a digit).
+    let zero = idle.cell_center(idle_at, &speed_geom, 2);
+    for v in [-0.25, 0.25] {
+        let counter = mean_rgb(&img, &layout, speed_geom.map(zero, vec2(0.0, v * speed_geom.height)));
+        assert!(counter[1] < 16.0, "the 0's counter at {v}: {counter:?}");
+    }
+
+    // Tight VFD halo (tokens glow.phosphor): 40 px above the digits the cavity is black again.
+    let above = mean_rgb(
+        &img,
+        &layout,
+        vec2(speed_at.x, speed_at.y - speed_geom.height * 0.5 - 40.0),
+    );
+    assert!(above[1] < 10.0, "phosphor veil 40 px above the speed: {above:?}");
+    // The soft limiter glow fades within the bay: 80 px beside the gear it is gone.
+    let edge = gear_geom.bounds(limiter_at).max.x;
+    let beside = mean_rgb(&img, &layout, vec2(edge + 80.0, limiter_at.y));
+    assert!(beside.iter().all(|&v| v < 12.0), "limiter glow 80 px out: {beside:?}");
 }

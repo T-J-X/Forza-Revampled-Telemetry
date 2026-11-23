@@ -6,7 +6,8 @@
 //! follows the spec: an 8° slant, a stroke of 10.5% of the digit height and gaps of 18% of the
 //! stroke between segment tips. Unlit segments are always drawn at 7% of the phosphor (the ghost
 //! `8`); lit segments are the phosphor fill with the tokens' `glow.phosphor` lobes in a bloom
-//! layer and a hot core mixed 45% toward the white ink.
+//! layer and a hot core mixed 45% toward the white ink ([`Emission`] picks the softer
+//! `glow.soft` lobe for a hero gear on the limiter, or no glow for ranks 4–5).
 //!
 //! Ghost segments are opaque: each channel shows 7% of the phosphor's displayed brightness on any
 //! black, whether the digits sit in an opaque VFD cavity (`materials.vfdCavity`, the family's
@@ -64,15 +65,22 @@ pub const NEUTRAL_DIAGONAL: u16 = 0x36 | DIAGONAL;
 const CORE_WIDTH: f32 = 0.4;
 /// Soft edge of the hot core as a fraction of the stroke.
 const CORE_SOFTNESS: f32 = 0.1;
-/// Digit height at which the `glow.phosphor` lobes apply unscaled (sci-fi.md: the ghost-888
-/// speed has a cap of 120). The halo grows with the square root of the height above it, so a
-/// large gear keeps the tight VFD halo instead of a fog.
-const GLOW_REFERENCE_HEIGHT: f32 = 120.0;
-/// Share of the tokens' bloom intensity a lit phosphor of [`GLOW_REFERENCE_HEIGHT`] writes. VFD
-/// light is a tight core with a short halo (tokens `glow.phosphor`): the lobes carry the halo, the
-/// display bloom only a trace, so the true-black cavity around the digits stays black rather than
-/// fogged. Taller digits write proportionally less (see [`Seg7Geometry::bloom_scale`]).
-const PHOSPHOR_BLOOM: f32 = 0.25;
+/// Digit height at which the token glow lobes apply at their authored sigma. The lobes scale
+/// linearly with the digit, so a readout looks the same at every size. Every segment glows on
+/// its own and neighbouring halos add up inside a digit's counters: at this reference the
+/// `glow.phosphor` halo (σ 10) is under half the counter, and at the RetroCyber speed cap of 120
+/// (σ 5) the counters stay black and the segments crisp, as in the Sci-Fi hero frames.
+const GLOW_REFERENCE_HEIGHT: f32 = 240.0;
+/// Smallest and largest glow scale: tiny readouts keep a visible halo, huge ones stay inside the
+/// tokens' bloom radius budget.
+const GLOW_SCALE_RANGE: (f32, f32) = (0.25, 2.0);
+/// Digit height up to which a lit phosphor writes the full [`PHOSPHOR_BLOOM`].
+const BLOOM_REFERENCE_HEIGHT: f32 = 120.0;
+/// Share of the tokens' bloom intensity a lit phosphor writes. VFD light is a tight core with a
+/// short halo (tokens `glow.phosphor`): the lobes carry the halo, the display bloom only a trace,
+/// so the true-black cavity around the digits stays black rather than fogged. Taller digits write
+/// proportionally less (see [`Seg7Geometry::bloom_scale`]).
+const PHOSPHOR_BLOOM: f32 = 0.03;
 /// Extra space a colon adds between its two cells, as a fraction of the stroke.
 const COLON_EXTRA: f32 = 1.4;
 /// Vertical offset of the colon dots from the digit middle, as a fraction of the height.
@@ -156,13 +164,19 @@ impl Phosphor {
     }
 }
 
-/// Whether lit segments write to the emissive (bloom) buffer.
+/// Whether lit segments glow and write to the emissive (bloom) buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Emission {
-    /// Glance ranks 1–3 (gear, speed, tach readouts): the `glow.phosphor` lobes in a bloom layer.
+    /// Glance ranks 2–3 phosphor readouts (speed, tach numbers): the tight `glow.phosphor` lobes
+    /// in a bloom layer.
     #[default]
     Bloom,
-    /// Ranks 4–5 (mini readouts, data tiles): lit segments with their core, no glow, no bloom.
+    /// The hero gear while the limiter is active (COMPONENTS.md §1: "soft glow only while the
+    /// limiter is active"): the single `glow.soft` lobe in a bloom layer, so a large white glyph
+    /// keeps its edges and the ghosts around it stay readable.
+    Soft,
+    /// Ranks 4–5 (mini readouts, data tiles) and the hero gear off the limiter: lit segments with
+    /// their core, no glow, no bloom.
     Matte,
 }
 
@@ -372,18 +386,19 @@ impl Seg7Geometry {
         self.stroke * COLON_EXTRA
     }
 
-    /// Glow sigma multiplier: the token lobes at the reference height, growing with the square
-    /// root of the height (a large gear keeps a tight halo).
+    /// Glow sigma multiplier: the token lobes at [`GLOW_REFERENCE_HEIGHT`], proportional to the
+    /// height (within [`GLOW_SCALE_RANGE`]) so the halo keeps its size relative to the stroke.
     fn glow_scale(&self) -> f32 {
-        (self.height / GLOW_REFERENCE_HEIGHT).sqrt().clamp(0.7, 1.6)
+        let (min, max) = GLOW_SCALE_RANGE;
+        (self.height / GLOW_REFERENCE_HEIGHT).clamp(min, max)
     }
 
-    /// Bloom write multiplier: 1 up to [`GLOW_REFERENCE_HEIGHT`], then falling with the height.
+    /// Bloom write multiplier: 1 up to [`BLOOM_REFERENCE_HEIGHT`], then falling with the height.
     /// The bloom pyramid has a fixed radius in pixels, so the veil a digit casts grows with its
     /// lit area; without this a 300 px gear at the limiter fogs its whole bay and drowns its own
     /// ghost segments.
     fn bloom_scale(&self) -> f32 {
-        (GLOW_REFERENCE_HEIGHT / self.height).min(1.0)
+        (BLOOM_REFERENCE_HEIGHT / self.height).min(1.0)
     }
 
     /// How far each tip is pulled back along its axis: two 45° chamfers pulled back by `s` sit
@@ -978,10 +993,11 @@ fn phosphor_bloom(tokens: &Tokens, geom: &Seg7Geometry) -> Bloom {
     }
 }
 
-/// Runs `f` in a phosphor bloom layer for [`Emission::Bloom`], in the current layer otherwise.
+/// Runs `f` in a phosphor bloom layer for [`Emission::Bloom`] and [`Emission::Soft`], in the
+/// current layer for [`Emission::Matte`].
 fn emit<'f>(p: &mut Painter<'f>, geom: &Seg7Geometry, emission: Emission, f: impl FnOnce(&mut Painter<'f>)) {
     match emission {
-        Emission::Bloom => {
+        Emission::Bloom | Emission::Soft => {
             let options = LayerOptions {
                 bloom: Some(phosphor_bloom(p.tokens(), geom)),
                 ..LayerOptions::default()
@@ -992,10 +1008,12 @@ fn emit<'f>(p: &mut Painter<'f>, geom: &Seg7Geometry, emission: Emission, f: imp
     }
 }
 
-/// The phosphor glow lobes and their scale, or `None` for [`Emission::Matte`].
+/// The glow lobes for `emission` and their scale, or `None` for [`Emission::Matte`].
 fn glow_lobes(p: &Painter<'_>, geom: &Seg7Geometry, emission: Emission) -> Option<(GlowLevel, f32)> {
+    let glow = &p.tokens().glow;
     match emission {
-        Emission::Bloom => Some((p.tokens().glow.phosphor, geom.glow_scale())),
+        Emission::Bloom => Some((glow.phosphor, geom.glow_scale())),
+        Emission::Soft => Some((glow.soft, geom.glow_scale())),
         Emission::Matte => None,
     }
 }
@@ -1468,6 +1486,28 @@ mod tests {
         assert_eq!(dim.lit.a, full.lit.a);
         assert_eq!(dim.core.a, full.core.a);
         assert_eq!(dim.ghost, full.ghost, "ghosts never dim");
+    }
+
+    #[test]
+    fn glow_scales_with_the_digit_and_bloom_thins_on_large_digits() {
+        let speed = Seg7Geometry::new(120.0);
+        let gear = Seg7Geometry::new(240.0);
+        // The halo keeps its size relative to the stroke.
+        assert!((gear.glow_scale() / speed.glow_scale() - 2.0).abs() < 1e-5);
+        assert!(
+            (gear.glow_scale() - 1.0).abs() < 1e-6,
+            "tokens unscaled at the reference"
+        );
+        // At the speed cap the phosphor halo (σ 10 -> 5) stays well inside the counter.
+        let counter = speed.width - 2.0 * speed.stroke;
+        assert!(
+            10.0 * speed.glow_scale() * 3.0 < counter,
+            "3σ inside the {counter} px counter"
+        );
+        assert_eq!(Seg7Geometry::new(10.0).glow_scale(), GLOW_SCALE_RANGE.0);
+        assert_eq!(Seg7Geometry::new(5000.0).glow_scale(), GLOW_SCALE_RANGE.1);
+        assert_eq!(speed.bloom_scale(), 1.0);
+        assert!((Seg7Geometry::new(300.0).bloom_scale() - 0.4).abs() < 1e-6);
     }
 
     #[test]

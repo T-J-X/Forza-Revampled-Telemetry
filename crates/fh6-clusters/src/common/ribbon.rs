@@ -314,14 +314,14 @@ impl PathRibbon {
                         (core / radius.max(1.0)).clamp(0.1, 0.95) * 0.5,
                         roles.ink.lerp(palette.accent, 0.35),
                     )
-                    .stop(0.72, halo.with_alpha(0.7 * (0.35 + 0.65 * i)))
+                    .stop(0.72, halo.with_alpha(0.7 * (0.35 + 0.65 * i) * (1.0 - 0.45 * hot)))
                     .stop(1.0, halo.with_alpha(0.0)),
             );
         });
         // Only the hot meniscus gets an extra halo; otherwise the bloom of the core is enough
         // (a soft primary glow outside the glass reads as a dark smudge on OLED black).
         if hot > 0.01 {
-            p.glow(&Shape::circle(tip, core * 0.5), halo, Glow::new(8.0, 0.45 * hot));
+            p.glow(&Shape::circle(tip, core * 0.5), halo, Glow::new(6.0, 0.25 * hot));
         }
         // Specular: a tiny highlight offset towards the light.
         let spec = tip + light_dir * (radius * 0.42);

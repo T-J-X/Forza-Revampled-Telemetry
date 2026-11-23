@@ -50,9 +50,7 @@ impl Shooter<'_> {
         let mut last = None;
         for _ in 0..MAX_GLYPH_PASSES {
             let missing = {
-                let mut p = self.kit.begin_frame(layout);
-                draw(&mut p);
-                drop(p);
+                draw(&mut self.kit.begin_frame(layout));
                 self.kit.scene().missing_glyph_count()
             };
             let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
@@ -176,7 +174,13 @@ pub fn run(
         target: Offscreen::new(&gpu.device, W, H),
         timing,
     };
-    println!("{} ({}, {}, {})", cat.display, cat.family.label(), cat.views.label(), theme);
+    println!(
+        "{} ({}, {}, {})",
+        cat.display,
+        cat.family.label(),
+        cat.views.label(),
+        theme
+    );
 
     let mut rows = Vec::new();
     for (view, prefix) in views(cat) {
@@ -345,7 +349,11 @@ fn write_page(
             crop = r.crop,
         );
         if let Some(c) = &r.cockpit {
-            let _ = write!(h, "<a href=\"{c}\"><img src=\"_thumbs/{c}\" alt=\"{} in the cockpit\"></a>", r.label);
+            let _ = write!(
+                h,
+                "<a href=\"{c}\"><img src=\"_thumbs/{c}\" alt=\"{} in the cockpit\"></a>",
+                r.label
+            );
         }
         h.push_str("</div></figure>");
     }

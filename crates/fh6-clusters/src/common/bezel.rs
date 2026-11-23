@@ -16,7 +16,7 @@
 //! the ring and every material level reads the same over any backdrop. Material levels are
 //! linear-light coverage of `ink` over that body (the kit blends linear premultiplied).
 use fh6_kit::color::srgb_to_linear;
-use fh6_kit::math::finite_or;
+use fh6_kit::math::{finite_or, smoothstep};
 use fh6_kit::{
     deg, vec2, Color, Gradient, ImageId, ImagePaint, Paint, Painter, Palette, Rect, Shadow, Shape, Spread, Stroke,
     StrokeAlign, StrokeUnit, TickRing, Vec2,
@@ -69,8 +69,11 @@ const CARBON_WEAVE_ALPHA: f32 = 0.02;
 const CARBON_SHEEN: f32 = 0.025;
 /// Texture tile size for an optional carbon image: four twill repeats.
 const CARBON_TILE: f32 = CARBON_WEAVE * 4.0;
-/// Falloff steps for a rounded-rect cavity (nested inner strokes).
-const FALLOFF_STEPS: u32 = 6;
+/// Falloff steps for a rounded-rect cavity (nested inner strokes): 12 keeps each step under
+/// 10% of the display level, so the ramp reads smooth.
+const FALLOFF_STEPS: u32 = 12;
+/// Falloff stops for a circular cavity (plus one transparent stop; the kit allows 8).
+const CIRCLE_FALLOFF_STOPS: u32 = 7;
 
 /// Outward normals of the octagon segments from [`octagon`] (top, then clockwise).
 const OCTAGON_NORMALS: [Vec2; 8] = {
@@ -226,16 +229,22 @@ impl Bezel {
     /// Draws the bezel around `form`, lit from `light` (radians, screen convention).
     pub fn draw(&self, p: &mut Painter<'_>, form: BezelForm, palette: &Palette, light: f32) {
         let light = finite_or(light, deg(-135.0));
-        match self.variant {
-            BezelVariant::TitaniumRing => self.draw_titanium(p, form, palette, light),
-            BezelVariant::Chamfer45 => self.draw_chamfer(p, form, palette, light),
-            BezelVariant::CarbonFrame { weave } => self.draw_carbon(p, form, weave, palette, light),
+        // `width` is a public field: sanitise it here as `new` does.
+        let this = Self::new(self.variant, self.width);
+        match this.variant {
+            BezelVariant::TitaniumRing => this.draw_titanium(p, form, palette, light),
+            BezelVariant::Chamfer45 => this.draw_chamfer(p, form, palette, light),
+            BezelVariant::CarbonFrame { weave } => this.draw_carbon(p, form, weave, palette, light),
             BezelVariant::Frameless => Self::draw_frameless(p, form, palette, light),
         }
     }
 
     /// Fades content into the cavity edge over `depth` px (draw after the content). This is the
     /// "content falloff" of the frameless variant; any variant may use it.
+    ///
+    /// The ramp is even as seen on screen (a smoothstep in display levels), reaching true black
+    /// at the edge. The kit blends in linear light, so a plain linear alpha ramp would leave the
+    /// content at about a third of its brightness right at the edge.
     pub fn draw_falloff(p: &mut Painter<'_>, form: BezelForm, palette: &Palette, depth: f32) {
         let black = palette.roles.oled_black;
         match form {
@@ -244,25 +253,27 @@ impl Bezel {
                 if d <= 0.0 || radius <= 0.0 {
                     return;
                 }
-                p.fill(
-                    &Shape::ring(center, radius - d * 0.5, d),
-                    Gradient::radial(center, radius)
-                        .stop(0.0, black.with_alpha(0.0))
-                        .stop((radius - d) / radius, black.with_alpha(0.0))
-                        .stop(1.0, black),
-                );
+                // Transparent inside, then the ramp sampled at 6 stops toward the edge.
+                let from = (radius - d) / radius;
+                let mut paint = Gradient::radial(center, radius).stop(0.0, black.with_alpha(0.0));
+                for i in 0..CIRCLE_FALLOFF_STOPS {
+                    let s = i as f32 / (CIRCLE_FALLOFF_STOPS - 1) as f32;
+                    paint = paint.stop(from + (1.0 - from) * s, black.with_alpha(falloff_alpha(1.0 - s)));
+                }
+                p.fill(&Shape::ring(center, radius - d * 0.5, d), paint);
             }
             BezelForm::RoundRect { .. } => {
                 let d = finite_or(depth, 0.0).max(0.0);
                 if d <= 0.0 {
                     return;
                 }
-                // Nested inner strokes: the edge gets every step, the inside fewer, so opacity
-                // ramps without seams.
-                let step_alpha = 1.0 - 0.1f32.powf(1.0 / FALLOFF_STEPS as f32);
-                for i in 1..=FALLOFF_STEPS {
+                // Nested inner strokes, widest first: band `j` (0 at the edge) lies under the
+                // strokes wider than it, so stroke `i` takes the ratio between the transmissions
+                // its band edge needs.
+                for i in (1..=FALLOFF_STEPS).rev() {
                     let w = d * i as f32 / FALLOFF_STEPS as f32;
-                    p.stroke(&form.shape(), black.with_alpha(step_alpha), Stroke::inner(w));
+                    let alpha = falloff_step_alpha(i);
+                    p.stroke(&form.shape(), black.with_alpha(alpha), Stroke::inner(w));
                 }
             }
         }
@@ -512,7 +523,9 @@ impl Bezel {
             let at = match form {
                 BezelForm::Circle { center, radius } => Vec2::polar(center, radius + w * 0.5, a),
                 BezelForm::RoundRect { rect, radius } => {
+                    // The kit clamps a corner radius to the shorter half side; so does the bolt.
                     let half = rect.size() * 0.5;
+                    let radius = radius.min(half.x).min(half.y).max(0.0);
                     let dir = Vec2::from_angle(a);
                     let corner_center =
                         c + vec2(dir.x.signum() * (half.x - radius), dir.y.signum() * (half.y - radius));
@@ -593,6 +606,35 @@ pub fn chamfer_level(normal: Vec2, light: f32) -> f32 {
 #[must_use]
 pub fn on_screen(level: f32) -> f32 {
     srgb_to_linear(finite_or(level, 0.0).clamp(0.0, 1.0))
+}
+
+/// Black coverage of the content falloff at `x` (0 at the cavity edge, 1 at the falloff's inner
+/// end): it leaves the content at a smoothstep display level, converted to the kit's linear
+/// light.
+fn falloff_alpha(x: f32) -> f32 {
+    1.0 - falloff_transmission(x)
+}
+
+/// The linear-light share of the content that survives the falloff at `x` (see
+/// [`falloff_alpha`]).
+fn falloff_transmission(x: f32) -> f32 {
+    srgb_to_linear(smoothstep(0.0, 1.0, finite_or(x, 1.0).clamp(0.0, 1.0)))
+}
+
+/// Opacity of the `i`-th nested falloff stroke (`1..=FALLOFF_STEPS`, `i` steps wide). Band `j`
+/// (0 at the edge) lies under strokes `j + 1..=FALLOFF_STEPS`, so its transmission is the
+/// product of theirs; each stroke supplies the ratio between neighbouring band targets.
+fn falloff_step_alpha(i: u32) -> f32 {
+    let n = FALLOFF_STEPS as f32;
+    let target = |band: u32| {
+        if band >= FALLOFF_STEPS {
+            1.0
+        } else {
+            falloff_transmission((band as f32 + 0.5) / n)
+        }
+    };
+    let inner = target(i).max(1e-6);
+    (1.0 - target(i.saturating_sub(1)) / inner).clamp(0.0, 1.0)
 }
 
 /// The 8 corners of `rect` with 45° corner cuts of `cut` px, clockwise from the top-left end
@@ -848,6 +890,27 @@ mod tests {
         let shrunk = BezelForm::round_rect(Rect::from_xywh(0.0, 0.0, 100.0, 50.0), 12.0).grown(-20.0);
         assert!(matches!(shrunk, BezelForm::RoundRect { radius, .. } if radius == 0.0));
         assert_eq!(Bezel::new(BezelVariant::TitaniumRing, f32::NAN).width, 0.0);
+    }
+
+    /// The nested strokes compose to the target ramp band by band: true black at the edge,
+    /// rising monotonically, about half brightness on screen half way in, untouched inside.
+    #[test]
+    fn falloff_ramp_is_even_on_screen_and_black_at_the_edge() {
+        let n = FALLOFF_STEPS;
+        let mut prev = 0.0;
+        for j in 0..n {
+            let t: f32 = (j + 1..=n).map(|i| 1.0 - falloff_step_alpha(i)).product();
+            let want = falloff_transmission((j as f32 + 0.5) / n as f32);
+            assert!((t - want).abs() < 1e-4, "band {j}: {t} vs {want}");
+            assert!(t > prev, "band {j} is brighter than the band outside it");
+            prev = t;
+        }
+        assert!(falloff_transmission(0.5 / n as f32) < 1e-3, "near black at the edge");
+        assert!((falloff_alpha(1.0)).abs() < 1e-4, "untouched at the inner end");
+        assert!((falloff_alpha(0.0) - 1.0).abs() < 1e-6, "black at the edge");
+        // Half way in, the display level is half (linear light about 0.21).
+        assert!((falloff_transmission(0.5) - srgb_to_linear(0.5)).abs() < 1e-5);
+        assert!((0..=n).all(|i| (0.0..=1.0).contains(&falloff_step_alpha(i))));
     }
 
     #[test]

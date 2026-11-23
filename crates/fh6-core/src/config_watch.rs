@@ -4,8 +4,8 @@
 //! thread can read the config every frame. A file that fails to parse (for example while the
 //! configurator is half-way through writing it) is ignored and the previous config stays live.
 use crate::config::AppConfig;
-use crate::theme::ClusterTheme;
 use crate::profiles::{profiles_path_for, CarProfilesFile, ProfilesHandle};
+use crate::theme::ClusterTheme;
 use arc_swap::ArcSwap;
 use std::fs;
 use std::io;

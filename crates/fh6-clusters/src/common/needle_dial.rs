@@ -13,8 +13,8 @@
 use super::bezel::lit_rim;
 use fh6_kit::math::{finite_or, smoothstep};
 use fh6_kit::{
-    deg, vec2, Align, Cap, Color, FontRole, Gradient, LayerOptions, Painter, Palette, Rect, Shadow, Shape, Signals,
-    Spring, Stroke, TextStyle, TickRing, Tokens, VAlign, Vec2,
+    deg, vec2, Align, Cap, Color, FontRole, Gradient, LayerOptions, Paint, Painter, Palette, Rect, Shadow, Shape,
+    Signals, Spring, Stroke, TextStyle, TickRing, Tokens, VAlign, Vec2,
 };
 use std::f32::consts::{PI, TAU};
 
@@ -38,6 +38,12 @@ const WORDMARK_WIDTH_PCT: f32 = 0.66;
 const WORDMARK_HEIGHT_PCT: f32 = 0.19;
 /// See [`WORDMARK_WIDTH_PCT`].
 const WORDMARK_DROP_PCT: f32 = 0.62;
+/// The wordmark zone is used only when the dead zone sits within about 0.6° of 6 o'clock
+/// (`|cos|` of its centre angle); a rotated track face gets the crest square, because the
+/// wordmark's upper corners clear the needle by only a few degrees.
+const WORDMARK_MAX_TILT: f32 = 0.01;
+/// Light azimuth used when the caller passes a non-finite angle (tokens `light`: 135° at rest).
+const REST_LIGHT_DEG: f32 = -135.0;
 /// Above this many thousands the numerals step by 2000 rpm (tight faces stay legible).
 const MAX_NUMERALS_AT_1000: u32 = 12;
 
@@ -280,7 +286,8 @@ impl DialScale {
     pub fn logo_zone(&self, center: Vec2, radius: f32) -> Rect {
         let radius = finite_or(radius, 0.0).max(0.0);
         let gap = self.dead_zone_angle();
-        if Vec2::from_angle(gap).y > 0.97 {
+        let down = Vec2::from_angle(gap);
+        if down.y > 0.0 && down.x.abs() < WORDMARK_MAX_TILT {
             // The upper corners stay above 57° so the needle, even at its 102% overshoot
             // (50.4°), clears them by more than its half width.
             let size = vec2(
@@ -413,10 +420,19 @@ impl NeedleDial {
 
     /// Advances with this frame's signals: rpm with feed-forward from `rpm_rate`, the limiter
     /// and shift rpm for the scale, and `shift_fraction` for the stage-3 hub ring.
+    ///
+    /// A zero or non-finite limiter (menus, a dropped packet) keeps the last known scale, so the
+    /// face never collapses; until a limiter is known the face has no red sector and no wash.
     pub fn update(&mut self, sig: &Signals, dt: f32) {
         let dt = finite_or(dt, 0.0).max(0.0);
-        self.limiter_rpm = finite_or(sig.max_rpm, 0.0).max(0.0);
-        self.shift_rpm = finite_or(sig.shift_rpm, 0.0).max(0.0);
+        let limiter = finite_or(sig.max_rpm, 0.0);
+        if limiter > 0.0 {
+            self.limiter_rpm = limiter;
+        }
+        let shift = finite_or(sig.shift_rpm, 0.0);
+        if shift > 0.0 {
+            self.shift_rpm = shift;
+        }
         self.target_rpm = finite_or(sig.rpm, 0.0).max(0.0);
         if !self.primed {
             self.needle.reset(self.target_rpm);
@@ -483,23 +499,26 @@ impl NeedleDial {
         self.heat.value().clamp(0.0, 1.0)
     }
 
-    /// The steady limiter wash, 0 to 1 from 92% of the limiter (0 with [`LimiterCue::None`]).
+    /// The steady limiter wash, 0 to 1 from 92% of the limiter (0 with [`LimiterCue::None`] or
+    /// while no limiter is known).
     #[must_use]
     pub fn wash(&self) -> f32 {
         match self.config.limiter_cue {
             LimiterCue::None => 0.0,
-            LimiterCue::RedWash => {
-                let frac = self.needle.value() / self.limiter_rpm.max(1.0);
-                smoothstep(WASH_FROM, 1.0, frac)
-            }
+            LimiterCue::RedWash if self.limiter_rpm <= 0.0 => 0.0,
+            LimiterCue::RedWash => smoothstep(WASH_FROM, 1.0, self.needle.value() / self.limiter_rpm),
         }
     }
 
-    /// The red sector start: `redline_pct` of the limiter, snapped down to a 250 rpm tick.
+    /// The red sector start: `redline_pct` of the limiter, snapped down to a 250 rpm tick, or
+    /// `None` while no limiter is known (the face then shows no red).
     #[must_use]
-    pub fn redline_rpm(&self) -> f32 {
+    pub fn redline_rpm(&self) -> Option<f32> {
+        if self.limiter_rpm <= 0.0 {
+            return None;
+        }
         let rpm = self.limiter_rpm * finite_or(self.config.redline_pct, REDLINE_FROM_PCT).clamp(0.5, 1.0);
-        (rpm / MINOR_STEP_RPM).floor() * MINOR_STEP_RPM
+        Some((rpm / MINOR_STEP_RPM).floor() * MINOR_STEP_RPM)
     }
 
     /// The logo zone for a face of `radius` at `center` (see [`DialScale::logo_zone`]).
@@ -525,6 +544,7 @@ impl NeedleDial {
     pub fn draw_face(&self, p: &mut Painter<'_>, center: Vec2, radius: f32, palette: &Palette, light: f32) {
         let g = Geometry::new(radius);
         let radius = finite_or(radius, REFERENCE_RADIUS).max(1.0);
+        let light = finite_or(light, deg(REST_LIGHT_DEG));
         let k = g.k;
         let roles = palette.roles;
         let scale = self.scale();
@@ -579,13 +599,15 @@ impl NeedleDial {
             }
         }
         let red_rpm = self.redline_rpm();
-        let red_a = scale.angle(red_rpm);
-        let end_a = scale.angle(scale.full_rpm);
-        if end_a > red_a {
-            p.fill(
-                &Shape::arc(center, track, BAND_WIDTH * k, red_a, end_a - red_a, Cap::Butt),
-                roles.warning.with_alpha(RED_SECTOR_ALPHA),
-            );
+        if let Some(red_rpm) = red_rpm {
+            let red_a = scale.angle(red_rpm);
+            let end_a = scale.angle(scale.full_rpm);
+            if end_a > red_a {
+                p.fill(
+                    &Shape::arc(center, track, BAND_WIDTH * k, red_a, end_a - red_a, Cap::Butt),
+                    roles.warning.with_alpha(RED_SECTOR_ALPHA),
+                );
+            }
         }
 
         // Chapter ring: a 1 px hairline along the tick ends.
@@ -604,13 +626,17 @@ impl NeedleDial {
         // Ticks every 250 / 500 / 1000 rpm; ticks inside the red sector turn warning. The conic
         // seam sits in the middle of the dead zone, so the 0 tick never samples the wrap.
         let seam = scale.dead_zone_angle() - TAU;
-        let red_t = ((scale.angle(red_rpm - MINOR_STEP_RPM * 0.5) - seam) / TAU).clamp(0.0, 1.0);
-        let tick_paint = |base: Color| {
-            Gradient::conic(center, seam)
-                .stop(0.0, base)
-                .stop(red_t, base)
-                .stop(red_t, roles.warning)
-                .stop(1.0, roles.warning)
+        let red_t = red_rpm.map(|rpm| ((scale.angle(rpm - MINOR_STEP_RPM * 0.5) - seam) / TAU).clamp(0.0, 1.0));
+        let tick_paint = |base: Color| -> Paint {
+            match red_t {
+                Some(t) => Gradient::conic(center, seam)
+                    .stop(0.0, base)
+                    .stop(t, base)
+                    .stop(t, roles.warning)
+                    .stop(1.0, roles.warning)
+                    .into(),
+                None => base.into(),
+            }
         };
         // One muted ring for 250 / 500 (so the translucent ticks never overlap themselves), then
         // the opaque 1000 rpm majors on top.
@@ -649,7 +675,11 @@ impl NeedleDial {
             let half_w = p.measure(digits, &base_style).width * 0.5;
             let half_h = cap * 0.5;
             let r = g.numeral_bound - (dir.x.abs() * half_w + dir.y.abs() * half_h);
-            let ink = if rpm >= red_rpm { roles.warning } else { roles.ink };
+            let ink = if red_rpm.is_some_and(|red| rpm >= red) {
+                roles.warning
+            } else {
+                roles.ink
+            };
             p.text(Vec2::polar(center, r, a), digits, &base_style.paint(ink));
         }
     }
@@ -658,6 +688,7 @@ impl NeedleDial {
     /// the polished hub with its stage-3 ring.
     pub fn draw_needle(&self, p: &mut Painter<'_>, center: Vec2, radius: f32, palette: &Palette, light: f32) {
         let g = Geometry::new(radius);
+        let light = finite_or(light, deg(REST_LIGHT_DEG));
         let k = g.k;
         let roles = palette.roles;
         let scale = self.scale();
@@ -720,18 +751,20 @@ impl NeedleDial {
                 .stop(1.0, flank(left)),
         );
 
-        // Lume core in a black keyline; the lume is the emissive part (glance rank 3).
+        // Lume core in a black keyline; the lume is the emissive part (glance rank 3). The
+        // keyline never grows past the needle's own silhouette near the narrow tip.
         let s0 = g.needle_length * LUME_FROM;
         let s1 = g.needle_length * LUME_TO;
         let w0 = g.needle_width(s0) * LUME_WIDTH;
         let w1 = g.needle_width(s1) * LUME_WIDTH;
         let keyline = LUME_KEYLINE * k;
+        let (k0, k1) = (s0 - keyline, s1 + keyline);
         p.fill(
             &Shape::Line {
-                a: center + dir * (s0 - keyline),
-                b: center + dir * (s1 + keyline),
-                width_a: w0 + keyline * 2.0,
-                width_b: w1 + keyline * 2.0,
+                a: center + dir * k0,
+                b: center + dir * k1,
+                width_a: (w0 + keyline * 2.0).min(g.needle_width(k0)),
+                width_b: (w1 + keyline * 2.0).min(g.needle_width(k1)),
                 cap: Cap::Round,
             },
             roles.oled_black,
@@ -849,7 +882,111 @@ mod tests {
         let t = Tokens::default();
         let mut d = NeedleDial::new(&t, DialConfig::default());
         d.update(&signals(900.0, 0.0), 1.0 / 60.0);
-        assert_eq!(d.redline_rpm(), 8000.0, "0.92 x 8700 = 8004 snaps to 8000");
+        assert_eq!(d.redline_rpm(), Some(8000.0), "0.92 x 8700 = 8004 snaps to 8000");
+    }
+
+    /// Before the first limiter (or on a zeroed menu packet) the face must not turn red: no red
+    /// sector, no wash. A later zero keeps the last known scale.
+    #[test]
+    fn unknown_limiter_shows_no_red_and_keeps_the_last_scale() {
+        let t = Tokens::default();
+        let dt = 1.0 / 60.0;
+        let mut d = NeedleDial::new(&t, DialConfig::default());
+        let unknown = Signals {
+            rpm: 3000.0,
+            ..Signals::default()
+        };
+        for _ in 0..30 {
+            d.update(&unknown, dt);
+        }
+        assert_eq!(d.redline_rpm(), None);
+        assert_eq!(d.wash(), 0.0, "rpm above a zero limiter is not the limiter");
+        assert!(d.needle_angle().is_finite());
+
+        for _ in 0..30 {
+            d.update(&signals(LIMITER, 0.0), dt);
+        }
+        let known = d.scale();
+        assert!(d.wash() > 0.99);
+        let zeroed = Signals {
+            rpm: LIMITER,
+            max_rpm: 0.0,
+            shift_rpm: f32::NAN,
+            ..Signals::default()
+        };
+        d.update(&zeroed, dt);
+        assert_eq!(d.scale(), known, "a zeroed packet keeps the scale");
+        assert_eq!(d.redline_rpm(), Some(8000.0));
+    }
+
+    /// NaN and out-of-range telemetry never reaches the geometry: the needle stays on the scale
+    /// (at most the 2% spring overshoot past full scale) and every output is finite.
+    #[test]
+    fn nan_and_out_of_range_inputs_stay_on_the_scale() {
+        let t = Tokens::default();
+        let dt = 1.0 / 60.0;
+        let mut d = NeedleDial::new(
+            &t,
+            DialConfig {
+                afterimage: Afterimage::Lfa,
+                ..DialConfig::default()
+            },
+        );
+        let s = DialScale::new(DialMode::Symmetric, LIMITER, SHIFT);
+        for sig in [
+            signals(f32::NAN, f32::NAN),
+            signals(-500.0, 0.0),
+            signals(90_000.0, 1.0e9),
+            signals(f32::INFINITY, f32::NEG_INFINITY),
+        ] {
+            for _ in 0..10 {
+                d.update(&sig, dt);
+                d.update(&sig, f32::NAN);
+                d.update(&sig, -1.0);
+            }
+            let a = d.needle_angle();
+            assert!(a.is_finite() && d.hub_heat().is_finite() && d.wash().is_finite());
+            assert!(a >= s.angle(0.0) - 1e-4 && a <= s.start + s.sweep * 1.02 + 1e-4, "{a}");
+        }
+    }
+
+    /// The crest of a rotated track face sits in its dead zone for any realistic shift point:
+    /// the needle (with its overshoot) and the numerals stay clear of it.
+    #[test]
+    fn track_crest_is_never_crossed() {
+        for shift_pct in [0.80, 0.90, 0.97, 1.0] {
+            for radius in [150.0, REFERENCE_RADIUS, 320.0] {
+                let g = Geometry::new(radius);
+                let s = DialScale::new(DialMode::Track, LIMITER, LIMITER * shift_pct);
+                let zone = s.logo_zone(Vec2::ZERO, radius);
+                assert!(zone.width() > 0.0);
+                let mut rpm = 0.0;
+                while rpm <= s.full_rpm * 1.02 {
+                    let dir = Vec2::from_angle(s.angle(rpm));
+                    let n = dir.perp();
+                    let mut d = -g.needle_tail;
+                    while d <= g.needle_length {
+                        let hw = g.needle_width(d) * 0.5 + 2.0;
+                        for side in [-1.0, 0.0, 1.0] {
+                            assert!(
+                                !zone.contains(dir * d + n * (hw * side)),
+                                "needle at {rpm} rpm crosses the crest (shift {shift_pct}, R {radius})"
+                            );
+                        }
+                        d += 2.0;
+                    }
+                    rpm += 50.0;
+                }
+                let cap = Tokens::default().type_scale.dial_numeral * g.k;
+                for n in 0..=9 {
+                    let dir = Vec2::from_angle(s.angle(n as f32 * 1000.0));
+                    let (hw, hh) = (cap * 0.62, cap * 0.5);
+                    let r = g.numeral_bound - (dir.x.abs() * hw + dir.y.abs() * hh);
+                    let b = Rect::from_center_size(dir * r, vec2(hw * 2.0, hh * 2.0));
+                    assert!(b.intersect(&zone).is_empty(), "numeral {n} overlaps the crest");
+                }
+            }
+        }
     }
 
     /// Points along the needle (hub to tip, both edges) for every 50 rpm never enter the logo

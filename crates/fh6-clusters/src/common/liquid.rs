@@ -26,8 +26,8 @@
 //! when the input stops: the flipbook advances only while the liquid moves.
 use fh6_kit::math::finite_or;
 use fh6_kit::{
-    deg, vec2, Align, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, LayerOptions, Painter, Palette, Rect,
-    Shape, Signals, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
+    deg, vec2, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, LayerOptions, Painter,
+    Palette, Rect, Shape, Signals, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
 };
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
@@ -61,6 +61,10 @@ pub const TINT_MIX: f32 = 0.18;
 pub const MAX_DROPLETS: usize = 8;
 /// Flipbook rate of the Phase 6 atlases (assets/ASSETS.md: 64 frames at 30 fps).
 pub const FLIPBOOK_FPS: f32 = 30.0;
+/// A screened underlay's texels are multiplied by the falloff band lifted this far toward the
+/// lower band: its brightest texel adds a grey reflection under the softbox line and the
+/// specular, so the image never turns the metal into satin aluminium.
+const UNDERLAY_LIFT: f32 = 0.3;
 
 /// Environment band levels relative to the palette `ink` (linear luminance ratios of
 /// `materials.liquidMetal.envBands`: floor `#0B0D10`, softbox `#E8EEF5`, falloff `#5E6773`,
@@ -382,7 +386,9 @@ impl LiquidMetal {
     }
 
     /// Bands of a body of liquid below a free surface: from `surface` along `down` (unit) for
-    /// `depth` px. The surface itself gets its softbox line separately.
+    /// `depth` px: a thin falloff under the surface line, the chrome horizon, the dark floor
+    /// and a faint lower band where the container wall reflects at the bottom. The surface
+    /// itself gets its softbox line separately; above the surface the paint holds the falloff.
     #[must_use]
     pub fn depth_bands(&self, surface: Vec2, down: Vec2, depth: f32) -> Gradient {
         let depth = depth.max(1.0);
@@ -391,15 +397,15 @@ impl LiquidMetal {
             last = (px / depth).clamp(last, 1.0);
             last
         };
-        let (a, b, c) = (at(4.0), at(20.0), at(depth * 0.45));
-        let d = at(depth * 0.86);
+        let (a, b, c) = (at(3.0), at(12.0), at(depth * 0.4));
+        let d = at(depth * 0.85);
         Gradient::linear(surface, surface + down * depth)
-            .stop(0.0, self.falloff.lerp(self.horizon, 0.2))
-            .stop(a, self.falloff.lerp(self.horizon, 0.55))
+            .stop(0.0, self.falloff.lerp(self.horizon, 0.35))
+            .stop(a, self.falloff.lerp(self.horizon, 0.7))
             .stop(b, self.horizon)
             .stop(c, self.floor)
             .stop(d, self.horizon)
-            .stop(1.0, self.lower.lerp(self.horizon, 0.72))
+            .stop(1.0, self.lower.lerp(self.horizon, 0.82))
     }
 
     /// A droplet (a sphere) of radius `r` at `c`, its bright side toward `to_light` (unit).
@@ -415,10 +421,26 @@ impl LiquidMetal {
     }
 }
 
-/// An image drawn inside the liquid over the procedural base: a Phase 6 flipbook atlas from
-/// `assets/fluid/` (`mercury_pool_beauty_8x8.png`: 8 x 8 cells, 64 frames at 30 fps), or a live
-/// GPU fluid dye registered with `Images::register_view` (one cell). Load it once in the
-/// cluster's constructor; the liquid works fully procedurally without it.
+/// How an [`Underlay`] combines with the procedural metal. Neither mode can turn the dark
+/// studio floor into a bright slab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UnderlayBlend {
+    /// Multiplied over the finished liquid (bands, softbox line and cap highlight), tinted
+    /// `ink`: the image's dark texels run moving ripples through the highlights and its light
+    /// texels leave them alone. For bright renders such as the Phase 6 mercury pool.
+    #[default]
+    Multiply,
+    /// Screened over the bands, under the highlights, tinted down to the falloff band: the
+    /// image's light adds moving reflections and its dark texels leave the floor black. For
+    /// dark renders with highlights, such as the ferrofluid flipbook or a live GPU fluid dye.
+    Screen,
+}
+
+/// An image inside the liquid over the procedural base: a Phase 6 flipbook atlas from
+/// `assets/fluid/` (`mercury_pool_beauty_8x8.png`: 8 x 8 cells, 64 frames at 30 fps, a bright
+/// top-down render, so [`UnderlayBlend::Multiply`]), or a live GPU fluid dye registered with
+/// `Images::register_view` (one cell, [`UnderlayBlend::Screen`]). Load it once in the cluster's
+/// constructor; the liquid works fully procedurally without it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Underlay {
     /// The image.
@@ -431,12 +453,14 @@ pub struct Underlay {
     pub frames: u32,
     /// Frames per second of liquid motion (the flipbook holds still while the liquid rests).
     pub fps: f32,
-    /// Opacity over the procedural bands (0..=1).
+    /// Strength over the procedural metal (0..=1).
     pub opacity: f32,
+    /// How it combines with the metal.
+    pub blend: UnderlayBlend,
 }
 
 impl Underlay {
-    /// A `columns x rows` flipbook atlas at 30 fps, opacity 0.6.
+    /// A `columns x rows` flipbook atlas at 30 fps, multiplied at opacity 0.6.
     #[must_use]
     pub fn flipbook(image: ImageId, columns: u32, rows: u32) -> Self {
         let columns = columns.max(1);
@@ -448,10 +472,11 @@ impl Underlay {
             frames: columns * rows,
             fps: FLIPBOOK_FPS,
             opacity: 0.6,
+            blend: UnderlayBlend::Multiply,
         }
     }
 
-    /// A single image (or a live fluid dye), opacity 0.6.
+    /// A single image (or a live fluid dye), multiplied at opacity 0.6.
     #[must_use]
     pub fn still(image: ImageId) -> Self {
         Self::flipbook(image, 1, 1)
@@ -464,6 +489,13 @@ impl Underlay {
         self
     }
 
+    /// With a blend mode.
+    #[must_use]
+    pub fn with_blend(mut self, blend: UnderlayBlend) -> Self {
+        self.blend = blend;
+        self
+    }
+
     /// The atlas cell (texture coordinates, inset by half a percent against mip bleeding)
     /// after `motion_time` seconds of liquid motion.
     #[must_use]
@@ -471,13 +503,43 @@ impl Underlay {
         atlas_cell(self.columns, self.rows, self.frames, self.fps, motion_time)
     }
 
-    /// The paint mapping the current cell onto `rect`.
-    fn paint(&self, rect: Rect, motion_time: f32) -> ImagePaint {
-        ImagePaint {
+    /// The tint for the blend: `ink` for a multiply (the image keeps its own values), the
+    /// falloff band lifted a little for a screen (its brightest texel adds a grey reflection).
+    fn tint(&self, mat: &LiquidMetal) -> Color {
+        let base = match self.blend {
+            UnderlayBlend::Multiply => mat.specular.with_alpha(1.0),
+            UnderlayBlend::Screen => mat.falloff.lerp(mat.lower, UNDERLAY_LIFT),
+        };
+        base.fade(self.opacity)
+    }
+
+    /// Fills `shape` with the current cell mapped onto `rect` when this underlay draws at
+    /// `stage` (screens go under the highlights, multiplies over them).
+    fn fill_at(
+        &self,
+        stage: UnderlayBlend,
+        p: &mut Painter<'_>,
+        shape: &Shape<'_>,
+        rect: Rect,
+        motion_time: f32,
+        mat: &LiquidMetal,
+    ) {
+        if self.blend != stage || self.opacity <= 0.0 {
+            return;
+        }
+        let paint = ImagePaint {
             uv: self.cell(motion_time),
             ..ImagePaint::new(self.image, rect)
         }
-        .tint(Color::WHITE.fade(self.opacity))
+        .tint(self.tint(mat));
+        let mode = match self.blend {
+            UnderlayBlend::Multiply => BlendMode::Multiply,
+            UnderlayBlend::Screen => BlendMode::Screen,
+        };
+        p.scoped(|p| {
+            p.set_blend(mode);
+            p.fill(shape, paint);
+        });
     }
 }
 
@@ -711,8 +773,10 @@ fn draw_neck(p: &mut Painter<'_>, a: Vec2, ra: f32, b: Vec2, rb: f32, paint: Gra
 /// The foot a droplet of radius `r` at `c` pulls up from a free surface through `on_surface`
 /// with the upward unit normal `up`, under [`smooth_union`] with a plane: a fillet mound that
 /// rises from inside the liquid to the waist, then the thread to the droplet. Nothing once the
-/// droplet is `k / 2` clear of the surface. Returns whether a foot was drawn.
-fn draw_foot(p: &mut Painter<'_>, on_surface: Vec2, up: Vec2, c: Vec2, r: f32, mat: &LiquidMetal) -> bool {
+/// droplet is `k / 2` clear of the surface. `paint` is the pool body's own gradient, so the
+/// mound's root vanishes into the body and only the raised liquid shows. Returns whether a foot
+/// was drawn.
+fn draw_foot(p: &mut Painter<'_>, on_surface: Vec2, up: Vec2, c: Vec2, r: f32, paint: Gradient) -> bool {
     let height = (c - on_surface).dot(up);
     let gap = height - r;
     let w = neck_half_width(PLANE_RADIUS, r, gap, SMOOTH_K).min(NECK_MAX_SHARE * r);
@@ -725,10 +789,6 @@ fn draw_foot(p: &mut Painter<'_>, on_surface: Vec2, up: Vec2, c: Vec2, r: f32, m
     let waist = base + up * (gap * 0.5).max(0.0);
     let root = base - up * (SMOOTH_K * 0.5);
     let tip = c - up * (0.4 * r);
-    let paint = Gradient::linear(base, c)
-        .stop(0.0, mat.falloff.lerp(mat.horizon, 0.3))
-        .stop(0.6, mat.horizon)
-        .stop(1.0, mat.floor);
     p.fill(
         &Shape::Line {
             a: root,
@@ -940,9 +1000,21 @@ impl LiquidSurface {
         p.save();
         p.clip(rect, geom.corner.max(0.0));
         let body = Shape::Polygon { points: &pts };
-        p.fill(&body, mat.depth_bands(pivot, down, (bottom - level).max(8.0)));
+        let body_paint = mat.depth_bands(pivot, down, (bottom - level).max(8.0));
+        p.fill(&body, body_paint);
+
+        // Droplets close to the surface pull up a smooth-union foot of the body's own liquid,
+        // under the surface line so the line rides over the raised liquid.
+        let up = vec2(tilt.sin(), -tilt.cos());
+        for (pos, r) in self.drops.iter() {
+            let c = pivot + pos * half_w;
+            let rd = r * half_w;
+            if rd >= 0.4 {
+                draw_foot(p, vec2(c.x, surface_y(c.x)), up, c, rd, body_paint);
+            }
+        }
         if let Some(u) = underlay {
-            p.fill(&body, u.paint(rect, self.motion_time));
+            u.fill_at(UnderlayBlend::Screen, p, &body, rect, self.motion_time, &mat);
         }
 
         // The surface edge: the primary fresnel kicker halo, then the softbox line, brightest
@@ -988,16 +1060,13 @@ impl LiquidSurface {
             );
         }
 
-        // Droplets: a smooth-union foot while near the surface, then the bead.
-        let up = vec2(tilt.sin(), -tilt.cos());
+        if let Some(u) = underlay {
+            u.fill_at(UnderlayBlend::Multiply, p, &body, rect, self.motion_time, &mat);
+        }
+
+        // The droplets themselves.
         for (pos, r) in self.drops.iter() {
-            let c = pivot + pos * half_w;
-            let rd = r * half_w;
-            if rd < 0.4 {
-                continue;
-            }
-            draw_foot(p, vec2(c.x, surface_y(c.x)), up, c, rd, &mat);
-            draw_bead(p, c, rd, &mat, to_light, Glint::Matte);
+            draw_bead(p, pivot + pos * half_w, r * half_w, &mat, to_light, Glint::Matte);
         }
         p.restore();
     }
@@ -1388,17 +1457,31 @@ impl LiquidChannel {
     ) {
         let to_light = Vec2::from_angle(light);
         let bands = mat.tube_bands(col.center, col.r - col.hw, col.r + col.hw);
-        let body = Shape::arc(col.center, col.r, col.hw * 2.0, col.start, col.s_back / col.r, Cap::Round);
+        let body = Shape::arc(
+            col.center,
+            col.r,
+            col.hw * 2.0,
+            col.start,
+            col.s_back / col.r,
+            Cap::Round,
+        );
         p.fill(&body, bands);
         // A faint silhouette round the walls and the back cap (the body's tip cap lies inside
         // the meniscus, which covers its part of the stroke).
         p.stroke(&body, mat.kicker.fade(KICKER_SILHOUETTE), Stroke::inner(1.0));
         let meniscus = col.meniscus();
         p.fill(&Shape::Polygon { points: &meniscus }, bands);
+        let outline = col.outline();
+        let square = Rect::from_center_size(geom.center, Vec2::splat(geom.outer * 2.0));
         if let Some(u) = underlay {
-            let outline = col.outline();
-            let square = Rect::from_center_size(geom.center, Vec2::splat(geom.outer * 2.0));
-            p.fill(&Shape::Polygon { points: &outline }, u.paint(square, self.motion_time));
+            u.fill_at(
+                UnderlayBlend::Screen,
+                p,
+                &Shape::Polygon { points: &outline },
+                square,
+                self.motion_time,
+                mat,
+            );
         }
         // The fresnel kicker on each wall where it turns away from the light: a rim light that
         // moves with the light, not an outline.
@@ -1522,7 +1605,10 @@ impl LiquidChannel {
                     let a = peak - half + 2.0 * half * k as f32 / 6.0;
                     paint = paint.stop((a - cs) / TAU, lobe(a));
                 }
-                p.fill(&Shape::arc(col.center, radius, SPEC_WIDTH, from, to - from, Cap::Round), paint);
+                p.fill(
+                    &Shape::arc(col.center, radius, SPEC_WIDTH, from, to - from, Cap::Round),
+                    paint,
+                );
             }
             if facing > 0.05 {
                 let cap_center = col.at(col.s_read - col.hw * (0.35 + 0.5 * col.bulge), 0.0);
@@ -1533,6 +1619,16 @@ impl LiquidChannel {
                 );
             }
         });
+        if let Some(u) = underlay {
+            u.fill_at(
+                UnderlayBlend::Multiply,
+                p,
+                &Shape::Polygon { points: &outline },
+                square,
+                self.motion_time,
+                mat,
+            );
+        }
     }
 
     /// Droplets: the smooth-union neck while they pinch off the meniscus, then the bead.
@@ -1568,7 +1664,14 @@ impl LiquidChannel {
             .stop(1.0, roles.hairline.fade(0.4));
         p.stroke(&tube, rim, Stroke::rim_px(1.0));
         if bore > TUBE_WALL * 2.0 {
-            let wall = Shape::arc(geom.center, r, (bore - TUBE_WALL) * 2.0, self.start, self.sweep, Cap::Round);
+            let wall = Shape::arc(
+                geom.center,
+                r,
+                (bore - TUBE_WALL) * 2.0,
+                self.start,
+                self.sweep,
+                Cap::Round,
+            );
             p.stroke(&wall, roles.hairline.fade(0.32), Stroke::rim_px(1.0));
         }
 
@@ -1686,12 +1789,18 @@ mod tests {
         assert!(touching > close && overlap > touching, "the neck widens as they merge");
         // Just before pinch-off the droplet hangs by a thread much thinner than itself.
         let thread = neck_half_width(16.0, 6.0, k * 0.49, k);
-        assert!(thread > 0.0 && thread < 3.0, "a separating droplet hangs by a thread: {thread}");
+        assert!(
+            thread > 0.0 && thread < 3.0,
+            "a separating droplet hangs by a thread: {thread}"
+        );
         assert!(thread < close, "the thread thins as the droplet leaves");
         // Overlapping by 4 px the waist plane lies 14 px from the big centre, inside it: the
         // smooth union is at least the hard union's chord there and adds at most `k`.
         let chord = (16.0_f32 * 16.0 - 14.0 * 14.0).sqrt();
-        assert!(overlap >= chord - 1e-3 && overlap <= chord + k, "overlap neck {overlap} vs chord {chord}");
+        assert!(
+            overlap >= chord - 1e-3 && overlap <= chord + k,
+            "overlap neck {overlap} vs chord {chord}"
+        );
         assert!((neck_half_width(4.0, 20.0, -30.0, k) - 4.0).abs() < 1e-6, "contained");
         // A droplet over a plane grows a foot as it lands.
         let foot = neck_half_width(6.0, PLANE_RADIUS, 1.0, k);
@@ -1713,7 +1822,10 @@ mod tests {
     #[test]
     fn meniscus_front_reads_the_rpm_and_leads_with_tilt() {
         let (s, hw) = (400.0, 16.0);
-        assert!((meniscus_front(s, hw, 0.55, 0.3, 0.0) - s).abs() < 1e-4, "centre line is the reading");
+        assert!(
+            (meniscus_front(s, hw, 0.55, 0.3, 0.0) - s).abs() < 1e-4,
+            "centre line is the reading"
+        );
         let outer = meniscus_front(s, hw, 0.55, 0.3, 1.0);
         let inner = meniscus_front(s, hw, 0.55, 0.3, -1.0);
         assert!(outer > inner, "positive tilt: the outer wall leads");
@@ -1727,11 +1839,17 @@ mod tests {
     fn reflection_catches_both_flanks() {
         let light = deg(-135.0);
         let (peak, u) = tube_reflection(light, light);
-        assert!((peak - 1.0).abs() < 1e-4 && u > 0.35, "facing the light: outer side, u {u}");
+        assert!(
+            (peak - 1.0).abs() < 1e-4 && u > 0.35,
+            "facing the light: outer side, u {u}"
+        );
         let (back, u_back) = tube_reflection(light + PI, light);
         assert!((back - 1.0).abs() < 1e-4 && u_back < -0.35, "facing away: inner side");
         let (side, u_side) = tube_reflection(light + FRAC_PI_2, light);
-        assert!(side.powf(SPECULAR_EXPONENT) < 1e-3 && u_side.abs() < 1e-4, "no hotspot side-on");
+        assert!(
+            side.powf(SPECULAR_EXPONENT) < 1e-3 && u_side.abs() < 1e-4,
+            "no hotspot side-on"
+        );
         // The exponent-120 lobe is half bright about 15° off the peak.
         let (m, _) = tube_reflection(light + deg(15.0), light);
         let half = m.powf(SPECULAR_EXPONENT);
@@ -1835,6 +1953,29 @@ mod tests {
     }
 
     #[test]
+    fn channel_droplets_leave_only_from_the_limiter_end() {
+        let t = tokens();
+        let mut ch = LiquidChannel::new(&t);
+        let geom = ChannelGeometry::fluid_family();
+        let end = ch.angle_at(1.0);
+        // A standing start straight onto the limiter: the column has to climb first.
+        let sig = signals(8000.0, 0.0, 0.0);
+        ch.update(&sig, DT);
+        assert!(ch.limiter() > 0.0, "the hot glow starts at once");
+        assert_eq!(ch.droplet_count(), 0, "no droplet from a column still climbing");
+        for _ in 0..60 {
+            ch.update(&sig, DT);
+            for (c, _) in ch.droplets(&geom) {
+                // Launched at the end of the tube, they fall inward from there (within 40°).
+                let a = (c - geom.center).angle();
+                let off = (wrap_from(a, end - PI) - end).abs();
+                assert!(off < deg(40.0), "droplet {:.1}° off the limiter end", off.to_degrees());
+            }
+        }
+        assert!(ch.droplet_count() > 0);
+    }
+
+    #[test]
     fn channel_meniscus_tilts_with_g_and_surges_with_the_rate() {
         let t = tokens();
         let mut ch = LiquidChannel::new(&t);
@@ -1925,7 +2066,11 @@ mod tests {
             atlas_cell(1, 1, 1, FLIPBOOK_FPS, 123.0),
             Rect::from_xywh(0.0, 0.0, 1.0, 1.0).inset(0.005)
         );
-        assert_eq!(atlas_cell(0, 0, 0, f32::NAN, f32::INFINITY), atlas_cell(1, 1, 1, 0.0, 0.0), "degenerate input");
+        assert_eq!(
+            atlas_cell(0, 0, 0, f32::NAN, f32::INFINITY),
+            atlas_cell(1, 1, 1, 0.0, 0.0),
+            "degenerate input"
+        );
         // Fewer frames than cells loop early.
         assert_eq!(atlas_cell(8, 8, 10, 1.0, 10.5), atlas_cell(8, 8, 10, 1.0, 0.0));
     }

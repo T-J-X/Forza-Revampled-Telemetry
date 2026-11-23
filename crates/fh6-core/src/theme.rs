@@ -240,7 +240,10 @@ impl ClusterTheme {
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         let name = name.trim();
-        Self::all().iter().copied().find(|t| t.name().eq_ignore_ascii_case(name))
+        Self::all()
+            .iter()
+            .copied()
+            .find(|t| t.name().eq_ignore_ascii_case(name))
     }
 }
 

@@ -298,3 +298,42 @@ ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDa
 - Group draws by blend mode and image; a change starts a new draw call.
 - Strobes only on the shift strip (≤ 42 px tall), 10 Hz max; honour `reduced_flash`.
 - Hide is the host's job: never draw "hidden" states yourself.
+
+## 12. Shared components (`fh6-clusters::common`)
+
+Every family composes these instead of re-drawing the same instrument. Each keeps its own animation state (`update`), draws with the kit (`draw`), never allocates after `new`, and takes every colour from the palette. They are shared files: a cluster chat uses them and does not edit them. If one needs a change, say so in your handover. Component shots are written by `cargo test -p fh6-clusters --test component_<group>` to `target/component-shots/`.
+
+| Module | Main types | Use it for |
+|---|---|---|
+| `scaffold` | `Scaffold` | the placeholder every unbuilt catalog cluster draws (title, family, shift strip, gear, speed, rpm) |
+| `glass_plate` | `squircle`, `squircle_point`, `GlassPlate` (`Regular` / `Clear` / `Tinted`), `dimming_pad`, `legibility_halo` | a Liquid Glass slab with the virtual light, the 200 ms materialise ramp, palette-driven rims; the pad under a hero glyph; the hood halo over a bright bonnet |
+| `ribbon` | `PathRibbon`, `RibbonStyle` | a tapered light ribbon along an arch or a squircle rim, drawn in chunks (cheap), with a meniscus bead |
+| `shift` + `mod.rs` | `ShiftLights`, `PodShape`, `PodStyle`, `draw_pod`, `LimiterCue`, `draw_rail` | outside-in shift lights (odd or even counts) as a strip, at arbitrary centres (`draw_at`) or on an arc; the 10 Hz limiter strobe; a steady limiter ramp for the non-strobing cue |
+| `hero_gear` | `HeroGear` (+ `GearGlyph`) | the rank-1 gear with state colours, the 1.12 / 24 px entry, the 1-frame flash and the limiter pulse |
+| `speed` | `TabularSpeed` (+ `SpeedReadout`) | 3 fixed cells, the 0.6 hysteresis, optional ghost 8s, the unit label |
+| `label` | `micro_label`, `shy`, `metric`, `logo_zone` (`LogoVariant`) | rank-5 labels and the car logo / custom-name zone |
+| `tach` | `TachArc`, `TachBar`, `TachChevron`, `LimiterCue`, `ChevronZones` | arc, segmented-bar and chevron tachs with the honest fill model (never shows revs the engine has not got) |
+| `needle_dial` | `NeedleDial`, `DialConfig`, `DialScale`, `OperatingBand` | classic analog dials: face, numerals, needle, hub, lume, optional track mode and afterimages |
+| `bezel` | `Bezel` (`BezelForm`, `BezelVariant`), `lit_rim`, `octagon` | machined and chamfered bezels lit by the virtual light |
+| `adas_road` | `AdasRoad`, `AdasInput`, `curvature`, `ego_yaw` | the perspective ADAS road (κ = ω_y / V, slip, low-speed guards), lane dashes, traffic and blind-spot arcs |
+| `gball` | `GBall`, `felt_force` | G meter on the `gBall` spring (felt force, not acceleration) |
+| `tyre_slip` | `TyreSlipQuad`, `Corner` | 4-corner tyre slip; tyre slip is **not verified** in telemetry (see the pilot's lessons) |
+| `signed_bar` | `SignedBar` | bipolar bars (G, yaw rate, pedal overlap) |
+| `race` | `AlarmLamp`, `AlarmColumn`, `DataTile`, `draw_fixed` | race-dash alarm lamps and fixed-point data tiles without allocation |
+| `seg7` | `Seg7Digit`, `Seg7Number`, `Seg7Geometry`, `draw_speed` | VFD / LCD seven-segment numerals with phosphor, emission and ghosting |
+| `liquid` | `LiquidSurface`, `LiquidChannel`, `LiquidMetal`, `Droplets`, `Underlay` | liquid-metal pools and channels with slosh from G, meniscus and droplets; an optional Phase 6 flipbook or live fluid underlay |
+
+## 13. Lessons from the pilot
+
+The Liquid Glass pilot (`clusters/liquid_glass/`, its `README.md` and `HANDOVER.md`) set the pattern. What it taught:
+
+- **Module shape.** One `Geom` table per view at the top of `mod.rs` (every size and position in local 4K px), a `Faces` struct resolved once in `new()`, precomputed paths per view, and state that is only springs, smoothers and shared components. A unit test keeps the table inside `layout.envelope` and checks the clearances you care about.
+- **Long paths cost GPU.** A `Shape::Polyline` evaluates every segment over its whole bounding box: one 128-point polyline round a 1240 px capsule cost 0.36 ms. Use `PathRibbon` or chunks of at most 8 segments (0.17 ms for the whole pilot afterwards).
+- **Overlapping translucent segments show as dots.** Keep segmented strokes opaque (darken, do not fade alpha), or use butt caps for additive streaks.
+- **Clips are rectangles with an optional corner radius.** A circle is a square clip with radius = half its side (the pilot clips the gear to its lens that way). Keep content inside other curves by geometry.
+- **Bloom is for ranks 1–3, and less is more.** A Gaussian halo outside a glass body reads as a game HUD on OLED black. The critique pushed the pilot to: pipe out of the bloom, the gear blooming only on the limiter, a bead whose size follows the orb intensity law, pill glow sigma 6.
+- **One hue per job.** The limiter belongs to the pill strip alone. The pipe stays in the primary hue at the limiter; only the bead goes hot.
+- **Glass first means no refraction of the scene behind it.** The capsule opens the frame, so its backdrop is black and the lensing has nothing to bend. Glass reads from the rim, the fresnel band and a thin sheen, so tune those (`Glass::sheen`, `sheen_height`, `fresnel`) per cluster rather than relying on the token defaults.
+- **Fonts load lazily.** Resolve faces once with `setup.fonts.find(family, weight, italic).unwrap_or(role)`; a new glyph can appear a frame late (the review tools repeat the frame until no glyph is missing). If `input.fonts.display` differs from the display role seen in `new()`, the user chose a font: use it for numerals.
+- **Telemetry honesty.** Tyre slip, suspension, pitch / roll, fuel, laps and torque are not verified against `tests/golden/packets`. The pilot uses body slip (`Signals::slip_deg`, from velocity) for grip and integrates speed for distance.
+- **Review loop.** `preview-export --cluster <Name>` (crops, cockpit composite, 60-frame sequence, GPU p50 / p99), the goldens, then `design:design-critique` and the `ui-ux-designer` agent on the crops. Read the critique's must-fix list against the family spec; most items are about rank, glow and spacing, not new features.
