@@ -45,7 +45,7 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | Order | Theme | Wave | Family | View | Effort | Status |
 |---|---|---|---|---|---|---|
 | 1 | ★ `LiquidGlass` | pilot | Liquid Glass | cockpit+hood | xhigh | ✅ |
-| 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ◐ |
+| 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ✅ |
 | 3 | ★ `PorscheAnalog` | pattern-setter | Classic Analog | cockpit | high | ◐ |
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
 | 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
@@ -108,7 +108,7 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 |---|---|---|---|---|---|---|---|---|
 | 1 | ★ LiquidGlass | [`liquid_glass`](../../../crates/fh6-clusters/src/clusters/liquid_glass/) | rebuild | Liquid Glass | cockpit+hood | 1 | `mockups/LiquidGlass/index.html` | ✅ |
 | 2 | VisionSpatialGlass | [`vision_spatial_glass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | rebuild | Liquid Glass | cockpit | 8 | `mockups/VisionSpatialGlass/index.html` | ☐ |
-| 3 | ★ Gt7HoodPro | [`gt7_hood_pro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | rebuild | Modern Digital 2027 | hood | 2 | `mockups/Gt7HoodPro/index.html` | next |
+| 3 | ★ Gt7HoodPro | [`gt7_hood_pro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | rebuild | Modern Digital 2027 | hood | 2 | Penpot `07 · Gt7HoodPro` (`6fe75c5e-bb22-8084-8008-fd908bb325c8`) · `mockups/Gt7HoodPro/index.html` | ✅ |
 | 4 | AmgMbuxSuperscreen | [`amg_mbux_superscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) | rebuild | Modern Digital 2027 | cockpit | 9 | `mockups/AmgMbuxSuperscreen/index.html` | ☐ |
 | 5 | DriftGlass | [`drift_glass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | rebuild | Modern Digital 2027 | cockpit | 10 | `mockups/DriftGlass/index.html` | ☐ |
 | 6 | GlyphDotMatrix | [`glyph_dot_matrix`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/) | rebuild | Modern Digital 2027 | cockpit | 11 | `mockups/GlyphDotMatrix/index.html` | ☐ |

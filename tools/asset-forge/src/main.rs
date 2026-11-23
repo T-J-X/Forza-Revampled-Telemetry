@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! cargo run --release -p asset-forge -- doctor
-//! cargo run --release -p asset-forge -- build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy] [--force] [--only <job>]
+//! cargo run --release -p asset-forge -- build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>]
 //! cargo run --release -p asset-forge -- sheet      # rewrite assets/contact-sheet.html and ASSETS.md
 //! ```
 //! `build` is idempotent: a job is skipped when its fingerprint (recipe source, parameters,
@@ -27,7 +27,7 @@ mod svg;
 use error::{ForgeError, Result};
 use std::process::ExitCode;
 
-const SETS: &[&str] = &["glass", "fluid", "scifi", "classic", "adas", "fonts", "logos", "comfy"];
+const SETS: &[&str] = &["glass", "fluid", "scifi", "classic", "adas", "fonts", "logos", "comfy", "gt7_hood_pro"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -81,7 +81,7 @@ fn run(args: &[String]) -> Result<()> {
             sheet::write(&paths, &ledger)
         }
         _ => Err(ForgeError::Usage(
-            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy] [--force] [--only <job>] | sheet".into(),
+            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>] | sheet".into(),
         )),
     }
 }
