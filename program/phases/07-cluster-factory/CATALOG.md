@@ -52,9 +52,9 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ✅ |
 | 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
 | 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | high | ☐ |
-| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
-| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
-| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
+| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
+| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
+| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | next |
 | 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
