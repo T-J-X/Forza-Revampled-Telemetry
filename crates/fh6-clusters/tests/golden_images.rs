@@ -1,137 +1,116 @@
-//! Golden-image tests: every registered kit cluster, in two review states, rendered on the GPU
-//! and compared perceptually with `tests/golden/images/<Cluster>_<state>.png`.
+//! Golden-image tests, one test per catalog cluster (named after its module, so
+//! `cargo test -p fh6-clusters <snake_name>` runs exactly that cluster).
 //!
-//! Run with `FH6_UPDATE_GOLDEN=1` to (re)write the goldens after an intended visual change;
-//! review the new PNGs before committing them.
+//! Each cluster is settled on the four review states (`fh6_clusters::review::STATES`) in every view
+//! it is designed for (cockpit, and hood when the catalog says so), rendered on the GPU at
+//! 1920x1080, cropped to the view envelope and compared perceptually with
+//! `tests/golden/images/<Theme>[_hood]_<state>.png`.
+//!
+//! Run with `FH6_UPDATE_GOLDEN=1` to (re)write the goldens after an intended visual change; review
+//! the new PNGs before committing them. A cluster chat only ever rewrites its own goldens.
 #![cfg(not(target_arch = "wasm32"))]
 
-use fh6_clusters::registry::REGISTRY;
-use fh6_core::{AppConfig, FH6TelemetryData};
-use fh6_gpu::GpuContext;
-use fh6_kit::testing::{compare, Offscreen, RgbaImage, Tolerance, OFFSCREEN_FORMAT};
-use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
-use std::path::PathBuf;
+mod support;
 
-const W: u32 = 1920;
-const H: u32 = 1080;
-const DT: f32 = 1.0 / 60.0;
+use fh6_clusters::{catalog, registry, review::STATES};
+use fh6_core::ClusterTheme;
+use fh6_kit::View;
 
-fn golden_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/images")
-}
-
-/// Cruise and drift/braking review states (tokens `states`), limiter 8700 rpm.
-fn state(name: &str) -> FH6TelemetryData {
-    let (rpm, gear, mph, thr, brk, glat, glong, slip): (f32, u8, f32, f32, f32, f32, f32, f32) = match name {
-        "cruise" => (5200.0, 4, 118.0, 0.42, 0.0, 0.18, 0.08, 1.0),
-        _ => (7100.0, 3, 74.0, 0.30, 0.62, -0.96, -0.58, 27.0),
-    };
-    let v = mph / 2.236_936_3;
-    let s = slip.to_radians();
-    FH6TelemetryData {
-        is_race_on: 1,
-        engine_max_rpm: 8700.0,
-        engine_idle_rpm: 900.0,
-        current_engine_rpm: rpm,
-        speed_ms: v,
-        velocity_x: v * s.sin(),
-        velocity_z: v * s.cos(),
-        acceleration_x: glat * 9.80665,
-        acceleration_z: glong * 9.80665,
-        gear,
-        accel: (thr * 255.0) as u8,
-        brake: (brk * 255.0) as u8,
-        ..Default::default()
-    }
-}
-
-#[test]
-fn kit_clusters_match_their_goldens() {
-    let ctx = GpuContext::headless().expect("a DX12 adapter or WARP");
-    // The goldens bind to the repo tokens, so a token edit shows up as a visual diff.
-    let tokens_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/figma_tokens.json");
-    let tokens = Tokens::load(&tokens_path).expect("data/figma_tokens.json");
-    let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone()).expect("kit");
-    let cfg = AppConfig::default();
-    let layout = Layout::from_config(&cfg, &tokens, View::Cockpit, (W, H));
-    let target = Offscreen::new(&ctx.device, W, H);
-    let logo = Logo {
-        custom_name: "TJX".into(),
-        ..Logo::default()
-    };
-    let fonts = kit.font_choice(None);
-    let update = std::env::var_os("FH6_UPDATE_GOLDEN").is_some();
+/// Renders every view and state of `theme` and compares them with the goldens.
+fn check(theme: ClusterTheme) {
+    let entry = registry::entry(theme).expect("registered");
+    let views = catalog::entry(theme).expect("in the catalog").views;
     let mut failures = Vec::new();
-    for entry in REGISTRY {
-        for state_name in ["cruise", "drift"] {
-            let palette = Palette::family(&tokens, entry.family);
-            kit.set_palette(palette);
-            let mut cluster = (entry.make)(&mut kit.setup(&ctx.device, &ctx.queue, None));
-            let data = state(state_name);
-            let mut smoother = SignalSmoother::new();
-            for i in 0..=30 {
-                let signals = smoother.update(&data, &cfg, &tokens, DT);
-                cluster.update(&FrameInput {
-                    telemetry: &data,
-                    signals: &signals,
-                    dt: DT,
-                    t: i as f32 * DT,
-                    config: &cfg,
-                    palette: &palette,
-                    tokens: &tokens,
-                    fonts,
-                    logo: &logo,
-                    view: View::Cockpit,
-                    reduced_flash: false,
-                });
-            }
-            let mut img = None;
-            // Two frames: glyphs first used in frame one are in the atlas by frame two.
-            for _ in 0..2 {
-                {
-                    let mut p = kit.begin_frame(&layout);
-                    cluster.draw(&mut p, &layout);
-                }
-                let mut encoder = ctx.device.create_command_encoder(&Default::default());
-                kit.render(
-                    &ctx.device,
-                    &ctx.queue,
-                    &mut encoder,
-                    target.view(),
-                    OFFSCREEN_FORMAT,
-                    (W, H),
-                    1.0,
-                );
-                target.copy_out(&mut encoder);
-                ctx.queue.submit(Some(encoder.finish()));
-                img = Some(target.read(&ctx.device).expect("readback"));
-            }
-            assert!(!ctx.has_failed(), "wgpu error rendering {}", entry.theme);
-            let img: RgbaImage = img.expect("rendered").crop(560, 700, 800, 380).over([0, 0, 0]);
-            let name = format!("{}_{state_name}.png", entry.theme);
-            let path = golden_dir().join(&name);
-            if update || !path.exists() {
-                if !update {
-                    failures.push(format!("{name}: golden missing (run with FH6_UPDATE_GOLDEN=1)"));
-                    continue;
-                }
-                img.save_png(&path).expect("write golden");
-                continue;
-            }
-            let golden = RgbaImage::load_png(&path).expect("read golden");
-            let diff = compare(&img, &golden, Tolerance::default());
-            if !diff.pass {
-                let actual = golden_dir().join(format!("{}_{state_name}.actual.png", entry.theme));
-                let _ = img.save_png(&actual);
-                failures.push(format!(
-                    "{name}: {:.2}% of pixels differ (mean dE {:.2}, max {:.1}); wrote {}",
-                    diff.fraction_over * 100.0,
-                    diff.mean,
-                    diff.max,
-                    actual.display()
-                ));
+    let mut gpu = support::gpu();
+    for (view, suffix) in [(View::Cockpit, ""), (View::Hood, "_hood")] {
+        let wanted = match view {
+            View::Hood => views.hood,
+            _ => views.cockpit || views.raised_hud,
+        };
+        if !wanted {
+            continue;
+        }
+        for state in &STATES {
+            let img = gpu.render_cluster(entry, view, state);
+            let name = format!("{theme}{suffix}_{}", state.name);
+            if let Some(f) = support::check_golden(&name, &img) {
+                failures.push(f);
             }
         }
     }
     assert!(failures.is_empty(), "golden mismatches:\n{}", failures.join("\n"));
+}
+
+macro_rules! goldens {
+    ($($name:ident => $theme:ident),* $(,)?) => {
+        $(
+            #[test]
+            fn $name() {
+                check(ClusterTheme::$theme);
+            }
+        )*
+
+        #[test]
+        fn every_catalog_cluster_has_a_golden_test() {
+            let listed = [$(ClusterTheme::$theme),*];
+            for e in &catalog::CATALOG {
+                assert!(listed.contains(&e.theme), "{} has no golden test", e.theme);
+            }
+            let names = [$(stringify!($name)),*];
+            for (n, t) in names.iter().zip(listed.iter()) {
+                assert_eq!(catalog::entry(*t).map(|e| e.snake), Some(*n));
+            }
+        }
+    };
+}
+
+goldens! {
+    liquid_glass => LiquidGlass,
+    vision_spatial_glass => VisionSpatialGlass,
+    gt7_hood_pro => Gt7HoodPro,
+    amg_mbux_superscreen => AmgMbuxSuperscreen,
+    drift_glass => DriftGlass,
+    glyph_dot_matrix => GlyphDotMatrix,
+    porsche_analog => PorscheAnalog,
+    pagani_horologerie => PaganiHorologerie,
+    bugatti_tourbillon => BugattiTourbillon,
+    lfa_v10_nurburgring => LfaV10Nurburgring,
+    koenigsegg_gyro => KoenigseggGyro,
+    bosch_ddu => BoschDdu,
+    valkyrie_lmp1 => ValkyrieLmp1,
+    gt7_modular_tripod => Gt7ModularTripod,
+    tesla_adas => TeslaAdas,
+    windshield_hud => WindshieldHud,
+    ar_nav_wayfinder => ArNavWayfinder,
+    f35_helmet_hmd => F35HelmetHmd,
+    retro_cyber => RetroCyber,
+    synthwave_outrun => SynthwaveOutrun,
+    eva_bio_sync => EvaBioSync,
+    chrono_event_horizon => ChronoEventHorizon,
+    neural_cyber_synapse => NeuralCyberSynapse,
+    solaris_warp_core => SolarisWarpCore,
+    aero_plasma_blade => AeroPlasmaBlade,
+    shibuya_chromatic_prisma => ShibuyaChromaticPrisma,
+    kinetic_liquid_metal => KineticLiquidMetal,
+    cymatic_resonance_field => CymaticResonanceField,
+    chrono_multiverse => ChronoMultiverse,
+    lumen_etch => LumenEtch,
+    vernier_loupe => VernierLoupe,
+    dichroic_louvre => DichroicLouvre,
+    fibre_optic_corona => FibreOpticCorona,
+    aperture_nine => ApertureNine,
+    aero_smoke_tunnel => AeroSmokeTunnel,
+    rattrapante_sector => RattrapanteSector,
+    sapphire_mystery => SapphireMystery,
+    rack_focus => RackFocus,
+    bionic_spaceframe => BionicSpaceframe,
+    geodesic_well => GeodesicWell,
+    lightpainter => Lightpainter,
+    tread_seismograph => TreadSeismograph,
+    star_sail_origami => StarSailOrigami,
+    arc_ladder_cascade => ArcLadderCascade,
+    aurora_veil => AuroraVeil,
+    isochromatic_load_path => IsochromaticLoadPath,
+    abyssal_shear_bloom => AbyssalShearBloom,
+    harmonograph_drive => HarmonographDrive,
 }

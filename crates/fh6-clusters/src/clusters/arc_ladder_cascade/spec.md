@@ -1,0 +1,14 @@
+# Arc Ladder Cascade (`ArcLadderCascade`): brief
+
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 44 (ArcLadderCascade — build #46 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+
+- **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
+- **Kind:** new · **View:** cockpit · **Build order:** 46
+
+A high-voltage impulse generator. Twelve capacitor stages, each two 1 px plates with a spark gap, form a 220 deg horseshoe ladder (radius 260) over the gear; insulators are hairlines and nothing is filled except charge. Rank 3: stages charge in sequence with rpm, each gap filling with a primary glow, joined by a thin bus. Rank 1: Saira Condensed 800 gear (cap 210) at the discharge electrode, a 1 px polished sphere rim, under a straight 36 px 15-pod crown strip. Rank 2: Saira Condensed 700 speed (cap 100) right of the horseshoe foot. Rank 4: an unglowing shift-timing log under speed and gear, showing the last 12 upshifts as ticks against the car's shift-rpm line.
+
+- **Signature moment:** Cascade on upshift. When the gear rises, the charged stages fire top-down through the gaps into the gear electrode as a 2 px arc per gap, 50 ms in total, once per shift rather than a repeated flash. The ladder then recharges from the new rpm. The log gains a tick showing how close that shift was to the target: go within 150 rpm, caution if early, warning if at the limiter. At the limiter only the strip strobes at 10 Hz, and the gaps hold a steady corona in the shift colour.
+- **Telemetry:** CurrentEngineRpm against per-car thresholds drives the stage charge and the strip. A rising edge on Gear, together with the rpm in the frame before the change, triggers the cascade and the log tick against the car_profiles.json shift rpm. Gear drives the glyph and Speed the speed. Boost drives the charge-glow intensity. Clutch dims the gaps while it is in (open circuit). Felt lateral G sets the light azimuth on the electrode sphere and plates.
+- **References:** Multi-stage impulse-generator test halls (spark-gap ladders); high-voltage laboratory photography; AiM and MoTeC per-gear shift-light threshold tables; Tron: Legacy three-term neon
+- **Phase 6 assets:** Procedural only: plates, gaps and arcs are SDF, with one jagged polyline per gap generated once at load. An optional 512x512 ceramic-insulator normal strip (SDF fallback). Saira Condensed MSDF atlas.
+- **Risk:** Spark arcs are flashes. They are limited to one 50 ms cascade per upshift with 2 px cores and under 3,000 px2 of total arc area, and reduced-flash mode swaps them for a 150 ms charge drain. A 260 px horseshoe keeps 90 px clear of the gear cap. Cost: about 0.1 ms, with bloom on the charge, gear and strip only.

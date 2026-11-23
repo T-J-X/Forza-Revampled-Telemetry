@@ -100,6 +100,11 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
     let waker = Waker::default();
     let watcher = ConfigWatcher::spawn(config_path.clone(), Duration::from_millis(250), waker.notify())
         .map_err(io_err("starting the config watcher"))?;
+    if let Some(theme) = args.cluster {
+        // `--cluster`: review one catalog cluster in every view; the file is left alone.
+        watcher.handle().force_cluster_style(theme);
+        tracing::info!(%theme, "cluster forced from the command line");
+    }
     let cfg = watcher.current();
 
     let reader = TelemetryReader::new();

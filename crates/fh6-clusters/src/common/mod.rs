@@ -2,6 +2,24 @@
 //!
 //! Each component keeps its own animation state (`update`) and draws with the kit (`draw`), so a
 //! cluster composes them in a few lines and every family gets the same token behaviour.
+pub mod adas_road;
+pub mod bezel;
+pub mod gball;
+pub mod glass_plate;
+pub mod hero_gear;
+pub mod label;
+pub mod liquid;
+pub mod needle_dial;
+pub mod race;
+pub mod ribbon;
+pub mod scaffold;
+pub mod seg7;
+pub mod shift;
+pub mod signed_bar;
+pub mod speed;
+pub mod tach;
+pub mod tyre_slip;
+
 use fh6_kit::{
     vec2, Align, Color, FontId, Gear, LayerOptions, Painter, Palette, Rect, Shape, Signals, Spring, SpringSpec, Strobe,
     TextStyle, Tokens, VAlign,

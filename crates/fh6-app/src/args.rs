@@ -1,4 +1,5 @@
 //! Command-line options of `FH6_WheelDash`.
+use fh6_core::ClusterTheme;
 use std::path::PathBuf;
 
 /// The game's process image name.
@@ -8,7 +9,8 @@ pub const GAME_EXE: &str = "ForzaHorizon6.exe";
 pub const USAGE: &str = "FH6_WheelDash [options]
   --auto-exit           quit when the game process exits (used by FH6_SteamLauncher)
   --demo                show the overlay regardless of race state and focus (synthetic data if no packets)
-  --stats               draw receive-to-present latency and CPU frame time on the overlay
+  --cluster NAME        show this catalog cluster in every view for this run (e.g. LiquidGlass)
+  --stats              draw receive-to-present latency and CPU frame time on the overlay
   --bench-seconds N     run N seconds, then write latency/frame-time percentiles and quit
   --bench-out PATH      where --bench-seconds writes its report (default docs/perf/engine.md)
   --game-process NAME   foreground process that counts as the game (default ForzaHorizon6.exe)
@@ -24,6 +26,8 @@ pub struct AppArgs {
     pub auto_exit: bool,
     /// Bypass the visibility rules; synthesise telemetry when none arrives.
     pub demo: bool,
+    /// A cluster forced in every view for this run (the config file is not changed).
+    pub cluster: Option<ClusterTheme>,
     /// Draw the latency stats on the overlay.
     pub stats: bool,
     /// Benchmark duration, if benchmarking.
@@ -45,6 +49,7 @@ impl Default for AppArgs {
         Self {
             auto_exit: false,
             demo: false,
+            cluster: None,
             stats: false,
             bench_seconds: None,
             bench_out: PathBuf::from("docs/perf/engine.md"),
@@ -119,6 +124,13 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, ArgsErro
             }
             "--config" => out.config = Some(it.next().ok_or(ArgsError::MissingValue("--config"))?.into()),
             "--log" => out.log = Some(it.next().ok_or(ArgsError::MissingValue("--log"))?.into()),
+            "--cluster" => {
+                let v = it.next().ok_or(ArgsError::MissingValue("--cluster"))?;
+                out.cluster = Some(ClusterTheme::from_name(&v).ok_or(ArgsError::InvalidValue {
+                    option: "--cluster",
+                    value: v.clone(),
+                })?);
+            }
             _ => return Err(ArgsError::Unknown(arg)),
         }
     }
@@ -168,5 +180,21 @@ mod tests {
         ));
         assert_eq!(run(&["--frobnicate"]), Err(ArgsError::Unknown("--frobnicate".into())));
         assert_eq!(run(&["--help"]), Ok(Command::Help));
+    }
+
+    #[test]
+    fn cluster_takes_a_catalog_theme_name() {
+        let Ok(Command::Run(a)) = run(&["--demo", "--cluster", "vernierloupe"]) else {
+            panic!("parse failed");
+        };
+        assert_eq!(a.cluster, Some(ClusterTheme::VernierLoupe));
+        assert_eq!(run(&["--cluster"]), Err(ArgsError::MissingValue("--cluster")));
+        assert!(matches!(
+            run(&["--cluster", "NoSuchCluster"]),
+            Err(ArgsError::InvalidValue {
+                option: "--cluster",
+                ..
+            })
+        ));
     }
 }

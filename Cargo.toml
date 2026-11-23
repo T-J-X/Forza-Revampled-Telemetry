@@ -41,3 +41,23 @@ windows = "0.62"
 wgpu = { version = "30.0.2", default-features = false, features = ["dx12", "webgpu", "wgsl", "std", "parking_lot"] }
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"
+
+# Font shaping (kerning), MTSDF glyph generation and PNG decoding run at startup. Optimise them
+# in dev and test builds too, so the golden tests load the Phase 6 font pack in seconds.
+[profile.dev.package.rustybuzz]
+opt-level = 3
+
+[profile.dev.package.ttf-parser]
+opt-level = 3
+
+[profile.dev.package.fdsm]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3

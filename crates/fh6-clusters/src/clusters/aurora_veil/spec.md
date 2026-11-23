@@ -1,0 +1,14 @@
+# Aurora Veil (`AuroraVeil`): brief
+
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 45 (AuroraVeil — build #41 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+
+- **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
+- **Kind:** new · **View:** cockpit · **Build order:** 41
+
+A polar-night sky over the binnacle. A 1 px field arc (1300 px span, 100 px sagitta) crosses the crown. From it, 64 vertical rays rise as the rank-3 tach: an aurora curtain whose ray heights grow with rpm from both ends inward, up to 160 px. Each ray is a primary-to-transparent gradient at alpha 64 or less, so the sky stays black. Rank 1: Saira 600 gear (cap 200) under the arc's apex, with a straight 34 px 16-pod strip just beneath the arc. Rank 2: Saira 300 speed (cap 96) beside the gear. Rank 4: an unglowing heading tape from Yaw under speed and gear, with ticks every 15 deg. Labels are Chakra Petch.
+
+- **Signature moment:** Solar wind. Lateral G shears the whole curtain sideways (rays lean up to 12 deg), and longitudinal G compresses or lifts it, on the under-damped fluidSlosh spring (T 0.62 s, zeta 0.35). The aurora sways with the car and settles perfectly still at constant input. At the shift rpm the curtain closes at the centre and the ray tips take the shift colour, steady, while only the strip strobes at 10 Hz. Upshift: the curtain drops with the rpm, and a single 1 px fold travels along the base from the centre outward.
+- **Telemetry:** CurrentEngineRpm drives the ray heights (outside-in) and the strip. Felt G (-AccelerationX/Z) drives the curtain shear and lift and the light azimuth. Gear drives the glyph and Speed the speed. Yaw drives the heading tape; this is heading only, not navigation. Boost drives ray brightness. DistanceTraveled drives the slow fold drift, so a parked car's curtain is still.
+- **References:** All-sky auroral time-lapse photography (curtain and corona forms); magnetosphere field-line diagrams; Lucid Gravity's floating black-glass restraint; BMW Panoramic Vision's single dark band
+- **Phase 6 assets:** An optional 1x256 ray-noise texture baked at load (procedural fallback). Saira and Chakra Petch MSDF atlases. The curtain, arc and tape are procedural.
+- **Risk:** A large luminous curtain costs bloom, can pull the eye off the gear, and could turn into constant motion. Rays are gradients that fade to 0, only the lower 30% of each ray is emissive, and the curtain is capped at 1300x160. Sway comes only from G through the spring, and fold drift only from distance. Cost: one 1300x200 ray pass plus bloom, about 0.12 ms.

@@ -420,8 +420,9 @@ pub struct Fonts {
     pub(crate) atlas: Atlas,
 }
 
-/// Most faces that can be loaded.
-pub const MAX_FACES: usize = 64;
+/// Most faces that can be loaded (the Phase 6 pack alone ships 64 static faces, plus the embedded
+/// fallback and the user's own `fonts/`).
+pub const MAX_FACES: usize = 128;
 
 impl Fonts {
     /// The embedded Noto Sans fallback, assigned to every role.
@@ -434,7 +435,7 @@ impl Fonts {
             roles: [FontId::FALLBACK; 9],
             atlas: Atlas::new(),
         };
-        fonts.add_face(
+        let id = fonts.add_face(
             Cow::Borrowed(NOTO_SANS),
             0,
             None,
@@ -444,6 +445,7 @@ impl Fonts {
                 italic: false,
             },
         )?;
+        fonts.generate(id.0, PRELOAD.chars());
         Ok(fonts)
     }
 
@@ -470,7 +472,7 @@ impl Fonts {
             None
         };
 
-        self.add_face(
+        let id = self.add_face(
             Cow::Owned(bytes),
             0,
             wght,
@@ -479,33 +481,66 @@ impl Fonts {
                 weight: weight.filter(|_| wght.is_some()).unwrap_or(natural),
                 italic,
             },
-        )
+        )?;
+        self.generate(id.0, PRELOAD.chars());
+        Ok(id)
     }
 
-    /// Loads every `.ttf` / `.otf` in `dir` (Phase 6 pack, or the user `fonts/` folder beside the
-    /// exe). Unreadable files are skipped with a warning. Returns the faces loaded.
+    /// Like [`Fonts::load`] but generates no glyphs up front: they are added to the atlas the
+    /// first time they are drawn. Used for whole font folders, where preloading every face
+    /// would cost seconds and overflow the atlas; [`Fonts::bind_tokens`] preloads the faces it
+    /// binds to roles.
+    fn load_lazy(&mut self, bytes: Vec<u8>) -> Result<FontId, FontError> {
+        let face = ttf_parser::Face::parse(&bytes, 0).map_err(|e| FontError::Parse(e.to_string()))?;
+        let family = face
+            .names()
+            .into_iter()
+            .filter(|n| {
+                n.name_id == ttf_parser::name_id::TYPOGRAPHIC_FAMILY || n.name_id == ttf_parser::name_id::FAMILY
+            })
+            .find_map(|n| n.to_string())
+            .unwrap_or_else(|| "Unknown".into());
+        let desc = FontDesc {
+            family,
+            weight: face.weight().to_number(),
+            italic: face.is_italic(),
+        };
+        self.add_face(Cow::Owned(bytes), 0, None, desc)
+    }
+
+    /// Loads every `.ttf` / `.otf` in `dir` and in its immediate subfolders (the Phase 6 pack keeps
+    /// one folder per family, `assets/fonts/<family>/`; the user `fonts/` folder beside the exe may
+    /// be flat). Unreadable files are skipped with a warning. Returns the faces loaded, in path
+    /// order.
     ///
     /// # Errors
-    /// [`FontError::Io`] when the directory cannot be listed.
+    /// [`FontError::Io`] when `dir` itself cannot be listed.
     pub fn load_dir(&mut self, dir: &Path) -> Result<Vec<FontId>, FontError> {
         let entries = std::fs::read_dir(dir).map_err(|source| FontError::Io {
             path: dir.display().to_string(),
             source,
         })?;
-        let mut paths: Vec<_> = entries
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| {
-                p.extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf"))
-            })
-            .collect();
+        let is_font = |p: &Path| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf"))
+        };
+        let mut paths = Vec::new();
+        for path in entries.filter_map(Result::ok).map(|e| e.path()) {
+            if path.is_dir() {
+                // One level only: a family folder.
+                if let Ok(sub) = std::fs::read_dir(&path) {
+                    paths.extend(sub.filter_map(Result::ok).map(|e| e.path()).filter(|p| is_font(p)));
+                }
+            } else if is_font(&path) {
+                paths.push(path);
+            }
+        }
         paths.sort();
         let mut loaded = Vec::new();
         for path in paths {
             match std::fs::read(&path) {
-                Ok(bytes) => match self.load(bytes, None) {
+                Ok(bytes) => match self.load_lazy(bytes) {
                     Ok(id) => loaded.push(id),
                     Err(err) => tracing::warn!(path = %path.display(), error = %err, "skipping font"),
                 },
@@ -554,7 +589,6 @@ impl Fonts {
             glyphs: HashMap::with_capacity(160),
             kerning,
         });
-        self.generate(id.0, PRELOAD.chars());
         Ok(id)
     }
 
@@ -588,6 +622,8 @@ impl Fonts {
             };
             if let Some(id) = self.find(&token.family, weight, false) {
                 self.set_role(role, id);
+                // Faces from a folder load lazily; the role faces get the usual preload.
+                self.generate(id.0, PRELOAD.chars());
                 bound += 1;
             }
         }
@@ -1142,5 +1178,20 @@ mod tests {
         assert!(px[3] > 128, "true SDF positive inside the stem, got {px:?}");
         let corner = ((y0 * ATLAS_WIDTH + x0) * 4) as usize;
         assert!(f.atlas.pixels[corner + 3] < 128, "outside is negative");
+    }
+
+    #[test]
+    fn load_dir_reads_the_family_folders_of_the_pack() {
+        // assets/fonts/<family>/*.ttf (Phase 6): a flat scan found nothing, so every role
+        // silently fell back to the embedded Noto Sans.
+        let pack = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
+        if !pack.is_dir() {
+            return;
+        }
+        let mut f = fonts();
+        let loaded = f.load_dir(&pack).expect("list assets/fonts");
+        assert!(loaded.len() > 20, "only {} faces", loaded.len());
+        assert!(f.find("Saira Condensed", 700, false).is_some());
+        assert!(f.find("Titillium Web", 600, false).is_some());
     }
 }
