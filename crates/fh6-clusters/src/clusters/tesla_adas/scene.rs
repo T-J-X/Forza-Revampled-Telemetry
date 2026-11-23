@@ -1,5 +1,6 @@
 //! The Tesla ADAS road scene (zone Z4): a chase-cam diorama of the predicted road with the
-//! Phase 6 glTF clay cars drawn by the kit's mesh pass.
+//! Blender studio-lit car sprites (the Phase 6 glTF cars rendered per camera and view angle;
+//! the kit's mesh pass draws clay meshes for any sprite that is missing).
 //!
 //! It follows the family's scene rules (`docs/design/families/adas-hud.md`) and reuses the shared
 //! model in `common::adas_road` (the curvature guard, the drift yaw, the camera constants, lane
@@ -18,8 +19,8 @@ use fh6_kit::math::{finite_or, smoothstep, vec3, Mat4, Vec3};
 use fh6_kit::mesh::{MeshData, MeshDraw, MeshId, MeshShading};
 use fh6_kit::perspective::{Camera25, RoadCurve};
 use fh6_kit::{
-    vec2, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect, Shape,
-    Spring, TextStyle, Tokens, VAlign, Vec2,
+    vec2, Affine, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect,
+    Shape, Spring, TextStyle, Tokens, VAlign, Vec2,
 };
 
 /// Standard gravity (m/s^2).
@@ -70,7 +71,14 @@ const POOL_COLS: usize = 4;
 const POOL_YAW_MIN: f32 = -50.0;
 const POOL_YAW_STEP: f32 = 10.0;
 /// The ComfyUI asphalt plate's light level (linear ink; about #0E1116 where the plate is full).
-const ASPHALT_LEVEL: f32 = 0.010;
+const ASPHALT_LEVEL: f32 = 0.060;
+/// The horizon haze: alpha at the vanishing point, its tint toward the primary, and its radii
+/// (fractions of the band's width and height).
+const HAZE_ALPHA: f32 = 0.22;
+const HAZE_TINT: f32 = 0.45;
+const HAZE_RADII: [f32; 2] = [0.40, 0.17];
+/// The haze centre below the horizon (fraction of the band height): it reaches 0 before the band top.
+const HAZE_DROP: f32 = 0.08;
 /// The road fill reaches this far past the outer edge lines (metres).
 const ROAD_SHOULDER: f32 = 0.6;
 /// Traffic contact shadows: a ground ellipse 1.1x the car's width and 0.95x its length, 50% black.
@@ -203,7 +211,39 @@ pub struct SceneAssets {
     lamp: MeshId,
     pools: [Option<ImageId>; 2],
     asphalt: Option<ImageId>,
+    sprites: Sprites,
 }
+
+/// The Blender studio-lit car sprites (`assets/clusters/tesla_adas/`, recipe
+/// `tools/asset-forge/src/recipes/tesla_adas.rs`). Each `None` falls back to that car's clay mesh.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Sprites {
+    /// The ego through each camera (cockpit, hood) at the pool yaws.
+    ego: [Option<ImageId>; 2],
+    /// The ego's tail-lamp emission masks, same layout at half size.
+    lamps: [Option<ImageId>; 2],
+    /// Sedan, SUV, supercar: elevation rows x relative-heading columns.
+    traffic: [Option<ImageId>; 3],
+}
+
+/// Ego sprite cell (render px), its scale (render px per metre at the car's ground centre) and
+/// where that point sits in the cell (the recipe's `EGO_CELL`, `EGO_S`, `EGO_ANCHOR`).
+const EGO_CELL: [f32; 2] = [540.0, 360.0];
+const EGO_S: f32 = 100.0;
+const EGO_ANCHOR: [f32; 2] = [0.5, 0.66];
+/// Traffic sprite cell, scale and anchor (the recipe's `TRAFFIC_*`).
+const TRAFFIC_CELL: [f32; 2] = [336.0, 232.0];
+const TRAFFIC_S: f32 = 64.0;
+const TRAFFIC_ANCHOR: [f32; 2] = [0.5, 0.70];
+/// Traffic atlas rows: view elevation to the car's ground centre (degrees).
+const TRAFFIC_ELEVATIONS: [f32; 4] = [2.5, 5.0, 10.0, 20.0];
+/// Traffic atlas columns: heading relative to the view ray, 0..40 in 10° steps (mirrored below 0).
+const TRAFFIC_HEADING_STEP: f32 = 10.0;
+const TRAFFIC_COLS: usize = 5;
+/// The ego sprite's tint toward the brand primary (multiplied).
+const EGO_SPRITE_TINT: f32 = 0.12;
+/// Vertical compression of the ego sprite per radian of dive (nose down, tail up).
+const DIVE_SQUASH: f32 = 1.3;
 
 /// Loads [`SceneAssets`].
 pub fn load_assets(setup: &mut fh6_kit::cluster::Setup<'_>) -> SceneAssets {
@@ -238,6 +278,21 @@ pub fn load_assets(setup: &mut fh6_kit::cluster::Setup<'_>) -> SceneAssets {
             image("clusters/tesla_adas/underglow_pool_hood.png"),
         ],
         asphalt: image("clusters/tesla_adas/asphalt.png"),
+        sprites: Sprites {
+            ego: [
+                image("clusters/tesla_adas/ego_cockpit.png"),
+                image("clusters/tesla_adas/ego_hood.png"),
+            ],
+            lamps: [
+                image("clusters/tesla_adas/ego_lamps_cockpit.png"),
+                image("clusters/tesla_adas/ego_lamps_hood.png"),
+            ],
+            traffic: [
+                image("clusters/tesla_adas/traffic_sedan.png"),
+                image("clusters/tesla_adas/traffic_suv.png"),
+                image("clusters/tesla_adas/traffic_supercar.png"),
+            ],
+        },
     }
 }
 
@@ -605,6 +660,7 @@ pub struct Scene {
     lamp: MeshId,
     pools: [Option<ImageId>; 2],
     asphalt: Option<ImageId>,
+    sprites: Sprites,
     traffic: Traffic,
     kappa: Spring,
     kappa_target: f32,
@@ -645,6 +701,7 @@ impl Scene {
             lamp: assets.lamp,
             pools: assets.pools,
             asphalt: assets.asphalt,
+            sprites: assets.sprites,
             traffic: Traffic::seeded(SEED),
             kappa: Spring::new(s.default, 0.0),
             kappa_target: 0.0,
@@ -781,12 +838,148 @@ impl Scene {
         let f = Frame::new(g, self.kappa.value());
         p.scoped(|p| {
             p.clip(vp, 0.0);
+            Self::draw_haze(p, &f, pal);
             self.draw_ground(p, &f, pal);
             self.draw_carpet(p, &f, pal);
             self.draw_lanes(p, &f, pal);
             self.draw_stop_line(p, &f, pal, label);
             self.draw_proximity(p, &f, pal);
             self.draw_car_overlays(p, &f, pal);
+        });
+    }
+
+    /// The traffic sprite for `kind` (`None`: draw its clay mesh).
+    fn traffic_sprite(&self, kind: Kind) -> Option<ImageId> {
+        kind.index()
+            .checked_sub(1)
+            .and_then(|i| self.sprites.traffic.get(i).copied().flatten())
+    }
+
+    /// The ego sprite for this camera (`None`: draw the clay mesh).
+    fn ego_sprite(&self, f: &Frame) -> Option<ImageId> {
+        self.sprites.ego[f.pool.min(1)]
+    }
+
+    /// The studio-lit sprites, far to near (the ego among the traffic), each anchored at its car's
+    /// projected ground centre and scaled by that point's depth. Neighbouring atlas cells are
+    /// blended by drawing the nearer cell opaque and the next one over it at its weight, so a body
+    /// never turns see-through mid-blend.
+    fn draw_sprites(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        let lead = self.lead();
+        let mut order = [(0.0f32, 0usize); ROAD_USERS + 1];
+        for (slot, (i, u)) in order.iter_mut().zip(self.traffic.users.iter().enumerate()) {
+            *slot = (u.z, i);
+        }
+        order[ROAD_USERS] = (EGO_Z, ROAD_USERS);
+        order.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        for (_, i) in order {
+            if i == ROAD_USERS {
+                self.draw_ego_sprite(p, f, pal);
+                continue;
+            }
+            let u = self.traffic.users[i];
+            let Some(img) = self.traffic_sprite(u.kind) else {
+                continue;
+            };
+            let Some((_, level, fade)) = self.traffic_pose(f, i) else {
+                continue;
+            };
+            let x = f.road.center_x(u.z) + f32::from(u.lane) * LANE_WIDTH;
+            let ground = vec3(x, 0.0, u.z);
+            let Some(q) = f.cam.project(ground) else {
+                continue;
+            };
+            let depth = f.cam.depth(ground);
+            if depth < 0.5 {
+                continue;
+            }
+            let (dx, dz) = (x - f.cam.eye.x, u.z - f.cam.eye.z);
+            let elevation = f.cam.eye.y.atan2(dx.hypot(dz)).to_degrees();
+            let rel = (f.road.heading(u.z) - dx.atan2(dz)).to_degrees();
+            let mirror = rel < 0.0;
+            let col = (rel.abs() / TRAFFIC_HEADING_STEP).clamp(0.0, (TRAFFIC_COLS - 1) as f32);
+            let (c0, tc) = (col.floor() as usize, col.fract());
+            let c1 = (c0 + 1).min(TRAFFIC_COLS - 1);
+            let el = elevation.clamp(TRAFFIC_ELEVATIONS[0], TRAFFIC_ELEVATIONS[3]);
+            let r0 = TRAFFIC_ELEVATIONS.windows(2).position(|w| el <= w[1]).unwrap_or(2);
+            let tr = (el - TRAFFIC_ELEVATIONS[r0]) / (TRAFFIC_ELEVATIONS[r0 + 1] - TRAFFIC_ELEVATIONS[r0]);
+            let r1 = r0 + 1;
+            let k = f.cam.fx / (depth * TRAFFIC_S);
+            let size = vec2(TRAFFIC_CELL[0] * k, TRAFFIC_CELL[1] * k);
+            let rect = Rect::from_xywh(
+                q.x - TRAFFIC_ANCHOR[0] * size.x,
+                q.y - TRAFFIC_ANCHOR[1] * size.y,
+                size.x,
+                size.y,
+            );
+            let body = if lead == Some(i) {
+                Color::WHITE.lerp(pal.primary, 0.2)
+            } else {
+                Color::WHITE
+            };
+            let tint = body.intensity(level.min(1.0)).fade(fade);
+            let grid = [TRAFFIC_COLS, TRAFFIC_ELEVATIONS.len()];
+            let near_col = if tc < 0.5 { c0 } else { c1 };
+            for (cell, w) in [((c0, r0), 1.0), ((c1, r0), tc), ((near_col, r1), tr)] {
+                if w > 0.004 {
+                    sprite(p, img, grid, cell, mirror, rect, tint.fade(w));
+                }
+            }
+        }
+    }
+
+    /// The ego sprite: yaw from the atlas (two neighbouring cells), roll as a screen rotation about
+    /// the ground centre, dive as the lift plus a vertical squash; then the tail lamps' emission
+    /// mask, added in warning red while braking.
+    fn draw_ego_sprite(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        let Some(img) = self.ego_sprite(f) else {
+            return;
+        };
+        let dive = self.dive.value().to_radians();
+        let lift = 0.25 * self.models[Kind::Ego.index()].dims[1] * dive.abs().sin();
+        let x = f.road.center_x(EGO_Z);
+        let ground = vec3(x, lift, EGO_Z);
+        let (Some(q), depth) = (f.cam.project(ground), f.cam.depth(ground)) else {
+            return;
+        };
+        if depth < 0.5 {
+            return;
+        }
+        let heading =
+            (f.road.heading(EGO_Z) + self.yaw.value() - (x - f.cam.eye.x).atan2(EGO_Z - f.cam.eye.z)).to_degrees();
+        let pos = ((heading - POOL_YAW_MIN) / POOL_YAW_STEP).clamp(0.0, (POOL_CELLS - 1) as f32);
+        let (i0, t) = (pos.floor() as usize, pos.fract());
+        let i1 = (i0 + 1).min(POOL_CELLS - 1);
+        let k = f.cam.fx / (depth * EGO_S);
+        let size = vec2(EGO_CELL[0] * k, EGO_CELL[1] * k);
+        let rect = Rect::from_xywh(
+            q.x - EGO_ANCHOR[0] * size.x,
+            q.y - EGO_ANCHOR[1] * size.y,
+            size.x,
+            size.y,
+        );
+        let grid = [POOL_COLS, POOL_CELLS.div_ceil(POOL_COLS)];
+        let cell = |i: usize| (i % POOL_COLS, i / POOL_COLS);
+        let tint = Color::WHITE.lerp(pal.primary, EGO_SPRITE_TINT);
+        let lamp = self.lamps.value().clamp(0.0, 1.0);
+        let lamps = self.sprites.lamps[f.pool.min(1)];
+        p.scoped(|p| {
+            let squash = (1.0 - DIVE_SQUASH * dive.sin()).clamp(0.85, 1.1);
+            p.transform(
+                &Affine::translate(-q)
+                    .then(&Affine::scale_xy(1.0, squash))
+                    .then(&Affine::rotate(-self.roll.value().to_radians()))
+                    .then(&Affine::translate(q)),
+            );
+            sprite(p, img, grid, cell(i0), false, rect, tint);
+            if t > 0.004 {
+                sprite(p, img, grid, cell(i1), false, rect, tint.fade(t));
+            }
+            if let (Some(mask), true) = (lamps, lamp > 0.02) {
+                p.set_blend(BlendMode::Add);
+                let near = if t < 0.5 { i0 } else { i1 };
+                sprite(p, mask, grid, cell(near), false, rect, pal.roles.warning.fade(lamp));
+            }
         });
     }
 
@@ -826,6 +1019,29 @@ impl Scene {
             }
         }
         n
+    }
+
+    /// Atmosphere over the far road, centred just below the horizon so it fades to 0 before the
+    /// band's top edge (the band clips it).
+    fn draw_haze(p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        // Atmosphere: a cool haze glowing where the road meets the horizon (an ellipse, wide and
+        // flat, centred on the vanishing point), so the far road dissolves into air, not black.
+        let far_x = f.lane_point(0.0, f.z_far * 0.8).map_or(f.vp.center().x, |q| q.x);
+        let vanish = vec2(far_x, f.cam.horizon_y + HAZE_DROP * f.vp.height());
+        let haze = pal.roles.ink.lerp(pal.primary, HAZE_TINT);
+        p.scoped(|p| {
+            p.transform(
+                &Affine::scale_xy(HAZE_RADII[0] * f.vp.width(), HAZE_RADII[1] * f.vp.height())
+                    .then(&Affine::translate(vanish)),
+            );
+            p.fill(
+                &Shape::circle(Vec2::ZERO, 1.0),
+                Gradient::radial(Vec2::ZERO, 1.0)
+                    .stop(0.0, haze.with_alpha(HAZE_ALPHA))
+                    .stop(0.35, haze.with_alpha(HAZE_ALPHA * 0.45))
+                    .stop(1.0, haze.with_alpha(0.0)),
+            );
+        });
     }
 
     /// The road surface between the outer edges (the ComfyUI asphalt plate, near-black; or a faint
@@ -1214,6 +1430,10 @@ impl Scene {
     /// brackets.
     fn draw_car_overlays(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
         for (i, u) in self.traffic.users.iter().enumerate() {
+            // A sprite carries its own studio shadow.
+            if self.traffic_sprite(u.kind).is_some() {
+                continue;
+            }
             let Some((m, level, fade)) = self.traffic_pose(f, i) else {
                 continue;
             };
@@ -1254,17 +1474,24 @@ impl Scene {
                 }
             }
             if ok {
+                // With the sprite, its emission mask lights the lenses: the spill stays a halo.
+                let (alpha, spread) = if self.ego_sprite(f).is_some() {
+                    (0.40, 5.0)
+                } else {
+                    (0.85, 11.0)
+                };
                 p.glow(
                     &Shape::Polygon { points: &q },
-                    pal.roles.warning.fade(0.85 * lamp),
+                    pal.roles.warning.fade(alpha * lamp),
                     Glow {
-                        sigma: 5.0 + 11.0 * lamp,
+                        sigma: 4.0 + spread * lamp,
                         intensity: 1.0,
                         fill_inside: true,
                     },
                 );
             }
         }
+        self.draw_sprites(p, f, pal);
         if let Some(i) = self.lead() {
             if let Some((m, _, fade)) = self.traffic_pose(f, i) {
                 let dims = self.models[self.traffic.users[i].kind.index()].dims;
@@ -1304,6 +1531,9 @@ impl Scene {
             });
         };
         for (i, u) in self.traffic.users.iter().enumerate() {
+            if self.traffic_sprite(u.kind).is_some() {
+                continue;
+            }
             let Some((m, level, fade)) = self.traffic_pose(&f, i) else {
                 continue;
             };
@@ -1325,6 +1555,9 @@ impl Scene {
             );
         }
 
+        if self.ego_sprite(&f).is_some() {
+            return;
+        }
         // The ego: a brand-pearl twin (light neutral, 15% brand, an accent-tinted pearl rim).
         let m = self.ego_pose(&f);
         let body = pal.roles.ink.lerp(pal.primary, EGO_TINT).intensity(0.92);
@@ -1357,6 +1590,36 @@ impl Scene {
             MeshShading::Unlit,
         );
     }
+}
+
+/// Draws atlas cell `cell` (`(column, row)` of a `grid` of `[columns, rows]`) over `rect`,
+/// mirrored left-right when `mirror`.
+fn sprite(
+    p: &mut Painter<'_>,
+    img: ImageId,
+    grid: [usize; 2],
+    cell: (usize, usize),
+    mirror: bool,
+    rect: Rect,
+    tint: Color,
+) {
+    let (cu, cv) = (1.0 / grid[0] as f32, 1.0 / grid[1] as f32);
+    let (u0, v0) = (cell.0 as f32 * cu, cell.1 as f32 * cv);
+    let uv = if mirror {
+        Rect {
+            min: vec2(u0 + cu, v0),
+            max: vec2(u0, v0 + cv),
+        }
+    } else {
+        Rect::from_xywh(u0, v0, cu, cv)
+    };
+    p.fill(
+        &Shape::rect(rect),
+        ImagePaint {
+            uv,
+            ..ImagePaint::new(img, rect).tint(tint)
+        },
+    );
 }
 
 /// A unit quad for the tail-light bar: x -1..1, y 0..1 at z 0, facing -Z (the chase camera).

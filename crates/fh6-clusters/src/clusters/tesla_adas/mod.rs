@@ -44,13 +44,17 @@ use crate::common::ShiftLights;
 use fh6_kit::cluster::Setup;
 use fh6_kit::math::{smoothstep, vec3};
 use fh6_kit::{
-    vec2, Align, Cap, Cluster, FontId, FontRole, FrameInput, Gear, Glow, Gradient, LayerOptions, Layout, Painter,
-    Palette, Rect, Shape, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    vec2, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId, ImagePaint,
+    LayerOptions, Layout, Painter, Palette, Rect, Shape, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
 };
 use scene::{Scene, SceneGeom, SceneInput};
 
 /// Standard gravity (m/s^2).
 const G: f32 = 9.80665;
+/// LED cap atlas cell and the lens inside it (render px; the recipe's `CAP_CELL` / `CAP_LENS_PX`).
+const CAP_CELL: [f32; 2] = [288.0, 128.0];
+const CAP_LENS: [f32; 2] = [240.0, 88.0];
+/// LED cap atlas cell and the lens inside it (render px; the recipe's `CAP_CELL` / `CAP_LENS_PX`).const CAP_CELL: [f32; 2] = [288.0, 128.0];const CAP_LENS: [f32; 2] = [240.0, 88.0];
 /// The pod count (catalog brief).
 const PODS: u32 = 10;
 /// Width of the comet at the head of the rev ribbon (px).
@@ -234,6 +238,9 @@ pub struct TeslaAdas {
     unit: &'static str,
     micro_cap: f32,
     tracking: f32,
+    /// The Blender LED caps (off, on; `assets/clusters/tesla_adas/led_caps.png`), or `None` for
+    /// the shared vector pods.
+    caps: Option<ImageId>,
 }
 
 impl TeslaAdas {
@@ -254,6 +261,14 @@ impl TeslaAdas {
         let micro_cap = t.type_scale.micro_label;
         let tracking = t.type_scale.label_tracking;
         let assets = scene::load_assets(setup);
+        let caps = setup
+            .assets
+            .map(|a| a.join("clusters/tesla_adas/led_caps.png"))
+            .and_then(|path| {
+                path.is_file()
+                    .then(|| setup.images.load_file(setup.device, setup.queue, &path, None).ok())
+                    .flatten()
+            });
         Self {
             faces,
             palette: Palette::family(t, "adasHud"),
@@ -273,6 +288,7 @@ impl TeslaAdas {
             unit: "MPH",
             micro_cap,
             tracking,
+            caps,
         }
     }
 
@@ -356,22 +372,11 @@ impl Cluster for TeslaAdas {
         // Z4 first: the scene is rank 4 and sits behind everything else.
         self.scene.draw(p, &g.scene, &pal, self.faces.label);
         self.draw_ribbon(p, g, &pal);
-        self.shift.draw_at(
-            p,
-            &g.pod_centers(),
-            g.pod_size,
-            &pal,
-            &PodStyle {
-                glow_sigma: 6.0,
-                unlit_alpha: 1.0 / 255.0,
-                unlit_rim: 0.02,
-                ..PodStyle::default().with_shape(PodShape::Pill)
-            },
-        );
+        self.draw_pods(p, g, &pal);
         self.draw_gear(p, g, &pal);
         self.draw_readouts(p, g, &pal);
-        // The clay cars last: they depth-test only against each other, so the 2D scene sits
-        // under them and the lamp bar (a mesh quad) on the ego.
+        // Clay meshes only for cars without a sprite (missing assets): they depth-test only against
+        // each other, so they come last, over the 2D scene.
         self.scene.draw_meshes(p, &g.scene, &pal);
     }
 
@@ -387,6 +392,52 @@ impl Cluster for TeslaAdas {
 }
 
 impl TeslaAdas {
+    /// The shift lights: the Blender LED caps (a smoked acrylic lens, or the back-lit diffuser
+    /// tinted with the pod's colour over its glow, bloomed), or the shared vector pods without
+    /// the asset. The shared `ShiftLights` decides each pod's colour and the strobe.
+    fn draw_pods(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let Some(caps) = self.caps else {
+            self.shift.draw_at(
+                p,
+                &g.pod_centers(),
+                g.pod_size,
+                pal,
+                &PodStyle {
+                    glow_sigma: 6.0,
+                    unlit_alpha: 1.0 / 255.0,
+                    unlit_rim: 0.02,
+                    ..PodStyle::default().with_shape(PodShape::Pill)
+                },
+            );
+            return;
+        };
+        // The lens fills CAP_LENS of each cell; the cell grows by the same ratio round the pod.
+        let cell = vec2(
+            g.pod_size.x * CAP_CELL[0] / CAP_LENS[0],
+            g.pod_size.y * CAP_CELL[1] / CAP_LENS[1],
+        );
+        let uv = |i: f32| Rect::from_xywh(0.5 * i, 0.0, 0.5, 1.0);
+        for (i, c) in g.pod_centers().iter().enumerate() {
+            let pod = Rect::from_center_size(*c, g.pod_size);
+            let rect = Rect::from_center_size(*c, cell);
+            let lens = |p: &mut Painter<'_>, lit: bool, tint: Color| {
+                let paint = ImagePaint {
+                    uv: uv(f32::from(u8::from(lit))),
+                    ..ImagePaint::new(caps, rect).tint(tint)
+                };
+                p.fill(&Shape::rect(rect), paint);
+            };
+            match self.shift.color_of(i, pal) {
+                Some(color) => {
+                    let shape = Shape::round_rect(pod, pod.height() * 0.5);
+                    p.glow(&shape, color, Glow::new(6.0, 0.55));
+                    p.layer(LayerOptions::bloom(), |p| lens(p, true, color));
+                }
+                None => lens(p, false, Color::WHITE),
+            }
+        }
+    }
+
     /// The rev ribbon (rank 3, outside the bloom): a hairline track, the redline share in a dim
     /// warning, the fill from primary to accent and a 12 px white comet at its head.
     fn draw_ribbon(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {

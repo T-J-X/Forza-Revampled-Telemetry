@@ -115,6 +115,220 @@ for v in P['views']:
 done()
 "#;
 
+/// bpy: one studio-lit render per shot. The Phase 6 glTF car (subdivided once, smoothed) with
+/// car-studio materials on its five slots (clear-coated metallic paint, dark glass, rubber,
+/// smoked tail lamps, headlamps), posed by heading and dive, on a shadow catcher, under an
+/// overhead softbox, two long strip lights (the paint's highlight lines), a cool rim light from
+/// ahead and Blender's studio HDRI for reflections. The camera reproduces
+/// `fh6_kit::perspective::Camera25` (pitched, no yaw) with the car's ground centre straight ahead
+/// at depth `d` and `h` below the eye; its focal gives `s` px per metre at that point and its
+/// lens shift puts that point at `(0.5, ay)` of the image. A `lamp_pass` shot renders only the
+/// tail lamps (emission, everything else held out) for the live brake light. Writes PNG
+/// (AgX, straight alpha). Blender's camera is right-handed and the kit's is not: the images are
+/// mirrored left-right in post.
+pub const CARS: &str = r#"
+
+import math
+P = ARGS
+
+def principled(name, base, metallic=0.0, rough=0.5, coat=0.0, coat_rough=0.03, emit=None, emit_strength=0.0):
+    m, nt = new_mat(name)
+    b = nt.nodes.new('ShaderNodeBsdfPrincipled')
+    b.inputs['Base Color'].default_value = (base[0], base[1], base[2], 1.0)
+    b.inputs['Metallic'].default_value = metallic
+    b.inputs['Roughness'].default_value = rough
+    try:
+        b.inputs['Coat Weight'].default_value = coat
+        b.inputs['Coat Roughness'].default_value = coat_rough
+    except Exception:
+        pass
+    if emit is not None:
+        b.inputs['Emission Color'].default_value = (emit[0], emit[1], emit[2], 1.0)
+        b.inputs['Emission Strength'].default_value = emit_strength
+    o = nt.nodes.new('ShaderNodeOutputMaterial')
+    nt.links.new(b.outputs['BSDF'], o.inputs['Surface'])
+    return m
+
+def holdout(name):
+    m, nt = new_mat(name)
+    h = nt.nodes.new('ShaderNodeHoldout')
+    o = nt.nodes.new('ShaderNodeOutputMaterial')
+    nt.links.new(h.outputs[0], o.inputs['Surface'])
+    return m
+
+def emissive(name, strength):
+    m, nt = new_mat(name)
+    e = nt.nodes.new('ShaderNodeEmission')
+    e.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+    e.inputs['Strength'].default_value = strength
+    o = nt.nodes.new('ShaderNodeOutputMaterial')
+    nt.links.new(e.outputs[0], o.inputs['Surface'])
+    return m
+
+def kit_to_blender(x, y, z):
+    # glTF / kit (x, y up, z forward) -> Blender (x, -z, y), as the glTF importer does.
+    return (x, -z, y)
+
+for shot in P['shots']:
+    sc = reset()
+    gpu_cycles(sc, samples=int(P['samples']), denoise=True, bounces=8)
+    sc.render.film_transparent = True
+    lamp_pass = bool(shot.get('lamp_pass', False))
+    if lamp_pass:
+        w = bpy.data.worlds.new('void')
+        sc.world = w
+        w.use_nodes = True
+        bg = w.node_tree.nodes.get('Background')
+        if bg is not None:
+            bg.inputs['Strength'].default_value = 0.0
+    else:
+        studio_world(sc, strength=float(P['world']), hdri='studio.exr', rotation=0.0, visible=False)
+    bpy.ops.import_scene.gltf(filepath=shot['glb'])
+    paint = shot['paint']
+    mats = {
+        'paint': principled('paint', paint, metallic=float(P['metallic']), rough=float(P['rough']), coat=1.0, coat_rough=0.03),
+        'glass': principled('glass', (0.012, 0.014, 0.018), metallic=0.0, rough=0.04, coat=1.0, coat_rough=0.0),
+        'tyre': principled('tyre', (0.012, 0.012, 0.013), rough=0.85),
+        'tail': principled('tail', (0.10, 0.004, 0.006), rough=0.12, coat=1.0),
+        'head': principled('head', (0.75, 0.78, 0.82), metallic=0.3, rough=0.08, emit=(0.85, 0.9, 1.0), emit_strength=1.5),
+    }
+    if lamp_pass:
+        hold = holdout('hold')
+        mats = {k: hold for k in mats}
+        mats['tail'] = emissive('tail_lit', 6.0)
+    for o in list(sc.objects):
+        if o.type != 'MESH':
+            continue
+        for i, slot in enumerate(o.material_slots):
+            name = slot.material.name if slot.material else ''
+            for key, m in mats.items():
+                if name.endswith('_' + key):
+                    o.material_slots[i].material = m
+        for poly in o.data.polygons:
+            poly.use_smooth = True
+        try:
+            bpy.context.view_layer.objects.active = o
+            o.select_set(True)
+            bpy.ops.object.shade_auto_smooth(angle=math.radians(38.0))
+            if int(P.get('subsurf', 0)) > 0:
+                md = o.modifiers.new('subsurf', 'SUBSURF')
+                md.levels = int(P['subsurf'])
+                md.render_levels = int(P['subsurf'])
+        except Exception as e:
+            log('auto smooth', e)
+    # The car's pose: dive about kit x (nose down positive) then heading about kit y (nose to +x).
+    yaw = math.radians(float(shot['yaw_deg']))
+    dive = math.radians(float(shot.get('dive_deg', 0.0)))
+    for o in list(sc.objects):
+        if o.parent is None and o.type in ('MESH', 'EMPTY'):
+            o.rotation_mode = 'XYZ'
+            o.rotation_euler = (dive, 0.0, yaw)
+            o.location = (0.0, 0.0, float(shot.get('lift', 0.0)))
+    if not lamp_pass:
+        bpy.ops.mesh.primitive_plane_add(size=60.0, location=(0.0, 0.0, 0.0))
+        ground = bpy.context.active_object
+        ground.is_shadow_catcher = True
+        # Studio lights fixed to the world (the car turns under them): an overhead softbox, two
+        # long strips for the paint's highlight lines, and a cool rim from ahead.
+        area_light('softbox', (0.0, 0.6, 5.0), (0.0, 0.0, 0.0), 5.0, float(P['key']), size_y=3.0)
+        for sx in (-1.0, 1.0):
+            area_light('strip', (sx * 3.6, 1.0, 2.6), (0.0, 0.0, 0.6), 0.35, float(P['strip']), size_y=7.0)
+        area_light('rim', (0.0, -7.0, 2.2), (0.0, 0.0, 0.7), 4.0, float(P['rim']), color=(0.80, 0.90, 1.0), size_y=1.2)
+    # Camera: the cluster's chase-camera orientation (pitched down, no yaw), the car's ground
+    # centre straight ahead at depth D and height h below the eye; focal chosen for S px per metre
+    # at that point, lens shift putting it at the anchor (0.5, ay).
+    h = float(shot['h'])
+    D = float(shot['d'])
+    pitch = math.radians(float(shot['pitch_deg']))
+    rx, ry = int(shot['rx']), int(shot['ry'])
+    s, c = math.sin(pitch), math.cos(pitch)
+    zc = D * c + h * s
+    yc = -h * c + D * s
+    f = float(shot['s']) * zc
+    below = -f * yc / zc
+    resolution(sc, rx, ry)
+    view(sc, 'AgX', exposure=float(P['exposure']))
+    cd = bpy.data.cameras.new('chase')
+    cd.sensor_fit = 'HORIZONTAL'
+    cd.sensor_width = 36.0
+    cd.lens = f * 36.0 / rx
+    cd.shift_x = 0.0
+    cd.shift_y = ((float(shot['ay']) - 0.5) * ry - below) / max(rx, ry)
+    cd.clip_start = 0.05
+    cd.clip_end = 400.0
+    cam = bpy.data.objects.new('chase', cd)
+    cam.location = kit_to_blender(0.0, h, -D)
+    cam.rotation_euler = (math.radians(90.0) - pitch, 0.0, math.pi)
+    link(cam)
+    sc.camera = cam
+    save(sc, os.path.join(OUT, shot['file']), exr=False, depth='8')
+done()
+"#;
+
+/// bpy: the shift-light LED cap, off and on. A pill lens (the PRELUDE plate mesh, bevelled rim)
+/// in clear-coated smoked acrylic, or as a diffuser lit from behind (white emission, hottest at the
+/// centre), under a softbox above-front (the highlight along the upper bevel) and a cool strip
+/// below, seen straight on through an orthographic camera. Writes `cap_off.png` / `cap_on.png`.
+pub const CAPS: &str = r#"
+import math
+P = ARGS
+for state in ('off', 'on'):
+    sc = reset()
+    gpu_cycles(sc, samples=int(P['samples']), denoise=True, bounces=10)
+    sc.render.film_transparent = True
+    studio_world(sc, strength=float(P['world']), hdri='studio.exr', rotation=0.6, visible=False)
+    w, h, d = P['lens']
+    lens = plate_mesh('lens', outline('pill', w, h, segs=24), d, d * 0.85, segs=14, profile=0.6)
+    m, nt = new_mat('lens')
+    b = nt.nodes.new('ShaderNodeBsdfPrincipled')
+    b.inputs['Roughness'].default_value = 0.06
+    try:
+        b.inputs['Coat Weight'].default_value = 1.0
+        b.inputs['Coat Roughness'].default_value = 0.02
+    except Exception:
+        pass
+    o = nt.nodes.new('ShaderNodeOutputMaterial')
+    if state == 'off':
+        b.inputs['Base Color'].default_value = (0.010, 0.011, 0.013, 1.0)
+        nt.links.new(b.outputs['BSDF'], o.inputs['Surface'])
+    else:
+        # A diffuser lit from behind: white emission, hottest in the middle of the lens.
+        b.inputs['Base Color'].default_value = (0.9, 0.9, 0.9, 1.0)
+        tc = nt.nodes.new('ShaderNodeTexCoord')
+        grad = nt.nodes.new('ShaderNodeTexGradient')
+        grad.gradient_type = 'SPHERICAL'
+        mp = nt.nodes.new('ShaderNodeMapping')
+        mp.inputs['Scale'].default_value = (1.6 / w, 1.6 / h, 1.0)
+        nt.links.new(tc.outputs['Object'], mp.inputs['Vector'])
+        nt.links.new(mp.outputs['Vector'], grad.inputs['Vector'])
+        ramp = nt.nodes.new('ShaderNodeMath')
+        ramp.operation = 'MULTIPLY_ADD'
+        ramp.inputs[1].default_value = float(P['hot'])
+        ramp.inputs[2].default_value = float(P['emit'])
+        nt.links.new(grad.outputs['Fac'], ramp.inputs[0])
+        b.inputs['Emission Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+        nt.links.new(ramp.outputs[0], b.inputs['Emission Strength'])
+        nt.links.new(b.outputs['BSDF'], o.inputs['Surface'])
+    lens.data.materials.append(m)
+    # Studio: a wide softbox above and in front (the highlight along the upper bevel), a low
+    # cool strip below (the lower rim).
+    area_light('softbox', (0.0, -d * 6.0, d * 9.0), (0.0, h * 0.2, 0.0), w * 1.4, float(P['key']), size_y=h * 1.2)
+    area_light('under', (0.0, h * 3.0, -d * 2.0 + d * 4.0), (0.0, 0.0, 0.0), w * 1.2, float(P['rim']), color=(0.8, 0.9, 1.0), size_y=h * 0.3)
+    rx, ry = P['cell']
+    resolution(sc, rx, ry)
+    view(sc, 'AgX', exposure=float(P['exposure']))
+    cd = bpy.data.cameras.new('front')
+    cd.type = 'ORTHO'
+    cd.ortho_scale = float(P['span'])
+    cd.sensor_fit = 'HORIZONTAL'
+    cam = bpy.data.objects.new('front', cd)
+    cam.location = (0.0, 0.0, 10.0)
+    link(cam)
+    sc.camera = cam
+    save(sc, os.path.join(OUT, 'cap_%s.png' % state), exr=False, depth='8')
+done()
+"#;
+
 const ASPHALT_PROMPT: &str = "photograph of an empty dark asphalt road at night seen from a low camera behind a car, the road surface fills the frame and recedes straight to a vanishing point at the top centre, fine aggregate texture, faint cold blue sheen, moody, minimal";
 const ASPHALT_NEGATIVE: &str = "lane markings, white lines, yellow lines, arrows, text, letters, watermark, logo, car, vehicle, people, buildings, trees, street lights, sky, sun, moon, lowres, blurry, jpeg artifacts, oversaturated";
 const ASPHALT_SEED: u64 = 1507;
@@ -122,10 +336,265 @@ const ASPHALT_SEED: u64 = 1507;
 /// bottom).
 const ASPHALT_SIZE: [usize; 2] = [1536, 512];
 
+/// Ego sprite cell (render px) and its scale (px per metre at the ground centre).
+pub const EGO_CELL: [usize; 2] = [540, 360];
+/// Ego sprite scale (render px per metre at the car's ground centre).
+pub const EGO_S: f32 = 100.0;
+/// Where the car's ground centre sits in a cell (fractions of width and height).
+pub const EGO_ANCHOR: [f32; 2] = [0.5, 0.66];
+/// Traffic sprite cell (render px).
+pub const TRAFFIC_CELL: [usize; 2] = [336, 232];
+/// Traffic sprite scale (render px per metre).
+pub const TRAFFIC_S: f32 = 64.0;
+/// Traffic anchor.
+pub const TRAFFIC_ANCHOR: [f32; 2] = [0.5, 0.70];
+/// Traffic view elevations (degrees below the horizon to the car's ground centre), atlas rows.
+pub const TRAFFIC_ELEVATIONS: [f32; 4] = [2.5, 5.0, 10.0, 20.0];
+/// Traffic headings relative to the view ray (degrees, nose to the right), atlas columns; the
+/// cluster mirrors a cell for a negative angle.
+pub const TRAFFIC_HEADINGS: [f32; 5] = [0.0, 10.0, 20.0, 30.0, 40.0];
+/// The traffic bodies: `(name, glb)`.
+pub const TRAFFIC_MODELS: [(&str, &str); 3] = [
+    ("sedan", "sport_sedan.glb"),
+    ("suv", "suv.glb"),
+    ("supercar", "supercar.glb"),
+];
+/// The cluster cameras: `(view, eye [x, y, z], pitch degrees)` (`tesla_adas::COCKPIT` / `HOOD`).
+const VIEWS: [(&str, [f32; 3]); 2] = [("cockpit", [0.0, 3.4, -6.0]), ("hood", [0.0, 2.8, -6.5])];
+const PITCH_DEG: f32 = 8.0;
+const EGO_Z: f32 = 3.2;
+/// The traffic rig's eye height (the cockpit's; the elevation bins carry the geometry).
+const TRAFFIC_EYE_H: f32 = 3.4;
+const EGO_PAINT: [f32; 3] = [0.60, 0.62, 0.66];
+const TRAFFIC_PAINT: [f32; 3] = [0.42, 0.44, 0.47];
+const CAR_SEED: u64 = 152;
+
 /// Builds the set.
 pub fn build(ctx: &mut Ctx) -> Result<()> {
     pools(ctx)?;
+    cars(ctx)?;
+    caps(ctx)?;
     asphalt(ctx)
+}
+
+/// LED cap cell (render px): the lens fills [`CAP_LENS_PX`] of it, centred.
+pub const CAP_CELL: [usize; 2] = [288, 128];
+/// The lens inside a cap cell (render px).
+pub const CAP_LENS_PX: [usize; 2] = [240, 88];
+
+/// The shift-light LED caps: a 2-cell atlas, off (left) and on (right).
+fn caps(ctx: &mut Ctx) -> Result<()> {
+    let params = json!({
+        "seed": 153, "samples": 128, "world": 0.5, "lens": [6.0, 2.2, 0.7], "hot": 3.0, "emit": 0.5,
+        "key": 60.0, "rim": 15.0, "exposure": 0.0, "cell": CAP_CELL, "span": 7.2
+    });
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        CAPS.as_bytes(),
+        params.to_string().as_bytes(),
+        b"led-caps-v1",
+    ]);
+    ctx.job("tesla_adas/led_caps", &fp, |ctx| {
+        let out = ctx.scratch("tesla_adas_caps")?;
+        let mut p = params.clone();
+        p["out"] = json!(out.to_string_lossy());
+        blender::run(&ctx.paths, "tesla_adas_caps", CAPS, &p)?;
+        let mut atlas = Img::new(CAP_CELL[0] * 2, CAP_CELL[1], 4);
+        for (i, state) in ["off", "on"].iter().enumerate() {
+            // Orthographic and symmetric: no mirror needed.
+            let cell = img::load(&out.join(format!("cap_{state}.png")))?;
+            atlas.paste(&cell, i * CAP_CELL[0], 0);
+        }
+        ctx.image(
+            "tesla_adas/led_caps",
+            "assets/clusters/tesla_adas/led_caps.png",
+            &atlas,
+            Format::Png8,
+            Spec::new(
+                SET,
+                "sprite",
+                "blender:tesla_adas::CAPS (Cycles 128 spp, OptiX denoise, AgX; pill lens 6.0 x 2.2 x 0.7 with a bevelled rim: clear-coated smoked acrylic off, a back-lit white diffuser on; softbox above-front + cool strip below + studio.exr) seed=153",
+                CLUSTERS,
+            )
+            .alpha("straight")
+            .qa(format!(
+                "2 cells of {} x {} (off, on); the lens fills the centred {} x {} px of each; the on cell is white, tinted live with the pod colour",
+                CAP_CELL[0], CAP_CELL[1], CAP_LENS_PX[0], CAP_LENS_PX[1]
+            )),
+        )
+    })
+}
+
+/// Mirrors left-right (Blender's right-handed camera vs the kit's).
+fn flip_x(src: &Img) -> Img {
+    Img::from_fn(src.w, src.h, src.c, |x, y| {
+        let mut px = [0.0; 4];
+        for (ch, v) in px.iter_mut().enumerate().take(src.c) {
+            *v = src.get(src.w - 1 - x, y, ch);
+        }
+        px
+    })
+}
+
+/// One CARS shot.
+#[allow(clippy::too_many_arguments)]
+fn shot(
+    glb: &str,
+    paint: [f32; 3],
+    yaw: f32,
+    h: f32,
+    d: f32,
+    s: f32,
+    cell: [usize; 2],
+    ay: f32,
+    file: &str,
+    lamp: bool,
+) -> serde_json::Value {
+    json!({
+        "glb": glb, "paint": paint, "yaw_deg": yaw, "h": h, "d": d, "pitch_deg": PITCH_DEG,
+        "s": s, "rx": cell[0], "ry": cell[1], "ay": ay, "file": file, "lamp_pass": lamp
+    })
+}
+
+/// The studio-lit car sprites: the ego per cluster camera at the pool yaws (with a tail-lamp
+/// emission mask at half size), and each traffic body over a grid of view elevations and
+/// relative headings.
+fn cars(ctx: &mut Ctx) -> Result<()> {
+    let ego_glb = ctx.abs("assets/adas/ego_coupe.glb");
+    let mut shots = Vec::new();
+    let half = [EGO_CELL[0] / 2, EGO_CELL[1] / 2];
+    for (view, eye) in VIEWS {
+        for (i, yaw) in POOL_YAWS.iter().enumerate() {
+            let (g, h, d) = (ego_glb.to_string_lossy(), eye[1], EGO_Z - eye[2]);
+            shots.push(shot(
+                &g,
+                EGO_PAINT,
+                *yaw,
+                h,
+                d,
+                EGO_S,
+                EGO_CELL,
+                EGO_ANCHOR[1],
+                &format!("ego_{view}_{i}.png"),
+                false,
+            ));
+            shots.push(shot(
+                &g,
+                EGO_PAINT,
+                *yaw,
+                h,
+                d,
+                EGO_S * 0.5,
+                half,
+                EGO_ANCHOR[1],
+                &format!("lamp_{view}_{i}.png"),
+                true,
+            ));
+        }
+    }
+    let mut glb_bytes = crate::ctx::read(&ego_glb)?;
+    for (name, file) in TRAFFIC_MODELS {
+        let glb = ctx.abs(&format!("assets/adas/{file}"));
+        glb_bytes.extend(crate::ctx::read(&glb)?);
+        for (r, el) in TRAFFIC_ELEVATIONS.iter().enumerate() {
+            let d = TRAFFIC_EYE_H / el.to_radians().tan();
+            for (c, yaw) in TRAFFIC_HEADINGS.iter().enumerate() {
+                shots.push(shot(
+                    &glb.to_string_lossy(),
+                    TRAFFIC_PAINT,
+                    *yaw,
+                    TRAFFIC_EYE_H,
+                    d,
+                    TRAFFIC_S,
+                    TRAFFIC_CELL,
+                    TRAFFIC_ANCHOR[1],
+                    &format!("{name}_{r}_{c}.png"),
+                    false,
+                ));
+            }
+        }
+    }
+    let params = json!({
+        "samples": 128, "world": 0.6, "metallic": 0.75, "rough": 0.22, "key": 300.0, "strip": 260.0,
+        "rim": 220.0, "exposure": -0.6, "subsurf": 1, "seed": CAR_SEED, "shots": shots
+    });
+    // The fingerprint leaves out the absolute paths (the glb bytes stand in for them).
+    let mut stable = params.clone();
+    if let Some(list) = stable["shots"].as_array_mut() {
+        for s in list {
+            s["glb"] = json!("");
+        }
+    }
+    let fp = fingerprint(&[
+        recipes::PRELUDE.as_bytes(),
+        CARS.as_bytes(),
+        stable.to_string().as_bytes(),
+        &glb_bytes,
+        b"car-sprites-v1",
+    ]);
+    ctx.job("tesla_adas/car_sprites", &fp, |ctx| {
+        let out = ctx.scratch("tesla_adas_cars")?;
+        let mut p = params.clone();
+        p["out"] = json!(out.to_string_lossy());
+        blender::run(&ctx.paths, "tesla_adas_cars", CARS, &p)?;
+        let gen = "blender:tesla_adas::CARS (Cycles 128 spp, OptiX denoise, AgX -0.6 EV; subdivided Phase 6 glTF, clear-coated metallic paint, overhead softbox + two strip lights + cool rim + studio.exr HDRI, shadow catcher) seed=152";
+        let rows = POOL_YAWS.len().div_ceil(POOL_COLS);
+        for (view, _) in VIEWS {
+            let mut atlas = Img::new(EGO_CELL[0] * POOL_COLS, EGO_CELL[1] * rows, 4);
+            let mut lamps = Img::new(half[0] * POOL_COLS, half[1] * rows, 4);
+            for i in 0..POOL_YAWS.len() {
+                let (cx, cy) = (i % POOL_COLS, i / POOL_COLS);
+                let body = flip_x(&img::load(&out.join(format!("ego_{view}_{i}.png")))?);
+                atlas.paste(&body, cx * EGO_CELL[0], cy * EGO_CELL[1]);
+                let lamp = flip_x(&img::load(&out.join(format!("lamp_{view}_{i}.png")))?);
+                lamps.paste(&to_light_mask(&lamp, 1, 0.0, 1.0, |_, _| 1.0), cx * half[0], cy * half[1]);
+            }
+            ctx.image(
+                &format!("tesla_adas/car_sprites/ego_{view}"),
+                &format!("assets/clusters/tesla_adas/ego_{view}.png"),
+                &atlas,
+                Format::Png8,
+                Spec::new(SET, "sprite", format!("{gen} ego_coupe.glb through the {view} chase camera, yaw -50..50 step 10"), CLUSTERS)
+                    .alpha("straight")
+                    .qa(format!(
+                        "{POOL_COLS} x {rows} atlas of {} x {} cells (yaw -50..50 step 10, row-major); {EGO_S} px per metre at the ego's ground centre, which sits at ({}, {}) of each cell; mirrored left-right to the kit's handedness",
+                        EGO_CELL[0], EGO_CELL[1], EGO_ANCHOR[0], EGO_ANCHOR[1]
+                    )),
+            )?;
+            ctx.image(
+                &format!("tesla_adas/car_sprites/lamps_{view}"),
+                &format!("assets/clusters/tesla_adas/ego_lamps_{view}.png"),
+                &lamps,
+                Format::Png8,
+                Spec::new(SET, "mask", format!("{gen} tail-lamp emission pass, {view}"), CLUSTERS)
+                    .alpha("straight")
+                    .qa(format!("the ego atlas's layout at half size ({} x {} cells); white RGB, alpha = the visible tail-lamp lenses", half[0], half[1])),
+            )?;
+        }
+        for (name, file) in TRAFFIC_MODELS {
+            let cols = TRAFFIC_HEADINGS.len();
+            let mut atlas = Img::new(TRAFFIC_CELL[0] * cols, TRAFFIC_CELL[1] * TRAFFIC_ELEVATIONS.len(), 4);
+            for r in 0..TRAFFIC_ELEVATIONS.len() {
+                for c in 0..cols {
+                    let cell = flip_x(&img::load(&out.join(format!("{name}_{r}_{c}.png")))?);
+                    atlas.paste(&cell, c * TRAFFIC_CELL[0], r * TRAFFIC_CELL[1]);
+                }
+            }
+            ctx.image(
+                &format!("tesla_adas/car_sprites/{name}"),
+                &format!("assets/clusters/tesla_adas/traffic_{name}.png"),
+                &atlas,
+                Format::Png8,
+                Spec::new(SET, "sprite", format!("{gen} {file}, elevation x relative heading grid"), CLUSTERS)
+                    .alpha("straight")
+                    .qa(format!(
+                        "{cols} x {} atlas of {} x {} cells: rows = view elevation {TRAFFIC_ELEVATIONS:?} deg, columns = heading relative to the view ray {TRAFFIC_HEADINGS:?} deg; {TRAFFIC_S} px per metre at the ground centre, anchored at ({}, {}); mirrored to the kit's handedness",
+                        TRAFFIC_ELEVATIONS.len(), TRAFFIC_CELL[0], TRAFFIC_CELL[1], TRAFFIC_ANCHOR[0], TRAFFIC_ANCHOR[1]
+                    )),
+            )?;
+        }
+        Ok(())
+    })
 }
 
 /// Luminance → alpha over white: softened by a down-and-up resample (`soften` = the reduction
@@ -134,8 +603,17 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
 /// tail), and multiplied by `shape(u, v)` (feathers and fades; `u`, `v` in 0..1).
 fn to_light_mask(src: &Img, soften: usize, black: f32, gamma: f32, shape: impl Fn(f32, f32) -> f32) -> Img {
     let mut lum = Img::from_fn(src.w, src.h, 1, |x, y| {
-        let a = if src.c >= 4 { src.get(x, y, 3).clamp(0.0, 1.0) } else { 1.0 };
-        [img::luma(src.get(x, y, 0), src.get(x, y, 1), src.get(x, y, 2)) * a, 0.0, 0.0, 0.0]
+        let a = if src.c >= 4 {
+            src.get(x, y, 3).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        [
+            img::luma(src.get(x, y, 0), src.get(x, y, 1), src.get(x, y, 2)) * a,
+            0.0,
+            0.0,
+            0.0,
+        ]
     });
     if soften > 1 {
         let small = lum.resize((src.w / soften).max(2), (src.h / soften).max(2), false);
@@ -187,7 +665,7 @@ fn pools(ctx: &mut Ctx) -> Result<()> {
         POOL.as_bytes(),
         params.to_string().as_bytes(),
         &glb_bytes,
-        b"pool-atlas-v1",
+        b"pool-atlas-v2-mirrored",
     ]);
     ctx.job("tesla_adas/underglow_pools", &fp, |ctx| {
         let out = ctx.scratch("tesla_adas_pools")?;
@@ -204,7 +682,7 @@ fn pools(ctx: &mut Ctx) -> Result<()> {
             let mut atlas = Img::new(cw * POOL_COLS, ch * rows, 4);
             for i in 0..POOL_YAWS.len() {
                 let exr = img::load_exr(&out.join(format!("pool_{view}_{i}.exr")))?;
-                let cell = to_light_mask(&exr, 10, 0.04, 0.7, feather(0.12, 0.16));
+                let cell = flip_x(&to_light_mask(&exr, 10, 0.04, 0.7, feather(0.12, 0.16)));
                 atlas.paste(&cell, (i % POOL_COLS) * cw, (i / POOL_COLS) * ch);
             }
             let gen = format!(
