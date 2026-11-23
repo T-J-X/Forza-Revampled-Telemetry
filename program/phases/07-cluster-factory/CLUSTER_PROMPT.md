@@ -26,6 +26,17 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 - **Never:** an opaque full-screen fill, flat rectangles posing as glow, hardcoded telemetry, block digits, or anything over budget.
 
 ## Steps
+
+**Order of work, enforced (TJX, 2026-11-23):** research → Penpot → Blender → ComfyUI → TJX direction check → polish and critique.
+1. **Research:** the real display or the real references, from real sources.
+2. **Penpot:** layout, the 4 states and the intent.
+3. **Blender, every cluster:** rendered hardware and light (bezels, faces, LED caps, lit-in-face bands, housings), plus real 3D where the design moves or turns.
+4. **ComfyUI:** organic textures (leather, alcantara, carbon, enamel) and the detail pass over the Blender renders (render → depth ControlNet → refiner).
+5. **Direction check:** step 2b below.
+6. **Polish and critique.**
+
+Any later Penpot change loops back through Blender and ComfyUI. The numbered steps below give the details.
+
 1. **Design first, on your board.**
    - In Penpot (the `penpot` MCP, see `SKILLS.md`): create your page `07 · <Name>` in the Penpot master file "FH6 WheelDash v2 — Design System" (file ID `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, see `docs/design/PENPOT.md`) if it does not exist yet. Every write first checks `penpot.currentFile.id` equals that ID; if it doesn't, write nothing and ask TJX to reconnect the master file's tab. In one `execute_code` call, look for a page with exactly that name, create it only if it is missing, `openPage` it, check `penpot.currentPage.name`, then draw. Every chat shares one connected Penpot tab, so do every page switch and write in the same call, keep your shapes by stored ID, never touch other pages and never call `closePlugin`. Build it with a 3840×2160 board and the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). Follow the family template and the tokens (Penpot tokens mirror `data/figma_tokens.json`, which stays the source of truth). Make the 4 states per view at 4K, plus the motion notes, and write the page and board IDs into your row of `CATALOG.md`.
    - Also write the layout as a zone table at the top of your `mod.rs` (zones, sizes and positions in local 4K px, as the pilot's `Geom`), then design in code against `mockups/<Name>/index.html`.
