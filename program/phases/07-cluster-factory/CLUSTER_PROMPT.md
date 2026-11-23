@@ -33,6 +33,17 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
    - Run `design:design-critique` on the frames, and iterate until it clears the bar above.
 2. **Bespoke assets, mandatory** (Blender and ComfyUI via `cargo run -p asset-forge`). TJX's rule: every cluster ships **at least one bespoke Blender asset and at least one bespoke ComfyUI asset**, both visibly used in the final cluster, not token. Examples: machined bezels, dial faces, glass and caustic plates, normal and specular maps, fluid flipbooks (Blender); seamless SDXL + 4x textures, plates and detail maps (ComfyUI). Procedural-only clusters are not accepted. The bar is the best, not acceptable.
    - **Flat designs** use Blender for materials (normal, specular and roughness maps, machined or glass plates) and ComfyUI for detail textures, so even a 2D face has real depth and grain.
+   - **Liquid Glass family: the glass is maths, not PNGs.** Benchmark Apple's Liquid Glass (iOS 26, CarPlay Ultra, visionOS) and match it in real time:
+     - SDF geometry with smooth-union morphing, so pods merge and separate like liquid.
+     - Lensing and refraction of whatever sits under the glass: the content, the cockpit, or the cluster's own layers.
+     - Edge-weighted magnification, chromatic dispersion at the rim, a fresnel ramp, and a specular highlight from a virtual light that moves with G, steer and yaw.
+     - Adaptive tint, depending on what's behind the glass.
+     Blender and ComfyUI only add to this (environment and caustic maps, normal detail); they never replace the optics. If the kit lacks an optic you need, stop and report it in your handover, because the conductor schedules kit work.
+   - **Race Dash and motorsport family: pure professional.** Benchmark real motorsport displays: MoTeC C1xx, Bosch DDU 10/11, AiM MXS, Cosworth, F1 and LMP steering-wheel displays.
+     - Black, high contrast, exact data, strict grid alignment and tabular figures.
+     - The shift lights and limiter behave like the real hardware.
+     - No ornamental glow or sci-fi effects.
+     - Blender and ComfyUI serve material realism only: anti-glare LCD and matrix texture, the CNC housing, LED lens caps, carbon.
    - **Designs with 3D elements** (cars, mechanisms, gyros and tourbillons, spaceframes, origami, prisms, liquid volumes, anything that turns or has parallax) get real 3D from Blender. That means glTF meshes drawn by the kit's mesh pass, or pre-rendered sprite and flipbook sequences with matching normal maps, lit to match the cluster. A flat texture standing in for a 3D object does not pass.
    - One 8 GB GPU serves every chat: keep SDXL jobs small and sequential, and if a render fails out of memory, wait and retry.
    - Local tools on this machine (write them as `%USERPROFILE%` paths in any repo file):
