@@ -36,6 +36,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
      - Blender 5.3: `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64`
      - ComfyUI portable: `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable`
      - Penpot through the `penpot` MCP (hosted; TJX keeps the Penpot file open with File → MCP Server connected).
+   - Run Blender, ComfyUI and asset-forge through the Bash tool, not PowerShell. `cargo run --release -p asset-forge -- doctor|build` already finds both tools.
    - Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
    - Outputs go to `assets/clusters/<snake_name>/`, with a row in `assets/clusters/<snake_name>/ASSETS.md`.
    - "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.
