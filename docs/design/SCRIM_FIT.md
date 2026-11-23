@@ -33,7 +33,7 @@ A **superellipse** (squircle-dome), not a rectangle, centred on the steering-col
 
 | Parameter | Value (4K px, scale 1.0) | Notes |
 |---|---|---|
-| Centre | anchor + (0, −75) → (1920, 1760) | follows the cluster anchor, user height offset and scale |
+| Centre | anchor + (0, −75) → (1920, 1760) | follows the cluster anchor and scale; stays put when the user height offset moves the cluster (Phase 8: the factory binnacle does not move) |
 | Semi-axes a × b | 640 × 470 | top at y 1290 (45 px above the cowl), sides at x 1280 … 2560 |
 | Exponent n | 2.6 | between an ellipse (2) and a squircle (4): a domed hood, flat enough at the sides to cover the envelope |
 | Core alpha | 255 × `OemDashOpaquePct` | pure `#000000` |
@@ -57,7 +57,7 @@ Shape test at the envelope: at y 1515 the core half-width is 592 px; at y 1760 i
 - **Safe margins:** keep 40 px between any lit cluster element and the feather's inner edge, so bloom never spills over the feather onto the dash.
 - **Wider clusters** (Race Dash, Liquid Glass capsule at 1280 px) use the dome's widest band (y 1700–1850); their ends may sit in the feather, which is intended: the dome fades under the bezel.
 - **Hood view `[4]`:** the scrim is forced to 0% (`layout.hood.scrimPct`). The Modern Digital hood cluster carries its own legibility halo (a soft radial dark of alpha ≤ 0.55, never a box).
-- **User controls:** cluster height offset (±240 px) and scale (0.70–1.40) move and scale the dome with the cluster. The configurator's "scrim fit" adds a per-car dome offset (dx, dy), scale (sx, sy) and `OemDashOpaquePct`, saved per car ordinal (Phase 8 decides the storage; the car profile is the natural home).
+- **User controls:** scale (0.70–1.40) scales the dome with the cluster; the cluster height offset (±240 px) moves only the cluster, and the dome stays on the binnacle (Phase 8 decision after the fit critique). The configurator's "scrim fit" adds a per-car dome offset (dx, dy), scale (sx, sy) and `OemDashOpaquePct`, saved per car ordinal (Phase 8 decides the storage; the car profile is the natural home).
 
 ## 5. Low seat and wide FOV
 In the low-seat target view (`target_wide_cockpit_fov.jpg`, `Param.y = −0.045`, `DefaultOffsetFromSteeringWheelY = −0.035`), the factory binnacle drops to about y 1330–1500 and is seen through the upper opening of the wheel. The default dome still covers it; the composite uses a −170 px height offset so the cluster sits in the upper wheel opening. Phase 8 should:

@@ -183,6 +183,52 @@ pub struct AppConfig {
     pub osd_hold_ms: u32,
     pub guide_button_opens_widget: bool,
 
+    // Phase 8: the dome scrim (4K px at user scale 1.0; see `docs/design/SCRIM_FIT.md`).
+    /// Horizontal dome offset from the steering-column line (px, + right).
+    pub oem_dash_offset_x: i32,
+    /// Dome height multiplier (semi-axis 470 px at 1.0).
+    pub oem_dash_height_scale: f32,
+    /// Top arch: 0 = flat crown (exponent 4), 1 = round arch (exponent 2). Default 0.7 (2.6).
+    pub oem_dash_top_arch: f32,
+    /// Lower corners: 0 = square (exponent 4), 1 = round (exponent 2). Default 0.7 (2.6).
+    pub oem_dash_corner_softness: f32,
+    /// Feather at the top edge in px (sides x1.25, bottom corners x1.46).
+    pub oem_dash_feather_px: f32,
+    /// Width of the steering-column void cut below the cluster in px (0 = no void).
+    pub oem_dash_column_void_px: f32,
+
+    // Phase 8: cluster placement per view (anchors are the `*AnchorX/Y` keys).
+    /// Chase-camera floating HUD anchor (4K px).
+    pub chase_anchor_x: i32,
+    pub chase_anchor_y: i32,
+    /// Cluster height per view in px (positive raises; ±240).
+    pub cockpit_height_offset_px: f32,
+    pub bonnet_height_offset_px: f32,
+    pub chase_height_offset_px: f32,
+    /// Per-view scale, multiplied by `ClusterScale`; the product is clamped to 0.70–1.40.
+    pub cockpit_cluster_scale: f32,
+    pub bonnet_cluster_scale: f32,
+    pub chase_cluster_scale: f32,
+    /// Per-view safe zones (px at 4K) the cluster envelope is clamped into.
+    pub cockpit_safe_zone: SafeZone,
+    pub bonnet_safe_zone: SafeZone,
+    pub chase_safe_zone: SafeZone,
+    /// Show a floating HUD in the chase cameras.
+    pub chase_hud_enabled: bool,
+    /// Chase HUD theme; empty = the cockpit theme.
+    pub chase_hud_style: String,
+
+    // Phase 8: camera ring resync and the game's camera files.
+    /// The camera index a resync (OSD item or LB+RB hold) declares the game to be in.
+    pub resync_camera_index: i32,
+    /// How long LB+RB must be held to resync (ms).
+    pub resync_hold_ms: u32,
+    /// Write the camera files automatically when seat/FOV settings change (queued while the
+    /// game runs). Off by default: the OSD and configurator apply explicitly.
+    pub camera_patch_auto: bool,
+    /// Game install folder override; empty = find it through Steam's `libraryfolders.vdf`.
+    pub game_install_dir: String,
+
     /// Keys this version does not know, preserved on save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -283,6 +329,29 @@ impl Default for AppConfig {
             osd_toggle_mask: default_osd_toggle_mask(),
             osd_hold_ms: default_osd_hold_ms(),
             guide_button_opens_widget: default_guide_button_osd(),
+            oem_dash_offset_x: 0,
+            oem_dash_height_scale: 1.0,
+            oem_dash_top_arch: 0.7,
+            oem_dash_corner_softness: 0.7,
+            oem_dash_feather_px: 96.0,
+            oem_dash_column_void_px: 220.0,
+            chase_anchor_x: 1920,
+            chase_anchor_y: 1900,
+            cockpit_height_offset_px: 0.0,
+            bonnet_height_offset_px: 0.0,
+            chase_height_offset_px: 0.0,
+            cockpit_cluster_scale: 1.0,
+            bonnet_cluster_scale: 1.0,
+            chase_cluster_scale: 0.8,
+            cockpit_safe_zone: SafeZone::default(),
+            bonnet_safe_zone: SafeZone::default(),
+            chase_safe_zone: SafeZone::default(),
+            chase_hud_enabled: true,
+            chase_hud_style: String::new(),
+            resync_camera_index: 3,
+            resync_hold_ms: 1000,
+            camera_patch_auto: false,
+            game_install_dir: String::new(),
             extra: serde_json::Map::new(),
         }
     }
@@ -376,6 +445,14 @@ impl AppConfig {
         crate::atomic_file::write_atomically(path.as_ref(), json.as_bytes())
     }
 
+    /// `cfg` with every migration and range check applied (for configs built in code, such as
+    /// a per-car overlay).
+    #[must_use]
+    pub fn sanitized(mut cfg: AppConfig) -> AppConfig {
+        cfg.apply_migrations();
+        cfg
+    }
+
     fn apply_migrations(&mut self) {
         let defaults = AppConfig::default();
         if (5200..=5300).contains(&self.fallback_port) {
@@ -431,6 +508,118 @@ impl AppConfig {
             && self.cockpit_offset_y.abs() > f32::EPSILON
         {
             self.driver_seat_height_m = self.cockpit_offset_y.clamp(-0.100, 0.050);
+        }
+        self.migrate_fit(&defaults);
+    }
+
+    /// Phase 8 keys: the old free-form `ClusterHeightOffsetPx` becomes the per-view heights, and
+    /// every scrim and placement value is brought into its range (non-finite → default).
+    fn migrate_fit(&mut self, defaults: &AppConfig) {
+        if let Some(old) = self.extra.remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) {
+            let old = old as f32;
+            for h in [
+                &mut self.cockpit_height_offset_px,
+                &mut self.bonnet_height_offset_px,
+                &mut self.chase_height_offset_px,
+            ] {
+                if h.abs() < f32::EPSILON {
+                    *h = old;
+                }
+            }
+        }
+        let fix = |v: &mut f32, d: f32, lo: f32, hi: f32| {
+            *v = if v.is_finite() { v.clamp(lo, hi) } else { d };
+        };
+        fix(&mut self.oem_dash_width_scale, defaults.oem_dash_width_scale, 0.5, 1.6);
+        fix(
+            &mut self.oem_dash_height_scale,
+            defaults.oem_dash_height_scale,
+            0.5,
+            1.6,
+        );
+        fix(&mut self.oem_dash_top_arch, defaults.oem_dash_top_arch, 0.0, 1.0);
+        fix(
+            &mut self.oem_dash_corner_softness,
+            defaults.oem_dash_corner_softness,
+            0.0,
+            1.0,
+        );
+        fix(&mut self.oem_dash_feather_px, defaults.oem_dash_feather_px, 8.0, 240.0);
+        fix(
+            &mut self.oem_dash_column_void_px,
+            defaults.oem_dash_column_void_px,
+            0.0,
+            600.0,
+        );
+        self.oem_dash_offset_x = self.oem_dash_offset_x.clamp(-600, 600);
+        self.oem_dash_binnacle_offset_y = self.oem_dash_binnacle_offset_y.clamp(-600, 600);
+        for (h, d) in [
+            (&mut self.cockpit_height_offset_px, defaults.cockpit_height_offset_px),
+            (&mut self.bonnet_height_offset_px, defaults.bonnet_height_offset_px),
+            (&mut self.chase_height_offset_px, defaults.chase_height_offset_px),
+        ] {
+            fix(h, d, -HEIGHT_OFFSET_MAX_PX, HEIGHT_OFFSET_MAX_PX);
+        }
+        for (s, d) in [
+            (&mut self.cockpit_cluster_scale, defaults.cockpit_cluster_scale),
+            (&mut self.bonnet_cluster_scale, defaults.bonnet_cluster_scale),
+            (&mut self.chase_cluster_scale, defaults.chase_cluster_scale),
+        ] {
+            fix(s, d, 0.5, 2.0);
+        }
+        for z in [
+            &mut self.cockpit_safe_zone,
+            &mut self.bonnet_safe_zone,
+            &mut self.chase_safe_zone,
+        ] {
+            z.sanitize();
+        }
+        if !(0..6).contains(&self.resync_camera_index) {
+            self.resync_camera_index = defaults.resync_camera_index;
+        }
+        self.resync_hold_ms = self.resync_hold_ms.clamp(RESYNC_HOLD_MS_MIN, RESYNC_HOLD_MS_MAX);
+    }
+}
+
+/// Largest cluster height offset either way (px at 4K).
+pub const HEIGHT_OFFSET_MAX_PX: f32 = 240.0;
+/// Shortest allowed LB+RB resync hold (ms).
+pub const RESYNC_HOLD_MS_MIN: u32 = 500;
+/// Longest allowed LB+RB resync hold (ms).
+pub const RESYNC_HOLD_MS_MAX: u32 = 3000;
+
+/// Margins (px at 4K) a cluster's envelope must stay inside.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub struct SafeZone {
+    /// Left and right margin.
+    pub side_px: f32,
+    /// Top margin.
+    pub top_px: f32,
+    /// Bottom margin.
+    pub bottom_px: f32,
+}
+
+impl Default for SafeZone {
+    /// The tokens' safe zone: 160 px at the sides, 40 px at the bottom.
+    fn default() -> Self {
+        Self {
+            side_px: 160.0,
+            top_px: 0.0,
+            bottom_px: 40.0,
+        }
+    }
+}
+
+impl SafeZone {
+    fn sanitize(&mut self) {
+        let d = Self::default();
+        for (v, dv) in [
+            (&mut self.side_px, d.side_px),
+            (&mut self.top_px, d.top_px),
+            (&mut self.bottom_px, d.bottom_px),
+        ] {
+            *v = if v.is_finite() { v.clamp(0.0, 800.0) } else { dv };
         }
     }
 }

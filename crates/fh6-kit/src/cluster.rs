@@ -17,6 +17,8 @@ use crate::painter::Painter;
 use crate::palette::Palette;
 use crate::text::{FontId, Fonts};
 use crate::tokens::Tokens;
+use fh6_core::config::SafeZone;
+use fh6_core::fit::{clamp_anchor, FitView, ViewPlacement};
 use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 
 /// Reference height of the authoring space (4K).
@@ -32,7 +34,7 @@ pub enum View {
     Cockpit,
     /// Hood `[4]`: wider, lower, frameless; scrim forced to 0%.
     Hood,
-    /// Chase cameras (routing arrives in Phase 8; uses the cockpit anchor for now).
+    /// Chase cameras: the optional floating HUD at `ChaseAnchorX/Y`, no scrim.
     Chase,
 }
 
@@ -44,6 +46,16 @@ impl View {
             4 => View::Hood,
             3 => View::Cockpit,
             _ => View::Chase,
+        }
+    }
+
+    /// The matching `fh6_core` fit view.
+    #[must_use]
+    pub fn fit_view(self) -> FitView {
+        match self {
+            View::Cockpit => FitView::Cockpit,
+            View::Hood => FitView::Hood,
+            View::Chase => FitView::Chase,
         }
     }
 }
@@ -68,40 +80,44 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// The layout for `view` from the config (anchors authored at 4K, user scale 0.70–1.40,
-    /// height offset ±240 px from `ClusterHeightOffsetPx`).
+    /// The layout for `view` from the config: the view's anchor (authored at 4K), user scale
+    /// (`ClusterScale` x the view's scale, 0.70–1.40), height offset (±240, local units) and
+    /// safe zone, with the anchor clamped so the view's envelope never leaves the screen.
     #[must_use]
     pub fn from_config(config: &AppConfig, tokens: &Tokens, view: View, target: (u32, u32)) -> Self {
         let (w, h) = (target.0.max(1) as f32, target.1.max(1) as f32);
         // v2 sizes are authored at user scale 1.0 (tokens); `CockpitScale` and `BonnetScale` are
         // v1 authoring multipliers and do not apply to kit clusters.
-        let (ax, ay, envelope) = match view {
-            View::Hood => (
-                config.bonnet_anchor_x as f32,
-                config.bonnet_anchor_y as f32,
-                tokens.layout.hood_envelope,
-            ),
-            View::Cockpit | View::Chase => (
-                config.cockpit_anchor_x as f32,
-                config.cockpit_anchor_y as f32,
-                tokens.layout.cockpit_envelope,
-            ),
+        let place = ViewPlacement::from_config(config, view.fit_view());
+        let envelope = match view {
+            View::Hood => tokens.layout.hood_envelope,
+            View::Cockpit | View::Chase => tokens.layout.cockpit_envelope,
         };
-        let user = finite_or(config.cluster_scale, 1.0).clamp(0.70, 1.40);
-        let scale = user * h / REF_HEIGHT;
-        let height_offset = config
-            .extra
-            .get("ClusterHeightOffsetPx")
-            .and_then(serde_json::Value::as_f64)
-            .map_or(0.0, |v| (v as f32).clamp(-240.0, 240.0));
         let k = h / REF_HEIGHT;
-        Self {
-            anchor: vec2(ax * w / REF_WIDTH, ay * k),
+        let scale = place.scale * k;
+        let safe = SafeZone {
+            side_px: place.safe.side_px * k,
+            top_px: place.safe.top_px * k,
+            bottom_px: place.safe.bottom_px * k,
+        };
+        let (ax, ay) = clamp_anchor(
+            (place.anchor.0 * w / REF_WIDTH, place.anchor.1 * k),
+            (envelope.min.x, envelope.min.y, envelope.max.x, envelope.max.y),
             scale,
-            height_offset,
+            place.height_offset_px,
+            (w, h),
+            safe,
+        );
+        Self {
+            anchor: vec2(ax, ay),
+            scale,
+            height_offset: place.height_offset_px,
             view,
             envelope,
-            safe: Rect::from_points(vec2(160.0 * k, 0.0), vec2(w - 160.0 * k, h - 40.0 * k)),
+            safe: Rect::from_points(
+                vec2(safe.side_px, safe.top_px),
+                vec2(w - safe.side_px, h - safe.bottom_px),
+            ),
             target,
         }
     }
@@ -443,6 +459,63 @@ mod tests {
         assert!((l1.scale * 2.0 - l4.scale).abs() < 1e-5);
         let p = l4.to_target(Vec2::ZERO);
         assert!((p - l4.anchor).length() < 1e-3);
+    }
+
+    #[test]
+    fn each_view_has_its_own_placement() {
+        let t = Tokens::default();
+        let cfg = AppConfig {
+            cockpit_height_offset_px: 100.0,
+            bonnet_cluster_scale: 1.2,
+            chase_anchor_x: 1700,
+            ..AppConfig::default()
+        };
+        let c = Layout::from_config(&cfg, &t, View::Cockpit, (3840, 2160));
+        assert_eq!(c.height_offset, 100.0);
+        assert!(
+            (c.to_target(Vec2::ZERO).y - (1835.0 - 100.0)).abs() < 1e-3,
+            "positive raises"
+        );
+        let h = Layout::from_config(&cfg, &t, View::Hood, (3840, 2160));
+        assert!((h.scale - 1.2).abs() < 1e-5);
+        assert_eq!(h.height_offset, 0.0);
+        let ch = Layout::from_config(&cfg, &t, View::Chase, (3840, 2160));
+        assert_eq!(ch.anchor, vec2(1700.0, 1900.0));
+        assert!((ch.scale - 0.8).abs() < 1e-5, "chase HUD defaults to 0.8");
+    }
+
+    #[test]
+    fn the_cluster_never_leaves_the_screen() {
+        let t = Tokens::default();
+        for (ax, ay, hoff, scale) in [
+            (0, 2160, -240.0, 1.4),
+            (3840, 0, 240.0, 1.4),
+            (-5000, 9000, 0.0, 1.0),
+            (1920, 2160, -240.0, 0.7),
+        ] {
+            let cfg = AppConfig {
+                cockpit_anchor_x: ax,
+                cockpit_anchor_y: ay,
+                cockpit_height_offset_px: hoff,
+                cluster_scale: scale,
+                ..AppConfig::default()
+            };
+            for target in [(3840u32, 2160u32), (1920, 1080), (5120, 1440)] {
+                let l = Layout::from_config(&cfg, &t, View::Cockpit, target);
+                let a = l.to_target(l.envelope.min);
+                let b = l.to_target(l.envelope.max);
+                let (w, h) = (target.0 as f32, target.1 as f32);
+                assert!(a.x >= -0.01 && a.y >= -0.01, "{ax},{ay} at {target:?}: {a:?}");
+                assert!(b.x <= w + 0.01 && b.y <= h + 0.01, "{ax},{ay} at {target:?}: {b:?}");
+                let s = l.safe.expand(0.01);
+                let fits =
+                    l.envelope.width() * l.scale <= l.safe.width() && l.envelope.height() * l.scale <= l.safe.height();
+                assert!(
+                    !fits || (s.contains(a) && s.contains(b)),
+                    "inside the safe zone at {target:?}"
+                );
+            }
+        }
     }
 
     #[test]

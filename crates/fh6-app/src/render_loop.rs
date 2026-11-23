@@ -4,10 +4,14 @@
 use crate::latency::{caught_next_vsync, FrameStats, Percentiles, SAMPLE_CAPACITY};
 use crate::refraction::{RefractionSource, RETRY};
 use crate::resources::KitResources;
-use fh6_core::{AppConfig, ClusterTheme, ConfigHandle, TelemetryReader, VisibilityController, VisibilityInputs};
+use fh6_core::{
+    AppConfig, CarProfilesFile, ClusterTheme, ConfigHandle, ProfilesHandle, ScrimFit, TelemetryReader,
+    VisibilityController, VisibilityInputs,
+};
 use fh6_gpu::seven_seg::StackStr;
 use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
+use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
     vec2, Affine, Align, Cluster, FontId, FrameInput, Kit, Layout, Logo, Painter, Palette, SignalSmoother, TextStyle,
     VAlign, View,
@@ -121,6 +125,8 @@ pub struct RenderSetup {
     pub telemetry: TelemetryReader,
     /// Live config.
     pub config: ConfigHandle,
+    /// Live per-car profiles (`car_profiles.json`), applied over the config by car ordinal.
+    pub profiles: ProfilesHandle,
     /// Controller state (camera ring, OSD).
     pub input: Arc<InputShared>,
     /// Whether the game has the foreground.
@@ -186,6 +192,42 @@ pub fn spawn(setup: RenderSetup) -> io::Result<(JoinHandle<RenderSummary>, Threa
         .spawn(move || run(setup))?;
     let thread = handle.thread().clone();
     Ok((handle, thread))
+}
+
+/// The config with the current car's profile applied (`car_profiles.json`, by car ordinal).
+/// It is rebuilt only when the base config, the profiles or the car change: one allocation per
+/// change, none per frame. Without a profile (or with `PerCarProfileEnabled` off) it is the base
+/// config itself.
+#[derive(Debug, Default)]
+pub struct CarConfig {
+    base: Option<Arc<AppConfig>>,
+    profiles: Option<Arc<CarProfilesFile>>,
+    ordinal: i32,
+    current: Option<Arc<AppConfig>>,
+}
+
+impl CarConfig {
+    /// The effective config for `ordinal`.
+    pub fn resolve(&mut self, base: &Arc<AppConfig>, profiles: &Arc<CarProfilesFile>, ordinal: i32) -> Arc<AppConfig> {
+        let same = self.base.as_ref().is_some_and(|b| Arc::ptr_eq(b, base))
+            && self.profiles.as_ref().is_some_and(|p| Arc::ptr_eq(p, profiles))
+            && self.ordinal == ordinal;
+        if let (true, Some(current)) = (same, self.current.as_ref()) {
+            return Arc::clone(current);
+        }
+        let effective = match profiles.effective_config(base, ordinal) {
+            Some(cfg) => {
+                tracing::info!(car_ordinal = ordinal, "car profile applied");
+                Arc::new(cfg)
+            }
+            None => Arc::clone(base),
+        };
+        self.base = Some(Arc::clone(base));
+        self.profiles = Some(Arc::clone(profiles));
+        self.ordinal = ordinal;
+        self.current = Some(Arc::clone(&effective));
+        effective
+    }
 }
 
 /// Whether to draw the live dyno instead of the received packet. The demo, the bench and the
@@ -531,6 +573,7 @@ impl Loop {
         layout: &Layout,
         draw: bool,
         stats_on: bool,
+        scrim: Option<(ScrimFit, Wash)>,
         osd: Option<&OsdFrame<'_>>,
     ) -> Option<FrameOutcome> {
         let gpu = self.gpu.as_mut()?;
@@ -567,7 +610,13 @@ impl Loop {
             let mut p = kit.begin_frame(layout);
             if draw {
                 if let Some(o) = osd {
+                    // The cluster glides to the OSD's live zone: its own feathered pool replaces
+                    // the dash blocker, which belongs at the binnacle.
                     fh6_osd::draw::live_scrim(&mut p, layout, o.host.anim.open.progress());
+                } else if let Some((fit, wash)) = scrim {
+                    // Game frame, scrim, wash, cluster (SCRIM_FIT §3).
+                    scrim::draw_scrim(&mut p, &fit);
+                    scrim::draw_wash(&mut p, &fit, wash);
                 }
                 if let Some(active) = self.active.as_ref() {
                     active.cluster.draw(&mut p, layout);
@@ -642,6 +691,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
         window,
         telemetry,
         config,
+        profiles,
         input,
         foreground,
         control,
@@ -727,6 +777,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
     let mut measured_from = start;
     let mut warmed_up = options.bench.is_none();
     let mut on_bench_done = Some(on_bench_done);
+    let mut car_config = CarConfig::default();
 
     tracing::info!(?refresh, "render loop started");
     while !control.stopped() {
@@ -805,7 +856,9 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 osd.fonts_listed = true;
             }
         }
-        let cfg = osd.config_for_frame(&live_cfg, osd_open, wake);
+        // The OSD's working config (while open, and until the saved file reloads) is the base;
+        // the car's profile overlays it.
+        let base_cfg = osd.config_for_frame(&live_cfg, osd_open, wake);
         let live_preview = osd_open;
         let synthetic = uses_dyno(bypass, live_preview, fresh, race_on);
         let synth_data;
@@ -815,6 +868,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
         } else {
             &frame.data
         };
+        // Per-car overrides switch with the car ordinal (cached; no allocation per frame).
+        let cfg = car_config.resolve(&base_cfg, &profiles.current(), data.car_ordinal);
         let vis = visibility.update(
             VisibilityInputs {
                 race_on,
@@ -831,7 +886,10 @@ fn run(setup: RenderSetup) -> RenderSummary {
         last_seq = frame.seq;
         let osd_frame = Frame::new(lp.size);
 
-        if vis.opacity <= 0.0 {
+        // Chase views show the floating HUD only when `ChaseHudEnabled` is on; the OSD's live
+        // view always shows.
+        let view_shown = osd_open || camera_view != View::Chase || cfg.chase_hud_enabled;
+        if vis.opacity <= 0.0 || !view_shown {
             let layout = Layout::from_config(&cfg, &lp.resources.tokens, camera_view, lp.size);
             if osd_open {
                 // Hidden (the game lost focus): input meant for another window is dropped.
@@ -840,7 +898,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             if !blank_presented {
                 // Hide = one fully transparent frame, then idle.
                 blank_presented = matches!(
-                    lp.render(0.0, &layout, false, false, None),
+                    lp.render(0.0, &layout, false, false, None, None),
                     Some(FrameOutcome::Presented { .. })
                 );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
@@ -866,7 +924,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
             if osd.navigate(&input, build_start) {
                 input.set_osd_open(false);
             }
-            cfg = osd.config_for_frame(&live_cfg, true, build_start);
+            let edited = osd.config_for_frame(&live_cfg, true, build_start);
+            cfg = car_config.resolve(&edited, &profiles.current(), data.car_ordinal);
             lp.prepare_osd(&mut osd.host, &cfg);
         }
         // The OSD's live view shows the view being edited, gliding into the live zone.
@@ -910,6 +969,11 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 }
             }
         }
+        // Cockpit: scrim + wash under the cluster. Hood and chase: scrim 0 (`ScrimFit` gives 0).
+        let scrim_fit = ScrimFit::from_config(&cfg, view.fit_view());
+        let scrim = scrim_fit
+            .visible()
+            .then(|| (scrim_fit, Wash::from_config(&cfg, lp.palette.primary)));
         let built = build_start.elapsed();
 
         let stats_on = options.stats || model::show_stats(&cfg);
@@ -925,7 +989,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
             },
         });
         if let Some(FrameOutcome::Presented { timings, at }) =
-            lp.render(vis.opacity, &layout, true, stats_on, osd_draw.as_ref())
+            lp.render(vis.opacity, &layout, true, stats_on, scrim, osd_draw.as_ref())
         {
             lp.frames += 1;
             lp.stats.cpu_frame.record(built + timings.cpu());
@@ -1023,6 +1087,47 @@ mod tests {
             ..AppConfig::default()
         };
         assert_eq!(theme_for(&empty, View::Cockpit), ClusterTheme::LiquidGlass);
+        assert_eq!(
+            theme_for(&cfg, View::Chase),
+            ClusterTheme::LiquidGlass,
+            "chase falls back"
+        );
+        let chase = AppConfig {
+            chase_hud_style: "Gt7HoodPro".into(),
+            ..cfg
+        };
+        assert_eq!(theme_for(&chase, View::Chase), ClusterTheme::Gt7HoodPro);
+    }
+
+    #[test]
+    fn car_config_switches_with_the_ordinal_and_caches() {
+        let base = Arc::new(AppConfig {
+            per_car_profile_enabled: true,
+            oem_dash_opaque_pct: 80,
+            ..AppConfig::default()
+        });
+        let profiles = Arc::new(
+            CarProfilesFile::from_json_str(
+                r#"{"Version":"2.0.0","Profiles":{"3595":{"CarOrdinal":3595,"CockpitAnchorY":1820,"OemDashOpaquePct":95}}}"#,
+            )
+            .unwrap(),
+        );
+        let mut cc = CarConfig::default();
+        let m4 = cc.resolve(&base, &profiles, 4122);
+        assert!(Arc::ptr_eq(&m4, &base), "no profile: the base config itself");
+        let sf90 = cc.resolve(&base, &profiles, 3595);
+        assert_eq!(sf90.cockpit_anchor_y, 1820);
+        assert_eq!(sf90.oem_dash_opaque_pct, 95);
+        assert_eq!(ScrimFit::from_config(&sf90, View::Cockpit.fit_view()).opacity, 0.95);
+        let again = cc.resolve(&base, &profiles, 3595);
+        assert!(Arc::ptr_eq(&sf90, &again), "cached while nothing changes");
+        let back = cc.resolve(&base, &profiles, 4122);
+        assert_eq!(back.cockpit_anchor_y, 1835);
+        let off = Arc::new(AppConfig {
+            per_car_profile_enabled: false,
+            ..(*base).clone()
+        });
+        assert_eq!(cc.resolve(&off, &profiles, 3595).cockpit_anchor_y, 1835, "profiles off");
     }
 
     #[test]

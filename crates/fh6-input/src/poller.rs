@@ -2,7 +2,7 @@
 use crate::hold_state::HoldConfig;
 use crate::script::{PadScript, ScriptedPad};
 use crate::tracker::PadSource;
-use crate::tracker::{InputControllerTracker, PollContext, CAMERA_RING_LEN};
+use crate::tracker::{InputControllerTracker, PollContext, ResyncConfig, CAMERA_RING_LEN};
 use crate::xinput::XInput;
 use fh6_core::{ConfigHandle, TelemetryReader};
 use std::io;
@@ -59,6 +59,14 @@ impl InputShared {
         if let Ok(i) = u8::try_from(index % CAMERA_RING_LEN) {
             self.camera_index.store(i, Ordering::Relaxed);
         }
+    }
+
+    /// Resyncs the camera ring to `ResyncCameraIndex` (the OSD item; the LB + RB hold does the
+    /// same from the controller).
+    pub fn resync_camera(&self, cfg: &fh6_core::AppConfig) {
+        let index = ResyncConfig::from_config(cfg).camera_index;
+        self.set_camera_index(index);
+        tracing::info!(camera = index, "camera resynced");
     }
 
     /// Whether the OSD is open.
@@ -243,6 +251,8 @@ fn run<S: PadSource>(
 ) {
     let mut hold = HoldConfig::from_config(&config.current());
     let mut tracker = InputControllerTracker::new(source, hold);
+    let mut resync = ResyncConfig::from_config(&config.current());
+    tracker.set_resync_config(resync);
     let epoch = Instant::now();
 
     while running.load(Ordering::Relaxed) {
@@ -252,6 +262,11 @@ fn run<S: PadSource>(
         if new_hold != hold {
             hold = new_hold;
             tracker.set_hold_config(hold);
+        }
+        let new_resync = ResyncConfig::from_config(&cfg);
+        if new_resync != resync {
+            resync = new_resync;
+            tracker.set_resync_config(resync);
         }
         let frame = telemetry.latest();
         let ctx = PollContext {
@@ -273,6 +288,10 @@ fn run<S: PadSource>(
         if events.camera_changed {
             shared.set_camera_index(camera);
             tracing::debug!(camera, "camera ring advanced");
+        }
+        if events.camera_resynced {
+            shared.set_camera_index(camera);
+            tracing::info!(camera, "camera resynced by holding LB + RB");
         }
         if events.osd_toggled {
             // Flip the shared state itself, so a tray toggle since this poll began is not lost.

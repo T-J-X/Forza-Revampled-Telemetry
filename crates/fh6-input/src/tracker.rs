@@ -38,6 +38,39 @@ const EMPTY_SLOT_PROBE_MS: u64 = 1000;
 /// RB only cycles the camera once racing has run this long (the game ignores RB on resume).
 const RESUME_GUARD_MS: f64 = 150.0;
 
+/// The camera resync chord: hold LB + RB this long and the camera index is set to
+/// `camera_index` (the camera the game is on after the chord; `ResyncCameraIndex`, default 3 =
+/// cockpit). Never A/B/X/Y.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResyncConfig {
+    /// Index the ring is set to (0..6).
+    pub camera_index: usize,
+    /// Hold time in ms (`ResyncHoldMs`, 500..=3000).
+    pub hold_ms: u64,
+}
+
+impl Default for ResyncConfig {
+    fn default() -> Self {
+        Self {
+            camera_index: 3,
+            hold_ms: 1000,
+        }
+    }
+}
+
+impl ResyncConfig {
+    /// From `ResyncCameraIndex` and `ResyncHoldMs`.
+    pub fn from_config(cfg: &fh6_core::AppConfig) -> Self {
+        Self {
+            camera_index: usize::try_from(cfg.resync_camera_index.clamp(0, CAMERA_RING_LEN as i32 - 1)).unwrap_or(3),
+            hold_ms: u64::from(cfg.resync_hold_ms.clamp(
+                fh6_core::config::RESYNC_HOLD_MS_MIN,
+                fh6_core::config::RESYNC_HOLD_MS_MAX,
+            )),
+        }
+    }
+}
+
 /// Something that reports controller states per slot (0..=3).
 pub trait PadSource {
     /// The state of `slot`, or `None` when nothing is connected there.
@@ -64,6 +97,8 @@ pub struct PollContext {
 pub struct InputEvents {
     /// RB advanced the camera ring.
     pub camera_changed: bool,
+    /// LB + RB held for the resync time set the camera index (`ResyncConfig`).
+    pub camera_resynced: bool,
     /// The hold toggle opened or closed the OSD.
     pub osd_toggled: bool,
     /// LB while the OSD is open.
@@ -97,6 +132,9 @@ pub struct InputControllerTracker<S: PadSource> {
     last_shoulder_ms: Option<u64>,
     last_studio_ms: Option<u64>,
     l3r3_held: bool,
+    resync: ResyncConfig,
+    chord_since: Option<u64>,
+    chord_fired: bool,
     pad_source: S,
 }
 
@@ -128,6 +166,9 @@ impl<S: PadSource> InputControllerTracker<S> {
             last_shoulder_ms: None,
             last_studio_ms: None,
             l3r3_held: false,
+            resync: ResyncConfig::default(),
+            chord_since: None,
+            chord_fired: false,
             pad_source,
         }
     }
@@ -135,6 +176,11 @@ impl<S: PadSource> InputControllerTracker<S> {
     /// Replaces the hold toggle settings (config hot reload).
     pub fn set_hold_config(&mut self, hold: HoldConfig) {
         self.hold.set_config(hold);
+    }
+
+    /// Replaces the resync chord settings (config hot reload).
+    pub fn set_resync_config(&mut self, resync: ResyncConfig) {
+        self.resync = resync;
     }
 
     /// The A/B/X/Y-stripped buttons of every connected pad, OR-ed together.
@@ -214,6 +260,22 @@ impl<S: PadSource> InputControllerTracker<S> {
                 self.last_shoulder_ms = Some(now);
                 events.camera_changed = true;
             }
+        }
+
+        // Resync chord: LB + RB held (OSD closed). The RB edge that starts it still advances the
+        // ring like the game does; once the hold completes the index is set outright, once per
+        // hold.
+        let chord = combined & MASK_LB_RB == MASK_LB_RB;
+        if chord && !self.is_osd_open {
+            let since = *self.chord_since.get_or_insert(now);
+            if !self.chord_fired && now.saturating_sub(since) >= self.resync.hold_ms {
+                self.chord_fired = true;
+                *camera_index = self.resync.camera_index % CAMERA_RING_LEN;
+                events.camera_resynced = true;
+            }
+        } else {
+            self.chord_since = None;
+            self.chord_fired = false;
         }
 
         events.guide_pressed = self.guide.update(combined & XINPUT_GAMEPAD_GUIDE != 0);
@@ -368,6 +430,77 @@ mod tests {
         }
         assert_eq!(t.pad_source.calls[0], 125, "a connected pad is read every poll");
         assert_eq!(t.pad_source.calls[1], 1, "an empty slot is probed once in 1 s");
+    }
+
+    #[test]
+    fn holding_lb_rb_resyncs_the_camera_once() {
+        const LB_RB: u16 = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
+        let mut t = InputControllerTracker::new(
+            FakePad::new(&[XINPUT_GAMEPAD_LEFT_SHOULDER, LB_RB, LB_RB, LB_RB, LB_RB, 0]),
+            HoldConfig::default(),
+        );
+        let mut cam = 0usize;
+        assert!(!t.poll(&mut cam, &driving(0)).camera_resynced);
+        let ev = t.poll(&mut cam, &driving(100));
+        assert!(
+            ev.camera_changed && !ev.camera_resynced,
+            "the RB edge still mirrors the game"
+        );
+        assert_eq!(cam, 1);
+        assert!(!t.poll(&mut cam, &driving(600)).camera_resynced, "not held long enough");
+        let ev = t.poll(&mut cam, &driving(1100));
+        assert!(ev.camera_resynced);
+        assert_eq!(cam, 3, "default ResyncCameraIndex = cockpit");
+        cam = 5;
+        assert!(!t.poll(&mut cam, &driving(2500)).camera_resynced, "once per hold");
+        assert_eq!(cam, 5);
+        assert!(!t.poll(&mut cam, &driving(2600)).camera_resynced);
+    }
+
+    #[test]
+    fn resync_follows_config_and_ignores_abxy_and_the_open_osd() {
+        const LB_RB: u16 = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
+        let cfg = fh6_core::AppConfig {
+            resync_camera_index: 4,
+            resync_hold_ms: 500,
+            ..fh6_core::AppConfig::default()
+        };
+        let abxy = XINPUT_GAMEPAD_A | XINPUT_GAMEPAD_B | XINPUT_GAMEPAD_X | XINPUT_GAMEPAD_Y;
+        let mut t = InputControllerTracker::new(FakePad::new(&[LB_RB | abxy, LB_RB | abxy]), HoldConfig::default());
+        t.set_resync_config(ResyncConfig::from_config(&cfg));
+        let mut cam = 0usize;
+        t.poll(&mut cam, &driving(0));
+        assert!(t.poll(&mut cam, &driving(500)).camera_resynced);
+        assert_eq!(cam, 4);
+
+        let mut t = InputControllerTracker::new(FakePad::new(&[LB_RB, LB_RB]), HoldConfig::default());
+        t.is_osd_open = true;
+        let mut cam = 0usize;
+        t.poll(&mut cam, &driving(0));
+        assert!(
+            !t.poll(&mut cam, &driving(2000)).camera_resynced,
+            "LB/RB switch tabs in the OSD"
+        );
+        assert_eq!(cam, 0);
+
+        let mut t = InputControllerTracker::new(FakePad::new(&[abxy, abxy]), HoldConfig::default());
+        t.poll(&mut cam, &driving(0));
+        assert!(
+            !t.poll(&mut cam, &driving(2000)).camera_resynced,
+            "A/B/X/Y never resync"
+        );
+    }
+
+    #[test]
+    fn resync_config_clamps() {
+        let cfg = fh6_core::AppConfig {
+            resync_camera_index: 99,
+            resync_hold_ms: 10,
+            ..fh6_core::AppConfig::default()
+        };
+        let r = ResyncConfig::from_config(&cfg);
+        assert_eq!(r.camera_index, 5);
+        assert_eq!(r.hold_ms, 500);
     }
 
     #[test]

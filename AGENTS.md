@@ -7,7 +7,7 @@
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
 
-**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The tiny-skia rows below (scrim, OSD, v1 clusters) are kept until their rebuilds in Phases 7–9.
+**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The scrim (Phase 8) and the OSD (Phase 9) draw with the kit too; the v1 tiny-skia clusters are kept until their rebuilds in Phase 7.
 
 ---
 
@@ -15,16 +15,16 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 
 | Crate / tool | Owns | May depend on |
 |---|---|---|
-| `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail | std, serde, arc-swap, thiserror |
+| `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail | std, serde, arc-swap, thiserror |
 | `crates/fh6-render` | Theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
 | `crates/fh6-clusters` | The cluster registry (`registry::REGISTRY`, contract v2), kit clusters (`kit/`), shared components (`common/`), and the 29 v1 tiny-skia clusters behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
 | `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
 | `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
 | `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
-| `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher, `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
+| `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
 | `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
 | `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, OSD wiring (the remapper moved to fh6-osd), status server (no `unsafe`) | all crates |
-| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, scrim and OSD → `mockups/` (`--legacy` adds the v1 clusters) | core, kit, gpu, clusters, render, osd |
+| `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
 | `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-gpu, fh6-kit, fh6-clusters |

@@ -22,6 +22,7 @@ const K_BAR: u32 = 8u;
 const K_GLYPH: u32 = 9u;
 const K_SEVENSEG: u32 = 10u;
 const K_NINESLICE: u32 = 11u;
+const K_DOME: u32 = 12u;
 
 // Coverage modes (shape.rs `mode`).
 const M_FILL: u32 = 0u;
@@ -394,6 +395,42 @@ fn sd_polygon(p: vec2<f32>, first: u32, count: u32) -> f32 {
     return s * sqrt(d);
 }
 
+// Superellipse dome (OEM scrim). p0 = centre, semi-axes; p1 = exponents top/bottom, feather
+// top/side; p2 = feather bottom, void half width, void top, void feather. First-order signed
+// distance r - 1 / |grad r| (mirrors fh6_core::fit::ScrimFit::dome_distance).
+fn sd_dome_core(p: vec2<f32>, p0: vec4<f32>, p1: vec4<f32>) -> f32 {
+    let c = p0.xy;
+    let ab = p0.zw;
+    let n = select(p1.y, p1.x, p.y < c.y);
+    let uv = max(abs(p - c) / ab, vec2<f32>(1e-6));
+    let s = pow(uv.x, n) + pow(uv.y, n);
+    let r = pow(s, 1.0 / n);
+    let k = pow(r, 1.0 - n);
+    let grad = vec2<f32>(k * pow(uv.x, n - 1.0) / ab.x, k * pow(uv.y, n - 1.0) / ab.y);
+    return (r - 1.0) / max(length(grad), 1e-6);
+}
+
+fn dome_feather(p: vec2<f32>, p0: vec4<f32>, p1: vec4<f32>, p2: vec4<f32>) -> f32 {
+    let q = (p - p0.xy) / p0.zw;
+    let len = max(length(q), 1e-6);
+    let side_w = abs(q.x / len);
+    let vertical = select(p2.x, p1.z, q.y < 0.0);
+    return p1.w * side_w + vertical * (1.0 - side_w);
+}
+
+fn sd_dome_void(p: vec2<f32>, p0: vec4<f32>, p2: vec4<f32>) -> f32 {
+    let hw = p2.y;
+    if (hw <= 0.0) {
+        return 1e9;
+    }
+    let dx = p.x - p0.x;
+    let cap_y = p2.z + hw;
+    if (p.y < cap_y) {
+        return length(vec2<f32>(dx, p.y - cap_y)) - hw;
+    }
+    return abs(dx) - hw;
+}
+
 fn median3(v: vec3<f32>) -> f32 {
     return max(min(v.x, v.y), min(max(v.x, v.y), v.z));
 }
@@ -629,6 +666,8 @@ fn fs_main(in: VsOut) -> FsOut {
         paint_pos = b.zw;
     } else if (kind == K_SEVENSEG) {
         d = sd_seven(p - in.p0.xy, in.p0.zw, in.p1.x, u32(in.p1.y + 0.5));
+    } else if (kind == K_DOME) {
+        d = max(sd_dome_core(p, in.p0, in.p1), -sd_dome_void(p, in.p0, in.p2));
     } else if (kind == K_GLYPH) {
         let r = in.p2;
         let t = (p - r.xy) / max(r.zw - r.xy, vec2<f32>(1e-6));
@@ -665,7 +704,20 @@ fn fs_main(in: VsOut) -> FsOut {
 
     // Coverage from distance.
     var cov = 0.0;
-    if (mode == M_FILL) {
+    if (mode == M_FILL && kind == K_DOME) {
+        // Feathered dome: opaque core, smoothstep fall-off across the feather (at least one
+        // device pixel), cut by the void, with +-0.5/255 triangular dither against banding.
+        let fw = max(dome_feather(p, in.p0, in.p1, in.p2), 1.0 / px);
+        let core = 1.0 - smoothstep(0.0, fw, sd_dome_core(p, in.p0, in.p1));
+        let vf = max(in.p2.w, 1.0 / px);
+        let open = smoothstep(-0.5 * vf, 0.5 * vf, sd_dome_void(p, in.p0, in.p2));
+        let wpd = in.pos.xy + g.work_origin;
+        let dither = (hash2(wpd) + hash2(wpd + 37.0) - 1.0) / 255.0;
+        cov = core * open;
+        if (cov > 0.0 && cov < 1.0) {
+            cov = clamp(cov + dither, 0.0, 1.0);
+        }
+    } else if (mode == M_FILL) {
         cov = clamp(0.5 - d * px, 0.0, 1.0);
     } else if (mode == M_STROKE) {
         var w = in.style.x;
