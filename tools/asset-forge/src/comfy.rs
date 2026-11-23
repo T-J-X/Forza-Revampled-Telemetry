@@ -124,6 +124,74 @@ impl Comfy {
             return Ok(images);
         }
     }
+
+    /// Uploads PNG bytes to ComfyUI's `input/` folder (multipart `/upload/image`, overwrite) and
+    /// returns the name to give `LoadImage`.
+    pub fn upload_image(&self, name: &str, png: &[u8]) -> Result<String> {
+        let url = format!("{}/upload/image", self.base);
+        let boundary = "forge-boundary-7c1e0b3a";
+        let mut body = Vec::with_capacity(png.len() + 512);
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(png);
+        body.extend_from_slice(
+            format!("\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n")
+                .as_bytes(),
+        );
+        let mut resp = self
+            .agent
+            .post(&url)
+            .header("Content-Type", &format!("multipart/form-data; boundary={boundary}"))
+            .send(&body[..])
+            .map_err(|e| tool_err("comfyui", format!("upload {name}: {e}")))?;
+        let v: Value = resp
+            .body_mut()
+            .read_json()
+            .map_err(|e| tool_err("comfyui", format!("upload {name}: {e}")))?;
+        v.get("name")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| tool_err("comfyui", format!("upload {name}: no name in {v}")))
+    }
+
+    /// Asks ComfyUI to unload models and free VRAM (before handing the GPU back to Blender or
+    /// after an out-of-memory error).
+    pub fn free(&self) {
+        let url = format!("{}/free", self.base);
+        let _ = self
+            .agent
+            .post(&url)
+            .send_json(serde_json::json!({ "unload_models": true, "free_memory": true }));
+    }
+
+    /// Model files ComfyUI sees in `folder` (`checkpoints`, `controlnet`, `upscale_models` …).
+    pub fn models(&self, folder: &str) -> Vec<String> {
+        net::get_json(&self.agent, &format!("{}/models/{folder}", self.base))
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()
+    }
+
+    /// [`Comfy::run`], retried once after freeing VRAM when the card ran out of memory (the
+    /// 8 GB card is shared with Blender and other chats).
+    pub fn run_retry(&self, workflow: &Value, timeout: Duration) -> Result<Vec<Vec<u8>>> {
+        match self.run(workflow, timeout) {
+            Err(e) if e.to_string().to_ascii_lowercase().contains("memory") => {
+                eprintln!("  comfyui out of memory; freeing VRAM and retrying once");
+                self.free();
+                std::thread::sleep(Duration::from_secs(15));
+                self.run(workflow, timeout)
+            }
+            other => other,
+        }
+    }
 }
 
 fn local_agent() -> ureq::Agent {

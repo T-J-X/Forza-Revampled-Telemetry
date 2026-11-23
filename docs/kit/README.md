@@ -323,6 +323,13 @@ Every family composes these instead of re-drawing the same instrument. Each keep
 | `seg7` | `Seg7Digit`, `Seg7Number`, `Seg7Geometry`, `draw_speed` | VFD / LCD seven-segment numerals with phosphor, emission and ghosting |
 | `liquid` | `LiquidSurface`, `LiquidChannel`, `LiquidMetal`, `Droplets`, `Underlay` | liquid-metal pools and channels with slosh from G, meniscus and droplets; an optional Phase 6 flipbook or live fluid underlay |
 
+**Rendered hardware (asset-forge hero library).** The components above draw live data. The physical parts under them (bezels, dial faces, hub wells, needles, crystals, housings, leather hoods, LED caps) come from `tools/asset-forge/src/hero/` as Blender renders, not as vectors with a texture tint:
+
+- `Frame::envelope(&frame::COCKPIT)` (or `HOOD`) renders pixel-exact in local 4K px, so a plate is drawn with `ImagePaint { rect }` where `rect` is the frame's rect, at full strength (`BlendMode::Normal`, straight alpha premultiplied on load).
+- Draw order: hardware plate → live vectors (ticks, numerals, digits, bars) → needle sprite (`Frame::square`, pointing up, pivot at the centre; rotate it, add a soft offset shadow) → glass layer (crystals rendered alone: reflections only).
+- The kit has no normal-map relighting yet, so the plate comes as `beauty_0/1/2.png` at key azimuths −135°, −160°, −110°: crossfade them by `VirtualLight` azimuth. `normal.png`, `height.png`, `ao.png`, `rmh.png` and `emission.png` ship alongside for a future lit-sprite pass and for night glow (Add).
+- Proof and reference: `cargo run --release -p asset-forge -- hero-demo` (PorscheAnalog hardware) writes `docs/handover-shots/asset-pipeline-v2-*.png`. Skills: `blender-hero-assets`, `comfyui-hero-textures`.
+
 ## 13. Lessons from the pilot
 
 The Liquid Glass pilot (`clusters/liquid_glass/`, its `README.md` and `HANDOVER.md`) set the pattern. What it taught:

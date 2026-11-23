@@ -264,6 +264,9 @@ impl Ledger {
         s.push_str("`straight` alpha is premultiplied by the loader, `premultiplied` is stored that way, `additive` means RGB is emitted light.\n\n");
         s.push_str("Licences: assets made by asset-forge are MIT like the repo; fonts are SIL OFL 1.1 (each folder keeps its `OFL.txt`); ");
         s.push_str("logos are trademarks of their owners, used only to identify the car (see [`logos/NOTICE.md`](logos/NOTICE.md)); CC0 fill-ins name their source.\n\n");
+        s.push_str("**Hero hardware (asset pipeline v2).** Rendered physical parts (bezels, dial faces, needles, crystals, housings, leather hoods) come from the shared `tools/asset-forge/src/hero/` library: ");
+        s.push_str("full-strength Cycles beauty plates registered 1:1 to local 4K px, one per key azimuth for the lateral-G light swing, plus normal, height, AO, roughness/metallic and emission passes; ");
+        s.push_str("ComfyUI adds seamless organic textures and optional detail passes. Usage: the `blender-hero-assets` and `comfyui-hero-textures` skills; proof: `docs/handover-shots/asset-pipeline-v2-*.png`.\n\n");
         for (set, rows) in by_set {
             let bytes: u64 = rows.iter().map(|r| r.bytes).sum();
             s.push_str(&format!(
