@@ -62,6 +62,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
    - Outputs go to `assets/clusters/<snake_name>/`, with a row in `assets/clusters/<snake_name>/ASSETS.md`.
    - "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.
    - Every textured look keeps a procedural fallback: `setup.assets` may be `None`.
+2b. **TJX direction check (mandatory, TJX 2026-11-23).** As soon as the design direction is set (board drawn and the first real Blender/ComfyUI render of `02_mid_cruise` in the cockpit composite), and **before** any polishing or critique rounds, send the conductor one message: `DIRECTION CHECK <Name>`, then two absolute PNG paths (the full-frame cockpit render and the Penpot board export), then two or three lines on the idea and the references it follows. The conductor shows them to TJX and relays a go, a no-go or changes. Until the answer arrives, carry on only with work that the answer can't invalidate (module plumbing, tests, telemetry). A no-go means redesign, then a new check. Repeat the check after any major redesign.
 3. **Build:** replace the scaffold in your `mod.rs` with your `Cluster` (keep `pub fn make`). Use the kit and the `common/` components. Keep `update()` and `draw()` allocation-free after warm-up.
 4. **Verify** (from the repo root):
    - `cargo run --release -p preview-export -- --cluster <Name>` writes `mockups/<Name>/`: 4 states per view at 4K, crops, the cockpit composite, the 60-frame sequence and `index.html`. It prints the GPU time of every frame and the sequence p50 / p99: that is your budget number (under 0.5 ms at 4K).
@@ -93,4 +94,5 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 - At least one bespoke Blender asset and one bespoke ComfyUI asset are in `assets/clusters/<snake_name>/`, used in the cluster, with ASSETS rows (recipe plus seed) and before and after crops in the handover.
 - The design board is the Penpot page `07 · <Name>` (its page ID is in the handover); the HTML board alone is not enough.
 - The critique is a clean pass that beats the references; a "conditional pass" does not count.
+- TJX approved the direction check (the go is quoted in the handover).
 - The handover is written.
