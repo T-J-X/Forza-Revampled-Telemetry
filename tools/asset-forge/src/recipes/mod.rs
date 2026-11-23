@@ -3,6 +3,7 @@
 //! passes the parameters as a JSON file. Every script is deterministic for a given seed.
 
 pub mod adas;
+pub mod bosch_ddu;
 pub mod classic;
 pub mod fluid;
 pub mod glass;
