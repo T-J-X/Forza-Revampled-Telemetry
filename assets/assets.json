@@ -9638,6 +9638,22 @@
       "thumb": "assets/_thumbs/scifi__warp__tunnel.png"
     },
     {
+      "id": "tesla_adas/asphalt",
+      "path": "assets/clusters/tesla_adas/asphalt.png",
+      "set": "tesla_adas",
+      "kind": "mask",
+      "colorspace": "linear",
+      "alpha": "straight",
+      "tileable": false,
+      "dims": "1536x512",
+      "bytes": 386804,
+      "generator": "comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5, 1536 x 640) seed=1507 prompt=\"photograph of an empty dark asphalt road at night seen from a low camera behind a car, the road surface fills the frame and recedes straight to a vanishing point at the top centre, fine aggregate texture, faint cold blue sheen, moody, minimal\"",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "clusters": "TeslaAdas",
+      "qa": "the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate → 1536 x 512; luminance → alpha over white (tinted live to near-black), a far-to-near fade (0 at the top) and side feathers baked in",
+      "thumb": "assets/_thumbs/tesla_adas__asphalt.png"
+    },
+    {
       "id": "tesla_adas/horizon_haze",
       "path": "assets/clusters/tesla_adas/horizon_haze.png",
       "set": "tesla_adas",
@@ -9661,12 +9677,12 @@
       "colorspace": "linear",
       "alpha": "straight",
       "tileable": false,
-      "dims": "960x480",
-      "bytes": 14503,
-      "generator": "blender:tesla_adas::POOL cockpit chase camera (Cycles 256 spp, OptiX denoise; ego_coupe.glb camera-invisible, area light 1.9 x 4.0 m at 0.16 m, 520 W; mask softened 8x, gamma 0.7) seed=151",
+      "dims": "2880x1080",
+      "bytes": 97152,
+      "generator": "blender:tesla_adas::POOL cockpit chase camera at yaw -50..50 step 10 (Cycles 192 spp, OptiX denoise; ego_coupe.glb camera-invisible, area light 1.9 x 4.0 m at 0.16 m, 520 W) seed=151",
       "licence": "MIT (asset-forge)",
       "clusters": "TeslaAdas",
-      "qa": "white RGB, alpha = ground light (99.7th percentile = 1), edges feathered; 480 x 240 local px centred on the ego's ground centre",
+      "qa": "4 x 3 atlas of 720 x 360 cells (yaw -50..50 step 10, row-major); white RGB, alpha = ground light: softened 10x, 99.7th percentile = 1, black point 4% (true 0 below), gamma 0.7, edges feathered; each cell 480 x 240 local px centred on the ego's ground centre",
       "thumb": "assets/_thumbs/tesla_adas__underglow_pools__cockpit.png"
     },
     {
@@ -9677,12 +9693,12 @@
       "colorspace": "linear",
       "alpha": "straight",
       "tileable": false,
-      "dims": "960x480",
-      "bytes": 11302,
-      "generator": "blender:tesla_adas::POOL hood chase camera (Cycles 256 spp, OptiX denoise; ego_coupe.glb camera-invisible, area light 1.9 x 4.0 m at 0.16 m, 520 W; mask softened 8x, gamma 0.7) seed=151",
+      "dims": "2880x1080",
+      "bytes": 70634,
+      "generator": "blender:tesla_adas::POOL hood chase camera at yaw -50..50 step 10 (Cycles 192 spp, OptiX denoise; ego_coupe.glb camera-invisible, area light 1.9 x 4.0 m at 0.16 m, 520 W) seed=151",
       "licence": "MIT (asset-forge)",
       "clusters": "TeslaAdas",
-      "qa": "white RGB, alpha = ground light (99.7th percentile = 1), edges feathered; 480 x 240 local px centred on the ego's ground centre",
+      "qa": "4 x 3 atlas of 720 x 360 cells (yaw -50..50 step 10, row-major); white RGB, alpha = ground light: softened 10x, 99.7th percentile = 1, black point 4% (true 0 below), gamma 0.7, edges feathered; each cell 480 x 240 local px centred on the ego's ground centre",
       "thumb": "assets/_thumbs/tesla_adas__underglow_pools__hood.png"
     }
   ]

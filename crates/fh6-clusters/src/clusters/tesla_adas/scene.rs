@@ -14,12 +14,12 @@
 //! ambient simulation that carries no numbers. The stop line is real: it is the stopping distance
 //! at the measured deceleration.
 use crate::common::adas_road::{curvature, ego_yaw, EGO_Z, LANE_WIDTH, MAX_DT, MIN_CURVE_SPEED};
-use fh6_kit::math::{finite_or, smoothstep, vec3, Affine, Mat4, Vec3};
+use fh6_kit::math::{finite_or, smoothstep, vec3, Mat4, Vec3};
 use fh6_kit::mesh::{MeshData, MeshDraw, MeshId, MeshShading};
 use fh6_kit::perspective::{Camera25, RoadCurve};
 use fh6_kit::{
-    vec2, Align, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect, Shape, Spring,
-    TextStyle, Tokens, VAlign, Vec2,
+    vec2, Align, BlendMode, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect, Shape,
+    Spring, TextStyle, Tokens, VAlign, Vec2,
 };
 
 /// Standard gravity (m/s^2).
@@ -64,16 +64,23 @@ const UNDERGLOW_SIGMA: f32 = 0.22;
 /// the ego's ground centre) and its peak alpha.
 const POOL_LOCAL: [f32; 2] = [480.0, 240.0];
 const POOL_ALPHA: f32 = 0.75;
-/// The ComfyUI horizon haze: its height above the horizon (local px), the overlap below it, and
-/// its peak alpha (tinted primary, lifted 15% towards ink).
-const HAZE_ABOVE: f32 = 56.0;
-const HAZE_BELOW: f32 = 22.0;
-const HAZE_ALPHA: f32 = 0.16;
+/// The pool atlas: 11 yaw cells from -50 to +50 degrees, 4 per row (asset-forge `POOL_YAWS`).
+const POOL_CELLS: usize = 11;
+const POOL_COLS: usize = 4;
+const POOL_YAW_MIN: f32 = -50.0;
+const POOL_YAW_STEP: f32 = 10.0;
+/// The ComfyUI asphalt plate's light level (linear ink; about #0E1116 where the plate is full).
+const ASPHALT_LEVEL: f32 = 0.010;
+/// The road fill reaches this far past the outer edge lines (metres).
+const ROAD_SHOULDER: f32 = 0.6;
+/// Traffic contact shadows: a ground ellipse 1.1x the car's width and 0.95x its length, 50% black.
+const SHADOW_SCALE: [f32; 2] = [1.1, 0.95];
+const SHADOW_ALPHA: f32 = 0.5;
 /// Ego body: light neutral tinted 15% by the brand (the brand-pearl twin).
 const EGO_TINT: f32 = 0.15;
 /// Traffic body (`#8C929C` at 0.70 over black, drawn opaque) and a blind-spot ghost's level.
-const TRAFFIC_RGB: u32 = 0x8C_92_9C;
-const TRAFFIC_LEVEL: f32 = 0.70;
+const TRAFFIC_RGB: u32 = 0x8A_8E_96;
+const TRAFFIC_LEVEL: f32 = 1.0;
 const GHOST_LEVEL: f32 = 0.30;
 /// An adjacent-lane car nearer than `EGO_Z + 6 m` is a ghost, solid over the next 4 m.
 const BLIND_SPOT_AHEAD: f32 = 6.0;
@@ -188,14 +195,14 @@ pub struct CarModel {
 
 /// Everything the scene loads once: the car models (the Phase 6 glTF when `assets` has it, else
 /// the kit's procedural proxy), the tail-light quad, and this cluster's baked images (the Blender
-/// underglow pools per camera and the ComfyUI horizon haze; each `None` falls back to the
+/// underglow pool atlases per camera and the ComfyUI asphalt plate; each `None` falls back to the
 /// procedural look).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SceneAssets {
     models: [CarModel; 4],
     lamp: MeshId,
     pools: [Option<ImageId>; 2],
-    haze: Option<ImageId>,
+    asphalt: Option<ImageId>,
 }
 
 /// Loads [`SceneAssets`].
@@ -230,7 +237,7 @@ pub fn load_assets(setup: &mut fh6_kit::cluster::Setup<'_>) -> SceneAssets {
             image("clusters/tesla_adas/underglow_pool_cockpit.png"),
             image("clusters/tesla_adas/underglow_pool_hood.png"),
         ],
-        haze: image("clusters/tesla_adas/horizon_haze.png"),
+        asphalt: image("clusters/tesla_adas/asphalt.png"),
     }
 }
 
@@ -597,7 +604,7 @@ pub struct Scene {
     models: [CarModel; 4],
     lamp: MeshId,
     pools: [Option<ImageId>; 2],
-    haze: Option<ImageId>,
+    asphalt: Option<ImageId>,
     traffic: Traffic,
     kappa: Spring,
     kappa_target: f32,
@@ -637,7 +644,7 @@ impl Scene {
             models: assets.models,
             lamp: assets.lamp,
             pools: assets.pools,
-            haze: assets.haze,
+            asphalt: assets.asphalt,
             traffic: Traffic::seeded(SEED),
             kappa: Spring::new(s.default, 0.0),
             kappa_target: 0.0,
@@ -772,14 +779,6 @@ impl Scene {
             return;
         }
         let f = Frame::new(g, self.kappa.value());
-        // The ComfyUI horizon haze: a thin band of atmosphere sitting on the horizon behind the
-        // far road (it may rise a little above the band; it is the faintest thing on screen).
-        if let Some(img) = self.haze {
-            let h = f.cam.horizon_y;
-            let rect = Rect::from_points(vec2(vp.min.x, h - HAZE_ABOVE), vec2(vp.max.x, h + HAZE_BELOW));
-            let tint = pal.primary.lerp(pal.roles.ink, 0.15).fade(HAZE_ALPHA);
-            p.fill(&Shape::rect(rect), ImagePaint::new(img, rect).tint(tint));
-        }
         p.scoped(|p| {
             p.clip(vp, 0.0);
             self.draw_ground(p, &f, pal);
@@ -829,12 +828,13 @@ impl Scene {
         n
     }
 
-    /// The faint ground between the outer edge lines (<= 6% luminance) and the underglow pool.
+    /// The road surface between the outer edges (the ComfyUI asphalt plate, near-black; or a faint
+    /// gradient without it) and the underglow pool.
     fn draw_ground(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
         let mut pts = [Vec2::ZERO; 2 * CARPET_SAMPLES];
         let mut n = 0;
         let far = f.z_far * 0.8;
-        let edge = 1.5 * LANE_WIDTH;
+        let edge = 1.5 * LANE_WIDTH + ROAD_SHOULDER;
         for i in 0..CARPET_SAMPLES {
             if let Some(q) = f.lane_point(-edge, f.sample_z(i, CARPET_SAMPLES, far)) {
                 pts[n] = q;
@@ -849,50 +849,58 @@ impl Scene {
         }
         let (y0, y1) = (f.vp.max.y, f.ground_y(far));
         if n >= 3 && (y1 - y0).abs() > 1.0 {
+            let road = Shape::Polygon { points: &pts[..n] };
             let ink = pal.roles.ink;
-            p.fill(
-                &Shape::Polygon { points: &pts[..n] },
-                Gradient::linear(vec2(0.0, y0), vec2(0.0, y1))
-                    .stop(0.0, ink.with_alpha(0.0))
-                    .stop(0.25, ink.with_alpha(GROUND_ALPHA))
-                    .stop(1.0, ink.with_alpha(0.0)),
-            );
+            match self.asphalt {
+                // The plate's vanishing point at the horizon, its near edge at the band's bottom;
+                // the road polygon cuts it to the carriageway (it is texture, lit near-black).
+                Some(img) => {
+                    let rect = Rect::from_points(vec2(f.vp.min.x, f.cam.horizon_y), f.vp.max);
+                    p.fill(&road, ImagePaint::new(img, rect).tint(ink.intensity(ASPHALT_LEVEL)));
+                }
+                None => p.fill(
+                    &road,
+                    Gradient::linear(vec2(0.0, y0), vec2(0.0, y1))
+                        .stop(0.0, ink.with_alpha(0.0))
+                        .stop(0.25, ink.with_alpha(GROUND_ALPHA))
+                        .stop(1.0, ink.with_alpha(0.0)),
+                ),
+            }
         }
 
         let color = pal
             .primary
             .lerp(pal.roles.caution, self.drift.clamp(0.0, 1.0))
             .lerp(pal.shift, self.limiter.clamp(0.0, 1.0));
-        // Underglow, baked: the Blender light pool seen through this very camera (tyre and sill
-        // shadows included), tinted live. A yawed ego shears it along its projected heading.
+        // Underglow, baked: the Blender light pool seen through this very camera at the nearest
+        // two of 11 yaw angles (true perspective, tyre and sill shadows included), crossfaded and
+        // tinted live. Light adds, so the crossfade is exact.
         if let Some(img) = self.pools[f.pool.min(1)] {
             let x = f.road.center_x(EGO_Z);
             let Some(c) = f.cam.project(vec3(x, 0.0, EGO_Z)) else {
                 return;
             };
-            let slope = |heading: f32| {
-                f.cam
-                    .project(vec3(x + 2.0 * heading.sin(), 0.0, EGO_Z + 2.0 * heading.cos()))
-                    .map_or(0.0, |q| {
-                        let d = q - c;
-                        if d.y.abs() > 1e-3 {
-                            d.x / d.y
-                        } else {
-                            0.0
-                        }
-                    })
-            };
-            let road = f.road.heading(EGO_Z);
-            let shear = (slope(road + self.yaw.value()) - slope(road)).clamp(-1.5, 1.5);
-            let size = vec2(POOL_LOCAL[0], POOL_LOCAL[1]);
-            let rect = Rect::from_center_size(Vec2::ZERO, size);
+            let heading = (f.road.heading(EGO_Z) + self.yaw.value()).to_degrees();
+            let pos = ((heading - POOL_YAW_MIN) / POOL_YAW_STEP).clamp(0.0, (POOL_CELLS - 1) as f32);
+            let i0 = pos.floor() as usize;
+            let i1 = (i0 + 1).min(POOL_CELLS - 1);
+            let w1 = pos - i0 as f32;
+            let rect = Rect::from_center_size(c, vec2(POOL_LOCAL[0], POOL_LOCAL[1]));
+            let rows = POOL_CELLS.div_ceil(POOL_COLS);
+            let (cu, cv) = (1.0 / POOL_COLS as f32, 1.0 / rows as f32);
             p.scoped(|p| {
-                p.translate(c);
-                p.transform(&Affine::skew_x(shear));
-                p.fill(
-                    &Shape::rect(rect),
-                    ImagePaint::new(img, rect).tint(color.fade(POOL_ALPHA)),
-                );
+                p.set_blend(BlendMode::Add);
+                for (i, w) in [(i0, 1.0 - w1), (i1, w1)] {
+                    if w <= 0.004 {
+                        continue;
+                    }
+                    let uv = Rect::from_xywh((i % POOL_COLS) as f32 * cu, (i / POOL_COLS) as f32 * cv, cu, cv);
+                    let paint = ImagePaint {
+                        uv,
+                        ..ImagePaint::new(img, rect).tint(color.fade(POOL_ALPHA * w))
+                    };
+                    p.fill(&Shape::rect(rect), paint);
+                }
             });
             return;
         }
@@ -1201,9 +1209,38 @@ impl Scene {
         [d[0] * 0.5 * 0.62, d[2] * 0.56, d[2] * 0.62, -d[1] * 0.5 - 0.03]
     }
 
-    /// The 2D overlays of the cars, drawn before the meshes: the brake light's spill (the body
-    /// covers its inner part) and the lead car's FSD brackets.
+    /// The 2D overlays of the cars, drawn before the meshes: the traffic's contact shadows on the
+    /// road, the brake light's spill (the body covers its inner part) and the lead car's FSD
+    /// brackets.
     fn draw_car_overlays(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        for (i, u) in self.traffic.users.iter().enumerate() {
+            let Some((m, level, fade)) = self.traffic_pose(f, i) else {
+                continue;
+            };
+            let dims = self.models[u.kind.index()].dims;
+            let (a, b) = (0.5 * dims[0] * SHADOW_SCALE[0], 0.5 * dims[1] * SHADOW_SCALE[1]);
+            let mut pts = [Vec2::ZERO; 16];
+            let mut ok = true;
+            for (k, slot) in pts.iter_mut().enumerate() {
+                let t = core::f32::consts::TAU * k as f32 / 16.0;
+                match f.cam.project(transform(&m, vec3(a * t.cos(), 0.0, b * t.sin()))) {
+                    Some(q) => *slot = q,
+                    None => ok = false,
+                }
+            }
+            if ok {
+                let width_px = (pts[0] - pts[8]).length();
+                p.glow(
+                    &Shape::Polygon { points: &pts },
+                    pal.roles.oled_black.fade(SHADOW_ALPHA * fade * level.min(1.0)),
+                    Glow {
+                        sigma: (0.12 * width_px).clamp(1.5, 10.0),
+                        intensity: 1.0,
+                        fill_inside: true,
+                    },
+                );
+            }
+        }
         let lamp = self.lamps.value().clamp(0.0, 1.0);
         if lamp > 0.02 {
             let m = self.ego_pose(f);
