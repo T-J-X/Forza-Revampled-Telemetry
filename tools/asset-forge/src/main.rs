@@ -36,6 +36,7 @@ const SETS: &[&str] = &[
     "fonts",
     "logos",
     "comfy",
+    "tesla_adas",
     "gt7_hood_pro",
     "retro_cyber",
     "bosch_ddu",

@@ -124,5 +124,10 @@
   "scifi/holo_grid": "046a3aa5e2f0ec15",
   "scifi/masks": "01cf4162ae71c374",
   "scifi/reticles": "f966c2659714e404",
-  "scifi/warp": "b188da6dbd6c981b"
+  "scifi/warp": "b188da6dbd6c981b",
+  "tesla_adas/asphalt": "5692e371e1f8c435",
+  "tesla_adas/car_sprites": "8efe4da56f5629fc",
+  "tesla_adas/horizon_haze": "b3be181c532e8761",
+  "tesla_adas/led_caps": "95a5806f961ebaae",
+  "tesla_adas/underglow_pools": "153d3fb9d451ba98"
 }
