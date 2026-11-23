@@ -32,6 +32,10 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
    - For Liquid Glass, fluid, abstract or sci-fi designs, plan the bespoke assets now.
    - Run `design:design-critique` on the frames, and iterate until it clears the bar above.
 2. **Bespoke assets** (Blender and ComfyUI via `cargo run -p asset-forge`).
+   - Local tools on this machine (write them as `%USERPROFILE%` paths in any repo file):
+     - Blender 5.3: `%USERPROFILE%DocumentsDash_Toolslender-5.3.0-windows-x64`
+     - ComfyUI portable: `%USERPROFILE%DocumentsDash_ToolsComfyUI_windows_portable`
+     - Figma Desktop with the `figma-desktop` MCP, when it is open (otherwise use the HTML board).
    - Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
    - Outputs go to `assets/clusters/<snake_name>/`, with a row in `assets/clusters/<snake_name>/ASSETS.md`.
    - "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.
