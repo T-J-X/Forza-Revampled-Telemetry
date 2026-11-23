@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! cargo run --release -p asset-forge -- doctor
-//! cargo run --release -p asset-forge -- build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy] [--force] [--only <job>]
+//! cargo run --release -p asset-forge -- build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>]
 //! cargo run --release -p asset-forge -- sheet      # rewrite assets/contact-sheet.html and ASSETS.md
 //! ```
 //! `build` is idempotent: a job is skipped when its fingerprint (recipe source, parameters,
@@ -37,6 +37,8 @@ const SETS: &[&str] = &[
     "logos",
     "comfy",
     "tesla_adas",
+    "gt7_hood_pro",
+    "retro_cyber",
 ];
 
 fn main() -> ExitCode {
@@ -91,7 +93,7 @@ fn run(args: &[String]) -> Result<()> {
             sheet::write(&paths, &ledger)
         }
         _ => Err(ForgeError::Usage(
-            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy] [--force] [--only <job>] | sheet".into(),
+            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|gt7_hood_pro] [--force] [--only <job>] | sheet".into(),
         )),
     }
 }

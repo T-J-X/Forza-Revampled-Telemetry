@@ -40,19 +40,21 @@ One chat per cluster, at most 6 at once, in this order: the pilot, then the othe
 
 The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and marks the row after it `next`. A cluster chat sets only its own row to ✅ in its branch.
 
+**Hold (2026-11-23):** the Liquid Glass family rows (8 VisionSpatialGlass, 30 VernierLoupe, 37 DichroicLouvre, 43 LumenEtch, 48 FibreOpticCorona) wait until the kit's Liquid Glass optics upgrade (smooth-union SDF morphing, lensing of layers under the glass, dispersion, a moving specular light) is merged. The LiquidGlass pilot is then reworked on it to a clean pass. Skip held rows when filling slots.
+
 | Order | Theme | Wave | Family | View | Effort | Status |
 |---|---|---|---|---|---|---|
 | 1 | ★ `LiquidGlass` | pilot | Liquid Glass | cockpit+hood | xhigh | ✅ |
-| 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ◐ |
+| 2 | ★ `Gt7HoodPro` | pattern-setter | Modern Digital 2027 | hood | high | ✅ |
 | 3 | ★ `PorscheAnalog` | pattern-setter | Classic Analog | cockpit | high | ◐ |
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
-| 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ✅ |
-| 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ◐ |
-| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | next |
+| 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
+| 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ✅ |
+| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
 | 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | high | ☐ |
-| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
-| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
-| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
+| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
+| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ◐ |
+| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | next |
 | 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
@@ -106,7 +108,7 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 |---|---|---|---|---|---|---|---|---|
 | 1 | ★ LiquidGlass | [`liquid_glass`](../../../crates/fh6-clusters/src/clusters/liquid_glass/) | rebuild | Liquid Glass | cockpit+hood | 1 | `mockups/LiquidGlass/index.html` | ✅ |
 | 2 | VisionSpatialGlass | [`vision_spatial_glass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | rebuild | Liquid Glass | cockpit | 8 | `mockups/VisionSpatialGlass/index.html` | ☐ |
-| 3 | ★ Gt7HoodPro | [`gt7_hood_pro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | rebuild | Modern Digital 2027 | hood | 2 | `mockups/Gt7HoodPro/index.html` | next |
+| 3 | ★ Gt7HoodPro | [`gt7_hood_pro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | rebuild | Modern Digital 2027 | hood | 2 | Penpot `07 · Gt7HoodPro` (`6fe75c5e-bb22-8084-8008-fd908bb325c8`) · `mockups/Gt7HoodPro/index.html` | ✅ |
 | 4 | AmgMbuxSuperscreen | [`amg_mbux_superscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) | rebuild | Modern Digital 2027 | cockpit | 9 | `mockups/AmgMbuxSuperscreen/index.html` | ☐ |
 | 5 | DriftGlass | [`drift_glass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | rebuild | Modern Digital 2027 | cockpit | 10 | `mockups/DriftGlass/index.html` | ☐ |
 | 6 | GlyphDotMatrix | [`glyph_dot_matrix`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/) | rebuild | Modern Digital 2027 | cockpit | 11 | `mockups/GlyphDotMatrix/index.html` | ☐ |
@@ -118,11 +120,11 @@ On 2026-11-23 TJX switched the design tool from Figma to **Penpot** (unlimited p
 | 12 | ★ BoschDdu | [`bosch_ddu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | rebuild | Race Dash | cockpit | 4 | `mockups/BoschDdu/index.html` | next |
 | 13 | ValkyrieLmp1 | [`valkyrie_lmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | rebuild | Race Dash | cockpit+hood | 16 | `mockups/ValkyrieLmp1/index.html` | ☐ |
 | 14 | Gt7ModularTripod | [`gt7_modular_tripod`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/) | rebuild | Race Dash | cockpit+hood | 17 | `mockups/Gt7ModularTripod/index.html` | ☐ |
-| 15 | ★ TeslaAdas | [`tesla_adas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | rebuild | ADAS & HUD | cockpit+hood | 5 | `mockups/TeslaAdas/index.html` (Penpot page not created: HTML board fallback) | ✅ |
+| 15 | ★ TeslaAdas | [`tesla_adas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | rebuild | ADAS & HUD | cockpit+hood | 5 | `mockups/TeslaAdas/index.html` | ☐ |
 | 16 | WindshieldHud | [`windshield_hud`](../../../crates/fh6-clusters/src/clusters/windshield_hud/) | rebuild | ADAS & HUD | raised HUD | 18 | `mockups/WindshieldHud/index.html` | ☐ |
 | 17 | ArNavWayfinder | [`ar_nav_wayfinder`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/) | rebuild | ADAS & HUD | cockpit+hood | 20 | `mockups/ArNavWayfinder/index.html` | ☐ |
 | 18 | F35HelmetHmd | [`f35_helmet_hmd`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/) | rebuild | ADAS & HUD | cockpit+hood | 19 | `mockups/F35HelmetHmd/index.html` | ☐ |
-| 19 | ★ RetroCyber | [`retro_cyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | rebuild | Sci-Fi | cockpit+hood | 6 | `mockups/RetroCyber/index.html` | ☐ |
+| 19 | ★ RetroCyber | [`retro_cyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | rebuild | Sci-Fi | cockpit+hood | 6 | Penpot `07 · RetroCyber` (`6fe75c5e-bb22-8084-8008-fd924684ddca`) · `mockups/RetroCyber/index.html` | ✅ |
 | 20 | SynthwaveOutrun | [`synthwave_outrun`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/) | rebuild | Sci-Fi | cockpit+hood | 21 | `mockups/SynthwaveOutrun/index.html` | ☐ |
 | 21 | EvaBioSync | [`eva_bio_sync`](../../../crates/fh6-clusters/src/clusters/eva_bio_sync/) | rebuild | Sci-Fi | cockpit | 22 | `mockups/EvaBioSync/index.html` | ☐ |
 | 22 | ChronoEventHorizon | [`chrono_event_horizon`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/) | rebuild | Sci-Fi | cockpit | 27 | `mockups/ChronoEventHorizon/index.html` | ☐ |

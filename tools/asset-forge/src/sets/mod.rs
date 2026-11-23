@@ -24,6 +24,8 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "fonts" => fonts::build(ctx),
         "comfy" => comfyset::build(ctx),
         "tesla_adas" => crate::recipes::tesla_adas::build(ctx),
+        "gt7_hood_pro" => crate::recipes::gt7_hood_pro::build(ctx),
+        "retro_cyber" => crate::recipes::retro_cyber::build(ctx),
         _ => Ok(()),
     }
 }
