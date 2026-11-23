@@ -39,6 +39,7 @@ Seven Design Council directors drafted one family each (art direction, signature
 One chat per cluster, at most 6 at once, in this order: the pilot, then the other six pattern-setters (so every family's language and helpers are proven before its siblings), then the remaining 22 rebuilds grouped by the helpers they reuse, then the 19 new concepts alternating families.
 
 The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and marks the row after it `next`. A cluster chat sets only its own row to ✅ in its branch.
+
 **Hold (2026-11-23):** the Liquid Glass family rows (8 VisionSpatialGlass, 30 VernierLoupe, 37 DichroicLouvre, 43 LumenEtch, 48 FibreOpticCorona) wait until the kit's Liquid Glass optics upgrade (smooth-union SDF morphing, lensing of layers under the glass, dispersion, a moving specular light) is merged. The LiquidGlass pilot is then reworked on it to a clean pass. Skip held rows when filling slots.
 
 | Order | Theme | Wave | Family | View | Effort | Status |
