@@ -25,7 +25,7 @@ If a skill doesn't load on its own, type `/<skill-name>`.
 | MCP | Use for | Don't use for |
 |---|---|---|
 | **context7** (`.mcp.json`) | Crate docs before first use of an API: `windows` 0.58, `tiny-skia` 0.11, `ab_glyph`, `ttf-parser`, `serde`/`serde_json`, `arc-swap`, `png`, `thiserror` | Design decisions |
-| **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/figma_tokens.json`, and PNG/SVG checks with `export_shape` (`docs/design/PENPOT.md`) | Importing images from a local path (the hosted MCP can't; TJX drags them in), or putting the MCP key in any file or in `.mcp.json` |
+| **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/figma_tokens.json`, PNG/SVG checks with `export_shape`, and importing committed, pushed PNGs with `penpot.uploadMediaUrl` from this repo's raw GitHub URL pinned to a commit (`docs/design/PENPOT.md`) | Importing from a local path or `localhost` (blocked; only uncommitted renders need TJX to drag them in), or putting the MCP key in any file or in `.mcp.json` |
 | **Figma** (legacy) | Reading the legacy master `0zOEwnJ8dEj1kQ7QwPGEH0` (`docs/design/FIGMA.md`) | Any write: the Starter plan's MCP cap and the View seat block it |
 | **Built-in browser** | Opening `mockups/index.html` to inspect the 4K exports | Anything that needs a sign-in |
 

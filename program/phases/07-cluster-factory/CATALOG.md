@@ -48,48 +48,48 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
 | 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ✅ |
 | 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ◐ |
-| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
-| 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | medium | next |
-| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
-| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
-| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
-| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | medium | ☐ |
-| 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | medium | ☐ |
-| 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | medium | ☐ |
-| 15 | `KoenigseggGyro` | rebuild | Classic Analog | cockpit | medium | ☐ |
-| 16 | `ValkyrieLmp1` | rebuild | Race Dash | cockpit+hood | medium | ☐ |
-| 17 | `Gt7ModularTripod` | rebuild | Race Dash | cockpit+hood | medium | ☐ |
-| 18 | `WindshieldHud` | rebuild | ADAS & HUD | raised HUD | medium | ☐ |
-| 19 | `F35HelmetHmd` | rebuild | ADAS & HUD | cockpit+hood | medium | ☐ |
-| 20 | `ArNavWayfinder` | rebuild | ADAS & HUD | cockpit+hood | medium | ☐ |
-| 21 | `SynthwaveOutrun` | rebuild | Sci-Fi | cockpit+hood | medium | ☐ |
-| 22 | `EvaBioSync` | rebuild | Sci-Fi | cockpit | medium | ☐ |
-| 23 | `NeuralCyberSynapse` | rebuild | Sci-Fi | cockpit | medium | ☐ |
-| 24 | `ShibuyaChromaticPrisma` | rebuild | Sci-Fi | cockpit | medium | ☐ |
-| 25 | `AeroPlasmaBlade` | rebuild | Sci-Fi | hood | medium | ☐ |
-| 26 | `SolarisWarpCore` | rebuild | Sci-Fi | cockpit | medium | ☐ |
-| 27 | `ChronoEventHorizon` | rebuild | Sci-Fi | cockpit | medium | ☐ |
-| 28 | `CymaticResonanceField` | rebuild | Fluid / Generative | cockpit+hood | medium | ☐ |
-| 29 | `ChronoMultiverse` | rebuild | Fluid / Generative | cockpit+hood | medium | ☐ |
-| 30 | `VernierLoupe` | new concept | Liquid Glass | cockpit+hood | medium | ☐ |
-| 31 | `ApertureNine` | new concept | Modern Digital 2027 | cockpit | medium | ☐ |
-| 32 | `RattrapanteSector` | new concept | Classic Analog | cockpit+hood | medium | ☐ |
-| 33 | `RackFocus` | new concept | Race Dash | cockpit+hood | medium | ☐ |
-| 34 | `GeodesicWell` | new concept | ADAS & HUD | cockpit+hood | medium | ☐ |
-| 35 | `StarSailOrigami` | new concept | Sci-Fi | cockpit+hood | medium | ☐ |
-| 36 | `IsochromaticLoadPath` | new concept | Fluid / Generative | cockpit | medium | ☐ |
-| 37 | `DichroicLouvre` | new concept | Liquid Glass | cockpit | medium | ☐ |
-| 38 | `SapphireMystery` | new concept | Classic Analog | cockpit | medium | ☐ |
-| 39 | `AeroSmokeTunnel` | new concept | Modern Digital 2027 | cockpit | medium | ☐ |
-| 40 | `Lightpainter` | new concept | ADAS & HUD | cockpit+hood | medium | ☐ |
-| 41 | `AuroraVeil` | new concept | Sci-Fi | cockpit | medium | ☐ |
-| 42 | `AbyssalShearBloom` | new concept | Fluid / Generative | cockpit | medium | ☐ |
-| 43 | `LumenEtch` | new concept | Liquid Glass | cockpit | medium | ☐ |
-| 44 | `BionicSpaceframe` | new concept | Race Dash | cockpit | medium | ☐ |
-| 45 | `TreadSeismograph` | new concept | ADAS & HUD | cockpit+hood | medium | ☐ |
-| 46 | `ArcLadderCascade` | new concept | Sci-Fi | cockpit | medium | ☐ |
-| 47 | `HarmonographDrive` | new concept | Fluid / Generative | cockpit | medium | ☐ |
-| 48 | `FibreOpticCorona` | new concept | Liquid Glass | cockpit | medium | ☐ |
+| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | next |
+| 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | high | ☐ |
+| 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
+| 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
+| 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | high | ☐ |
+| 12 | `LfaV10Nurburgring` | rebuild | Classic Analog | cockpit | high | ☐ |
+| 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
+| 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
+| 15 | `KoenigseggGyro` | rebuild | Classic Analog | cockpit | high | ☐ |
+| 16 | `ValkyrieLmp1` | rebuild | Race Dash | cockpit+hood | high | ☐ |
+| 17 | `Gt7ModularTripod` | rebuild | Race Dash | cockpit+hood | high | ☐ |
+| 18 | `WindshieldHud` | rebuild | ADAS & HUD | raised HUD | high | ☐ |
+| 19 | `F35HelmetHmd` | rebuild | ADAS & HUD | cockpit+hood | high | ☐ |
+| 20 | `ArNavWayfinder` | rebuild | ADAS & HUD | cockpit+hood | high | ☐ |
+| 21 | `SynthwaveOutrun` | rebuild | Sci-Fi | cockpit+hood | high | ☐ |
+| 22 | `EvaBioSync` | rebuild | Sci-Fi | cockpit | high | ☐ |
+| 23 | `NeuralCyberSynapse` | rebuild | Sci-Fi | cockpit | high | ☐ |
+| 24 | `ShibuyaChromaticPrisma` | rebuild | Sci-Fi | cockpit | high | ☐ |
+| 25 | `AeroPlasmaBlade` | rebuild | Sci-Fi | hood | high | ☐ |
+| 26 | `SolarisWarpCore` | rebuild | Sci-Fi | cockpit | high | ☐ |
+| 27 | `ChronoEventHorizon` | rebuild | Sci-Fi | cockpit | high | ☐ |
+| 28 | `CymaticResonanceField` | rebuild | Fluid / Generative | cockpit+hood | high | ☐ |
+| 29 | `ChronoMultiverse` | rebuild | Fluid / Generative | cockpit+hood | high | ☐ |
+| 30 | `VernierLoupe` | new concept | Liquid Glass | cockpit+hood | high | ☐ |
+| 31 | `ApertureNine` | new concept | Modern Digital 2027 | cockpit | high | ☐ |
+| 32 | `RattrapanteSector` | new concept | Classic Analog | cockpit+hood | high | ☐ |
+| 33 | `RackFocus` | new concept | Race Dash | cockpit+hood | high | ☐ |
+| 34 | `GeodesicWell` | new concept | ADAS & HUD | cockpit+hood | high | ☐ |
+| 35 | `StarSailOrigami` | new concept | Sci-Fi | cockpit+hood | high | ☐ |
+| 36 | `IsochromaticLoadPath` | new concept | Fluid / Generative | cockpit | high | ☐ |
+| 37 | `DichroicLouvre` | new concept | Liquid Glass | cockpit | high | ☐ |
+| 38 | `SapphireMystery` | new concept | Classic Analog | cockpit | high | ☐ |
+| 39 | `AeroSmokeTunnel` | new concept | Modern Digital 2027 | cockpit | high | ☐ |
+| 40 | `Lightpainter` | new concept | ADAS & HUD | cockpit+hood | high | ☐ |
+| 41 | `AuroraVeil` | new concept | Sci-Fi | cockpit | high | ☐ |
+| 42 | `AbyssalShearBloom` | new concept | Fluid / Generative | cockpit | high | ☐ |
+| 43 | `LumenEtch` | new concept | Liquid Glass | cockpit | high | ☐ |
+| 44 | `BionicSpaceframe` | new concept | Race Dash | cockpit | high | ☐ |
+| 45 | `TreadSeismograph` | new concept | ADAS & HUD | cockpit+hood | high | ☐ |
+| 46 | `ArcLadderCascade` | new concept | Sci-Fi | cockpit | high | ☐ |
+| 47 | `HarmonographDrive` | new concept | Fluid / Generative | cockpit | high | ☐ |
+| 48 | `FibreOpticCorona` | new concept | Liquid Glass | cockpit | high | ☐ |
 
 The start prompt for row *n* is: *"You are the cluster chat for `<Name>` (catalog row `<n>`). Read `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."*
 

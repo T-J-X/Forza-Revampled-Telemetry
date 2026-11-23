@@ -16,7 +16,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 | 4 | Engine: a working exe | 2 | 3 | xhigh | ✅ merged 2026-11-21 |
 | 5 | GPU render kit (wgpu) | 4 | 3, 6 | xhigh | ✅ merged 2026-11-22 |
 | 6 | Assets, logos & fonts | 3 | 5 | high | ✅ merged 2026-11-22 |
-| 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | setup high; pattern-setters (★) high; other clusters medium (Opus 5.5 only, set 2026-11-23) | ◐ setup merged 2026-11-23; cluster chats running |
+| 7 | Cluster factory: setup chat, then one chat per cluster | 3, 5, 6 | 8, 9 | setup high; pattern-setters (★) high; every cluster high (Opus 5.5 only; TJX raised the others from medium on 2026-11-23) | ◐ setup merged 2026-11-23; cluster chats running |
 | 8 | Cockpit fit: dash blocker, camera, seat, FOV | 4, 5 | 7, 9 | high | ✅ merged 2026-11-22 |
 | 9 | Liquid Glass OSD | 5, 3 | 7, 8 | high | ✅ merged 2026-11-23 |
 | 10 | Configurator (`index.html`) & release | 7 (pattern-setters at least), 8, 9 | the rest of 7 | high | ☐ |
