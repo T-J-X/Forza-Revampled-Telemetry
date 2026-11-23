@@ -280,6 +280,8 @@ struct Face {
     cap_ratio: f32,
     glyphs: HashMap<char, Glyph>,
     kerning: HashMap<(u16, u16), f32>,
+    /// Whether [`PRELOAD`] has been rasterised (folder loads defer it until the face is used).
+    preloaded: bool,
 }
 
 /// One glyph quad, ready for the painter.
@@ -420,8 +422,85 @@ pub struct Fonts {
     pub(crate) atlas: Atlas,
 }
 
-/// Most faces that can be loaded.
-pub const MAX_FACES: usize = 64;
+/// Most faces that can be loaded (the font pack is about 80 with its variable instances, plus
+/// the fallback and user fonts).
+pub const MAX_FACES: usize = 160;
+
+/// The `wght` instances loaded from each variable font of the pack: the weights the token roles
+/// and the user font choice ask for.
+const PACK_WEIGHTS: [u16; 4] = [300, 400, 500, 600];
+
+/// `fonts.json` of the font pack (asset-forge): only the fields the loader needs.
+#[derive(Debug, serde::Deserialize)]
+struct PackManifest {
+    families: Vec<PackFamily>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PackFamily {
+    /// The family name every face of it gets ("Saira Condensed").
+    family: String,
+    /// The family folder, relative to `assets/` (`fonts/saira-condensed`).
+    dir: String,
+    files: Vec<PackFile>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PackFile {
+    file: String,
+    #[serde(default)]
+    variable: bool,
+    #[serde(default)]
+    axes: Vec<PackAxis>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PackAxis {
+    tag: String,
+    min: f32,
+    max: f32,
+}
+
+fn is_font_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf"))
+}
+
+/// One face to load from a font folder: the file, the `wght` instance of a variable font and the
+/// family name when a manifest gives it.
+type FaceSource = (std::path::PathBuf, Option<u16>, Option<String>);
+
+/// The faces of a pack manifest, in manifest order. Only the last component of each manifest
+/// path is used, so a manifest cannot point outside `dir`.
+fn manifest_faces(dir: &Path, manifest: &PackManifest) -> Vec<FaceSource> {
+    let mut out = Vec::new();
+    for family in &manifest.families {
+        let Some(folder) = Path::new(&family.dir).file_name() else {
+            continue;
+        };
+        for file in &family.files {
+            let Some(name) = Path::new(&file.file).file_name() else {
+                continue;
+            };
+            let path = dir.join(folder).join(name);
+            match file.axes.iter().find(|a| a.tag == "wght").filter(|_| file.variable) {
+                Some(axis) => {
+                    let mut last = None;
+                    for w in PACK_WEIGHTS {
+                        let w = f32::from(w).clamp(axis.min.min(axis.max), axis.max.max(axis.min)) as u16;
+                        if last != Some(w) {
+                            out.push((path.clone(), Some(w), Some(family.family.clone())));
+                            last = Some(w);
+                        }
+                    }
+                }
+                None => out.push((path, None, Some(family.family.clone()))),
+            }
+        }
+    }
+    out
+}
 
 impl Fonts {
     /// The embedded Noto Sans fallback, assigned to every role.
@@ -443,6 +522,7 @@ impl Fonts {
                 weight: 400,
                 italic: false,
             },
+            true,
         )?;
         Ok(fonts)
     }
@@ -453,14 +533,34 @@ impl Fonts {
     /// # Errors
     /// [`FontError`] when the bytes are not a font or too many faces are loaded.
     pub fn load(&mut self, bytes: Vec<u8>, weight: Option<u16>) -> Result<FontId, FontError> {
+        self.load_with(bytes, weight, true, None)
+    }
+
+    /// [`Fonts::load`], with the glyph preload now (`preload`) or deferred until the face is
+    /// first used (a role, [`Fonts::ensure_preloaded`], or its first drawn text).
+    ///
+    /// `family` names the family when the caller knows it (the pack manifest). Otherwise the
+    /// name table decides: the typographic family (name ID 16), which is the same for every
+    /// weight, before the legacy family (name ID 1), which carries the weight for all but the
+    /// regular and bold files ("Saira Condensed Thin").
+    fn load_with(
+        &mut self,
+        bytes: Vec<u8>,
+        weight: Option<u16>,
+        preload: bool,
+        family: Option<&str>,
+    ) -> Result<FontId, FontError> {
         let face = ttf_parser::Face::parse(&bytes, 0).map_err(|e| FontError::Parse(e.to_string()))?;
-        let family = face
-            .names()
-            .into_iter()
-            .filter(|n| {
-                n.name_id == ttf_parser::name_id::TYPOGRAPHIC_FAMILY || n.name_id == ttf_parser::name_id::FAMILY
-            })
-            .find_map(|n| n.to_string())
+        let named = |id: u16| {
+            face.names()
+                .into_iter()
+                .filter(|n| n.name_id == id)
+                .find_map(|n| n.to_string())
+        };
+        let family = family
+            .map(str::to_owned)
+            .or_else(|| named(ttf_parser::name_id::TYPOGRAPHIC_FAMILY))
+            .or_else(|| named(ttf_parser::name_id::FAMILY))
             .unwrap_or_else(|| "Unknown".into());
         let italic = face.is_italic();
         let natural = face.weight().to_number();
@@ -479,33 +579,59 @@ impl Fonts {
                 weight: weight.filter(|_| wght.is_some()).unwrap_or(natural),
                 italic,
             },
+            preload,
         )
     }
 
-    /// Loads every `.ttf` / `.otf` in `dir` (Phase 6 pack, or the user `fonts/` folder beside the
-    /// exe). Unreadable files are skipped with a warning. Returns the faces loaded.
+    /// Loads the fonts in `dir`: the font pack (`assets/fonts/`, one folder per family, listed
+    /// by its `fonts.json`) or a user `fonts/` folder beside the exe.
+    ///
+    /// - With a `fonts.json`, every listed file is loaded; a variable font gets one face per
+    ///   weight in 300/400/500/600 that its `wght` axis covers.
+    /// - Without one, every `.ttf` / `.otf` in `dir` and in its direct subfolders is loaded.
+    ///
+    /// The glyph preload of these faces is deferred until a face is used (dozens of faces would
+    /// otherwise each rasterise their preload set at start-up). Unreadable files are skipped
+    /// with a warning. Returns the faces loaded.
     ///
     /// # Errors
-    /// [`FontError::Io`] when the directory cannot be listed.
+    /// [`FontError::Io`] when `dir` itself cannot be listed.
     pub fn load_dir(&mut self, dir: &Path) -> Result<Vec<FontId>, FontError> {
         let entries = std::fs::read_dir(dir).map_err(|source| FontError::Io {
             path: dir.display().to_string(),
             source,
         })?;
-        let mut paths: Vec<_> = entries
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| {
-                p.extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf"))
-            })
-            .collect();
-        paths.sort();
+        let manifest = std::fs::read(dir.join("fonts.json")).ok().and_then(|bytes| {
+            serde_json::from_slice::<PackManifest>(&bytes)
+                .map_err(|err| tracing::warn!(dir = %dir.display(), error = %err, "fonts.json not readable; scanning"))
+                .ok()
+        });
+        let faces = match manifest {
+            Some(manifest) => manifest_faces(dir, &manifest),
+            None => {
+                let mut paths = Vec::new();
+                for path in entries.filter_map(Result::ok).map(|e| e.path()) {
+                    if path.is_dir() {
+                        match std::fs::read_dir(&path) {
+                            Ok(sub) => {
+                                paths.extend(sub.filter_map(Result::ok).map(|e| e.path()).filter(|p| is_font_file(p)));
+                            }
+                            Err(err) => {
+                                tracing::warn!(path = %path.display(), error = %err, "skipping font folder");
+                            }
+                        }
+                    } else if is_font_file(&path) {
+                        paths.push(path);
+                    }
+                }
+                paths.sort();
+                paths.into_iter().map(|p| (p, None, None)).collect()
+            }
+        };
         let mut loaded = Vec::new();
-        for path in paths {
+        for (path, weight, family) in faces {
             match std::fs::read(&path) {
-                Ok(bytes) => match self.load(bytes, None) {
+                Ok(bytes) => match self.load_with(bytes, weight, false, family.as_deref()) {
                     Ok(id) => loaded.push(id),
                     Err(err) => tracing::warn!(path = %path.display(), error = %err, "skipping font"),
                 },
@@ -515,12 +641,25 @@ impl Fonts {
         Ok(loaded)
     }
 
+    /// Rasterises the preload set of `font` if that has not happened yet. Roles do this when
+    /// they are assigned; call it for a face picked by [`Fonts::find`] (a user font choice) so
+    /// its first frame has every digit and letter.
+    pub fn ensure_preloaded(&mut self, font: FontId) {
+        if self.faces.get(usize::from(font.0)).is_some_and(|f| !f.preloaded) {
+            self.generate(font.0, PRELOAD.chars());
+            if let Some(face) = self.faces.get_mut(usize::from(font.0)) {
+                face.preloaded = true;
+            }
+        }
+    }
+
     fn add_face(
         &mut self,
         data: Cow<'static, [u8]>,
         index: u32,
         wght: Option<f32>,
         desc: FontDesc,
+        preload: bool,
     ) -> Result<FontId, FontError> {
         if self.faces.len() >= MAX_FACES {
             return Err(FontError::TooMany(MAX_FACES));
@@ -551,10 +690,13 @@ impl Fonts {
             wght,
             units_per_em: upm,
             cap_ratio,
-            glyphs: HashMap::with_capacity(160),
+            glyphs: HashMap::with_capacity(if preload { 160 } else { 0 }),
             kerning,
+            preloaded: false,
         });
-        self.generate(id.0, PRELOAD.chars());
+        if preload {
+            self.ensure_preloaded(id);
+        }
         Ok(id)
     }
 
@@ -564,10 +706,12 @@ impl Fonts {
         self.roles[role.index()]
     }
 
-    /// Assigns a face to a role (bind from tokens, or a user font choice).
+    /// Assigns a face to a role (bind from tokens, or a user font choice) and makes sure its
+    /// preload set is rasterised.
     pub fn set_role(&mut self, role: FontRole, font: FontId) {
         if usize::from(font.0) < self.faces.len() {
             self.roles[role.index()] = font;
+            self.ensure_preloaded(font);
         }
     }
 
@@ -612,6 +756,18 @@ impl Fonts {
     #[must_use]
     pub fn desc(&self, font: FontId) -> Option<&FontDesc> {
         self.faces.get(usize::from(font.0)).map(|f| &f.desc)
+    }
+
+    /// The distinct family names of the loaded faces, in load order (the OSD's font list).
+    #[must_use]
+    pub fn families(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for f in &self.faces {
+            if !out.iter().any(|n| n.eq_ignore_ascii_case(&f.desc.family)) {
+                out.push(f.desc.family.clone());
+            }
+        }
+        out
     }
 
     /// Number of loaded faces.
@@ -1020,7 +1176,33 @@ impl<F: Fn(f32, f32) -> Point> OutlineBuilder for ShapeBuilder<F> {
 
 /// Measures kerning for every pair of [`KERN_SET`] with rustybuzz: GPOS pair adjustments and
 /// the legacy `kern` table. Values are in em; zero pairs are not stored.
+///
+/// `rustybuzz::shape` compiles a shape plan on every call, which dominated the cost of loading
+/// a face (4,624 pairs). The two plans it would build are compiled once here instead: Latin
+/// for a pair with a letter, and no script for a pair of digits and punctuation, exactly what
+/// its script guess gives for [`KERN_SET`].
 fn measure_kerning(data: &[u8], index: u32, wght: Option<f32>) -> HashMap<(u16, u16), f32> {
+    let mut plans: Option<(rustybuzz::ShapePlan, rustybuzz::ShapePlan)> = None;
+    measure_kerning_with(data, index, wght, |face, buffer, has_letter| {
+        let (latin, common) = plans.get_or_insert_with(|| {
+            let ltr = rustybuzz::Direction::LeftToRight;
+            (
+                rustybuzz::ShapePlan::new(face, ltr, Some(rustybuzz::script::LATIN), None, &[]),
+                rustybuzz::ShapePlan::new(face, ltr, None, None, &[]),
+            )
+        });
+        rustybuzz::shape_with_plan(face, if has_letter { latin } else { common }, buffer)
+    })
+}
+
+/// The kerning loop over [`KERN_SET`]; `shape` shapes one two-character buffer and is told
+/// whether the pair contains a letter.
+fn measure_kerning_with(
+    data: &[u8],
+    index: u32,
+    wght: Option<f32>,
+    mut shape: impl FnMut(&rustybuzz::Face<'_>, rustybuzz::UnicodeBuffer, bool) -> rustybuzz::GlyphBuffer,
+) -> HashMap<(u16, u16), f32> {
     let mut out = HashMap::new();
     let Some(mut face) = rustybuzz::Face::from_slice(data, index) else {
         return out;
@@ -1047,7 +1229,8 @@ fn measure_kerning(data: &[u8], index: u32, wght: Option<f32>) -> HashMap<(u16, 
                 continue;
             };
             buffer.push_str(text);
-            let glyphs = rustybuzz::shape(&face, &[], buffer);
+            let has_letter = a.is_ascii_alphabetic() || b.is_ascii_alphabetic();
+            let glyphs = shape(&face, buffer, has_letter);
             let positions = glyphs.glyph_positions();
             let infos = glyphs.glyph_infos();
             if positions.len() == 2 && infos.first().map(|g| g.glyph_id as u16) == Some(ga.0) {
@@ -1070,6 +1253,163 @@ mod tests {
         Fonts::new().expect("embedded font loads")
     }
 
+    /// The pack file `rel` under `assets/fonts/`.
+    fn pack_font(rel: &str) -> Vec<u8> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/fonts")
+            .join(rel);
+        std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    }
+
+    #[test]
+    fn load_dir_reads_the_font_pack_with_a_deferred_preload() {
+        let mut f = fonts();
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
+        let uploads_before = f.atlas.dirty.len();
+        let loaded = f.load_dir(&dir).unwrap();
+        // 58 static files, plus 6 variable fonts at the weights their axes cover.
+        assert!(loaded.len() >= 58 + 6, "loaded {}", loaded.len());
+        assert!(loaded.len() < MAX_FACES);
+        assert_eq!(f.atlas.dirty.len(), uploads_before, "no glyph is rasterised at load");
+        assert_eq!(f.families().len(), 17, "{:?}", f.families());
+
+        // Every token role's family is there at (or next to) the weight the role asks for.
+        for (family, weight) in [
+            ("Saira Condensed", 600),
+            ("Titillium Web", 400),
+            ("Saira", 300),
+            ("Barlow Semi Condensed", 500),
+            ("Michroma", 400),
+            ("Chakra Petch", 500),
+            ("Exo 2", 500),
+            ("B612 Mono", 400),
+        ] {
+            let id = f
+                .find(family, weight, false)
+                .unwrap_or_else(|| panic!("{family} not loaded"));
+            let face = &f.faces[usize::from(id.0)];
+            assert!(
+                face.desc.weight.abs_diff(weight) <= 100,
+                "{family}: wanted {weight}, nearest is {}",
+                face.desc.weight
+            );
+            assert!(!face.preloaded && face.glyphs.is_empty(), "{family} is preloaded early");
+        }
+        // A variable font is one face per weight, not one default instance.
+        let (light, semibold) = (
+            f.find("Saira", 300, false).unwrap(),
+            f.find("Saira", 600, false).unwrap(),
+        );
+        assert_ne!(light, semibold);
+        assert_eq!(f.faces[usize::from(light.0)].desc.weight, 300);
+        assert_eq!(f.faces[usize::from(semibold.0)].desc.weight, 600);
+
+        // Using a face rasterises its preload set once.
+        f.set_role(FontRole::Display, semibold);
+        assert!(f.faces[usize::from(semibold.0)].preloaded);
+        let glyphs = f.faces[usize::from(semibold.0)].glyphs.len();
+        assert!(glyphs >= 60, "{glyphs} glyphs");
+        f.ensure_preloaded(semibold);
+        assert_eq!(f.faces[usize::from(semibold.0)].glyphs.len(), glyphs);
+        assert!(!f.faces[usize::from(light.0)].preloaded, "other faces stay deferred");
+    }
+
+    #[test]
+    fn a_font_without_a_manifest_takes_its_typographic_family() {
+        // A user drops single files in `fonts/`: every weight must land in one family, not in
+        // "Saira Condensed Thin" and friends (the legacy family name carries the weight).
+        let mut f = fonts();
+        let thin = f
+            .load(pack_font("saira-condensed/SairaCondensed-Thin.ttf"), None)
+            .unwrap();
+        let bold = f
+            .load(pack_font("saira-condensed/SairaCondensed-Bold.ttf"), None)
+            .unwrap();
+        let var = f.load(pack_font("saira/Saira[wdth,wght].ttf"), Some(500)).unwrap();
+        assert_eq!(f.faces[usize::from(thin.0)].desc.family, "Saira Condensed");
+        assert_eq!(f.faces[usize::from(bold.0)].desc.family, "Saira Condensed");
+        assert_eq!(f.faces[usize::from(var.0)].desc.family, "Saira");
+        assert_eq!(f.find("Saira Condensed", 700, false), Some(bold));
+        assert_eq!(f.families(), ["Noto Sans", "Saira Condensed", "Saira"]);
+    }
+
+    #[test]
+    fn load_dir_without_a_manifest_scans_the_folder_and_its_subfolders() {
+        let root = std::env::temp_dir().join(format!("fh6_fonts_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("family")).unwrap();
+        std::fs::write(root.join("flat.ttf"), NOTO_SANS).unwrap();
+        std::fs::write(root.join("family/nested.TTF"), NOTO_SANS).unwrap();
+        std::fs::write(root.join("family/OFL.txt"), b"licence").unwrap();
+        std::fs::write(root.join("broken.otf"), b"not a font").unwrap();
+        let mut f = fonts();
+        let loaded = f.load_dir(&root).unwrap();
+        assert_eq!(
+            loaded.len(),
+            2,
+            "the flat file and the nested file; the broken one is skipped"
+        );
+        // An unreadable manifest falls back to the scan.
+        std::fs::write(root.join("fonts.json"), b"{ not json").unwrap();
+        assert_eq!(fonts().load_dir(&root).unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(matches!(fonts().load_dir(&root), Err(FontError::Io { .. })));
+    }
+
+    #[test]
+    fn a_manifest_cannot_point_outside_the_font_folder() {
+        let manifest: PackManifest = serde_json::from_str(
+            r#"{"families":[{"family":"Elsewhere","dir":"../../elsewhere","files":[
+                {"file":"..\\..\\secret.ttf"},
+                {"file":"sub/Var[wght].ttf","variable":true,"axes":[{"tag":"wght","min":400.0,"max":500.0}]}
+            ]}]}"#,
+        )
+        .unwrap();
+        let dir = Path::new("fonts");
+        let faces = manifest_faces(dir, &manifest);
+        for (path, _, family) in &faces {
+            assert_eq!(family.as_deref(), Some("Elsewhere"));
+            assert!(path.starts_with(dir.join("elsewhere")), "{}", path.display());
+            assert_eq!(path.components().count(), 3, "{}", path.display());
+        }
+        // The variable file: 300 clamps to 400, then 400 (same), 500, and 600 clamps to 500.
+        let weights: Vec<_> = faces.iter().filter_map(|(_, w, _)| *w).collect();
+        assert_eq!(weights, [400, 500]);
+    }
+
+    #[test]
+    fn cached_shape_plans_measure_the_same_kerning_as_per_pair_shaping() {
+        // The reference: `rustybuzz::shape`, which guesses the script and compiles a plan per pair.
+        let reference = |data: &[u8], wght| {
+            measure_kerning_with(data, 0, wght, |face, buffer, _| rustybuzz::shape(face, &[], buffer))
+        };
+        // The embedded fallback, a GPOS-kerned static face, a variable face at two weights and
+        // a monospaced face.
+        let saira = pack_font("saira-condensed/SairaCondensed-SemiBold.ttf");
+        let exo = pack_font("exo-2/Exo2[wght].ttf");
+        let mono = pack_font("b612-mono/B612Mono-Regular.ttf");
+        let cases: [(&str, &[u8], Option<f32>); 5] = [
+            ("Noto Sans", NOTO_SANS, None),
+            ("Saira Condensed", &saira, None),
+            ("Exo 2 at 300", &exo, Some(300.0)),
+            ("Exo 2 at 600", &exo, Some(600.0)),
+            ("B612 Mono", &mono, None),
+        ];
+        let mut kerned_faces = 0;
+        for (name, data, wght) in cases {
+            let fast = measure_kerning(data, 0, wght);
+            let slow = reference(data, wght);
+            assert_eq!(fast.len(), slow.len(), "{name}: pair count");
+            for (pair, value) in &slow {
+                assert_eq!(fast.get(pair), Some(value), "{name}: pair {pair:?}");
+            }
+            if !fast.is_empty() {
+                kerned_faces += 1;
+            }
+        }
+        assert!(kerned_faces >= 3, "the test must cover faces that really kern");
+    }
+
     #[test]
     fn preload_generates_digits_and_letters() {
         let f = fonts();
@@ -1077,6 +1417,16 @@ mod tests {
             assert!(f.glyph(0, ch).is_some(), "{ch} generated");
         }
         assert!(f.atlas.dirty.len() > 50, "atlas has uploads pending");
+    }
+
+    #[test]
+    fn families_lists_each_family_once() {
+        let f = fonts();
+        let fams = f.families();
+        assert!(!fams.is_empty());
+        let first = &fams[0];
+        assert_eq!(fams.iter().filter(|n| n.eq_ignore_ascii_case(first)).count(), 1);
+        assert!(f.find(first, 400, false).is_some());
     }
 
     #[test]

@@ -14,7 +14,8 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
 | 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
 | 8 Cockpit fit | ✅ 2026-11-22 (branch `claude/phase-8-cockpit-fit-7daeb6`, see `program/phases/08-cockpit-fit/HANDOVER.md`) |
-| 7, 9–11 | ☐ waiting on dependencies (9 started 2026-11-22) |
+| 9 Controller-first Liquid Glass OSD | ✅ 2026-11-23 (branch `claude/phase-9-osd-1fcc97`, merged with Phases 6 and 8; see `program/phases/09-osd/HANDOVER.md`) |
+| 7, 10, 11 | ☐ waiting on dependencies (7 setup started) |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -35,6 +36,23 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **Visibility:** nothing hides the overlay in menus or out of focus. (Phase 4)
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
+
+## State of the code (after Phase 9, 2026-11-23)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings (the `tools/web-preview` manifest note, as on main) |
+| `cargo test --workspace` | ✅ 366 passed, 0 failed, 1 ignored |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
+
+What Phase 9 added:
+- **`crates/fh6-osd`:** the controller-first Liquid Glass OSD (spec `docs/design/OSD.md`): 5-tab row model, navigation with hold-to-repeat, on-screen keyboard, remapper, auto-pause behind `KeyboardInjector`, debounced saver, live dyno, carousel thumbnails, and the `CockpitFit` seam.
+- **App wiring:** open and close edges in the render loop, the live view over the paused game, `PatcherFit` on Phase 8's camera patcher, nine blocker rows with a live blocker preview, per-view cluster height, and a "profile overrides" note for per-car settings.
+- **Kit:** `Kit::set_underlay`, `Painter::set_backdrops(false)`, and font-pack loading from `assets/fonts/fonts.json` (variable-font instances, deferred glyph preload, cached kerning plans).
+- **Input:** press/release latches, the hold toggle suspended while the OSD has focus, `--pad-script` and `--open-osd` for manual runs without a controller.
+- **Perf:** 1.26–1.32 ms GPU for the whole OSD at 4K (target 1.5); CPU p50 0.99 ms, p99 2.24 ms with the OSD open (defect 13). See `docs/perf/osd.md`.
 
 ## State of the code (after Phase 8, 2026-11-22)
 | Check | Result |
@@ -117,14 +135,17 @@ What exists:
 2. ~~Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`~~ Fixed in Phase 4; the whole workspace is clippy-clean.
 3. `FH6TelemetryData` has no `torque` field, so `GlyphDotMatrix` derives torque from power and RPM. Decide whether to add the field (check the packet layout first) or drop torque from the design.
 4. ~~50 compiler warnings~~ Fixed in Phase 4.
-8. Nine `TODO(phase-7)` comments in `fh6-clusters` (and one in `fh6-osd/src/render.rs`) mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
-9. The OSD is not drawn yet. The hold toggle (View 400 ms) and the tray's "Open OSD" only switch the live-view bypass on and off (Phase 9). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
+8. Nine `TODO(phase-7)` comments in `fh6-clusters` mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
+9. ~~The OSD is not drawn yet~~ Fixed in Phase 9 (`docs/design/OSD.md`). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
 10. Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).
 11. `fh6-gpu`'s `QuadRenderer` and `test_cluster` are no longer used by the app (only by `fh6-gpu`'s own tests); remove them when nothing needs a quad baseline.
 12. `Camera25` has no pitch; the Phase 3 ADAS chase eye (0, 3.4, −6.0) m with 8° pitch needs a pitch term before TeslaAdas is rebuilt (the eye itself is a public field).
 5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.
 6. `fh6-render::pool::PaintPool` is a cache stub with no real paint objects.
 7. `assets/*.png` duplicates `assets/textures/4k/`. Pick one location when `AssetCache` is wired up.
+13. OSD-open CPU per frame p99 is 2.24 ms (p50 0.99 ms; dash only 0.76 / 1.48 ms), measured before the merge. The OSD shows only while the game is paused, so racing frames are not affected; it shares the Phase 4/5 p99 levers (`docs/perf/osd.md`).
+14. Phase 9 review items not yet verified (found by the branch review, not reproduced): clearing the custom name may come back after a reload (the config migration restores the default name); a seat height set in the OSD may be reverted on reload when the file still has a legacy `CockpitOffsetY`; a face is marked preloaded even when the glyph atlas is full (its text then falls back to Noto Sans); the open-edge ESC judges "racing" from a packet up to 250 ms old. See `program/phases/09-osd/HANDOVER.md`.
+15. The pack fonts have no CJK glyphs; a custom name or font family in CJK draws as missing glyphs. The on-screen keyboard only types Latin, so only hand-edited configs hit it.
 
 ## Backlog (not yet scheduled)
 **Pre-05A: Liquid Glass OSD and cockpit optics**
@@ -146,7 +167,7 @@ What exists:
 
 **P7: launcher, remapper, Game Bar**
 - P7-1: `FH6_WheelDash.exe` (standalone, tray, process watcher) and `FH6_SteamLauncher.exe` (wraps the game launch with `--auto-exit`).
-- P7-2: hold-View remapper in OSD tab 3 (200 to 1000 ms in 50 ms steps). A tap under 200 ms passes through to the game. A/B/X/Y can never be selected.
+- ~~P7-2: hold-View remapper~~ Done in Phase 9 (Controls tab: OSD button remapper, hold time 200–1000 ms; A/B/X/Y never captured).
 - P7-3: Xbox Guide button (`XInputGetStateEx`, ordinal 100, `0x0400`) and a Game Bar companion over a loopback HTTP control server.
 
 **Phase 8: materials and shaders**
@@ -163,7 +184,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 - G1: a scan for forbidden patterns.
 - G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output.
 - G3: matrix integrity.
-- G4: OSD dispatch. A test exists (`crates/fh6-osd/tests/g4_dispatch.rs`).
+- G4: OSD dispatch. The v1 test (`g4_dispatch.rs`) went with the v1 OSD renderer in Phase 9; the OSD now draws the cluster through `fh6_clusters::registry`, covered by `fh6-osd` unit tests (`host`, `model`) and `preview-export`'s OSD states.
 - G5: robustness against NaN, Inf and zero-size inputs.
 
 ## Open questions for TJX
@@ -248,3 +269,19 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-22 | The OEM dome stays on the factory binnacle when the user changes the cluster height; it still follows the anchor and the cluster scale | The fit critique showed the dome rising into the windscreen at +170 px; the binnacle does not move. SCRIM_FIT §2 and §4 updated |
 | 2026-11-22 | Car profiles are an `Option` overlay (`car_profiles.json` v2); styles are not shipped per car | Missing keys inherit instead of collapsing to 0; profiles carry fit only |
 | 2026-11-22 | The camera patcher writes only while the game is closed and only when `CameraPatchAuto` is on or the OSD/configurator asks; the first backup is the original | Deploy guard and safe restore; a running game queues the change ("restart needed") |
+| 2026-11-22 | Phase 9: the OSD runs on the render thread (`fh6_osd::OsdHost`). Input arrives as press/release latches from the input thread; an edit lands in a working `AppConfig` (a new `Arc` per edit) and shows on that frame; a saver thread writes `config.json` 350 ms after the last edit; after close the working config is drawn until the watcher reloads an equal value (2 s at most) | Every input shows on the next frame, with no file I/O and no lock on the render thread |
+| 2026-11-22 | The OSD dims the game through `Kit::set_underlay` (0.62 black, applied in the resolve pass) plus feathered black pools; it does not blur the game | The overlay cannot blur a game it does not capture; a full-screen dim shape cost 0.9 ms GPU at 4K, the underlay is free |
+| 2026-11-22 | `Painter::set_backdrops(false)` for the OSD carousel thumbnails | Each glass backdrop snapshots and blurs the 4K work rectangle (1.2 ms); thumbnails keep tint, rims and sheen without it |
+| 2026-11-22 | Auto-pause sits behind `fh6_osd::KeyboardInjector` (`fh6_win::keyboard::SendInputKeyboard`, scan-code ESC). ESC goes out on the open edge only while racing, with the game in front and `OsdAutoPauseGame` on; on close it resumes 250 ms later only if this code paused the game and it is still paused | Never an ESC in a menu or over another window; testable with a mock |
+| 2026-11-22 | OSD config keys kept in `extra` (hot-reloaded, unknown to older builds): `ReducedFlash`, `GlassRefraction`, `PaletteSeed`, `ClusterFont`, `ShowLogo`, `ShowStats`, `ShiftPointPct`. The cluster height and the chase cluster use Phase 8's typed keys (`CockpitHeightOffsetPx` and siblings, `ChaseHudStyle`) | New settings without a config version bump; one owner per key after the Phase 8 merge |
+| 2026-11-22 | The OSD's Fit & camera tab binds Phase 8: nine `OemDash*` rows, cluster height for the view being edited, a `CameraPatchAuto` switch, and Resync through `InputShared::resync_camera`. The OSD never writes camera files; Phase 8's sync service does, and only while the game is closed | Deploy guard; one writer for the game folder |
+| 2026-11-22 | The OSD edits the global config. With a per-car profile the rows show the global values, the live view shows what the car really gets, and a row the profile overrides says so. Saving for one car is the configurator's job (Phase 10, `CarProfilesFile::upsert`) | A row that silently did nothing would look broken; per-car editing needs a UI the OSD does not have |
+| 2026-11-22 | `Fonts::load_dir` reads the font pack as Phase 6 ships it: `assets/fonts/fonts.json`, one folder per family, variable fonts as one face per weight (300/400/500/600 within the axis), glyph preload deferred until a face is used. A face takes the manifest's family name, else its typographic family (name ID 16) | The Phase 5 loader read only flat folders, and registered each static weight as its own family ("Saira Condensed Thin"), so token roles would have bound to the wrong weights |
+| 2026-11-22 | Kerning is measured with two shape plans compiled once per face (Latin, and no script) instead of `rustybuzz::shape`, which compiles a plan per pair; a test proves the tables are identical | 4,624 pairs per face |
+| 2026-11-22 | Dev profile: `opt-level = 3` for `rustybuzz`, `ttf-parser`, `fdsm` and `nalgebra` | Loading one font face took 5 s in a debug build (shaping and MTSDF rasterising); the kit's text tests went from 34.6 s to 2.1 s |
+| 2026-11-22 | `fh6_input::PadScript` and `--pad-script`, plus `--open-osd` | Repeatable manual runs and screenshots without a physical controller; the script goes through the same tracker, so A/B/X/Y are stripped |
+| 2026-11-22 | Phase 9 adds no dependency | — |
+| 2026-11-22 | The Phase 9 OSD page was not built in Figma: the Starter plan's MCP call cap returned on the first write. `docs/design/boards/osd/index.html` and `docs/design/OSD.md` are the reference | Same block as Phase 3 (docs/design/FIGMA.md) |
+| 2026-11-23 | Phase 9 merged with main (Phases 6 and 8) before the final gates: the OSD uses the Phase 8 `CameraPatchHandle` (`fh6-app::osd_fit::PatcherFit`), the nine `OemDash*` blocker rows, per-view cluster height and the typed `ChaseHudStyle`; it draws in the Phase 6 font pack | Main moved under the phase; the OSD binds to the real cockpit-fit model instead of the Phase 9 stand-ins |
+| 2026-11-23 | OSD rows edit the global config; the live view shows the car's profile on top, and an overridden row says so | Per-car editing needs a save target per row; Phase 10 owns per-car profiles in the configurator |
+| 2026-11-23 | Branch review fixes: no OSD (and no ESC) while the overlay is hidden from the tray; the dyno keeps the last raced car's profile; the Cockpit FOV row reads the wheel-less FOV the patcher writes; the chase glide starts from `ChaseAnchorX`; no per-frame assets clone; the car-profile log line fires only on a car or profiles change | Found by an adversarially verified review of the branch |

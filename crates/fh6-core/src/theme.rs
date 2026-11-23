@@ -42,9 +42,11 @@ impl Default for ClusterTheme {
     }
 }
 
-impl std::fmt::Display for ClusterTheme {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
+impl ClusterTheme {
+    /// The config name (`"LiquidGlass"`), allocation-free.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
             ClusterTheme::BoschDdu => "BoschDdu",
             ClusterTheme::DriftGlass => "DriftGlass",
             ClusterTheme::PorscheAnalog => "PorscheAnalog",
@@ -74,8 +76,13 @@ impl std::fmt::Display for ClusterTheme {
             ClusterTheme::CymaticResonanceField => "CymaticResonanceField",
             ClusterTheme::KineticLiquidMetal => "KineticLiquidMetal",
             ClusterTheme::ShibuyaChromaticPrisma => "ShibuyaChromaticPrisma",
-        };
-        write!(f, "{}", name)
+        }
+    }
+}
+
+impl std::fmt::Display for ClusterTheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
     }
 }
 

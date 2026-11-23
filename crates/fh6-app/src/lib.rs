@@ -10,11 +10,11 @@ pub mod camera_sync;
 pub mod latency;
 pub mod launcher;
 pub mod logging;
+pub mod osd_fit;
 pub mod perf_report;
 pub mod process_watcher;
 #[cfg(windows)]
 pub mod refraction;
-pub mod remapper;
 pub mod render_loop;
 pub mod resources;
 pub mod widget_server;

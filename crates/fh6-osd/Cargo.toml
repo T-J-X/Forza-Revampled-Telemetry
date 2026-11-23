@@ -10,6 +10,6 @@ rust-version.workspace = true
 fh6-core = { path = "../fh6-core" }
 fh6-render = { path = "../fh6-render" }
 fh6-clusters = { path = "../fh6-clusters" }
-tiny-skia.workspace = true
+fh6-kit = { path = "../fh6-kit" }
+serde_json.workspace = true
 tracing.workspace = true
-ttf-parser = "0.20"

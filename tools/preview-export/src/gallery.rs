@@ -107,7 +107,13 @@ fn esc(s: &str) -> String {
 }
 
 /// Writes `index.html`: no script; full-size views open as plain links.
-pub fn write_index(out: &Path, renders: &[Render], adapter: &str, legacy: bool) -> std::io::Result<()> {
+pub fn write_index(
+    out: &Path,
+    renders: &[Render],
+    osd: &[crate::osd::OsdRender],
+    adapter: &str,
+    legacy: bool,
+) -> std::io::Result<()> {
     let mut h = String::new();
     let _ = write!(
         h,
@@ -175,11 +181,37 @@ h1{{margin:0 0 4px;font-size:22px}} h2{{margin:28px 0 10px;font-size:16px;color:
         h.push_str("</div>\n");
     }
     h.push_str(
-        "<h2>OEM scrim and OSD (v1 renderer until Phases 8–9)</h2><div class=\"grid\">\
+        "<h2>OSD (kit, Phase 9)</h2><div class=\"meta\">Whole-frame GPU time (median; live cluster \
+and thumbnails included; budget 1.5 ms). Files ending <code>_over_game.png</code> show the frame \
+over a game capture when exported with <code>--backdrop</code>.</div><div class=\"grid\">\n",
+    );
+    for r in osd {
+        let gpu = match (r.gpu_ms, r.gpu_min_ms) {
+            (Some(m), Some(lo)) => format!("{m:.3} ms (min {lo:.3})"),
+            _ => "n/a".to_string(),
+        };
+        let cls = if r.gpu_min_ms.is_some_and(|g| g < 1.5) {
+            "ok"
+        } else {
+            "warn"
+        };
+        let _ = write!(
+            h,
+            "<div class=\"card\"><a href=\"{full}\"><img src=\"{thumb}\" alt=\"{name}\"></a><div class=\"cap\">{cap}<br>\
+<span class=\"b {cls}\">GPU {gpu}</span><span class=\"b\">{draws} draws</span></div></div>",
+            full = r.full,
+            thumb = r.thumb,
+            name = r.name,
+            cap = esc(r.caption),
+            draws = r.draws,
+        );
+    }
+    h.push_str("</div>\n");
+    h.push_str(
+        "<h2>OEM scrim (v1 renderer until Phase 8)</h2><div class=\"grid\">\
 <div class=\"card\"><a href=\"Scrim/OemScrim_0pct.png\"><img src=\"Scrim/OemScrim_0pct.png\" alt=\"scrim 0%\"></a><div class=\"cap\">Scrim 0%</div></div>\
 <div class=\"card\"><a href=\"Scrim/OemScrim_50pct.png\"><img src=\"Scrim/OemScrim_50pct.png\" alt=\"scrim 50%\"></a><div class=\"cap\">Scrim 50%</div></div>\
-<div class=\"card\"><a href=\"Scrim/OemScrim_100pct.png\"><img src=\"Scrim/OemScrim_100pct.png\" alt=\"scrim 100%\"></a><div class=\"cap\">Scrim 100%</div></div>\
-<div class=\"card\"><a href=\"UnifiedOsd_4K.png\"><img src=\"UnifiedOsd_4K.png\" alt=\"OSD\"></a><div class=\"cap\">Unified OSD</div></div></div>\n",
+<div class=\"card\"><a href=\"Scrim/OemScrim_100pct.png\"><img src=\"Scrim/OemScrim_100pct.png\" alt=\"scrim 100%\"></a><div class=\"cap\">Scrim 100%</div></div></div>\n",
     );
     if legacy {
         h.push_str("<h2>v1 clusters</h2><div class=\"meta\">Rendered into ModernClusters/ (tiny-skia references for Phase 7).</div>\n");
