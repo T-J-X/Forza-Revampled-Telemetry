@@ -59,7 +59,8 @@ use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
     deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, LayerOptions,
-    Layout, Painter, Palette, Rect, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
+    View,
 };
 
 /// The diamond strip (`modern11`).
@@ -83,6 +84,11 @@ const SWEEP_S: f32 = 0.2;
 const SWEEP_HALF: f32 = 0.524; // 30°, a 60° streak
 /// The diamonds' strobe off phase keeps 25% of the shift colour.
 const STROBE_FLOOR: f32 = 0.25;
+/// The diamonds hold full `shift` this long at the shift point before the strobe starts (s).
+const STROBE_HOLD_S: f32 = 0.1;
+/// Share of each wing (from the tip) that keeps its own colour under the lock; the rest turns
+/// `shift`.
+const LOCK_FROM: f32 = 0.55;
 /// Width of the apex blade (px).
 const BLADE_W: f32 = 8.0;
 /// Smallest cap of the micro-labels (MPH, THR, BRK): the hood has no scrim behind them.
@@ -362,6 +368,7 @@ pub struct Gt7HoodPro {
     /// Seconds since the pod-rim light sweep started (negative: none running).
     sweep_t: f32,
     sweep_up: bool,
+    reduced_flash: bool,
     micro_cap: f32,
     tracking: f32,
 }
@@ -408,6 +415,7 @@ impl Gt7HoodPro {
             brake: Spring::new(t.springs.snap, 0.0),
             sweep_t: -1.0,
             sweep_up: true,
+            reduced_flash: false,
             micro_cap: t.type_scale.micro_label.max(MICRO_MIN_CAP),
             tracking: t.type_scale.label_tracking,
         }
@@ -467,8 +475,8 @@ impl Gt7HoodPro {
     fn tyre_color(step: TyreStep, pal: &Palette) -> Color {
         match step {
             TyreStep::Cool | TyreStep::Optimal => pal.roles.ink.with_alpha(2.0 / 255.0),
-            TyreStep::Hot => pal.roles.caution.fade(0.2),
-            TyreStep::Critical => pal.roles.warning.fade(0.25),
+            TyreStep::Hot => pal.roles.caution.fade(0.06),
+            TyreStep::Critical => pal.roles.warning.fade(0.08),
         }
     }
 }
@@ -505,6 +513,7 @@ impl Cluster for Gt7HoodPro {
         self.parallax_target = (-sig.g_lat / 1.5).clamp(-1.0, 1.0);
         self.parallax.update(self.parallax_target, dt);
 
+        self.reduced_flash = input.reduced_flash;
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.lock.update(self.shift.over_shift(), LOCK_RAMP_S, dt);
         self.gear.update(sig.gear, self.lock.held(), dt);
@@ -545,7 +554,17 @@ impl Cluster for Gt7HoodPro {
 
         // The feathered pads behind gear and speed go first, under the ribbons' bloom, so they
         // never cut a dark silhouette into it (alpha <= 0.55, the hood brief's 140).
-        dimming_pad(p, g.pod, g.pod_size.x * 0.55, 1.0, &pal);
+        // The pod's pad hugs the pod (a 4 px spread, 8 px sigma: about a 24 px feather) instead of
+        // a radial pool, so it never rises as a dark dome over the apex.
+        p.shadow(
+            &squircle(g.pod, g.pod_size, POD_N),
+            Shadow {
+                offset: Vec2::ZERO,
+                sigma: 8.0,
+                spread: 4.0,
+                color: pal.roles.oled_black.with_alpha(0.45),
+            },
+        );
         dimming_pad(p, g.speed, g.speed_cap * 1.6, 1.0, &pal);
 
         // Back plane (0 px): hairline, scale, ribbons, comets, the apex fuse and the diamonds.
@@ -666,17 +685,19 @@ impl Gt7HoodPro {
         ];
         p.layer(ribbons, |p| {
             for (w, &f) in wings.side.iter().zip(fill.iter()) {
-                w.draw_fill(p, f, pal, 0.0);
-                if lock > 0.004 {
-                    Self::draw_arch_lock(p, w, f, lock, pal);
-                }
+                // Under the lock the white-hot inner fill retracts to LOCK_FROM, and the shift-tinted
+                // arch takes its place (drawn after the cores, in its own bloom).
+                let e = lock * (2.0 - lock);
+                let shown = if f > LOCK_FROM { f + (LOCK_FROM - f) * e } else { f };
+                w.draw_fill(p, shown, pal, 0.0);
             }
         });
 
-        // Comet orbs: size and glow follow the orb intensity law.
+        // Comet orbs: size and glow follow the orb intensity law; while locked they shrink so
+        // the shift-coloured arch, not a white core, carries the moment.
         let sig = &self.sig;
         let intensity = 0.35 + 0.65 * (sig.rpm / sig.shift_rpm.max(1.0)).clamp(0.0, 1.0);
-        let r = g.bead_r * (0.25 + 0.75 * intensity);
+        let r = g.bead_r * (0.25 + 0.75 * intensity) * (1.0 - 0.35 * lock);
         let core = r * (0.55 + 0.25 * self.throttle.value().clamp(0.0, 1.0));
         let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
         let heads = [wings.side[0].point_at(fill[0]), wings.side[1].point_at(fill[1])];
@@ -703,6 +724,15 @@ impl Gt7HoodPro {
         for (k, w) in wings.side.iter().enumerate() {
             let gain = if k == 0 { 1.0 } else { RIGHT_GAIN };
             w.draw_bead(p, fill[k].max(0.004), r, core, light, pal, intensity * gain, 0.0);
+        }
+        // The lock tint goes over the fill, the cores and their bloom (outside any bloom
+        // layer), so the inner arch reads as `shift`, not as a white-hot core.
+        if lock > 0.004 {
+            p.layer(ribbons, |p| {
+                for (w, &f) in wings.side.iter().zip(fill.iter()) {
+                    Self::draw_arch_lock(p, w, f, lock, pal);
+                }
+            });
         }
 
         // The lock: a steady blade in `shift` from the crest to the centre diamond, and the
@@ -738,10 +768,18 @@ impl Gt7HoodPro {
 
     /// The colour of diamond `i` this frame: the shared outside-in fill, and on the limiter
     /// the strobe between the full shift colour and 25% (the strip never vanishes).
+    ///
+    /// The strobe runs on the lock's own clock: the strip holds full `shift` for
+    /// [`STROBE_HOLD_S`] when the shift point is reached, then strobes at 10 Hz, 50% duty, so
+    /// the shift instruction always lands as a flash-on, never as a dimming. Reduced-flash mode
+    /// keeps the shared 2 Hz breath.
     fn diamond_color(&self, i: usize, pal: &Palette) -> Option<Color> {
-        self.shift
-            .color_of(i, pal)
-            .or_else(|| self.shift.over_shift().then(|| pal.shift.fade(STROBE_FLOOR)))
+        if !self.shift.over_shift() || self.reduced_flash {
+            return self.shift.color_of(i, pal);
+        }
+        let t = self.lock.held() - STROBE_HOLD_S;
+        let on = t < 0.0 || (t * 10.0).fract() < 0.5;
+        Some(if on { pal.shift } else { pal.shift.fade(STROBE_FLOOR) })
     }
 
     /// The 11 converging diamonds; only they strobe at the limiter. A lit diamond is light, not
@@ -837,9 +875,10 @@ impl Gt7HoodPro {
     }
 
     /// Inner arch at the lock: from 55% of the wing to its head the ribbon crossfades to `shift`
-    /// at 85% (opaque, butt-capped segments over the fill, so nothing shows as dots).
+    /// at 85% (opaque round-capped segments: overlapping opaque caps never show as dots, and butt caps
+    /// left anti-aliased seams).
     fn draw_arch_lock(p: &mut Painter<'_>, w: &PathRibbon, f: f32, lock: f32, pal: &Palette) {
-        const FROM: f32 = 0.55;
+        const FROM: f32 = LOCK_FROM;
         const STEPS: usize = 24;
         if f <= FROM {
             return;
@@ -860,7 +899,7 @@ impl Gt7HoodPro {
                     b: q,
                     width_a: w.width_at(t0),
                     width_b: w.width_at(t1),
-                    cap: Cap::Butt,
+                    cap: Cap::Round,
                 },
                 Gradient::linear(prev, q).stop(0.0, tint(t0)).stop(1.0, tint(t1)),
             );
@@ -990,23 +1029,19 @@ impl Gt7HoodPro {
             .align(Align::Center, VAlign::CapMiddle)
             .tabular();
         let value = self.speed.value();
+        // No ghost 8s: the kit sets low-alpha text far brighter than its linear alpha (even
+        // 1/255 reads as a real 8 on OLED black), so the field is exactly as wide as the digits
+        // and stays centred on the gear axis (see HANDOVER).
+        let cells = speed_cells(value);
         if g.keyline {
             let key = style.paint(roles.oled_black.with_alpha(0.85));
             let r = g.speed_cap * 0.045;
             for i in 0..8 {
                 let o = Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0);
-                p.number(g.speed + o, value, 3, &key, None);
+                p.number(g.speed + o, value, cells, &key, None);
             }
         }
-        let cells = p.number(
-            g.speed,
-            value,
-            3,
-            &style.paint(roles.ink),
-            // No ghost 8s: the kit sets low-alpha text far brighter than its linear alpha (even
-            // 1/255 reads as a real 8 on OLED black), so empty cells stay empty (see HANDOVER).
-            None,
-        );
+        let cells = p.number(g.speed, value, cells, &style.paint(roles.ink), None);
         let unit = TextStyle::new(self.faces.label, self.micro_cap)
             .paint(roles.ink.fade(0.8))
             .tracking(self.tracking)
@@ -1016,6 +1051,15 @@ impl Gt7HoodPro {
             self.sig.unit.label(),
             &unit,
         );
+    }
+}
+
+/// Digit cells for a speed (1–3; the readout clamps to 0..=999).
+fn speed_cells(value: i64) -> u8 {
+    match value {
+        v if v >= 100 => 3,
+        v if v >= 10 => 2,
+        _ => 1,
     }
 }
 
