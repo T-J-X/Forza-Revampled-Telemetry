@@ -59,7 +59,7 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 13 | `PaganiHorologerie` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 14 | `BugattiTourbillon` | rebuild | Classic Analog | cockpit | high | ☐ |
 | 15 | `KoenigseggGyro` | rebuild | Classic Analog | cockpit | high | ☐ |
-| 16 | `ValkyrieLmp1` | rebuild | Race Dash | cockpit+hood | high | ☐ |
+| 16 | `ValkyrieLmp1` | rebuild | Race Dash | cockpit+hood | high | ◐ |
 | 17 | `Gt7ModularTripod` | rebuild | Race Dash | cockpit+hood | high | ☐ |
 | 18 | `WindshieldHud` | rebuild | ADAS & HUD | raised HUD | high | ☐ |
 | 19 | `F35HelmetHmd` | rebuild | ADAS & HUD | cockpit+hood | high | ☐ |
