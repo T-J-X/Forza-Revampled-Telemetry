@@ -14,7 +14,8 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 | 5 GPU render kit | ✅ 2026-11-22 (branch `claude/phase-5-render-kit-d6906d`, see `program/phases/05-render-kit/HANDOVER.md`) |
 | 6 Assets, logos & fonts | ✅ 2026-11-22 (branch `claude/objective-euclid-13487b`, see `program/phases/06-assets/HANDOVER.md`) |
 | 8 Cockpit fit | ✅ 2026-11-22 (branch `claude/phase-8-cockpit-fit-7daeb6`, see `program/phases/08-cockpit-fit/HANDOVER.md`) |
-| 7, 9–11 | ☐ waiting on dependencies (9 started 2026-11-22) |
+| 7 Cluster factory: setup (07-00) | ✅ 2026-11-23 (branch `claude/exciting-napier-8fa678`, see `program/phases/07-cluster-factory/HANDOVER.md`): 48 scaffolds, registry, `common/` helpers, per-cluster tooling, the LiquidGlass pilot; cluster chats next (Gt7HoodPro, PorscheAnalog, BoschDdu) |
+| 7 Cluster chats, 9–11 | ☐ waiting (9 started 2026-11-22) |
 
 ## Runtime audit (2026-11-20): why v2 exists
 - **The exe draws nothing.** `fh6-app` never starts UDP, creates no window, has no render loop and no real XInput. `layered.rs` is a stub, and `--auto-exit` quits after about 3.5 s. (Phase 4)
@@ -35,6 +36,23 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **Visibility:** nothing hides the overlay in menus or out of focus. (Phase 4)
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
+
+## State of the code (after the Phase 7 setup, 2026-11-23)
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | ✅ no warnings (the `tools/web-preview` manifest note, as on main) |
+| `cargo test --workspace` | ✅ 569 passed, 0 failed (1 ignored) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit -p fh6-clusters --target wasm32-unknown-unknown` | ✅ |
+
+What the Phase 7 setup added:
+- **Cluster factory:** `fh6_clusters::catalog` (48 rows as data), the generated `registry`, one module per cluster under `clusters/<snake>/` (scaffold until its chat builds it), v1 clusters moved to `legacy/`.
+- **Shared components:** 17 modules in `fh6_clusters::common` (glass plate, light ribbon, shift lights, hero gear, tabular speed, labels, tachs, needle dial, bezel, ADAS road, G-ball, tyre slip, signed bar, race tiles, seven-segment, liquid metal), documented in `docs/kit/README.md` §12.
+- **Per-cluster tooling:** `preview-export --cluster <Name>` (4 states per view, crops, composites, 60-frame sequence, GPU p50 / p99), a golden test per catalog row (260 goldens), `FH6_WheelDash --demo --cluster <Name>`, `web-preview ?cluster=<Name>`.
+- **Kit:** lazy font loading (64-face pack, `MAX_FACES` 128), `Scene::missing_glyph_count`, the glass-first backdrop cleared without `CLEAR_TEXTURE`.
+- **Pilot:** Liquid Glass rebuilt on the kit (cockpit sequence GPU p50 0.227 / p99 0.238 ms; hood 0.44 ms); critique a conditional pass at 7.5/10 (glass material debt in shared code).
 
 ## State of the code (after Phase 8, 2026-11-22)
 | Check | Result |
@@ -248,3 +266,9 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-22 | The OEM dome stays on the factory binnacle when the user changes the cluster height; it still follows the anchor and the cluster scale | The fit critique showed the dome rising into the windscreen at +170 px; the binnacle does not move. SCRIM_FIT §2 and §4 updated |
 | 2026-11-22 | Car profiles are an `Option` overlay (`car_profiles.json` v2); styles are not shipped per car | Missing keys inherit instead of collapsing to 0; profiles carry fit only |
 | 2026-11-22 | The camera patcher writes only while the game is closed and only when `CameraPatchAuto` is on or the OSD/configurator asks; the first backup is the original | Deploy guard and safe restore; a running game queues the change ("restart needed") |
+| 2026-11-23 | Phase 7: cluster chats own only `clusters/<snake>/`, their goldens, assets, recipe and their own `CATALOG.md` status cell; `catalog.rs`, `registry.rs`, `ClusterTheme`, `common/`, the harness, kit and tools are frozen for them | Up to 3 parallel cluster chats merge without conflicts |
+| 2026-11-23 | Dependencies (`tools/preview-export`): `tracing` and `tracing-subscriber` (workspace versions, already used by `fh6-app`) | wgpu validation errors were invisible in headless renders; no new crate enters the lockfile |
+| 2026-11-23 | Dev profile: `rustybuzz`, `ttf-parser`, `fdsm`, `png`, `miniz_oxide`, `fdeflate` built at opt-level 3 | Golden and component tests load the 64-face font pack in seconds instead of minutes (one font test took 244 s) |
+| 2026-11-23 | Kit fonts load lazily: `load_dir` reads the pack's family folders, faces generate glyphs and measure kerning on first use, `MAX_FACES` 128 | Preloading the pack overflowed the glyph atlas and slowed start-up; a new glyph may appear one frame late (review tools repeat the frame) |
+| 2026-11-23 | v1 tiny-skia clusters moved to `fh6-clusters/src/legacy/`; every catalog row has a kit module (scaffold until built) and a golden | `clusters/<x>.rs` and `clusters/<x>/mod.rs` cannot coexist; v1 stays reachable until each rebuild lands |
+| 2026-11-23 | Figma stays on the HTML-board fallback for Phase 7 (`mockups/<Name>/index.html` + the zone table in each `mod.rs`) | The Figma MCP still returns the Starter-plan tool-call limit |

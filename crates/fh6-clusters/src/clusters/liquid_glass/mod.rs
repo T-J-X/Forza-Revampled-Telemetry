@@ -1,24 +1,28 @@
 //! Liquid Glass (`ClusterTheme::LiquidGlass`), catalog row 1: the Liquid Glass family's
 //! pattern-setter and the default cockpit theme (cockpit + hood, build #1, the Phase 7 pilot).
 //!
-//! One monolithic sapphire capsule (a 1240 × 300 squircle, n 4) at the regular glass tint, with
-//! no wallpaper: only the 1 px light-driven rim, the fresnel band and the crown sheen define it.
-//! - Rank 1: 16 glass pills in a strip under the crown, and the gear (Saira Condensed 700, cap
-//!   200) under a 230 px domed lens with a dimming pad.
-//! - Rank 2: tabular speed on the left (Saira 200, cap 112, ghost 8s).
+//! One monolithic sapphire capsule (a 1240 × 360 squircle, n 5; 1560 × 260 on the hood) at the
+//! regular glass tint over a dark backing, with no wallpaper: the 1 px light-driven rim, the
+//! fresnel band and a thin crown sheen define it.
+//! - Rank 1: 16 glass pills on an offset curve of the crown, and the gear (Saira Condensed 800,
+//!   cap 196) clipped to a 240 px lens with a dimming pad; it blooms only on the limiter.
+//! - Rank 2: tabular speed on the left (Saira 200, cap 108, no ghost 8s), unit on its baseline.
 //! - Rank 3: a light pipe 14 px inside the rim from lower-left over the crown to lower-right,
-//!   6 → 14 px wide, ending in a meniscus bead that swells with throttle.
+//!   4 → 8 px wide and outside the bloom, ending in a meniscus bead whose size and glow follow
+//!   the orb intensity law (0.35 + 0.65 × rpm / shift rpm).
 //! - Rank 4: a pendant glass drop under the centre holding the caustic G spot (felt force on the
-//!   G-ball spring; body slip defocuses it from a 6 px point into a 40 px ring caustic).
-//! - Power and boost float on the right in Saira 300.
+//!   G-ball spring, 1.5 g = ±16 px, a 0.5 g reference ring; body slip defocuses the point into a
+//!   ring caustic).
+//! - Power and boost float on the right in Saira 400, label, value and unit on one baseline.
 //!
 //! Signature moments:
-//! - **Upshift light-run:** a glint lights the new gear glyph, climbs the dome rim, splits at
-//!   the crown and races both ways round the capsule rim at 4000 px/s, meeting in the pendant
-//!   drop after about 340 ms, which flashes. The bead slides back on the ribbon spring meanwhile.
+//! - **Upshift light-run:** a glint lights the new gear glyph, a streak climbs each side of the
+//!   lens rim, then two tapered specular streaks race both ways round the capsule rim at
+//!   5000 px/s (dimmed while they cross the crown, so they never sit on the bead), meeting in the
+//!   pendant drop, which flashes softly. The bead slides back on the ribbon spring meanwhile.
 //! - **Limiter:** only the pill strip strobes (10 Hz, `common::ShiftLights`). The one steady cue
-//!   is the hot meniscus: the pipe warms to the shift colour, the bead core turns white with a
-//!   warning halo and the glass rim brightens (no bloom on the rim).
+//!   is the hot meniscus: the bead core turns white with a warning halo, the pipe warms a little
+//!   towards the shift colour and the glass rim brightens slightly (no bloom on either).
 //! - **Light:** lateral G swings the rim crescent, crown sheen and bead specular up to 25°.
 //! - **Show:** a 200 ms lensing and rim ramp; hiding is the host's 1 frame.
 //!
@@ -36,13 +40,13 @@ use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::ImageId;
 use fh6_kit::{
-    deg, vec2, Align, BlendMode, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImagePaint, LayerOptions,
-    Layout, Logo, Painter, Palette, Rect, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
-    View,
+    deg, vec2, Align, BlendMode, Cap, Cluster, Color, FontId, FontRole, FrameInput, Glow, Gradient, ImagePaint,
+    LayerOptions, Layout, Logo, Painter, Palette, Rect, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens,
+    VAlign, Vec2, View,
 };
 
 /// Comet speed of the upshift light-run (px/s).
-const RUN_SPEED: f32 = 4000.0;
+const RUN_SPEED: f32 = 5000.0;
 /// The glint on the glyph and the climb up the dome rim (s).
 const GLINT_S: f32 = 0.06;
 /// How long the pendant drop flashes when the two comets meet (s).
@@ -84,46 +88,46 @@ struct Geom {
 
 const COCKPIT: Geom = Geom {
     center: vec2(0.0, -30.0),
-    size: vec2(1240.0, 300.0),
+    size: vec2(1240.0, 360.0),
     pill_span: 470.0,
-    pill_size: vec2(44.0, 18.0),
-    pill_drop: 34.0,
-    dome: vec2(0.0, -2.0),
-    dome_r: 104.0,
-    gear_cap: 168.0,
-    speed: vec2(-372.0, 4.0),
-    speed_cap: 112.0,
-    metrics_x: 524.0,
-    metrics_y: [-38.0, 38.0],
-    metric_cap: 44.0,
-    drop: vec2(0.0, 126.0),
-    drop_r: 44.0,
+    pill_size: vec2(50.0, 20.0),
+    pill_drop: 36.0,
+    dome: vec2(0.0, 4.0),
+    dome_r: 120.0,
+    gear_cap: 196.0,
+    speed: vec2(-380.0, 8.0),
+    speed_cap: 108.0,
+    metrics_x: 532.0,
+    metrics_y: [-36.0, 40.0],
+    metric_cap: 42.0,
+    drop: vec2(0.0, 150.0),
+    drop_r: 28.0,
     bead_r: 13.0,
     logo: Some(Rect {
-        min: vec2(250.0, 84.0),
-        max: vec2(470.0, 104.0),
+        min: vec2(300.0, 108.0),
+        max: vec2(470.0, 124.0),
     }),
     halo: false,
 };
 
-/// Hood: the scrim is 0%, so the capsule stretches to 1560 × 240 with a legibility halo; speed
+/// Hood: the scrim is 0%, so the capsule stretches to 1560 × 260 with a legibility halo; speed
 /// and metrics mirror at ±470 px.
 const HOOD: Geom = Geom {
     center: vec2(0.0, -30.0),
-    size: vec2(1560.0, 240.0),
+    size: vec2(1560.0, 260.0),
     pill_span: 540.0,
-    pill_size: vec2(40.0, 14.0),
+    pill_size: vec2(44.0, 16.0),
     pill_drop: 32.0,
     dome: vec2(0.0, -4.0),
-    dome_r: 78.0,
-    gear_cap: 124.0,
-    speed: vec2(-470.0, -8.0),
-    speed_cap: 96.0,
+    dome_r: 88.0,
+    gear_cap: 146.0,
+    speed: vec2(-470.0, -4.0),
+    speed_cap: 84.0,
     metrics_x: 620.0,
-    metrics_y: [-34.0, 26.0],
-    metric_cap: 38.0,
-    drop: vec2(0.0, 96.0),
-    drop_r: 38.0,
+    metrics_y: [-32.0, 28.0],
+    metric_cap: 36.0,
+    drop: vec2(0.0, 100.0),
+    drop_r: 24.0,
     bead_r: 11.0,
     logo: None,
     halo: true,
@@ -249,7 +253,11 @@ impl LiquidGlass {
         let display = setup.fonts.role(FontRole::Display);
         let text = setup.fonts.role(FontRole::Text);
         let faces = Faces {
-            gear: setup.fonts.find("Saira Condensed", 700, false).unwrap_or(display),
+            gear: setup
+                .fonts
+                .find("Saira Condensed", 800, false)
+                .or_else(|| setup.fonts.find("Saira Condensed", 700, false))
+                .unwrap_or(display),
             speed: setup.fonts.find("Saira", 200, false).unwrap_or(display),
             metric: setup.fonts.find("Saira", 400, false).unwrap_or(display),
             label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
@@ -404,7 +412,7 @@ impl Cluster for LiquidGlass {
         // sheen is a thin specular band, not a gel-button gloss; the fresnel edge carries the
         // thickness.
         let mut glass = self.plate.material(heat * 0.4);
-        glass.sheen *= 0.45;
+        glass.sheen *= 0.35;
         glass.sheen_height = 0.08;
         glass.fresnel = (glass.fresnel * 1.6).min(1.0);
         p.layer(LayerOptions::glass(18.0), |p| {
@@ -421,15 +429,17 @@ impl Cluster for LiquidGlass {
                 p.fill(&Shape::circle(g.drop, g.drop_r), glass);
             });
         });
-        // Hood: over a bright bonnet the body needs a neutral backing, darkest in the centre
-        // (inset so the 1 px rim and the fresnel band stay lit).
-        if g.halo {
+        // A neutral backing, darkest in the centre (stronger on the hood, over a bright bonnet;
+        // inset so the 1 px rim and the fresnel band stay lit).
+        {
+            // Linear-light alphas: 0.94 keeps the centre near black even over a bright cabin; the edge stays see-through.
+            let (centre, edge) = if g.halo { (0.94, 0.55) } else { (0.94, 0.5) };
             let inner = squircle(g.center, g.size - Vec2::splat(12.0), N);
             p.fill(
                 &inner,
                 Gradient::radial(g.center, g.size.x * 0.5)
-                    .stop(0.0, roles.oled_black.with_alpha(0.55))
-                    .stop(1.0, roles.oled_black.with_alpha(0.25)),
+                    .stop(0.0, roles.oled_black.with_alpha(centre))
+                    .stop(1.0, roles.oled_black.with_alpha(edge)),
             );
         }
 
@@ -462,7 +472,7 @@ impl Cluster for LiquidGlass {
         //    redline share is warm) and the speed's own quiet pad.
         paths.pipe.draw_track(p, &pal);
         let frac = paths.pipe.fraction();
-        paths.pipe.draw_fill(p, frac, &pal, 0.0);
+        paths.pipe.draw_fill(p, frac, &pal, heat);
         dimming_pad(p, g.speed, g.speed_cap * 1.5, 0.6, &pal);
 
         // 4. Rank 1: the gear, clipped to its lens (the entry overshoot never reaches the rim).
@@ -499,6 +509,8 @@ impl Cluster for LiquidGlass {
             &pal,
             &PodStyle {
                 glow_sigma: 6.0,
+                unlit_alpha: 1.0 / 255.0,
+                unlit_rim: 0.018,
                 ..PodStyle::default().with_shape(PodShape::Pill)
             },
         );
@@ -613,12 +625,12 @@ impl LiquidGlass {
             );
             p.set_blend(BlendMode::Add);
             // Focused point (rank 4: at most 60% ink, no bloom).
-            let r_point = 3.0 + 5.0 * d;
+            let r_point = 14.0;
             p.fill(
-                &Shape::circle(c, r_point * 2.4),
-                Gradient::radial(c, r_point * 2.4)
-                    .stop(0.0, roles.ink.with_alpha(0.6 * (1.0 - d)))
-                    .stop(0.3, pal.primary.with_alpha(0.3 * (1.0 - d)))
+                &Shape::circle(c, r_point),
+                Gradient::radial(c, r_point)
+                    .stop(0.0, roles.ink.with_alpha(0.3 * (1.0 - d)))
+                    .stop(0.35, pal.primary.with_alpha(0.12 * (1.0 - d)))
                     .stop(1.0, pal.primary.with_alpha(0.0)),
             );
             // Defocused ring caustic (Phase 6 dispersive ring if present, else procedural).
@@ -693,7 +705,7 @@ impl LiquidGlass {
                     );
                 }
             }
-            const TAIL_PX: f32 = 160.0;
+            const TAIL_PX: f32 = 230.0;
             const TAIL_STEPS: usize = 16;
             let s = (t - GLINT_S).max(0.0) * RUN_SPEED;
             for run in [&paths.run_left, &paths.run_right] {
@@ -705,6 +717,7 @@ impl LiquidGlass {
                     let fade = 0.3 + 0.7 * k * k * (3.0 - 2.0 * k);
                     // A continuous tapered streak: butt-capped segments, so nothing overlaps.
                     let mut prev = run.point_at(head);
+                    p.glow(&Shape::circle(prev, 2.0), roles.ink, Glow::new(6.0, 0.6 * fade));
                     for i in 1..=TAIL_STEPS {
                         let back = (head - i as f32 * (TAIL_PX / TAIL_STEPS as f32) / len).max(0.0);
                         let q = run.point_at(back);
@@ -714,11 +727,11 @@ impl LiquidGlass {
                             &Shape::Line {
                                 a: prev,
                                 b: q,
-                                width_a: 0.5 + 2.0 * a0,
-                                width_b: 0.5 + 2.0 * a1,
+                                width_a: 0.5 + 2.5 * a0,
+                                width_b: 0.5 + 2.5 * a1,
                                 cap: Cap::Butt,
                             },
-                            roles.ink.lerp(pal.primary, 1.0 - a0).with_alpha(0.8 * a0 * a0 * fade),
+                            roles.ink.lerp(pal.primary, 1.0 - a0).with_alpha(a0 * a0 * fade),
                         );
                         prev = q;
                         if back <= 0.0 {

@@ -36,8 +36,11 @@ pub struct PodStyle {
     pub glow_sigma: f32,
     /// Glow intensity of a lit pod.
     pub glow: f32,
-    /// Unlit lens alpha (tokens: ≤ 22 of 255).
+    /// Unlit lens alpha (tokens: ≤ 22 of 255). Colours blend in linear light, so 3% reads as
+    /// about 19% grey on screen.
     pub unlit_alpha: f32,
+    /// Alpha of the unlit lens's 1 px rim (linear; 0.12 reads as about 38% grey).
+    pub unlit_rim: f32,
 }
 
 impl Default for PodStyle {
@@ -47,6 +50,7 @@ impl Default for PodStyle {
             glow_sigma: 10.0,
             glow: 0.55,
             unlit_alpha: 22.0 / 255.0,
+            unlit_rim: 0.12,
         }
     }
 }
@@ -100,7 +104,7 @@ pub fn draw_pod(p: &mut Painter<'_>, rect: Rect, color: Option<Color>, style: &P
         }
         None => {
             p.fill(&shape, ink.with_alpha(style.unlit_alpha));
-            p.stroke(&shape, ink.with_alpha(0.12), Stroke::rim_px(1.0));
+            p.stroke(&shape, ink.with_alpha(style.unlit_rim), Stroke::rim_px(1.0));
         }
     }
 }

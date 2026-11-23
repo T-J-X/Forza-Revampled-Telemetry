@@ -5,7 +5,7 @@ Catalog row 1 · `ClusterTheme::LiquidGlass` (config value `"LiquidGlass"`, the 
 Status: **built** by the Phase 7 setup chat as the pilot. See [HANDOVER.md](HANDOVER.md) for renders, numbers, the critique and "my calls", and [spec.md](spec.md) for the brief.
 
 ## What it is
-One sapphire capsule (a 1240 × 300 squircle) with no wallpaper. The gear sits under a domed lens, the speed floats on the left, a light pipe runs round the rim from lower-left over the crown to lower-right with a meniscus bead at the rpm, 16 glass pills under the crown are the shift lights, and a pendant glass drop under the centre holds the caustic G spot.
+One sapphire capsule (a 1240 × 360 squircle, n 5) with no wallpaper. The gear sits under a domed lens, the speed floats on the left, a thin light pipe runs round the rim from lower-left over the crown to lower-right with a meniscus bead at the rpm, 16 glass pills on a curve under the crown are the shift lights, and a pendant glass drop under the centre holds the caustic G spot.
 
 ## How the module is laid out (the pattern for every cluster)
 | Part | Where | Notes |

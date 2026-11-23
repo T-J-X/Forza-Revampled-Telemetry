@@ -51,6 +51,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 - **Overlapping translucent segments show as dots.** Keep segmented strokes opaque (darken the colour, do not fade its alpha).
 - **Clips are rectangles** (optionally rounded). Keep content inside a curved shape by geometry, not by clipping to it.
 - **Glass first is fine:** a cluster may open with its glass layer. Use one glass layer and put every rank 1–3 light into as few bloom layers as you can.
+- **Alphas are linear.** A 3% ink fill shows as about 19% grey and a 50% black overlay barely darkens; the pilot's off pills use 1/255 and its body backing 0.94. The critique will measure what is on screen, not your numbers.
 - **Fonts:** resolve faces once in `new()`, for example `setup.fonts.find("Saira", 200, false).unwrap_or(role)`. Pack faces load lazily, so a new glyph can appear a frame late. If `input.fonts.display` differs from the display role you saw in `new()`, the user picked a font: use it for your numerals.
 - **Views:** keep one geometry table per view (`View::Cockpit`, `View::Hood`) and pick it from `input.view`; stay inside `layout.envelope` (a unit test on your table is cheap).
 - **Telemetry honesty:** use `fh6_kit::Signals` and the verified raw fields (rpm, speed, gear, pedals, acceleration, velocity, power, boost). Tyre slip, suspension, pitch / roll, fuel, lap times and torque are not verified against `tests/golden/packets`: derive from verified fields or verify first, and say which in your handover.
