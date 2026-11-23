@@ -19,8 +19,10 @@ with the **Bash** tool, never PowerShell.
 
 ## Models
 
-Installed: `sd_xl_base_1.0.safetensors` and `4x-UltraSharp.pth`. Optional (download only with
-TJX's explicit OK, official sources only): SDXL refiner 1.0, ControlNet SDXL depth and canny.
+Installed: `sd_xl_base_1.0.safetensors`, `4x-UltraSharp.pth`, `sd_xl_refiner_1.0.safetensors`,
+`controlnet-depth-sdxl-1.0-small.fp16.safetensors` and `controlnet-canny-sdxl-1.0-small.fp16.safetensors`
+(the last three from the official stabilityai and diffusers Hugging Face orgs; `asset-forge doctor`
+lists what is present). Any further download needs TJX's explicit OK.
 `texture::Models::probe` switches features on when the files appear in
 `models/checkpoints` / `models/controlnet`; nothing breaks when they're missing.
 
@@ -43,7 +45,8 @@ One builder covers every combination, so graphs are always valid:
 ## Render → ControlNet → refine
 
 1. Blender renders the part with `Passes::ALL` (`beauty_0.png`, `depth.png`, `normal.png`).
-2. `texture::detail_pass(paths, beauty, Some(depth), prompt, 0.25, seed, out)`: flattens the
+2. `texture::detail_pass(paths, beauty, Some(depth), prompt, 0.25, seed, out)` (CLI:
+   `asset-forge hero-detail <beauty.png> <out.png> --depth <depth.png>`): flattens the
    beauty on OLED black, works near 1 MP, img2img at denoise 0.2–0.35, ControlNet depth when
    installed (else plain img2img), refiner when installed, scales back, **restores the beauty's
    alpha** so the result drops into the same `ImagePaint` rect.

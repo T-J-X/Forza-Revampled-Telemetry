@@ -15,7 +15,7 @@ strength, registered 1:1 to the kit's local 4K px, and puts only live data in ve
 |---|---|
 | Library | `tools/asset-forge/src/hero/` — `frame.rs` (camera matching, anchors), `rig.rs` (calibrated rigs, G-swing azimuths), `mat.rs` (PBR cookbook as data), `geom.rs` (lathe profiles with fillets, outlines, smooth union of pods, needle blades), `part.rs` (bezel, face, ring, crystal, dome, extrude, mesh, stitches), `bpy.rs` (the Blender side, a Rust string constant), `mod.rs` (`Scene`, `Passes`, `Rendered`, caching, EXR → PNG), `sdxl.rs` (ComfyUI graph builder), `texture.rs` (prompt cookbook, seamless textures, detail pass), `demo.rs` (the proof) |
 | ComfyUI client | `src/comfy.rs`: `upload_image` (multipart), `free`, `models`, `run_retry` (frees VRAM and retries once on OOM) |
-| CLI | `asset-forge hero-demo [--preview]`, `asset-forge hero-versus <board.png> <after.png> [out.png]` |
+| CLI | `asset-forge hero-demo [--preview]`, `asset-forge hero-detail <beauty.png> <out.png> [--depth depth.png] [--denoise 0.25] [--seed N] [--prompt TEXT]`, `doctor` reports the optional models, `asset-forge hero-versus <board.png> <after.png> [out.png]` |
 | Skills | `.claude/skills/blender-hero-assets/SKILL.md`, `.claude/skills/comfyui-hero-textures/SKILL.md` |
 | Docs | `docs/kit/README.md` §12 (rendered hardware paragraph), `program/phases/07-cluster-factory/CLUSTER_PROMPT.md` ("Use the hero library"), `assets/ASSETS.md` header via `ledger.rs::markdown`, `docs/PROGRESS.md` decision log |
 | Proof | `docs/handover-shots/asset-pipeline-v2-{before,after,passes,materials,vs-penpot}.png` (the Penpot board is `07 · PorscheAnalog · 02_mid_cruise`, cropped to the cockpit envelope) |
@@ -55,8 +55,8 @@ See the commit message for the run: fmt, clippy `-D warnings`, test (workspace),
 
 ## Open items / requests
 
-1. **Model downloads need TJX's OK** (asked in chat; nothing downloaded). Recommended set, all
-   official Hugging Face orgs:
+1. **Models installed** (TJX approved the download in chat on 2026-11-23; sizes verified against
+   Hugging Face, `asset-forge doctor` lists them):
    - `stabilityai/stable-diffusion-xl-refiner-1.0` → `sd_xl_refiner_1.0.safetensors`,
      6,075,981,930 bytes, CreativeML Open RAIL++-M, into `models/checkpoints/` (refiner hand-off).
    - `diffusers/controlnet-depth-sdxl-1.0-small` → `diffusion_pytorch_model.fp16.safetensors`,
@@ -64,7 +64,10 @@ See the commit message for the run: fmt, clippy `-D warnings`, test (workspace),
      in `models/controlnet/` (render → depth → refine).
    - `diffusers/controlnet-canny-sdxl-1.0-small` → same file name, 320,237,179 bytes,
      openrail++, saved as `controlnet-canny-sdxl-1.0-small.fp16.safetensors`.
-   The code detects them by name (`texture::Models::probe`) and works without them.
+   The code detects them by name (`texture::Models::probe`) and still works without them.
+   Smoke test: `asset-forge hero-detail <beauty.png> <out.png> --depth <depth.png>` on the
+   PorscheAnalog plate ran base + depth ControlNet + refiner at denoise 0.25: geometry and alpha
+   kept, brushing and knurling sharper.
 2. **Penpot side-by-side:** done from `07 · PorscheAnalog · 02_mid_cruise`. The demo's vectors are a stand-in (its tach runs 0 at lower-left); the board's dial layout belongs to the PorscheAnalog chat. Rerun any time: export the board with `export_shape`, then `asset-forge hero-versus <board.png> docs/handover-shots/asset-pipeline-v2-after.png`.
 3. **Kit request:** a lit-sprite pass (normal + rmh + the `VirtualLight`) would replace the
    three-beauty crossfade with true relighting; the library already writes those maps.

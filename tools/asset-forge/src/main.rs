@@ -91,6 +91,38 @@ fn run(args: &[String]) -> Result<()> {
             Ok(())
         }
         Some("hero-demo") => hero::demo::run(&paths, args.iter().any(|a| a == "--preview")),
+        Some("hero-detail") => {
+            let (Some(beauty), Some(out)) = (args.get(1), args.get(2)) else {
+                return Err(ForgeError::Usage(
+                    "asset-forge hero-detail <beauty.png> <out.png> [--depth depth.png] [--denoise 0.25] [--seed N] [--prompt TEXT]".into(),
+                ));
+            };
+            let mut depth = None;
+            let mut denoise = 0.25_f32;
+            let mut seed = 71_003_u64;
+            let mut prompt = hero::texture::DETAIL_PROMPT.to_owned();
+            let mut it = args.iter().skip(3);
+            while let Some(a) = it.next() {
+                match (a.as_str(), it.next()) {
+                    ("--depth", Some(v)) => depth = Some(std::path::PathBuf::from(v)),
+                    ("--denoise", Some(v)) => denoise = v.parse().unwrap_or(denoise),
+                    ("--seed", Some(v)) => seed = v.parse().unwrap_or(seed),
+                    ("--prompt", Some(v)) => prompt.clone_from(v),
+                    (other, _) => return Err(ForgeError::Usage(format!("unknown hero-detail flag {other}"))),
+                }
+            }
+            let p = hero::texture::detail_pass(
+                &paths,
+                std::path::Path::new(beauty),
+                depth.as_deref(),
+                &prompt,
+                denoise,
+                seed,
+                std::path::Path::new(out),
+            )?;
+            println!("wrote {}", p.display());
+            Ok(())
+        }
         Some("hero-versus") => {
             let (Some(board), Some(after)) = (args.get(1), args.get(2)) else {
                 return Err(ForgeError::Usage("asset-forge hero-versus <board.png> <after.png> [out.png]".into()));
@@ -159,6 +191,12 @@ fn doctor(paths: &paths::Paths) -> Result<()> {
                 true,
                 format!("{} up; {dev}, {vram} MB VRAM", paths.comfy_url),
             );
+            // Optional models (asset pipeline v2): reported, never required.
+            let m = hero::texture::Models::probe(&c);
+            let show = |o: &Option<String>| o.clone().unwrap_or_else(|| "not installed (optional)".into());
+            println!("· sdxl refiner: {}", show(&m.refiner));
+            println!("· controlnet depth: {}", show(&m.depth));
+            println!("· controlnet canny: {}", show(&m.canny));
         }
         Err(e) => check("comfyui api", false, e.to_string()),
     }

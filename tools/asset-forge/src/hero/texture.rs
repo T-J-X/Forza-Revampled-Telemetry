@@ -30,6 +30,15 @@ pub struct Recipe {
 pub const NEGATIVE: &str = "text, watermark, logo, signature, frame, border, vignette, perspective, \
     shadow gradient, lighting falloff, object, seam, blurry, jpeg artifacts, cartoon, illustration";
 
+/// Default prompt for the detail pass over rendered instrument hardware.
+pub const DETAIL_PROMPT: &str = "macro product photograph of a luxury sports car instrument cluster, \
+    machined titanium bezels with fine knurling, brushed sunburst metal dial faces, black pebble-grain \
+    leather hood with contrast stitching, sharp micro detail, studio lighting, pure black background";
+
+/// What the detail pass rejects: anything that would redraw the geometry or add content.
+pub const DETAIL_NEGATIVE: &str = "text, numbers, letters, logo, watermark, extra gauges, extra needles, \
+    distorted circles, warped geometry, blurry, noise, jpeg artifacts, cartoon, illustration, glow, bloom";
+
 /// The texture cookbook. Metals, guilloché and carbon are better procedural in Blender (exact,
 /// resolution-free, anisotropic); SDXL earns its place on organic surfaces.
 pub const COOKBOOK: &[Recipe] = &[
@@ -226,34 +235,47 @@ pub fn detail_pass(
         ((src.w as f32 * k) as u32 / 8 * 8).max(64),
         ((src.h as f32 * k) as u32 / 8 * 8).max(64),
     );
-    let mut job = Job::new(prompt, NEGATIVE, seed);
+    let mut job = Job::new(prompt, DETAIL_NEGATIVE, seed);
     job.size = (w, h);
     job.steps = 30;
-    job.prefix = "hero_detail".into();
     let stem = out.file_stem().and_then(|s| s.to_str()).unwrap_or("detail").to_owned();
-    job.init = Some((format!("{stem}_src.png"), denoise));
-    let (fresh, fp) = cached(out, &job);
-    if fresh {
-        return Ok(out.to_path_buf());
-    }
+    // The cache key covers the source pixels, the depth pass and which models are installed.
+    let src_bytes = std::fs::read(beauty).map_err(|e| io_err(beauty, e))?;
+    let depth_bytes = match depth {
+        Some(d) => Some(std::fs::read(d).map_err(|e| io_err(d, e))?),
+        None => None,
+    };
+    let src_fp = crate::ledger::fingerprint(&[&src_bytes, depth_bytes.as_deref().unwrap_or_default()]);
+    job.prefix = format!("hero_detail_{}", &src_fp[..src_fp.len().min(12)]);
+    let src_name = format!("{stem}_src.png");
+    let depth_name = format!("{stem}_depth.png");
     let c = Comfy::connect(paths)?;
     let models = Models::probe(&c);
-    let name = c.upload_image(&format!("{stem}_src.png"), &img::encode_png(&flat, false, true)?)?;
-    job.init = Some((name, denoise));
-    if let (Some(model), Some(d)) = (models.depth.clone(), depth) {
-        let dn = c.upload_image(
-            &format!("{stem}_depth.png"),
-            &std::fs::read(d).map_err(|e| io_err(d, e))?,
-        )?;
+    job.init = Some((src_name.clone(), denoise));
+    job.refiner = models.refiner.clone().map(|m| (m, 0.8));
+    if let (Some(model), Some(_)) = (models.depth.clone(), &depth_bytes) {
         job.control = Some(Control {
             model,
-            image: dn,
+            image: depth_name.clone(),
             canny: false,
             strength: 0.65,
             end: 0.85,
         });
     }
-    job.refiner = models.refiner.clone().map(|m| (m, 0.8));
+    let (fresh, fp) = cached(out, &job);
+    if fresh {
+        return Ok(out.to_path_buf());
+    }
+    let name = c.upload_image(&src_name, &img::encode_png(&flat, false, true)?)?;
+    job.init = Some((name, denoise));
+    if let (Some(ctl), Some(bytes)) = (job.control.as_mut(), &depth_bytes) {
+        ctl.image = c.upload_image(&depth_name, bytes)?;
+    }
+    println!(
+        "  detail pass {stem}: refiner {}, controlnet depth {}",
+        job.refiner.is_some(),
+        job.control.is_some()
+    );
     let res = first_image(c.run_retry(&sdxl::build(&job), Duration::from_secs(900))?, &stem)?;
     c.free();
     let res = res.resize(src.w, src.h, false);
