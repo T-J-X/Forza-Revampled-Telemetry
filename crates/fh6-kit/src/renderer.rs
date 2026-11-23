@@ -1289,6 +1289,9 @@ impl Renderer {
                             pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
                             self.meshes.record(&mut pass, *i, m.draw.mesh);
                             pass.set_scissor_rect(0, 0, ww, wh);
+                            // The mesh pass bound its own vertex buffer to slot 0;
+                            // restore the shape instances for later draws in this segment.
+                            pass.set_vertex_buffer(0, self.upload.slice(offs.instances..));
                             // The mesh pipeline replaced group 0 and the pipeline.
                             bound_blend = None;
                             bound_image = None;
