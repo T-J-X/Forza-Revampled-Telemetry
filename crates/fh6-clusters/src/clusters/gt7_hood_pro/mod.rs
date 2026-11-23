@@ -8,7 +8,7 @@
 //! car's shift rpm at the crest.
 //! - Rank 1: 11 converging diamonds (28 px, the centre 34–36 px) above the crest, and the gear
 //!   (Saira Condensed 800) in an OLED-black squircle pod with a light-driven 1 px rim.
-//! - Rank 2: the 3-cell tabular speed (Saira Condensed 600, ghost 8s) under the pod.
+//! - Rank 2: the 3-cell tabular speed (Saira Condensed 600, no ghost 8s: see HANDOVER) under the pod.
 //! - Rank 3: the twin ribbons, each led by a comet orb (the meniscus bead of
 //!   `common::ribbon`, sized by the orb intensity law 0.35 + 0.65 × rpm / shift rpm). The left
 //!   wing carries the rpm scale (Titillium Web 600, every 1000 rpm, ticks every 500); the right
@@ -48,18 +48,18 @@
 //! | Z4 | G puck · THR/BRK | r 58 at (620, 72) · x −656 / −584, y 14..130 | r 66 at (540, 70), readout under it · x −576 / −504 |
 //! | Z5 | rpm numerals | Titillium 600 cap 22 under the left wing | cap 24 |
 use crate::common::gball::GBall;
-use crate::common::glass_plate::{dimming_pad, squircle};
+use crate::common::glass_plate::{dimming_pad, squircle, squircle_point};
 use crate::common::hero_gear::HeroGear;
 use crate::common::ribbon::{PathRibbon, RibbonStyle};
-use crate::common::shift::{draw_pod, LimiterCue, PodShape, PodStyle};
+use crate::common::shift::LimiterCue;
 use crate::common::speed::TabularSpeed;
 use crate::common::tyre_slip::{Corner, SlipOutline, TyreSlipQuad, TyreStep};
 use crate::common::{ShiftLights, VirtualLight};
 use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    deg, vec2, Align, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, LayerOptions, Layout,
-    Painter, Palette, Rect, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, LayerOptions,
+    Layout, Painter, Palette, Rect, Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
 };
 
 /// The diamond strip (`modern11`).
@@ -78,9 +78,15 @@ const RIGHT_GAIN: f32 = 0.7;
 /// The blade rises over this ramp once the shift rpm is reached (s).
 const LOCK_RAMP_S: f32 = 0.06;
 /// The pod-rim light sweep on a gear change (s).
-const SWEEP_S: f32 = 0.24;
+const SWEEP_S: f32 = 0.2;
 /// Half width of the sweeping highlight on the pod rim.
-const SWEEP_HALF: f32 = 0.31; // ≈ 18°
+const SWEEP_HALF: f32 = 0.524; // 30°, a 60° streak
+/// The diamonds' strobe off phase keeps 25% of the shift colour.
+const STROBE_FLOOR: f32 = 0.25;
+/// Width of the apex blade (px).
+const BLADE_W: f32 = 8.0;
+/// Smallest cap of the micro-labels (MPH, THR, BRK): the hood has no scrim behind them.
+const MICRO_MIN_CAP: f32 = 18.0;
 /// Most scale ticks kept (every 500 rpm from idle to the shift rpm).
 const MAX_TICKS: usize = 48;
 /// Parallax of the mid (pod, tyres, G) and front (gear, speed) planes at 1.5 g (px).
@@ -89,9 +95,6 @@ const PARALLAX_PX: [f32; 2] = [2.0, 4.0];
 const HAIR_POINTS: usize = 65;
 /// Segments per hairline polyline chunk (keeps each bounding box small).
 const HAIR_CHUNK: usize = 8;
-/// Ghost 8s: linear alpha 1/255 reads as about 5% grey, a cell you see only when you look
-/// for it (the token ghost reads as a real digit on OLED black).
-const GHOST_ALPHA: f32 = 1.0 / 255.0;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -405,7 +408,7 @@ impl Gt7HoodPro {
             brake: Spring::new(t.springs.snap, 0.0),
             sweep_t: -1.0,
             sweep_up: true,
-            micro_cap: t.type_scale.micro_label,
+            micro_cap: t.type_scale.micro_label.max(MICRO_MIN_CAP),
             tracking: t.type_scale.label_tracking,
         }
     }
@@ -464,8 +467,8 @@ impl Gt7HoodPro {
     fn tyre_color(step: TyreStep, pal: &Palette) -> Color {
         match step {
             TyreStep::Cool | TyreStep::Optimal => pal.roles.ink.with_alpha(2.0 / 255.0),
-            TyreStep::Hot => pal.roles.caution.fade(0.7),
-            TyreStep::Critical => pal.roles.warning.fade(0.8),
+            TyreStep::Hot => pal.roles.caution.fade(0.2),
+            TyreStep::Critical => pal.roles.warning.fade(0.25),
         }
     }
 }
@@ -655,9 +658,18 @@ impl Gt7HoodPro {
             }),
             ..LayerOptions::default()
         };
+        // The drawn fill never passes FILL_MAX: the ribbon spring may overshoot its target, and
+        // the last stop of the ribbon's colour ramp is the warning role.
+        let fill = [
+            wings.side[0].fraction().min(FILL_MAX),
+            wings.side[1].fraction().min(FILL_MAX),
+        ];
         p.layer(ribbons, |p| {
-            for w in &wings.side {
-                w.draw_fill(p, w.fraction(), pal, 0.0);
+            for (w, &f) in wings.side.iter().zip(fill.iter()) {
+                w.draw_fill(p, f, pal, 0.0);
+                if lock > 0.004 {
+                    Self::draw_arch_lock(p, w, f, lock, pal);
+                }
             }
         });
 
@@ -667,10 +679,7 @@ impl Gt7HoodPro {
         let r = g.bead_r * (0.25 + 0.75 * intensity);
         let core = r * (0.55 + 0.25 * self.throttle.value().clamp(0.0, 1.0));
         let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
-        let heads = [
-            wings.side[0].point_at(wings.side[0].fraction()),
-            wings.side[1].point_at(wings.side[1].fraction()),
-        ];
+        let heads = [wings.side[0].point_at(fill[0]), wings.side[1].point_at(fill[1])];
         // Apex fuse: a neck grows between the orbs once they are within 2 r + k of each other.
         let d = (heads[1] - heads[0]).length();
         let reach = 2.0 * r + FUSE_K;
@@ -693,7 +702,7 @@ impl Gt7HoodPro {
         }
         for (k, w) in wings.side.iter().enumerate() {
             let gain = if k == 0 { 1.0 } else { RIGHT_GAIN };
-            w.draw_bead(p, w.fraction().max(0.004), r, core, light, pal, intensity * gain, 0.0);
+            w.draw_bead(p, fill[k].max(0.004), r, core, light, pal, intensity * gain, 0.0);
         }
 
         // The lock: a steady blade in `shift` from the crest to the centre diamond, and the
@@ -708,7 +717,10 @@ impl Gt7HoodPro {
             let h = (bottom - g.diamond_y) * e;
             p.layer(LayerOptions::bloom(), |p| {
                 p.fill(
-                    &Shape::round_rect(Rect::from_xywh(g.crest.x - 3.0, bottom - h, 6.0, h), 3.0),
+                    &Shape::round_rect(
+                        Rect::from_xywh(g.crest.x - BLADE_W * 0.5, bottom - h, BLADE_W, h),
+                        BLADE_W * 0.5,
+                    ),
                     Gradient::linear(vec2(0.0, bottom), vec2(0.0, bottom - h))
                         .stop(0.0, pal.shift.lerp(roles.ink, 0.3).fade(lock))
                         .stop(1.0, pal.shift.fade(lock)),
@@ -724,17 +736,135 @@ impl Gt7HoodPro {
         }
     }
 
-    /// The 11 converging diamonds; only they strobe at the limiter.
+    /// The colour of diamond `i` this frame: the shared outside-in fill, and on the limiter
+    /// the strobe between the full shift colour and 25% (the strip never vanishes).
+    fn diamond_color(&self, i: usize, pal: &Palette) -> Option<Color> {
+        self.shift
+            .color_of(i, pal)
+            .or_else(|| self.shift.over_shift().then(|| pal.shift.fade(STROBE_FLOOR)))
+    }
+
+    /// The 11 converging diamonds; only they strobe at the limiter. A lit diamond is light, not
+    /// a plate: an additive Gaussian-like halo with no edge, then a bloomed core with a 30% white
+    /// centre and a 1 px inner rim. Unlit diamonds are near-black lenses with a faint rim.
     fn draw_diamonds(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let style = PodStyle {
-            glow_sigma: 8.0,
-            glow: 0.3,
-            unlit_alpha: 1.0 / 255.0,
-            unlit_rim: 0.12,
-            ..PodStyle::default().with_shape(PodShape::Diamond)
+        let roles = pal.roles;
+        let mut pts = [[Vec2::ZERO; 4]; DIAMONDS as usize];
+        for (i, q) in pts.iter_mut().enumerate() {
+            let r = g.diamond_rect(i);
+            let (c, h) = (r.center(), r.width() * 0.5);
+            *q = [
+                vec2(c.x, c.y - h),
+                vec2(c.x + h, c.y),
+                vec2(c.x, c.y + h),
+                vec2(c.x - h, c.y),
+            ];
+        }
+        for (i, q) in pts.iter().enumerate() {
+            if self.diamond_color(i, pal).is_none() {
+                let shape = Shape::Polygon { points: q };
+                p.fill(&shape, roles.ink.with_alpha(1.0 / 255.0));
+                p.stroke(&shape, roles.ink.with_alpha(0.12), Stroke::rim_px(1.0));
+            }
+        }
+        p.scoped(|p| {
+            p.set_blend(BlendMode::Add);
+            for i in 0..DIAMONDS as usize {
+                if let Some(c) = self.diamond_color(i, pal) {
+                    let r = g.diamond_rect(i);
+                    let (center, rad) = (r.center(), r.width() * 1.15);
+                    p.fill(
+                        &Shape::circle(center, rad),
+                        Gradient::radial(center, rad)
+                            .stop(0.0, c.fade(0.35))
+                            .stop(0.22, c.fade(0.12))
+                            .stop(0.45, c.fade(0.03))
+                            .stop(0.7, c.fade(0.006))
+                            .stop(1.0, c.fade(0.0)),
+                    );
+                }
+            }
+        });
+        p.layer(LayerOptions::bloom(), |p| {
+            for (i, q) in pts.iter().enumerate() {
+                if let Some(c) = self.diamond_color(i, pal) {
+                    let r = g.diamond_rect(i);
+                    let shape = Shape::Polygon { points: q };
+                    p.fill(
+                        &shape,
+                        Gradient::radial(r.center(), r.width() * 0.5)
+                            .stop(0.0, c.lerp(roles.ink.with_alpha(c.a), 0.3))
+                            .stop(0.6, c)
+                            .stop(1.0, c),
+                    );
+                }
+            }
+        });
+        for (i, q) in pts.iter().enumerate() {
+            if let Some(c) = self.diamond_color(i, pal) {
+                p.stroke(
+                    &Shape::Polygon { points: q },
+                    roles.ink.fade(0.4 * c.a),
+                    Stroke::inner(1.0),
+                );
+            }
+        }
+    }
+
+    /// Light segments along the pod's squircle rim, centred on outline angle `mid` with half
+    /// width `half` (radians): a tapered streak in `color`, 0 at both ends.
+    #[allow(clippy::too_many_arguments)]
+    fn rim_streak(p: &mut Painter<'_>, g: &Geom, mid: f32, half: f32, width: f32, color: Color, alpha: f32) {
+        const STEPS: usize = 10;
+        let mut prev = squircle_point(g.pod, g.pod_size, POD_N, mid - half, 0.0);
+        for i in 1..=STEPS {
+            let a = mid - half + 2.0 * half * i as f32 / STEPS as f32;
+            let q = squircle_point(g.pod, g.pod_size, POD_N, a, 0.0);
+            let k = (i as f32 - 0.5) / STEPS as f32;
+            let taper = (k * core::f32::consts::PI).sin();
+            p.fill(
+                &Shape::Line {
+                    a: prev,
+                    b: q,
+                    width_a: width,
+                    width_b: width,
+                    cap: Cap::Butt,
+                },
+                color.with_alpha(alpha * taper * taper),
+            );
+            prev = q;
+        }
+    }
+
+    /// Inner arch at the lock: from 55% of the wing to its head the ribbon crossfades to `shift`
+    /// at 85% (opaque, butt-capped segments over the fill, so nothing shows as dots).
+    fn draw_arch_lock(p: &mut Painter<'_>, w: &PathRibbon, f: f32, lock: f32, pal: &Palette) {
+        const FROM: f32 = 0.55;
+        const STEPS: usize = 24;
+        if f <= FROM {
+            return;
+        }
+        let at = |k: usize| FROM + (f - FROM) * k as f32 / STEPS as f32;
+        let tint = |t: f32| {
+            let s = ((t - FROM) / 0.2).clamp(0.0, 1.0);
+            let s = s * s * (3.0 - 2.0 * s);
+            w.color_at(t, pal, 0.0).lerp(pal.shift, 0.85 * lock * s)
         };
-        for i in 0..DIAMONDS as usize {
-            draw_pod(p, g.diamond_rect(i), self.shift.color_of(i, pal), &style, pal);
+        let mut prev = w.point_at(at(0));
+        for k in 1..=STEPS {
+            let (t0, t1) = (at(k - 1), at(k));
+            let q = w.point_at(t1);
+            p.fill(
+                &Shape::Line {
+                    a: prev,
+                    b: q,
+                    width_a: w.width_at(t0),
+                    width_b: w.width_at(t1),
+                    cap: Cap::Butt,
+                },
+                Gradient::linear(prev, q).stop(0.0, tint(t0)).stop(1.0, tint(t1)),
+            );
+            prev = q;
         }
     }
 
@@ -756,6 +886,9 @@ impl Gt7HoodPro {
                 .stop(1.0, pal.primary.with_alpha(0.07 * calm)),
             Stroke::rim_px(1.0),
         );
+        // A specular crescent towards the virtual light (it swings with lateral G).
+        let la = self.light.angle();
+        Self::rim_streak(p, g, la, deg(28.0), 2.0, roles.rim_specular, 0.55 * calm);
         if lock > 0.004 {
             p.stroke(&pod, pal.shift.fade(0.85 * lock), Stroke::rim_px(1.5));
         }
@@ -765,16 +898,8 @@ impl Gt7HoodPro {
             // Over the top of the rim: 9 o'clock → 12 → 3 o'clock (reversed on a downshift).
             let along = if self.sweep_up { e } else { 1.0 - e };
             let a = deg(180.0) + deg(180.0) * along;
-            let fade = (1.0 - k).min(k * 6.0).clamp(0.0, 1.0);
-            p.stroke(
-                &pod,
-                Gradient::conic(g.pod, a - SWEEP_HALF)
-                    .stop(0.0, roles.ink.with_alpha(0.0))
-                    .stop(SWEEP_HALF / TAU, roles.ink.with_alpha(0.9 * fade))
-                    .stop(2.0 * SWEEP_HALF / TAU, roles.ink.with_alpha(0.0))
-                    .stop(1.0, roles.ink.with_alpha(0.0)),
-                Stroke::rim_px(2.0),
-            );
+            let fade = (1.0 - k).min(k * 8.0).clamp(0.0, 1.0);
+            Self::rim_streak(p, g, a, SWEEP_HALF, 3.0, roles.ink, fade);
         }
     }
 
@@ -816,7 +941,7 @@ impl Gt7HoodPro {
     fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
         let label = TextStyle::new(self.faces.label, self.micro_cap)
-            .paint(roles.ink_label)
+            .paint(roles.ink.fade(0.8))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
         let h = g.pedal_y[1] - g.pedal_y[0];
@@ -844,19 +969,20 @@ impl Gt7HoodPro {
     fn draw_gear(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let lock = self.lock.level();
         p.scoped(|p| {
+            // Inset 16 px, so the 1.12 entry is cut inside the pod and never meets its rim.
             p.clip(
-                Rect::from_center_size(g.pod, g.pod_size - Vec2::splat(6.0)),
-                g.pod_size.y * 0.3,
+                Rect::from_center_size(g.pod, g.pod_size - Vec2::splat(32.0)),
+                g.pod_size.y * 0.26,
             );
             self.gear.draw(p, g.pod, self.faces.gear, g.gear_cap, pal);
-            let glow = self.gear.color(pal).fade(0.22 + 0.3 * lock + self.gear.flash() * 0.5);
+            let glow = self.gear.color(pal).fade(0.1 + 0.3 * lock + self.gear.flash() * 0.5);
             p.layer(LayerOptions::bloom(), |p| {
                 self.gear.draw_with(p, g.pod, self.faces.gear, g.gear_cap, glow);
             });
         });
     }
 
-    /// Rank 2: the tabular speed with ghost 8s and its unit on the baseline; on the hood the
+    /// Rank 2: the tabular speed and its unit on the baseline; on the hood the
     /// digits get a black keyline and a feathered pad (the scrim is 0% there).
     fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
@@ -877,10 +1003,12 @@ impl Gt7HoodPro {
             value,
             3,
             &style.paint(roles.ink),
-            Some(roles.ink.with_alpha(GHOST_ALPHA).into()),
+            // No ghost 8s: the kit sets low-alpha text far brighter than its linear alpha (even
+            // 1/255 reads as a real 8 on OLED black), so empty cells stay empty (see HANDOVER).
+            None,
         );
         let unit = TextStyle::new(self.faces.label, self.micro_cap)
-            .paint(roles.ink_label)
+            .paint(roles.ink.fade(0.8))
             .tracking(self.tracking)
             .align(Align::Left, VAlign::Baseline);
         p.text(
