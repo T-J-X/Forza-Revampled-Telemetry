@@ -48,8 +48,8 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 4 | ★ `BoschDdu` | pattern-setter | Race Dash | cockpit | high | ◐ |
 | 5 | ★ `TeslaAdas` | pattern-setter | ADAS & HUD | cockpit+hood | high | ◐ |
 | 6 | ★ `RetroCyber` | pattern-setter | Sci-Fi | cockpit+hood | high | ◐ |
-| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | ◐ |
-| 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | medium | next |
+| 7 | ★ `KineticLiquidMetal` | pattern-setter | Fluid / Generative | cockpit | high | next |
+| 8 | `VisionSpatialGlass` | rebuild | Liquid Glass | cockpit | medium | ☐ |
 | 9 | `AmgMbuxSuperscreen` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
 | 10 | `DriftGlass` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
 | 11 | `GlyphDotMatrix` | rebuild | Modern Digital 2027 | cockpit | medium | ☐ |
