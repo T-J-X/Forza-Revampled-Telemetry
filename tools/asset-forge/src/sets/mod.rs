@@ -23,6 +23,7 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "logos" => logos::build(ctx),
         "fonts" => fonts::build(ctx),
         "comfy" => comfyset::build(ctx),
+        "tesla_adas" => crate::recipes::tesla_adas::build(ctx),
         _ => Ok(()),
     }
 }

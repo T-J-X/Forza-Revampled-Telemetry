@@ -14,12 +14,12 @@
 //! ambient simulation that carries no numbers. The stop line is real: it is the stopping distance
 //! at the measured deceleration.
 use crate::common::adas_road::{curvature, ego_yaw, EGO_Z, LANE_WIDTH, MAX_DT, MIN_CURVE_SPEED};
-use fh6_kit::math::{finite_or, smoothstep, vec3, Mat4, Vec3};
+use fh6_kit::math::{finite_or, smoothstep, vec3, Affine, Mat4, Vec3};
 use fh6_kit::mesh::{MeshData, MeshDraw, MeshId, MeshShading};
 use fh6_kit::perspective::{Camera25, RoadCurve};
 use fh6_kit::{
-    vec2, Align, Cap, Color, FontId, Glow, Gradient, Painter, Palette, Rect, Shape, Spring, TextStyle, Tokens, VAlign,
-    Vec2,
+    vec2, Align, Cap, Color, FontId, Glow, Gradient, ImageId, ImagePaint, Painter, Palette, Rect, Shape, Spring,
+    TextStyle, Tokens, VAlign, Vec2,
 };
 
 /// Standard gravity (m/s^2).
@@ -60,6 +60,15 @@ const GROUND_ALPHA: f32 = 0.006;
 /// Underglow alpha and its sigma as a fraction of the ego's on-screen width.
 const UNDERGLOW_ALPHA: f32 = 0.40;
 const UNDERGLOW_SIGMA: f32 = 0.22;
+/// The baked underglow pool: its size in local px (asset-forge `tesla_adas::POOL_LOCAL`, centred on
+/// the ego's ground centre) and its peak alpha.
+const POOL_LOCAL: [f32; 2] = [480.0, 240.0];
+const POOL_ALPHA: f32 = 0.75;
+/// The ComfyUI horizon haze: its height above the horizon (local px), the overlap below it, and
+/// its peak alpha (tinted primary, lifted 15% towards ink).
+const HAZE_ABOVE: f32 = 56.0;
+const HAZE_BELOW: f32 = 22.0;
+const HAZE_ALPHA: f32 = 0.16;
 /// Ego body: light neutral tinted 15% by the brand (the brand-pearl twin).
 const EGO_TINT: f32 = 0.15;
 /// Traffic body (`#8C929C` at 0.70 over black, drawn opaque) and a blind-spot ghost's level.
@@ -115,6 +124,8 @@ pub struct SceneGeom {
     pub focal: f32,
     /// Horizon as a fraction of the band's height from its top.
     pub horizon_frac: f32,
+    /// Which baked underglow pool matches this camera (0 cockpit, 1 hood; `assets/clusters/tesla_adas/`).
+    pub pool: usize,
 }
 
 impl SceneGeom {
@@ -175,9 +186,20 @@ pub struct CarModel {
     pub gltf: bool,
 }
 
-/// The car models (the Phase 6 glTF when `assets` has it, else the kit's procedural proxy) and
-/// the tail-light quad.
-pub fn load_models(setup: &mut fh6_kit::cluster::Setup<'_>) -> ([CarModel; 4], MeshId) {
+/// Everything the scene loads once: the car models (the Phase 6 glTF when `assets` has it, else
+/// the kit's procedural proxy), the tail-light quad, and this cluster's baked images (the Blender
+/// underglow pools per camera and the ComfyUI horizon haze; each `None` falls back to the
+/// procedural look).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SceneAssets {
+    models: [CarModel; 4],
+    lamp: MeshId,
+    pools: [Option<ImageId>; 2],
+    haze: Option<ImageId>,
+}
+
+/// Loads [`SceneAssets`].
+pub fn load_assets(setup: &mut fh6_kit::cluster::Setup<'_>) -> SceneAssets {
     let kinds = [Kind::Ego, Kind::Sedan, Kind::Suv, Kind::Supercar];
     let models = kinds.map(|k| {
         let (file, dims) = k.spec();
@@ -195,7 +217,21 @@ pub fn load_models(setup: &mut fh6_kit::cluster::Setup<'_>) -> ([CarModel; 4], M
         }
     });
     let lamp = setup.meshes.upload(setup.device, setup.queue, &lamp_quad());
-    (models, lamp)
+    let mut image = |rel: &str| {
+        let path = setup.assets?.join(rel);
+        path.is_file()
+            .then(|| setup.images.load_file(setup.device, setup.queue, &path, None).ok())
+            .flatten()
+    };
+    SceneAssets {
+        models,
+        lamp,
+        pools: [
+            image("clusters/tesla_adas/underglow_pool_cockpit.png"),
+            image("clusters/tesla_adas/underglow_pool_hood.png"),
+        ],
+        haze: image("clusters/tesla_adas/horizon_haze.png"),
+    }
 }
 
 /// What the scene reads each frame (verified telemetry only).
@@ -454,6 +490,8 @@ struct Frame {
     z_far: f32,
     ego_depth: f32,
     fade_px: f32,
+    /// The baked underglow pool for this camera.
+    pool: usize,
 }
 
 impl Frame {
@@ -477,6 +515,7 @@ impl Frame {
             z_far: reach(kappa),
             ego_depth: cam.depth(vec3(0.0, 0.0, EGO_Z)).max(0.5),
             fade_px: FADE_EDGES_PX.min(vp.width() * 0.25),
+            pool: g.pool,
         }
     }
 
@@ -557,6 +596,8 @@ impl Frame {
 pub struct Scene {
     models: [CarModel; 4],
     lamp: MeshId,
+    pools: [Option<ImageId>; 2],
+    haze: Option<ImageId>,
     traffic: Traffic,
     kappa: Spring,
     kappa_target: f32,
@@ -590,11 +631,13 @@ pub struct Scene {
 impl Scene {
     /// A scene with the tokens' motion and the seeded traffic.
     #[must_use]
-    pub fn new(tokens: &Tokens, models: [CarModel; 4], lamp: MeshId) -> Self {
+    pub fn new(tokens: &Tokens, assets: SceneAssets) -> Self {
         let s = &tokens.springs;
         Self {
-            models,
-            lamp,
+            models: assets.models,
+            lamp: assets.lamp,
+            pools: assets.pools,
+            haze: assets.haze,
             traffic: Traffic::seeded(SEED),
             kappa: Spring::new(s.default, 0.0),
             kappa_target: 0.0,
@@ -729,6 +772,14 @@ impl Scene {
             return;
         }
         let f = Frame::new(g, self.kappa.value());
+        // The ComfyUI horizon haze: a thin band of atmosphere sitting on the horizon behind the
+        // far road (it may rise a little above the band; it is the faintest thing on screen).
+        if let Some(img) = self.haze {
+            let h = f.cam.horizon_y;
+            let rect = Rect::from_points(vec2(vp.min.x, h - HAZE_ABOVE), vec2(vp.max.x, h + HAZE_BELOW));
+            let tint = pal.primary.lerp(pal.roles.ink, 0.15).fade(HAZE_ALPHA);
+            p.fill(&Shape::rect(rect), ImagePaint::new(img, rect).tint(tint));
+        }
         p.scoped(|p| {
             p.clip(vp, 0.0);
             self.draw_ground(p, &f, pal);
@@ -808,7 +859,45 @@ impl Scene {
             );
         }
 
-        // Underglow: a Gaussian round a ground ellipse under the ego (a baked quad, no bloom).
+        let color = pal
+            .primary
+            .lerp(pal.roles.caution, self.drift.clamp(0.0, 1.0))
+            .lerp(pal.shift, self.limiter.clamp(0.0, 1.0));
+        // Underglow, baked: the Blender light pool seen through this very camera (tyre and sill
+        // shadows included), tinted live. A yawed ego shears it along its projected heading.
+        if let Some(img) = self.pools[f.pool.min(1)] {
+            let x = f.road.center_x(EGO_Z);
+            let Some(c) = f.cam.project(vec3(x, 0.0, EGO_Z)) else {
+                return;
+            };
+            let slope = |heading: f32| {
+                f.cam
+                    .project(vec3(x + 2.0 * heading.sin(), 0.0, EGO_Z + 2.0 * heading.cos()))
+                    .map_or(0.0, |q| {
+                        let d = q - c;
+                        if d.y.abs() > 1e-3 {
+                            d.x / d.y
+                        } else {
+                            0.0
+                        }
+                    })
+            };
+            let road = f.road.heading(EGO_Z);
+            let shear = (slope(road + self.yaw.value()) - slope(road)).clamp(-1.5, 1.5);
+            let size = vec2(POOL_LOCAL[0], POOL_LOCAL[1]);
+            let rect = Rect::from_center_size(Vec2::ZERO, size);
+            p.scoped(|p| {
+                p.translate(c);
+                p.transform(&Affine::skew_x(shear));
+                p.fill(
+                    &Shape::rect(rect),
+                    ImagePaint::new(img, rect).tint(color.fade(POOL_ALPHA)),
+                );
+            });
+            return;
+        }
+        let color = color.fade(UNDERGLOW_ALPHA);
+        // Underglow fallback: a Gaussian round a ground ellipse under the ego (no bloom).
         let ego = self.models[Kind::Ego.index()];
         let model = f.model(0.0, EGO_Z, self.yaw.value(), 0.0, 0.0, 0.0);
         let (a, b) = (0.5 * ego.dims[0] * 1.22, 0.5 * ego.dims[1] * 1.10);
@@ -821,11 +910,6 @@ impl Scene {
             *slot = q;
         }
         let width_px = f.cam.fx * ego.dims[0] / f.ego_depth;
-        let color = pal
-            .primary
-            .lerp(pal.roles.caution, self.drift.clamp(0.0, 1.0))
-            .lerp(pal.shift, self.limiter.clamp(0.0, 1.0))
-            .fade(UNDERGLOW_ALPHA);
         let (d0, d1) = (f.vp.max.y - BOTTOM_FADE_PX, f.vp.max.y);
         p.glow(
             &Shape::Polygon { points: &pool },
@@ -1156,9 +1240,7 @@ impl Scene {
 
     /// The traffic and the ego as clay meshes, then the ego's tail-light bar as an unlit quad.
     ///
-    /// Drawn after every 2D draw of the cluster: the kit's renderer does not re-bind the shape
-    /// instance buffer after a mesh draw, so 2D shapes recorded after a mesh in the same segment
-    /// are lost (see `HANDOVER.md`). Meshes only depth-test against each other.
+    /// Drawn after the 2D scene (the meshes depth-test only against each other).
     pub fn draw_meshes(&self, p: &mut Painter<'_>, g: &SceneGeom, pal: &Palette) {
         let vp = g.viewport;
         if !(vp.min.is_finite() && vp.max.is_finite() && vp.width() >= 64.0 && vp.height() >= 32.0) {

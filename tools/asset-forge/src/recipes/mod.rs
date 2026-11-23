@@ -7,6 +7,7 @@ pub mod classic;
 pub mod fluid;
 pub mod glass;
 pub mod scifi;
+pub mod tesla_adas;
 
 /// Shared helpers: argument loading, scene reset, Cycles on the GPU, cameras, data passes
 /// (normal / height / AO written as emission into 32-bit EXR), studio lighting and saving.

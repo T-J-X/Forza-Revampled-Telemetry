@@ -27,7 +27,17 @@ mod svg;
 use error::{ForgeError, Result};
 use std::process::ExitCode;
 
-const SETS: &[&str] = &["glass", "fluid", "scifi", "classic", "adas", "fonts", "logos", "comfy"];
+const SETS: &[&str] = &[
+    "glass",
+    "fluid",
+    "scifi",
+    "classic",
+    "adas",
+    "fonts",
+    "logos",
+    "comfy",
+    "tesla_adas",
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

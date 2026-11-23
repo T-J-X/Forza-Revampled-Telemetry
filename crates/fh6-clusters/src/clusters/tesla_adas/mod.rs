@@ -134,6 +134,7 @@ const COCKPIT: Geom = Geom {
         // top so the far road and the lead car sit clear of the gear pill.
         focal: 440.0,
         horizon_frac: 0.085,
+        pool: 0,
     },
 };
 
@@ -176,6 +177,7 @@ const HOOD: Geom = Geom {
         pitch_deg: 8.0,
         focal: 400.0,
         horizon_frac: 0.02,
+        pool: 1,
     },
 };
 
@@ -251,12 +253,12 @@ impl TeslaAdas {
         let springs = t.springs;
         let micro_cap = t.type_scale.micro_label;
         let tracking = t.type_scale.label_tracking;
-        let (models, lamp) = scene::load_models(setup);
+        let assets = scene::load_assets(setup);
         Self {
             faces,
             palette: Palette::family(t, "adasHud"),
             view: View::Cockpit,
-            scene: Scene::new(t, models, lamp),
+            scene: Scene::new(t, assets),
             shift: ShiftLights::new(PODS),
             cue: LimiterCue::new(),
             gear: HeroGear::new(t),
@@ -368,18 +370,9 @@ impl Cluster for TeslaAdas {
         );
         self.draw_gear(p, g, &pal);
         self.draw_readouts(p, g, &pal);
-        // The clay cars last: no 2D draw may follow a mesh draw (kit renderer debt, HANDOVER).
+        // The clay cars last: they depth-test only against each other, so the 2D scene sits
+        // under them and the lamp bar (a mesh quad) on the ego.
         self.scene.draw_meshes(p, &g.scene, &pal);
-        // Kit debt guard: the renderer does not re-bind the shape instance buffer after a mesh
-        // draw, so a host draw after this cluster in the same segment (the `--stats` text, the
-        // OSD) fails wgpu validation and drops the device. A segment break starts a new render
-        // pass, which binds it again. A blurred layer is the only break that needs no backdrop;
-        // its single draw is a 1 px dot of near-zero black (invisible on any background). Remove
-        // once `Renderer` re-binds slot 0 after `Meshes::record`.
-        let dot = g.scene.viewport.max - Vec2::splat(2.0);
-        p.layer(LayerOptions::blurred(0.5), |p| {
-            p.fill(&Shape::circle(dot, 0.5), pal.roles.oled_black.with_alpha(1.0 / 255.0));
-        });
     }
 
     fn animating(&self) -> bool {
