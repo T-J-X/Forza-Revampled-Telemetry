@@ -215,9 +215,15 @@ impl CarConfig {
         if let (true, Some(current)) = (same, self.current.as_ref()) {
             return Arc::clone(current);
         }
+        // OSD edits swap the base on every step; only a new car or profiles file is news.
+        let car_changed = self.current.is_none()
+            || self.ordinal != ordinal
+            || !self.profiles.as_ref().is_some_and(|p| Arc::ptr_eq(p, profiles));
         let effective = match profiles.effective_config(base, ordinal) {
             Some(cfg) => {
-                tracing::info!(car_ordinal = ordinal, "car profile applied");
+                if car_changed {
+                    tracing::info!(car_ordinal = ordinal, "car profile applied");
+                }
                 Arc::new(cfg)
             }
             None => Arc::clone(base),
@@ -318,7 +324,8 @@ impl Osd {
         self.follow_until = None;
         let anchor_x = match view {
             View::Hood => cfg.bonnet_anchor_x,
-            View::Cockpit | View::Chase => cfg.cockpit_anchor_x,
+            View::Cockpit => cfg.cockpit_anchor_x,
+            View::Chase => cfg.chase_anchor_x,
         } as f32;
         self.host.open(cfg, view, anchor_x);
         if self.pause.on_open(&mut *self.injector, pause) {
@@ -465,9 +472,8 @@ impl Loop {
         let Some(gpu) = self.gpu.as_mut() else { return };
         let Some(kit) = gpu.kit.as_mut() else { return };
         let entry = fh6_clusters::registry::resolve(theme);
-        let assets = self.resources.assets.clone();
         let cluster = {
-            let mut setup = kit.setup(&gpu.ctx.device, &gpu.ctx.queue, assets.as_deref());
+            let mut setup = kit.setup(&gpu.ctx.device, &gpu.ctx.queue, self.resources.assets.as_deref());
             (entry.make)(&mut setup)
         };
         tracing::info!(%theme, cluster = entry.name, ?view, "cluster selected");
@@ -524,8 +530,13 @@ impl Loop {
     fn prepare_osd(&mut self, host: &mut OsdHost, cfg: &AppConfig) {
         let Some(gpu) = self.gpu.as_mut() else { return };
         let Some(kit) = gpu.kit.as_mut() else { return };
-        let assets = self.resources.assets.clone();
-        host.prepare(kit, &gpu.ctx.device, &gpu.ctx.queue, assets.as_deref(), cfg);
+        host.prepare(
+            kit,
+            &gpu.ctx.device,
+            &gpu.ctx.queue,
+            self.resources.assets.as_deref(),
+            cfg,
+        );
     }
 
     /// Starts, polls or stops the optional refraction capture (`"GlassRefraction": true`).
@@ -790,6 +801,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
     let mut warmed_up = options.bench.is_none();
     let mut on_bench_done = Some(on_bench_done);
     let mut car_config = CarConfig::default();
+    // The car last seen in a racing packet: the dyno (OSD live view while paused) keeps its profile.
+    let mut last_car_ordinal = 0i32;
 
     tracing::info!(?refresh, "render loop started");
     while !control.stopped() {
@@ -847,7 +860,15 @@ fn run(setup: RenderSetup) -> RenderSummary {
         let camera_view = View::from_camera_index(i32::try_from(input.camera_index()).unwrap_or(3));
 
         // OSD edges: open snapshots the config (and pauses mid-race); close flushes the save.
-        let osd_open = input.osd_open();
+        let mut osd_open = input.osd_open();
+        if osd_open && !osd.was_open && control.user_hidden() && !bypass {
+            // The overlay is hidden from the tray: an OSD nobody can see must not pause the game.
+            input.set_osd_open(false);
+            osd_open = false;
+        }
+        if fresh && race_on && frame.data.car_ordinal != 0 {
+            last_car_ordinal = frame.data.car_ordinal;
+        }
         let pause_inputs = PauseInputs {
             racing: fresh && race_on,
             game_foreground,
@@ -881,7 +902,8 @@ fn run(setup: RenderSetup) -> RenderSummary {
             &frame.data
         };
         // Per-car overrides switch with the car ordinal (cached; no allocation per frame).
-        let cfg = car_config.resolve(&base_cfg, &profiles.current(), data.car_ordinal);
+        let car_ordinal = if synthetic { last_car_ordinal } else { data.car_ordinal };
+        let cfg = car_config.resolve(&base_cfg, &profiles.current(), car_ordinal);
         let vis = visibility.update(
             VisibilityInputs {
                 race_on,
@@ -940,7 +962,7 @@ fn run(setup: RenderSetup) -> RenderSummary {
                 input.set_osd_open(false);
             }
             rows_cfg = osd.config_for_frame(&live_cfg, true, build_start);
-            cfg = car_config.resolve(&rows_cfg, &profiles.current(), data.car_ordinal);
+            cfg = car_config.resolve(&rows_cfg, &profiles.current(), car_ordinal);
             osd.host.note_profile(&rows_cfg, &cfg);
             lp.prepare_osd(&mut osd.host, &rows_cfg);
         }

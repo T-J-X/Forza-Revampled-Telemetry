@@ -845,7 +845,7 @@ pub fn slider_value(row: RowId, ctx: Ctx<'_>) -> f32 {
         RowId::Hue => hsv.h,
         RowId::Saturation => hsv.s * 100.0,
         RowId::Brightness => hsv.v * 100.0,
-        RowId::FovCockpit => cfg.standard_cockpit_fov,
+        RowId::FovCockpit => cfg.wheel_less_cockpit_fov,
         RowId::FovHood => cfg.bonnet_fov,
         RowId::FovChase => cfg.chase_near_fov,
         RowId::SeatHeight => cfg.driver_seat_height_m * 1000.0,
@@ -1199,7 +1199,7 @@ mod tests {
         let mut cfg = AppConfig::default();
         let mut edit = EditState::default();
         let mut fit = ConfigOnlyFit;
-        cfg.standard_cockpit_fov = 109.0;
+        cfg.wheel_less_cockpit_fov = 109.0;
         let e = adjust(RowId::FovCockpit, 1, 10, &mut cfg, &mut edit, &mut fit);
         assert!(e.changed && e.camera);
         assert_eq!(cfg.standard_cockpit_fov, 110.0);

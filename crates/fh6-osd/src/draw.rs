@@ -453,7 +453,7 @@ fn camera_schematic(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Ro
     let fov = match row {
         RowId::FovHood => cfg.bonnet_fov,
         RowId::FovChase => cfg.chase_near_fov,
-        _ => cfg.standard_cockpit_fov,
+        _ => cfg.wheel_less_cockpit_fov,
     };
     // Everything stays inside this box, between the focus echo and the cluster.
     let bx = Rect::from_xywh(cx - 420.0, 1080.0, 840.0, 280.0);
