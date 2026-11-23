@@ -27,11 +27,12 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 
 ## Steps
 1. **Design first, on your board.**
-   - In Penpot (the `penpot` MCP, see `SKILLS.md`): create your page `07 · <Name>` in the Phase 7 Penpot file (`docs/design/PENPOT.md` has its ID; if there is none yet, the conductor schedules it) with a 3840×2160 board and the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). Follow the family template and the tokens (Penpot tokens mirror `data/figma_tokens.json`, which stays the source of truth). Make the 4 states per view at 4K, plus the motion notes, and write the page and board IDs into your row of `CATALOG.md`.
+   - In Penpot (the `penpot` MCP, see `SKILLS.md`): create your page `07 · <Name>` in the Phase 7 Penpot file if it does not exist yet. In one `execute_code` call, look for a page with exactly that name, create it only if it is missing, `openPage` it, check `penpot.currentPage.name`, then draw. Every chat shares one connected Penpot tab, so do every page switch and write in the same call, keep your shapes by stored ID, never touch other pages and never call `closePlugin`. Build it with a 3840×2160 board and the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). Follow the family template and the tokens (Penpot tokens mirror `data/figma_tokens.json`, which stays the source of truth). Make the 4 states per view at 4K, plus the motion notes, and write the page and board IDs into your row of `CATALOG.md`.
    - Also write the layout as a zone table at the top of your `mod.rs` (zones, sizes and positions in local 4K px, as the pilot's `Geom`), then design in code against `mockups/<Name>/index.html`.
    - For Liquid Glass, fluid, abstract or sci-fi designs, plan the bespoke assets now.
    - Run `design:design-critique` on the frames, and iterate until it clears the bar above.
-2. **Bespoke assets** (Blender and ComfyUI via `cargo run -p asset-forge`).
+2. **Bespoke assets, mandatory** (Blender and ComfyUI via `cargo run -p asset-forge`). TJX's rule: every cluster ships **at least one bespoke Blender asset and at least one bespoke ComfyUI asset**, both visibly used in the final cluster, not token. Examples: machined bezels, dial faces, glass and caustic plates, normal and specular maps, fluid flipbooks (Blender); seamless SDXL + 4x textures, plates and detail maps (ComfyUI). Procedural-only clusters are not accepted. The bar is the best, not acceptable.
+   - One 8 GB GPU serves every chat: keep SDXL jobs small and sequential, and if a render fails out of memory, wait and retry.
    - Local tools on this machine (write them as `%USERPROFILE%` paths in any repo file):
      - Blender 5.3: `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64`
      - ComfyUI portable: `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable`
@@ -69,4 +70,7 @@ The conductor starts you with: *"You are the cluster chat for `<Name>` (catalog 
 - 4K renders plus the 60-frame sequence are in `mockups/<Name>/`.
 - Live demo verified, with the GPU time under 0.5 ms recorded.
 - The critique has passed, with its notes.
+- At least one bespoke Blender asset and one bespoke ComfyUI asset are in `assets/clusters/<snake_name>/`, used in the cluster, with ASSETS rows (recipe plus seed) and before and after crops in the handover.
+- The design board is the Penpot page `07 · <Name>` (its page ID is in the handover); the HTML board alone is not enough.
+- The critique is a clean pass that beats the references; a "conditional pass" does not count.
 - The handover is written.
