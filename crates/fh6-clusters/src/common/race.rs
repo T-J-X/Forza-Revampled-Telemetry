@@ -28,6 +28,9 @@ const UNLIT_RIM_ALPHA: f32 = 0.12;
 const LIT_RIM_ALPHA: f32 = 0.50;
 /// How far the lit core moves toward white (tokens `components.shiftLights.pod.core`: 40%).
 const CORE_WHITE: f32 = 0.40;
+/// Where the lit radial reaches full hue, as a fraction of the lens half-width (the same optics
+/// as the shift-light pods in `common::shift`, so lamps and pods read as one LED family).
+const CORE_STOP: f32 = 0.55;
 /// Opacity of the top glint on a lit lens.
 const GLINT_ALPHA: f32 = 0.30;
 /// Lamps count as lit above this level.
@@ -92,6 +95,8 @@ impl AlarmLamp {
     pub const ABS: AlarmLamp = AlarmLamp::new("ABS", LampTone::Caution);
     /// REV: the limiter ([`rev_condition`]); lights in the palette's shift colour.
     pub const REV: AlarmLamp = AlarmLamp::new("REV", LampTone::Shift);
+    /// LIM: the same limiter lamp under the COMPONENTS.md §14 label ([`rev_condition`]).
+    pub const LIM: AlarmLamp = AlarmLamp::new("LIM", LampTone::Shift);
     /// TYRE: any tyre overheated ([`tyre_condition`]).
     pub const TYRE: AlarmLamp = AlarmLamp::new("TYRE", LampTone::Caution);
 
@@ -228,7 +233,7 @@ impl AlarmColumn {
                 (w, w * LAMP_ASPECT)
             }
         };
-        let cap = (lens_h * 0.55).clamp(ts.nano, ts.micro_label);
+        let cap = lamp_label_cap(lens_h, ts.nano, ts.micro_label);
         let gap = lens_h * 0.45;
         for i in 0..self.count {
             let lamp = self.lamps[i];
@@ -270,6 +275,13 @@ impl AlarmColumn {
     }
 }
 
+/// The lamp label cap for a lens `lens_h` tall: 55% of the lens, between `nano` and
+/// `micro_label`. min/max rather than `clamp`: the bounds come from a user-editable token file
+/// and `clamp` panics if they cross (then `nano`, the legibility floor, wins).
+fn lamp_label_cap(lens_h: f32, nano: f32, micro_label: f32) -> f32 {
+    (lens_h * 0.55).min(micro_label).max(nano)
+}
+
 /// One LED lens (tokens `components.shiftLights.pod`): unlit = a grey lens with a 12% rim; lit =
 /// a 2-stop radial core 40% toward white, a 1 px inner rim at 50% white, a top glint and a soft
 /// distance glow (not bloom).
@@ -299,11 +311,13 @@ fn draw_lens(
         p.glow(&shape, color.fade(level), Glow::new(lobe.sigma, lobe.intensity));
     }
     let core = color.lerp(roles.ink, CORE_WHITE);
+    let lit = color.fade(level);
     p.fill(
         &shape,
-        Gradient::radial(lens.center(), lens.height() * 1.6)
+        Gradient::radial(lens.center(), lens.width().max(lens.height()) * 0.5)
             .stop(0.0, core.fade(level))
-            .stop(1.0, color.fade(level)),
+            .stop(CORE_STOP, lit)
+            .stop(1.0, lit),
     );
     p.stroke(&shape, roles.ink.with_alpha(LIT_RIM_ALPHA * level), Stroke::rim_px(1.0));
     let glint = Rect::from_xywh(
@@ -359,6 +373,19 @@ pub fn draw_fixed(p: &mut Painter<'_>, pos: Vec2, scaled: i64, decimals: u8, sty
     p.text(pos, text, style)
 }
 
+/// Holds `value` inside what `cells` digit cells can show (`9999` for 4 cells, `-99` for 3), so
+/// an out-of-range value saturates instead of `Painter::number` silently dropping its leading
+/// digits (1309 kW in 3 cells would otherwise read `309`). One cell shows no sign, so negatives
+/// read `0` there.
+#[must_use]
+pub fn saturate_to_cells(value: i64, cells: u8) -> i64 {
+    // 10^18 still fits in an i64; wider fields cannot overflow a display anyway.
+    let cells = u32::from(cells.clamp(1, 18));
+    let max = 10i64.pow(cells) - 1;
+    let min = -(10i64.pow(cells - 1) - 1);
+    value.clamp(min, max)
+}
+
 /// Label cap height as a fraction of the value cap (COMPONENTS.md §14: 25–30%).
 pub const TILE_LABEL_RATIO: f32 = 0.28;
 /// Padding inside an outlined tile as a fraction of the value cap.
@@ -371,7 +398,8 @@ const TILE_RADIUS: f32 = 6.0;
 /// How a tile formats its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TileFormat {
-    /// A whole number in `cells` fixed digit cells (`Painter::number`).
+    /// A whole number in `cells` fixed digit cells (`Painter::number`), saturating at the
+    /// field's range ([`saturate_to_cells`]).
     Integer {
         /// Digit cells (the field width never changes).
         cells: u8,
@@ -540,7 +568,7 @@ impl DataTile {
                 p.text(value_pos, "--", &style.paint(roles.ink_label));
             }
             (Some(v), TileFormat::Integer { cells }) => {
-                p.number(value_pos, v, cells, &style, None);
+                p.number(value_pos, saturate_to_cells(v, cells), cells, &style, None);
             }
             (Some(v), TileFormat::Fixed { decimals }) => {
                 draw_fixed(p, value_pos, v, decimals, &style);
@@ -645,6 +673,25 @@ mod tests {
             ..Signals::default()
         };
         assert!(rev_condition(&sig));
+    }
+
+    #[test]
+    fn integer_tiles_saturate_instead_of_dropping_digits() {
+        assert_eq!(saturate_to_cells(1309, 3), 999);
+        assert_eq!(saturate_to_cells(12345, 4), 9999);
+        assert_eq!(saturate_to_cells(-120, 3), -99);
+        assert_eq!(saturate_to_cells(-5, 1), 0, "no room for a sign");
+        assert_eq!(saturate_to_cells(311, 4), 311);
+        assert_eq!(saturate_to_cells(i64::MAX, 0), 9, "0 cells draws as 1");
+        assert_eq!(saturate_to_cells(i64::MIN, 30), -(10i64.pow(17) - 1));
+    }
+
+    #[test]
+    fn label_cap_survives_crossed_tokens() {
+        // A user token file with nano above microLabel must not panic (clamp would).
+        assert!((lamp_label_cap(30.0, 20.0, 16.0) - 20.0).abs() < f32::EPSILON);
+        assert!((lamp_label_cap(30.0, 12.0, 16.0) - 16.0).abs() < f32::EPSILON);
+        assert!((lamp_label_cap(10.0, 12.0, 16.0) - 12.0).abs() < f32::EPSILON);
     }
 
     #[test]

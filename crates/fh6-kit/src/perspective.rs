@@ -242,7 +242,10 @@ mod tests {
         let cam = Camera25::chase(vec3(0.0, 3.4, -6.0), pitch, 560.0, 560.0, 0.0, -60.0);
         // Far ground points converge on the horizon; the optical centre sits below it.
         let far = cam.project(vec3(0.0, 0.0, 1.0e5)).expect("far point");
-        assert!((far.y - cam.horizon_y).abs() < 0.5, "horizon stays at horizon_y: {far:?}");
+        assert!(
+            (far.y - cam.horizon_y).abs() < 0.5,
+            "horizon stays at horizon_y: {far:?}"
+        );
         assert!((cam.optical_center_y() - (-60.0 + 560.0 * pitch.tan())).abs() < 1e-3);
         // A point on the optical axis lands on the optical centre.
         let axis = vec3(0.0, 3.4 - 20.0 * pitch.sin(), -6.0 + 20.0 * pitch.cos());

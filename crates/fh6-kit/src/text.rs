@@ -280,6 +280,9 @@ struct Face {
     cap_ratio: f32,
     glyphs: HashMap<char, Glyph>,
     kerning: HashMap<(u16, u16), f32>,
+    /// False until the kerning table has been measured (it is measured the first time glyphs
+    /// are generated for the face, so a folder of unused faces costs nothing at startup).
+    kerned: bool,
 }
 
 /// One glyph quad, ready for the painter.
@@ -486,10 +489,10 @@ impl Fonts {
         Ok(id)
     }
 
-    /// Like [`Fonts::load`] but generates no glyphs up front: they are added to the atlas the
-    /// first time they are drawn. Used for whole font folders, where preloading every face
-    /// would cost seconds and overflow the atlas; [`Fonts::bind_tokens`] preloads the faces it
-    /// binds to roles.
+    /// Like [`Fonts::load`] but measures no kerning and generates no glyphs up front: both
+    /// happen the first time the face is drawn, or when a cluster calls [`Fonts::warm`]. Used for
+    /// whole font folders, where preparing every face would cost seconds and overflow the atlas;
+    /// [`Fonts::bind_tokens`] warms the faces it binds to roles.
     fn load_lazy(&mut self, bytes: Vec<u8>) -> Result<FontId, FontError> {
         let face = ttf_parser::Face::parse(&bytes, 0).map_err(|e| FontError::Parse(e.to_string()))?;
         let family = face
@@ -576,7 +579,6 @@ impl Fonts {
             })
             .unwrap_or(upm * 0.7);
         let cap_ratio = (cap / upm).clamp(0.60, 0.78);
-        let kerning = measure_kerning(&data, index, wght);
 
         let id = FontId(self.faces.len() as u16);
         self.faces.push(Face {
@@ -587,9 +589,18 @@ impl Fonts {
             units_per_em: upm,
             cap_ratio,
             glyphs: HashMap::with_capacity(160),
-            kerning,
+            kerning: HashMap::new(),
+            kerned: false,
         });
         Ok(id)
+    }
+
+    /// Prepares a face for drawing: measures its kerning and generates the common glyphs
+    /// ([`PRELOAD`]). Faces loaded from a folder are lazy; a cluster calls this in its
+    /// constructor for each face it sets, so nothing is measured or generated on the frame path.
+    /// Cheap when the face is already warm.
+    pub fn warm(&mut self, font: FontId) {
+        self.generate(font.0, PRELOAD.chars());
     }
 
     /// The face assigned to `role`.
@@ -855,8 +866,15 @@ impl Fonts {
         added
     }
 
-    /// Rasterises the MTSDF of every char in `chars` for face `face` and packs it.
+    /// Rasterises the MTSDF of every char in `chars` for face `face` and packs it. Measures the
+    /// face's kerning first if that has not happened yet.
     fn generate(&mut self, face: u16, chars: impl Iterator<Item = char>) {
+        if let Some(f) = self.faces.get_mut(usize::from(face)) {
+            if !f.kerned {
+                f.kerning = measure_kerning(&f.data, f.index, f.wght);
+                f.kerned = true;
+            }
+        }
         let Some(f) = self.faces.get(usize::from(face)) else {
             return;
         };

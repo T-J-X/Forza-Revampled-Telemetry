@@ -68,7 +68,12 @@ fn pod_shape(rect: Rect, shape: PodShape, pts: &mut [Vec2; 4]) -> Shape<'_> {
         PodShape::Diamond => {
             let c = rect.center();
             let (hw, hh) = (rect.width() * 0.5, rect.height() * 0.5);
-            *pts = [vec2(c.x, c.y - hh), vec2(c.x + hw, c.y), vec2(c.x, c.y + hh), vec2(c.x - hw, c.y)];
+            *pts = [
+                vec2(c.x, c.y - hh),
+                vec2(c.x + hw, c.y),
+                vec2(c.x, c.y + hh),
+                vec2(c.x - hw, c.y),
+            ];
             Shape::Polygon { points: &pts[..] }
         }
     }

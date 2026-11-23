@@ -5,11 +5,11 @@
 //! acceleration to the right pushes it left, braking pushes it forward/up) on the tokens `gBall`
 //! spring, a 500 ms trail of fading dots in a fixed ring buffer, and a total-g readout. Rank 4:
 //! no glow, no bloom.
-use crate::common::race::draw_fixed;
+use crate::common::race::{format_fixed, FIXED_BUF};
 use fh6_kit::math::finite_or;
 use fh6_kit::{
-    vec2, Align, Cap, FontId, Gradient, Hysteresis, Painter, Palette, Shape, Signals, Spring, Stroke, TextStyle, Tokens,
-    VAlign, Vec2,
+    vec2, Align, Cap, FontId, Gradient, Hysteresis, Painter, Palette, Shape, Signals, Spring, Stroke, TextStyle,
+    Tokens, VAlign, Vec2,
 };
 use std::f32::consts::TAU;
 
@@ -29,10 +29,21 @@ const DASHES: usize = 36;
 const DASH_DUTY: f32 = 0.42;
 /// Ball radius as a fraction of the outer ring radius.
 const BALL_PCT: f32 = 0.075;
-/// Ring and crosshair line width in local units (one device pixel at 4K, scale 1.0).
+/// Opacity of the newest trail dot (the oldest fades to 0).
+const TRAIL_ALPHA: f32 = 0.65;
+/// Radius of the oldest and newest trail dots as a fraction of the ball radius.
+const TRAIL_MIN_PCT: f32 = 0.22;
+/// See [`TRAIL_MIN_PCT`].
+const TRAIL_MAX_PCT: f32 = 0.62;
+/// Ring and crosshair line width in local units (two device pixels at 4K, scale 1.0; one at
+/// the 1080p preview scale).
 const LINE_W: f32 = 2.0;
 /// Readout precision (hundredths of a g).
 const READOUT_DECIMALS: u8 = 2;
+/// Air between the lowest ball position and the readout's cap top, as a fraction of the radius.
+const READOUT_GAP_PCT: f32 = 0.06;
+/// The readout unit.
+const UNIT: &str = "G";
 
 /// The felt force for lateral and longitudinal G, in g, screen convention (x right, y down):
 /// `(-g_lat, g_long)`, so acceleration to the right pushes the ball left and braking
@@ -142,7 +153,8 @@ impl GBall {
     }
 
     /// Draws the meter and the readout: the outer (1.5 g) ring has radius `radius` around
-    /// `center`; the readout sits under it (allow `radius * 0.1 + 2.2 x metricSecondary`).
+    /// `center`; the readout sits under it at [`GBall::readout_baseline`] (allow about
+    /// `radius * 0.24 + 1.3 x metricSecondary` below the outer ring).
     pub fn draw(
         &self,
         p: &mut Painter<'_>,
@@ -154,11 +166,21 @@ impl GBall {
     ) {
         self.draw_meter(p, center, radius, palette);
         let cap = p.tokens().type_scale.metric_secondary;
-        let baseline = center.y + radius + radius * 0.1 + cap * 1.2;
-        self.draw_readout(p, vec2(center.x, baseline), palette, value_font, label_font);
+        let baseline = Self::readout_baseline(center, radius, cap);
+        self.draw_readout(p, baseline, palette, value_font, label_font);
     }
 
-    /// Draws rings, crosshair, trail and ball (no readout).
+    /// Where [`GBall::draw`] sets the readout baseline for a meter of outer radius `radius`
+    /// around `center` and a readout cap height `cap`: under the lowest point a ball held at the
+    /// limit can reach (a hard launch pushes the ball straight down), so the two never touch.
+    #[must_use]
+    pub fn readout_baseline(center: Vec2, radius: f32, cap: f32) -> Vec2 {
+        let ball_reach = radius * (MAX_G / RINGS_G[2] + BALL_PCT);
+        vec2(center.x, center.y + ball_reach + radius * READOUT_GAP_PCT + cap)
+    }
+
+    /// Draws rings, crosshair, trail and ball (no readout). The crosshair reaches 1.06 x
+    /// `radius` and a ball held at the limit 1.18 x `radius`: keep that much room around it.
     pub fn draw_meter(&self, p: &mut Painter<'_>, center: Vec2, radius: f32, palette: &Palette) {
         let roles = palette.roles;
         let per_g = radius / RINGS_G[2];
@@ -182,13 +204,10 @@ impl GBall {
         for i in 0..DASHES {
             // Dashes centred on the axes so the crosshair passes through a dash, not a gap.
             let a = step * i as f32 - dash * 0.5;
-            p.fill(
-                &Shape::arc(center, radius, LINE_W, a, dash, Cap::Butt),
-                roles.hairline,
-            );
+            p.fill(&Shape::arc(center, radius, LINE_W, a, dash, Cap::Butt), roles.hairline);
         }
 
-        // Trail: dots fade and shrink with age, drawn oldest first.
+        // Trail: dots fade and shrink linearly with age (a comet tail), drawn oldest first.
         let ball_r = radius * BALL_PCT;
         for k in (0..self.len).rev() {
             let (at, age) = self.sample(k);
@@ -198,8 +217,8 @@ impl GBall {
             }
             let pos = center + at * per_g;
             p.fill(
-                &Shape::circle(pos, ball_r * (0.22 + 0.38 * life)),
-                palette.primary.fade(0.55 * life * life),
+                &Shape::circle(pos, ball_r * (TRAIL_MIN_PCT + (TRAIL_MAX_PCT - TRAIL_MIN_PCT) * life)),
+                palette.primary.fade(TRAIL_ALPHA * life),
             );
         }
 
@@ -223,7 +242,8 @@ impl GBall {
         );
     }
 
-    /// Draws the total-g readout (`1.02 G`) with its baseline at `pos`, centred on the point.
+    /// Draws the total-g readout (`1.02 G`) with its baseline at `pos`, the value and unit
+    /// measured and centred on the point together. Allocation-free.
     pub fn draw_readout(
         &self,
         p: &mut Painter<'_>,
@@ -235,17 +255,22 @@ impl GBall {
         let ts = p.tokens().type_scale;
         let value = TextStyle::new(value_font, ts.metric_secondary)
             .paint(palette.roles.ink_muted)
-            .align(Align::Right, VAlign::Baseline)
+            .align(Align::Left, VAlign::Baseline)
             .tabular();
         let unit = TextStyle::new(label_font, ts.micro_label)
             .paint(palette.roles.ink_label)
             .tracking(ts.label_tracking)
             .align(Align::Left, VAlign::Baseline);
         let gap = ts.micro_label * 0.35;
-        // The value's right edge sits right of centre so "0.00 G" reads centred as a unit.
-        let split = pos.x + ts.metric_secondary * 0.45;
-        draw_fixed(p, vec2(split, pos.y), self.total, READOUT_DECIMALS, &value);
-        p.text(vec2(split + gap, pos.y), "G", &unit);
+        let mut buf = [0u8; FIXED_BUF];
+        let text = format_fixed(self.total, READOUT_DECIMALS, &mut buf);
+        let value_w = p.measure(text, &value).width;
+        // The unit's trailing tracking is air, not ink: leave it out of the centred width.
+        let m = p.measure(UNIT, &unit);
+        let unit_w = (m.width - ts.label_tracking * m.em).max(0.0);
+        let left = pos.x - (value_w + gap + unit_w) * 0.5;
+        p.text(vec2(left, pos.y), text, &value);
+        p.text(vec2(left + value_w + gap, pos.y), UNIT, &unit);
     }
 }
 
@@ -281,6 +306,23 @@ mod tests {
         assert!((b.x - 0.96).abs() < 0.01 && (b.y + 0.58).abs() < 0.01, "{b:?}");
         assert_eq!(g.total_centi_g(), 112);
         assert!(!g.animating(), "trail collapsed after 1 s of constant G");
+    }
+
+    #[test]
+    fn readout_clears_a_ball_held_at_the_limit() {
+        let t = Tokens::default();
+        let mut g = GBall::new(&t);
+        // A hard launch: the felt force pushes the ball straight down, past the outer ring.
+        for _ in 0..120 {
+            g.update_g(0.0, 3.0, DT);
+        }
+        let (center, radius, cap) = (vec2(0.0, 0.0), 200.0, t.type_scale.metric_secondary);
+        let ball_bottom = center.y + g.ball().y * radius / RINGS_G[2] + radius * BALL_PCT;
+        let cap_top = GBall::readout_baseline(center, radius, cap).y - cap;
+        assert!(
+            cap_top > ball_bottom,
+            "readout cap top {cap_top} under the ball {ball_bottom}"
+        );
     }
 
     #[test]

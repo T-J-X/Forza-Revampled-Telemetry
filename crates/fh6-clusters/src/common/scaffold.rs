@@ -135,8 +135,14 @@ impl Scaffold {
             (env.max, vec2(-1.0, -1.0)),
         ] {
             let c = corner + dir * 6.0;
-            p.fill(&Shape::line(c, c + vec2(dir.x * BRACKET, 0.0), BRACKET_W), roles.ink_label);
-            p.fill(&Shape::line(c, c + vec2(0.0, dir.y * BRACKET), BRACKET_W), roles.ink_label);
+            p.fill(
+                &Shape::line(c, c + vec2(dir.x * BRACKET, 0.0), BRACKET_W),
+                roles.ink_label,
+            );
+            p.fill(
+                &Shape::line(c, c + vec2(0.0, dir.y * BRACKET), BRACKET_W),
+                roles.ink_label,
+            );
         }
 
         // 2. Shift lights across the top (<= 42 px, the only strobe).
@@ -172,7 +178,8 @@ impl Scaffold {
                 fh6_kit::Gear::Neutral => roles.ink.fade(0.72),
                 fh6_kit::Gear::Forward(_) => roles.ink,
             };
-            self.gear.draw(p, vec2(mid.x, core_y), self.fonts.display, gear_cap, gear_color);
+            self.gear
+                .draw(p, vec2(mid.x, core_y), self.fonts.display, gear_cap, gear_color);
         });
         let speed_cap = gear_cap * 0.56;
         let speed_x = mid.x - (w * 0.22).min(300.0);
@@ -217,15 +224,21 @@ impl Scaffold {
             .align(Align::Left, VAlign::CapMiddle);
         let right = TextStyle {
             align: Align::Right,
-            ..left.clone()
+            ..left
         };
         let foot = env.max.y - 30.0;
         p.text(vec2(env.min.x + 30.0, foot), &self.family_label, &left);
         p.text(vec2(env.max.x - 30.0, foot), &self.slot_label, &right);
         // Centre mark: the anchor, so fit reviews can see where (0, 0) lands.
         let c = Vec2::ZERO;
-        p.fill(&Shape::line(c - vec2(10.0, 0.0), c + vec2(10.0, 0.0), 1.0), roles.hairline);
-        p.fill(&Shape::line(c - vec2(0.0, 10.0), c + vec2(0.0, 10.0), 1.0), roles.hairline);
+        p.fill(
+            &Shape::line(c - vec2(10.0, 0.0), c + vec2(10.0, 0.0), 1.0),
+            roles.hairline,
+        );
+        p.fill(
+            &Shape::line(c - vec2(0.0, 10.0), c + vec2(0.0, 10.0), 1.0),
+            roles.hairline,
+        );
     }
 }
 

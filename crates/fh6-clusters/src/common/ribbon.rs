@@ -11,6 +11,8 @@ use fh6_kit::{deg, Cap, Color, Glow, Gradient, LayerOptions, Painter, Palette, S
 
 /// Samples along a ribbon path.
 pub const RIBBON_POINTS: usize = 129;
+/// Segments per polyline chunk of the track (keeps each chunk's bounding box small).
+const TRACK_CHUNK: usize = 8;
 
 /// How the ribbon is drawn.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +27,9 @@ pub struct RibbonStyle {
     pub redline: f32,
     /// Track (unlit path) width; 0 draws no track.
     pub track_width: f32,
+    /// Brightness of the lit fill (1 = the palette colours; lower it so a long ribbon never
+    /// outshines the gear).
+    pub gain: f32,
 }
 
 impl Default for RibbonStyle {
@@ -36,6 +41,7 @@ impl Default for RibbonStyle {
             power: 1.6,
             redline: 0.10,
             track_width: 2.0,
+            gain: 1.0,
         }
     }
 }
@@ -174,40 +180,53 @@ impl PathRibbon {
     #[must_use]
     pub fn color_at(&self, t: f32, palette: &Palette, heat: f32) -> Color {
         let red_from = 1.0 - self.style.redline.clamp(0.0, 0.5);
-        let base = if t < red_from {
-            let k = (t / red_from.max(1e-3)).clamp(0.0, 1.0);
-            palette.primary.lerp(palette.primary.lerp(palette.roles.ink, 0.55), k * k)
-        } else {
-            palette.roles.warning
-        };
-        base.lerp(palette.shift, heat.clamp(0.0, 1.0) * 0.85)
+        if t >= red_from {
+            // The redline share stays in the warning role at any heat.
+            return dim(palette.roles.warning, self.style.gain);
+        }
+        let k = (t / red_from.max(1e-3)).clamp(0.0, 1.0);
+        let base = palette
+            .primary
+            .lerp(palette.primary.lerp(palette.roles.ink, 0.55), k * k);
+        dim(base.lerp(palette.shift, heat.clamp(0.0, 1.0) * 0.6), self.style.gain)
     }
 
-    /// Draws the unlit track (a hairline the full length).
+    /// Draws the unlit track (a hairline the full length), with the redline share faintly in
+    /// the warning role.
+    ///
+    /// The path is drawn in short chunks: a polyline's distance field is evaluated over its
+    /// whole bounding box for every segment, so one 128-segment polyline spanning a 1240 px
+    /// capsule cost about 0.36 ms of GPU at 4K; 16 chunks with small boxes cost almost nothing.
     pub fn draw_track(&self, p: &mut Painter<'_>, palette: &Palette) {
         let w = self.style.track_width;
         if w <= 0.0 {
             return;
         }
-        p.fill(
-            &Shape::Polyline {
-                points: &self.pts,
-                width: w,
-                closed: false,
-            },
-            palette.roles.ink_ghost,
-        );
-        // The redline share of the track, faintly in the warning role.
         let red_from = 1.0 - self.style.redline;
-        let i0 = self.cum.partition_point(|&c| c < red_from * self.length()).min(RIBBON_POINTS - 2);
-        p.fill(
-            &Shape::Polyline {
-                points: &self.pts[i0..],
-                width: w,
-                closed: false,
-            },
-            palette.roles.warning.with_alpha(0.35),
-        );
+        let red_i = self
+            .cum
+            .partition_point(|&c| c < red_from * self.length())
+            .min(RIBBON_POINTS - 1);
+        let mut i = 0;
+        while i < RIBBON_POINTS - 1 {
+            let in_red = i >= red_i;
+            // A chunk never straddles the redline boundary.
+            let limit = if in_red { RIBBON_POINTS - 1 } else { red_i.max(i + 1) };
+            let end = (i + TRACK_CHUNK).min(limit).min(RIBBON_POINTS - 1);
+            p.fill(
+                &Shape::Polyline {
+                    points: &self.pts[i..=end],
+                    width: w,
+                    closed: false,
+                },
+                if in_red {
+                    palette.roles.warning.with_alpha(0.35)
+                } else {
+                    palette.roles.ink_ghost
+                },
+            );
+            i = end;
+        }
     }
 
     /// Draws the lit fill from 0 to `fraction` as tapered segments with per-segment gradients
@@ -263,7 +282,9 @@ impl PathRibbon {
     ) {
         let tip = self.point_at(t);
         let dir = self.tangent_at(t);
-        let neck_from = tip - dir * (radius * 1.6);
+        // The neck only reaches back along the lit part of the path (none at the very start).
+        let back = (radius * 1.6).min(t.clamp(0.0, 1.0) * self.length());
+        let neck_from = tip - dir * back;
         let w_neck = self.width_at(t);
         let roles = palette.roles;
         let hot = hot.clamp(0.0, 1.0);
@@ -271,31 +292,52 @@ impl PathRibbon {
         let i = intensity.clamp(0.0, 1.0);
         p.layer(LayerOptions::bloom(), |p| {
             // Neck: the ribbon swelling into the bead.
-            p.fill(
-                &Shape::Line {
-                    a: neck_from,
-                    b: tip,
-                    width_a: w_neck,
-                    width_b: radius * 1.5,
-                    cap: Cap::Round,
-                },
-                Gradient::linear(neck_from, tip)
-                    .stop(0.0, self.color_at(t, palette, 0.0))
-                    .stop(1.0, halo.lerp(roles.ink, 0.3)),
-            );
+            if back > 2.0 {
+                p.fill(
+                    &Shape::Line {
+                        a: neck_from,
+                        b: tip,
+                        width_a: w_neck,
+                        width_b: radius * 1.5,
+                        cap: Cap::Round,
+                    },
+                    Gradient::linear(neck_from, tip)
+                        .stop(0.0, self.color_at(t, palette, 0.0))
+                        .stop(1.0, halo.lerp(roles.ink, 0.3)),
+                );
+            }
             p.fill(
                 &Shape::circle(tip, radius),
                 Gradient::radial(tip, radius)
                     .stop(0.0, roles.ink)
-                    .stop((core / radius.max(1.0)).clamp(0.1, 0.95) * 0.5, roles.ink.lerp(palette.accent, 0.35))
-                    .stop(0.75, halo.with_alpha(0.85 * (0.35 + 0.65 * i)))
+                    .stop(
+                        (core / radius.max(1.0)).clamp(0.1, 0.95) * 0.5,
+                        roles.ink.lerp(palette.accent, 0.35),
+                    )
+                    .stop(0.72, halo.with_alpha(0.7 * (0.35 + 0.65 * i)))
                     .stop(1.0, halo.with_alpha(0.0)),
             );
         });
-        p.glow(&Shape::circle(tip, core * 0.5), halo, Glow::new(18.0 + 10.0 * hot, 0.35 + 0.35 * i));
+        // Only the hot meniscus gets an extra halo; otherwise the bloom of the core is enough
+        // (a soft primary glow outside the glass reads as a dark smudge on OLED black).
+        if hot > 0.01 {
+            p.glow(&Shape::circle(tip, core * 0.5), halo, Glow::new(8.0, 0.45 * hot));
+        }
         // Specular: a tiny highlight offset towards the light.
         let spec = tip + light_dir * (radius * 0.42);
         p.fill(&Shape::circle(spec, radius * 0.16), roles.rim_specular);
+    }
+}
+
+/// Darkens `c` by `gain` (0..1) but keeps its alpha, so overlapping round caps of opaque segments
+/// never show as dots.
+fn dim(c: Color, gain: f32) -> Color {
+    let g = gain.clamp(0.0, 1.0);
+    Color {
+        r: c.r * g,
+        g: c.g * g,
+        b: c.b * g,
+        a: c.a,
     }
 }
 

@@ -29,9 +29,15 @@ const MINOR_STEP_RPM: f32 = 250.0;
 const MAX_FULL_SCALE_RPM: f32 = 20_000.0;
 /// Numerals `0` to `20` (thousands), so drawing never formats a string.
 const DIGITS: [&str; 21] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-    "20",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
 ];
+/// Wordmark logo zone of the symmetric face, as fractions of the face radius: width, height and
+/// the drop of its centre below the pivot (capped at the tokens' 220 x 44).
+const WORDMARK_WIDTH_PCT: f32 = 0.66;
+/// See [`WORDMARK_WIDTH_PCT`].
+const WORDMARK_HEIGHT_PCT: f32 = 0.19;
+/// See [`WORDMARK_WIDTH_PCT`].
+const WORDMARK_DROP_PCT: f32 = 0.62;
 /// Above this many thousands the numerals step by 2000 rpm (tight faces stay legible).
 const MAX_NUMERALS_AT_1000: u32 = 12;
 
@@ -45,8 +51,12 @@ const TICK_MID: (f32, f32) = (22.0, 3.0);
 const TICK_MAJOR: (f32, f32) = (34.0, 5.0);
 /// Operating band and red sector width (tokens `layout.classicDial.operatingBand`: 9 px).
 const BAND_WIDTH: f32 = 9.0;
-/// Operating band opacity (family: band at 35%).
-const BAND_ALPHA: f32 = 0.35;
+/// Operating band: about 35% as seen on screen (family), given in linear light because the kit
+/// blends linear premultiplied (`srgb_to_linear(0.35)` is 0.10; lifted a little so a dim
+/// orange keeps its hue instead of turning brown).
+const BAND_ALPHA: f32 = 0.12;
+/// Red sector opacity (linear light): a lit element, just under full strength.
+const RED_SECTOR_ALPHA: f32 = 0.85;
 /// Gap between the major ticks and the numerals.
 const NUMERAL_GAP: f32 = 10.0;
 
@@ -78,10 +88,11 @@ const SHADOW_ALPHA: f32 = 0.40;
 const LIGHT_ELEVATION_DEG: f32 = 40.0;
 /// Tilt of each needle flank away from the face plane (a lance ridge).
 const FLANK_TILT_DEG: f32 = 38.0;
-/// Flank luminance (fraction of `ink` over black) in full shadow and full light.
-const FLANK_DARK: f32 = 0.16;
+/// Flank level (fraction of `ink` over black, linear light) in full shadow and full light: the
+/// shadow facet sits near the family's `#8C929C`, the lit facet near `ink`.
+const FLANK_DARK: f32 = 0.20;
 /// See [`FLANK_DARK`].
-const FLANK_LIT: f32 = 0.82;
+const FLANK_LIT: f32 = 0.86;
 
 /// Afterimage (tokens `motion.afterimage`): raw needle below 90°/s, all ghosts from 180°/s.
 const AFTERIMAGE_FROM_DEG_S: f32 = 90.0;
@@ -91,17 +102,25 @@ const AFTERIMAGE_FULL_DEG_S: f32 = 180.0;
 pub const GHOSTS: usize = 4;
 /// Ghost sampling interval: one 60 Hz frame, independent of the display rate.
 const GHOST_STEP: f32 = 1.0 / 60.0;
-/// Opacity of the newest ghost at full strength.
-const GHOST_ALPHA: f32 = 0.30;
+/// Opacity of the newest ghost at full strength (linear light: about 35% on screen).
+const GHOST_ALPHA: f32 = 0.10;
+/// Ghost fade exponent: older ghosts fall off faster than linearly, like a phosphor trail.
+const GHOST_FALLOFF: f32 = 1.6;
+/// Ghost blades start this far outside the hub cap (px at the reference radius).
+const GHOST_ROOT: f32 = 14.0;
+/// Ghost blade width as a share of the needle width at the same distance.
+const GHOST_WIDTH: f32 = 0.6;
 
 /// The steady limiter wash ramps in from this fraction of the limiter (family: LFA precedent).
 const WASH_FROM: f32 = 0.92;
-/// Peak wash opacity at the face edge.
-const WASH_ALPHA: f32 = 0.22;
-/// Domed sapphire crescent opacity (family: crescent 18/255).
-const CRESCENT_ALPHA: f32 = 18.0 / 255.0;
-/// Peak opacity of the face's domed sheen toward the light.
-const DOME_ALPHA: f32 = 0.045;
+/// Peak wash opacity at the face edge (linear light: about 30% on screen), fading to nothing
+/// toward the hub so the needle and numerals keep their contrast.
+const WASH_ALPHA: f32 = 0.075;
+/// Domed sapphire crescent (family: crescent 18/255 on screen; linear light).
+const CRESCENT_ALPHA: f32 = 0.006;
+/// Peak of the face's domed sheen toward the light (linear light: about 14/255 on screen), so
+/// the face stays a true-black cavity, never a lifted grey disc.
+const DOME_ALPHA: f32 = 0.0045;
 
 /// How the scale is laid out on the face.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -233,11 +252,7 @@ impl DialScale {
             // tokens: angle = 270 + (rpm - shiftRpm) * 270 / maxRpm (screen degrees).
             DialMode::Track => deg(270.0 - finite_or(shift_rpm, 0.0).clamp(0.0, full_rpm) / full_rpm * 270.0),
         };
-        Self {
-            start,
-            sweep,
-            full_rpm,
-        }
+        Self { start, sweep, full_rpm }
     }
 
     /// The angle of `rpm` (radians), clamped a little past full scale for spring overshoot.
@@ -266,8 +281,13 @@ impl DialScale {
         let radius = finite_or(radius, 0.0).max(0.0);
         let gap = self.dead_zone_angle();
         if Vec2::from_angle(gap).y > 0.97 {
-            let size = vec2((radius * 0.84).min(220.0), (radius * 0.19).min(44.0));
-            Rect::from_center_size(center + vec2(0.0, radius * 0.60), size)
+            // The upper corners stay above 57° so the needle, even at its 102% overshoot
+            // (50.4°), clears them by more than its half width.
+            let size = vec2(
+                (radius * WORDMARK_WIDTH_PCT).min(220.0),
+                (radius * WORDMARK_HEIGHT_PCT).min(44.0),
+            );
+            Rect::from_center_size(center + vec2(0.0, radius * WORDMARK_DROP_PCT), size)
         } else {
             let side = (radius * 0.36).min(96.0);
             Rect::from_center_size(Vec2::polar(center, radius * 0.58, gap), Vec2::splat(side))
@@ -511,25 +531,28 @@ impl NeedleDial {
         let l = Vec2::from_angle(light);
         let face = Shape::circle(center, radius);
 
-        // Cavity: true black, a faint dome of light toward the light source.
+        // Cavity: true black, a faint dome of light toward the light source that dies out well
+        // before the rim (the face reads as a hollow, not a plate).
         p.fill(&face, roles.oled_black);
         p.fill(
             &face,
-            Gradient::radial(center + l * (radius * 0.35), radius * 1.25)
+            Gradient::radial(center + l * (radius * 0.30), radius * 1.05)
                 .stop(0.0, roles.ink.with_alpha(DOME_ALPHA))
-                .stop(0.55, roles.ink.with_alpha(DOME_ALPHA * 0.3))
+                .stop(0.45, roles.ink.with_alpha(DOME_ALPHA * 0.35))
                 .stop(1.0, roles.ink.with_alpha(0.0)),
         );
 
         // The family's steady limiter cue: a red wash from the rim inwards, never flashing.
         let wash = self.wash();
         if wash > 0.0 {
+            let a = WASH_ALPHA * wash;
             p.fill(
                 &face,
                 Gradient::radial(center, radius)
-                    .stop(0.0, roles.warning.with_alpha(WASH_ALPHA * wash * 0.25))
-                    .stop(0.55, roles.warning.with_alpha(WASH_ALPHA * wash * 0.45))
-                    .stop(1.0, roles.warning.with_alpha(WASH_ALPHA * wash)),
+                    .stop(0.0, roles.warning.with_alpha(0.0))
+                    .stop(0.35, roles.warning.with_alpha(a * 0.04))
+                    .stop(0.7, roles.warning.with_alpha(a * 0.25))
+                    .stop(1.0, roles.warning.with_alpha(a)),
             );
         }
 
@@ -561,39 +584,54 @@ impl NeedleDial {
         if end_a > red_a {
             p.fill(
                 &Shape::arc(center, track, BAND_WIDTH * k, red_a, end_a - red_a, Cap::Butt),
-                roles.warning.with_alpha(0.85),
+                roles.warning.with_alpha(RED_SECTOR_ALPHA),
             );
         }
 
         // Chapter ring: a 1 px hairline along the tick ends.
         p.fill(
-            &Shape::arc(center, g.tick_outer + 2.0 * k, p.device_px(), scale.start, scale.sweep, Cap::Butt),
+            &Shape::arc(
+                center,
+                g.tick_outer + 2.0 * k,
+                p.device_px(),
+                scale.start,
+                scale.sweep,
+                Cap::Butt,
+            ),
             roles.hairline,
         );
 
-        // Ticks every 250 / 500 / 1000 rpm; ticks inside the red sector turn warning.
-        let red_t = ((scale.angle(red_rpm - MINOR_STEP_RPM * 0.5) - scale.start) / TAU).clamp(0.0, 1.0);
+        // Ticks every 250 / 500 / 1000 rpm; ticks inside the red sector turn warning. The conic
+        // seam sits in the middle of the dead zone, so the 0 tick never samples the wrap.
+        let seam = scale.dead_zone_angle() - TAU;
+        let red_t = ((scale.angle(red_rpm - MINOR_STEP_RPM * 0.5) - seam) / TAU).clamp(0.0, 1.0);
         let tick_paint = |base: Color| {
-            Gradient::conic(center, scale.start)
+            Gradient::conic(center, seam)
                 .stop(0.0, base)
                 .stop(red_t, base)
                 .stop(red_t, roles.warning)
                 .stop(1.0, roles.warning)
         };
+        // One muted ring for 250 / 500 (so the translucent ticks never overlap themselves), then
+        // the opaque 1000 rpm majors on top.
         let full = scale.full_rpm;
-        for (step, (len, width), base) in [
-            (MINOR_STEP_RPM, TICK_MINOR, roles.ink_muted),
-            (500.0, TICK_MID, roles.ink_muted),
-            (1000.0, TICK_MAJOR, roles.ink),
-        ] {
-            let count = (full / step).round() as u32 + 1;
-            p.fill(
-                &Shape::Ticks(
-                    TickRing::new(center, g.tick_outer, scale.start, scale.sweep, count).minor(len * k, width * k),
-                ),
-                tick_paint(base),
-            );
-        }
+        let fine = (full / MINOR_STEP_RPM).round() as u32 + 1;
+        p.fill(
+            &Shape::Ticks(
+                TickRing::new(center, g.tick_outer, scale.start, scale.sweep, fine)
+                    .minor(TICK_MINOR.0 * k, TICK_MINOR.1 * k)
+                    .major(2, TICK_MID.0 * k, TICK_MID.1 * k),
+            ),
+            tick_paint(roles.ink_muted),
+        );
+        let majors = (full / 1000.0).round() as u32 + 1;
+        p.fill(
+            &Shape::Ticks(
+                TickRing::new(center, g.tick_outer, scale.start, scale.sweep, majors)
+                    .minor(TICK_MAJOR.0 * k, TICK_MAJOR.1 * k),
+            ),
+            tick_paint(roles.ink),
+        );
 
         // Numerals in thousands, each pulled in by its own radial half-extent so the gap to the
         // ticks is even all round.
@@ -630,13 +668,27 @@ impl NeedleDial {
         };
         let needle_at = |a: f32| Shape::needle(center, a, g.needle_length, g.needle_tail, g.needle_base, g.needle_tip);
 
-        // LFA afterimage: the last positions at falling opacity.
+        // LFA afterimage: the lit blade of the last positions at falling opacity. Only the blade
+        // outside the hub trails (as a lume pointer does), so the pivot stays clean.
         if self.ghost_strength > 0.0 {
             let visible = (self.ghost_strength * GHOSTS as f32).ceil() as usize;
+            let s0 = g.hub + GHOST_ROOT * k;
+            let s1 = g.needle_length;
+            let (w0, w1) = (g.needle_width(s0) * GHOST_WIDTH, g.needle_width(s1) * GHOST_WIDTH);
             for i in 0..visible.min(GHOSTS) {
-                let fade = 1.0 - i as f32 / GHOSTS as f32;
+                let fade = (1.0 - i as f32 / GHOSTS as f32).powf(GHOST_FALLOFF);
                 let alpha = GHOST_ALPHA * self.ghost_strength * fade;
-                p.fill(&needle_at(scale.angle(self.ghost(i))), lume.with_alpha(alpha));
+                let dir = Vec2::from_angle(scale.angle(self.ghost(i)));
+                p.fill(
+                    &Shape::Line {
+                        a: center + dir * s0,
+                        b: center + dir * s1,
+                        width_a: w0,
+                        width_b: w1,
+                        cap: Cap::Round,
+                    },
+                    lume.with_alpha(alpha),
+                );
             }
         }
 
@@ -727,7 +779,12 @@ impl NeedleDial {
         p.fill(&jewel, roles.oled_black);
         p.stroke(
             &jewel,
-            lit_rim(center, light + PI, roles.rim_specular.with_alpha(0.5), roles.hairline.with_alpha(0.0)),
+            lit_rim(
+                center,
+                light + PI,
+                roles.rim_specular.with_alpha(0.5),
+                roles.hairline.with_alpha(0.0),
+            ),
             Stroke::rim_px(1.0),
         );
     }
@@ -781,7 +838,10 @@ mod tests {
         assert!(close(s.angle(SHIFT), deg(270.0)));
         assert!((s.sweep - deg(270.0)).abs() < 1e-5);
         let z = s.logo_zone(Vec2::ZERO, REFERENCE_RADIUS);
-        assert!(z.width() <= 96.0 && (z.width() - z.height()).abs() < 1e-3, "crest square");
+        assert!(
+            z.width() <= 96.0 && (z.width() - z.height()).abs() < 1e-3,
+            "crest square"
+        );
     }
 
     #[test]
@@ -811,7 +871,10 @@ mod tests {
                     let hw = g.needle_width(d) * 0.5 + 2.0;
                     for side in [-1.0, 0.0, 1.0] {
                         let pt = dir * d + n * (hw * side);
-                        assert!(!zone.contains(pt), "needle at {rpm} rpm crosses the logo zone (R {radius})");
+                        assert!(
+                            !zone.contains(pt),
+                            "needle at {rpm} rpm crosses the logo zone (R {radius})"
+                        );
                     }
                     d += 2.0;
                 }
@@ -825,7 +888,10 @@ mod tests {
                 let (hw, hh) = (cap * 0.62, cap * 0.5);
                 let r = g.numeral_bound - (dir.x.abs() * hw + dir.y.abs() * hh);
                 let b = Rect::from_center_size(dir * r, vec2(hw * 2.0, hh * 2.0));
-                assert!(b.intersect(&zone).is_empty(), "numeral {n} overlaps the logo zone (R {radius})");
+                assert!(
+                    b.intersect(&zone).is_empty(),
+                    "numeral {n} overlaps the logo zone (R {radius})"
+                );
             }
         }
     }
@@ -871,7 +937,11 @@ mod tests {
         assert!(fast.ghost_strength > 0.99, "strength {}", fast.ghost_strength);
         assert!(fast.animating());
         for i in 0..GHOSTS - 1 {
-            assert!(fast.ghost(i) > fast.ghost(i + 1), "ghost {i} is newer than ghost {}", i + 1);
+            assert!(
+                fast.ghost(i) > fast.ghost(i + 1),
+                "ghost {i} is newer than ghost {}",
+                i + 1
+            );
         }
         assert!(fast.ghost(0) < fast.needle_rpm());
         // Off: never.

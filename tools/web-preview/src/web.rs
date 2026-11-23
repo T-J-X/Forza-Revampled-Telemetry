@@ -196,11 +196,18 @@ async fn run() -> Result<(), String> {
     let tokens = Tokens::from_json(TOKENS).unwrap_or_default();
     let mut kit = Kit::new(&device, &queue, tokens.clone()).map_err(|e| e.to_string())?;
     let search = window.location().search().unwrap_or_default();
-    let theme = if search.contains("PorscheAnalog") || search.contains("analog") {
+    // `?cluster=<Theme>` picks any catalog cluster (e.g. `?cluster=VernierLoupe`); the older
+    // `?analog` still selects PorscheAnalog.
+    let named = search
+        .trim_start_matches('?')
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("cluster="))
+        .and_then(ClusterTheme::from_name);
+    let theme = named.unwrap_or(if search.contains("PorscheAnalog") || search.contains("analog") {
         ClusterTheme::PorscheAnalog
     } else {
         ClusterTheme::LiquidGlass
-    };
+    });
     let entry = fh6_clusters::registry::resolve(theme);
     let cluster = {
         let mut setup = kit.setup(&device, &queue, None);

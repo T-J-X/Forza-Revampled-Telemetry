@@ -135,7 +135,7 @@ pub fn sequence_frame(i: u32) -> FH6TelemetryData {
         (smooth(2600.0, 8680.0, t), 3, smooth(38.0, 92.0, t), 1.0, 0.62)
     } else if i < 42.0 {
         // Bouncing off the limiter.
-        let bounce = if (i as u32) % 2 == 0 { 8690.0 } else { 8640.0 };
+        let bounce = if (i as u32).is_multiple_of(2) { 8690.0 } else { 8640.0 };
         (bounce, 3, 92.5, 1.0, 0.05)
     } else if i < 45.0 {
         let t = (i - 42.0) / 2.0;

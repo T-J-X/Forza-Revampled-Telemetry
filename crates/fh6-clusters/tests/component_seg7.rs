@@ -1,16 +1,26 @@
-//! Visual shot of the Seg7Digit VFD component (COMPONENTS.md §15) on OLED black: speed states
-//! (idle, cruise, fast, clamped), 4-digit rpm (live and at the limiter in the accent phosphor), a
-//! decimal and a colon readout, the hero gear mid-sequence and settled, reverse, and the
-//! `segment` TabularSpeed convenience at the spec cap of 120. Written to
+//! Visual shot of the Seg7Digit VFD component (COMPONENTS.md §15) on OLED black, written to
 //! `target/component-shots/seg7.png`.
+//!
+//! Rows 1–3 sit in an opaque true-black VFD cavity (`materials.vfdCavity`), as in the Sci-Fi
+//! clusters, with the 2 px scanlines over rows 1 and 2 only:
+//! 1. speed, 3 cells: idle 0, cruise 88, fast 152, 1500 clamped to 999;
+//! 2. 4-digit rpm live and at the limiter (accent phosphor on cyan ghosts), boost 14.7 with a
+//!    decimal point in the secondary phosphor, a matte (rank 4) lap time with a colon;
+//! 3. the white hero gear on the gear bay's diagonal glass with cyan ghosts, matte as HeroGear asks
+//!    outside the limiter: the 3 -> 4 re-strike mid-sequence, 4 settled, the diagonal `N` at 72%,
+//!    reverse in `warning`, and 5 at the limiter with its soft phosphor glow.
+//!
+//! Bottom right: the `segment` TabularSpeed convenience at the spec cap of 120, straight on the
+//! transparent overlay (no cavity), to show the ghosts hold the same 7% there.
 mod support;
 
 use fh6_clusters::common::seg7::{
-    draw_scanlines, draw_speed, Emission, Leading, Phosphor, Reveal, Seg7Digit, Seg7Geometry, Seg7Number, Separator,
+    draw_scanlines, draw_speed, Emission, Leading, Phosphor, Reveal, Seg7Digit, Seg7Geometry, Seg7Number, Segments,
+    Separator, GHOST_LEVEL,
 };
 use fh6_clusters::common::SpeedReadout;
 use fh6_kit::testing::RgbaImage;
-use fh6_kit::{vec2, Align, FontRole, Gear, Palette, Rect, Signals, TextStyle, VAlign, Vec2};
+use fh6_kit::{vec2, Align, FontRole, Gear, Palette, Rect, Shape, Signals, TextStyle, VAlign, Vec2};
 
 /// Shot scale: target px per local (4K) px.
 const SCALE: f32 = support::H as f32 / 2160.0;
@@ -29,6 +39,21 @@ fn segment_pixel(img: &RgbaImage, geom: &Seg7Geometry, center: Vec2, index: usiz
     img.pixel(x, y).unwrap_or([0; 4])
 }
 
+/// The mean green of a 3 x 3 block at the centre of a segment (smooths the scanlines out).
+fn segment_green(img: &RgbaImage, geom: &Seg7Geometry, center: Vec2, index: usize) -> f32 {
+    let pts = geom.segment(center, index);
+    let sum = pts.iter().fold(Vec2::ZERO, |s, p| s + *p);
+    let (x, y) = to_px(sum * (1.0 / pts.len() as f32));
+    let mut total = 0.0;
+    for dy in 0..3 {
+        for dx in 0..3 {
+            let px = img.pixel(x + dx - 1, y + dy - 1).unwrap_or([0; 4]);
+            total += f32::from(px[1]);
+        }
+    }
+    total / 9.0
+}
+
 fn signals(speed: f32, rpm: f32, gear: Gear) -> Signals {
     Signals {
         race_on: true,
@@ -43,14 +68,6 @@ fn signals(speed: f32, rpm: f32, gear: Gear) -> Signals {
     }
 }
 
-fn gear_char(gear: Gear) -> char {
-    match gear {
-        Gear::Reverse => 'r',
-        Gear::Neutral => 'n',
-        Gear::Forward(n) => char::from_digit(u32::from(n % 10), 10).unwrap_or('-'),
-    }
-}
-
 #[test]
 fn seg7_shot() {
     let mut gpu = support::gpu();
@@ -60,7 +77,7 @@ fn seg7_shot() {
     let tokens = gpu.tokens.clone();
     let dt = support::DT;
 
-    // Row 1: speed states, 3 cells.
+    // Row 1: speed states, 3 cells, through the hysteresis filter like a cluster would.
     let speed_geom = Seg7Geometry::new(200.0);
     let speed_sigs = [
         signals(0.0, 900.0, Gear::Neutral),
@@ -79,8 +96,10 @@ fn seg7_shot() {
 
     // Row 2: rpm live and at the limiter, boost with a decimal point, a lap time with a colon.
     let rpm_geom = Seg7Geometry::new(170.0);
+    let live = signals(87.7, 3250.0, Gear::Forward(4));
+    let limit = signals(152.2, 7980.0, Gear::Forward(5));
     let mut rpm_live = Seg7Number::<4>::new(&tokens, Reveal::Instant);
-    let mut rpm_limit = Seg7Number::<4>::new(&tokens, Reveal::Instant).with_phosphor(Phosphor::Accent);
+    let mut rpm_limit = Seg7Number::<4>::new(&tokens, Reveal::Instant);
     let mut boost = Seg7Number::<3>::new(&tokens, Reveal::Instant)
         .with_separator(Separator::Decimal { places: 1 })
         .with_phosphor(Phosphor::Secondary);
@@ -88,30 +107,49 @@ fn seg7_shot() {
     let mut lap = Seg7Number::<3>::new(&tokens, Reveal::Instant)
         .with_separator(Separator::Colon { after: 1 })
         .with_leading(Leading::Zeros);
-    let live = signals(87.7, 3250.0, Gear::Forward(4));
-    let limit = signals(152.2, 7980.0, Gear::Forward(5));
     for _ in 0..30 {
         rpm_live.update(live.rpm.round() as i64, dt);
         rpm_limit.update(limit.rpm.round() as i64, dt);
         boost.update(147, dt);
         lap.update(142, dt);
     }
-
-    // Row 3: the gear (white ink) mid-sequence and settled, reverse, and the limiter cue.
-    let gear_geom = Seg7Geometry::new(300.0);
-    let mut gear_mid = Seg7Digit::new(&tokens, Reveal::Sequence).with_phosphor(Phosphor::Ink);
-    let mut gear_set = Seg7Digit::new(&tokens, Reveal::Sequence).with_phosphor(Phosphor::Ink);
-    let mut gear_rev = Seg7Digit::new(&tokens, Reveal::Sequence).with_phosphor(Phosphor::Warning);
-    let mut gear_lim = Seg7Digit::new(&tokens, Reveal::Sequence).with_phosphor(Phosphor::Accent);
-    for _ in 0..30 {
-        gear_mid.update_char(gear_char(Gear::Forward(3)), dt);
-        gear_set.update_char(gear_char(live.gear), dt);
-        gear_rev.update_char(gear_char(Gear::Reverse), dt);
-        gear_lim.update_char(gear_char(limit.gear), dt);
+    // The limiter switches the lit phosphor only; the glass (ghosts) stays cyan.
+    if limit.rpm >= limit.shift_rpm {
+        rpm_limit.set_phosphor(Phosphor::Accent);
     }
-    // Upshift 3 -> 4: 33 ms into the 80 ms re-strike (b and c lit, f and g still to come).
-    for _ in 0..3 {
-        gear_mid.update_char(gear_char(Gear::Forward(4)), dt);
+
+    // Row 3: the white gear on the panel's cyan ghosts.
+    let gear_geom = Seg7Geometry::new(300.0);
+    let hero_gear = Seg7Digit::new(&tokens, Reveal::Sequence)
+        .with_segments(Segments::Diagonal)
+        .with_phosphor(Phosphor::Ink)
+        .with_ghost(Phosphor::Primary);
+    let mut gear_mid = hero_gear;
+    let mut gear_set = hero_gear;
+    let mut gear_n = hero_gear;
+    let mut gear_rev = hero_gear;
+    let mut gear_lim = hero_gear;
+    gear_rev.set_phosphor(Phosphor::Warning);
+    gear_n.set_brightness(0.72);
+    for _ in 0..30 {
+        gear_mid.update_gear(Gear::Forward(3), dt);
+        gear_set.update_gear(live.gear, dt);
+        gear_n.update_gear(Gear::Neutral, dt);
+        gear_rev.update_gear(Gear::Reverse, dt);
+        gear_lim.update_gear(limit.gear, dt);
+    }
+    // HeroGear (COMPONENTS.md §1): a soft glow only while the limiter is active.
+    let gear_emission = |sig: &Signals| {
+        if sig.rpm >= sig.shift_rpm {
+            Emission::Bloom
+        } else {
+            Emission::Matte
+        }
+    };
+    let (normal, at_limit) = (gear_emission(&live), gear_emission(&limit));
+    // Upshift 3 -> 4, 67 ms into the 80 ms re-strike: b, c and f lit, the middle bar still to come.
+    for _ in 0..5 {
+        gear_mid.update_gear(Gear::Forward(4), dt);
     }
     assert!(gear_mid.animating(), "the gear change is mid-sequence");
     assert!(!gear_set.animating() && !rpm_live.animating());
@@ -120,9 +158,11 @@ fn seg7_shot() {
     let speed_y = -640.0;
     let row2_x = [-1310.0, -430.0, 380.0, 1210.0];
     let row2_y = -120.0;
-    let gear_x = [-1500.0, -950.0, -400.0, 150.0];
+    let gear_x = [-1560.0, -1080.0, -600.0, -120.0, 360.0];
     let gear_y = 520.0;
-    let small_speed = vec2(1150.0, 560.0);
+    let bare_speed = vec2(1350.0, 540.0);
+    let upper_cavity = Rect::from_xywh(-1900.0, -860.0, 3800.0, 900.0);
+    let lower_cavity = Rect::from_xywh(-1900.0, 260.0, 2560.0, 560.0);
     let labels = [
         (vec2(speed_x[0], speed_y + 160.0), "IDLE 0"),
         (vec2(speed_x[1], speed_y + 160.0), "CRUISE 88"),
@@ -134,13 +174,17 @@ fn seg7_shot() {
         (vec2(row2_x[3], row2_y + 140.0), "LAP  MATTE"),
         (vec2(gear_x[0], gear_y + 220.0), "3>4 SEQUENCE"),
         (vec2(gear_x[1], gear_y + 220.0), "GEAR"),
-        (vec2(gear_x[2], gear_y + 220.0), "REVERSE"),
-        (vec2(gear_x[3], gear_y + 220.0), "LIMITER"),
-        (vec2(small_speed.x, gear_y + 220.0), "SPEED CAP 120"),
+        (vec2(gear_x[2], gear_y + 220.0), "NEUTRAL 72%"),
+        (vec2(gear_x[3], gear_y + 220.0), "REVERSE"),
+        (vec2(gear_x[4], gear_y + 220.0), "LIMITER GLOW"),
+        (vec2(bare_speed.x, gear_y + 220.0), "CAP 120  NO CAVITY"),
     ];
 
     let img = gpu.render(&layout, |p, _| {
         let pal = *p.palette();
+        // The VFD cavities: opaque true black, as the Sci-Fi bezel fills them.
+        p.fill(&Shape::rect(upper_cavity), pal.roles.oled_black);
+        p.fill(&Shape::rect(lower_cavity), pal.roles.oled_black);
         for (num, x) in speeds.iter().zip(speed_x) {
             num.draw(p, vec2(x, speed_y), &speed_geom, &pal, Emission::Bloom);
         }
@@ -148,13 +192,14 @@ fn seg7_shot() {
         rpm_limit.draw(p, vec2(row2_x[1], row2_y), &rpm_geom, &pal, Emission::Bloom);
         boost.draw(p, vec2(row2_x[2], row2_y), &rpm_geom, &pal, Emission::Bloom);
         lap.draw(p, vec2(row2_x[3], row2_y), &lap_geom, &pal, Emission::Matte);
-        gear_mid.draw(p, vec2(gear_x[0], gear_y), &gear_geom, &pal, Emission::Bloom);
-        gear_set.draw(p, vec2(gear_x[1], gear_y), &gear_geom, &pal, Emission::Bloom);
-        gear_rev.draw(p, vec2(gear_x[2], gear_y), &gear_geom, &pal, Emission::Bloom);
-        gear_lim.draw(p, vec2(gear_x[3], gear_y), &gear_geom, &pal, Emission::Bloom);
-        draw_speed(p, small_speed, 120.0, 88, &pal);
+        gear_mid.draw(p, vec2(gear_x[0], gear_y), &gear_geom, &pal, normal);
+        gear_set.draw(p, vec2(gear_x[1], gear_y), &gear_geom, &pal, normal);
+        gear_n.draw(p, vec2(gear_x[2], gear_y), &gear_geom, &pal, normal);
+        gear_rev.draw(p, vec2(gear_x[3], gear_y), &gear_geom, &pal, normal);
+        gear_lim.draw(p, vec2(gear_x[4], gear_y), &gear_geom, &pal, at_limit);
+        draw_speed(p, bare_speed, 120.0, 88, &pal);
         // The cavity's scanlines over rows 1 and 2 only, so row 3 shows the bare phosphor.
-        draw_scanlines(p, Rect::from_xywh(-1900.0, -820.0, 3800.0, 860.0), &pal);
+        draw_scanlines(p, upper_cavity, &pal);
         let font = p.fonts().role(FontRole::Tech);
         let ts = p.tokens().type_scale;
         let style = TextStyle::new(font, ts.micro_label * 1.5)
@@ -166,60 +211,93 @@ fn seg7_shot() {
         }
     });
     let path = support::save_shot("seg7", &img);
+    let shot = path.display();
 
-    // Cruise 88: the leading cell shows only the ghost 8, the two digits are lit phosphor.
+    // The ghost level the palette asks for: 7% of the lit phosphor's displayed green.
+    let lit_green = f32::from(palette.primary_text.to_srgb8()[1]);
+    let ghost_green = GHOST_LEVEL * lit_green;
+
+    // Cruise 88: the leading cell shows only the ghost 8 at 7%, the two digits are lit phosphor.
     let cruise = speeds[1];
     assert_eq!(cruise.value(), 88);
     let c = vec2(speed_x[1], speed_y);
-    let ghost = segment_pixel(&img, &speed_geom, cruise.cell_center(c, &speed_geom, 0), 6);
-    let lit = segment_pixel(&img, &speed_geom, cruise.cell_center(c, &speed_geom, 1), 6);
+    let ghost = segment_green(&img, &speed_geom, cruise.cell_center(c, &speed_geom, 0), 6);
     assert!(
-        (6..=60).contains(&ghost[1]),
-        "ghost segment is dim phosphor: {ghost:?} ({})",
-        path.display()
+        ghost > ghost_green * 0.6 && ghost < ghost_green * 2.5,
+        "ghost segment is dim phosphor: {ghost} vs {ghost_green} ({shot})"
     );
-    assert!(ghost[0] < ghost[1], "ghost keeps the cyan hue: {ghost:?}");
-    assert!(lit[1] > 150 && lit[1] > 3 * ghost[1], "lit segment: {lit:?}");
+    let ghost_px = segment_pixel(&img, &speed_geom, cruise.cell_center(c, &speed_geom, 0), 3);
+    assert!(ghost_px[0] < ghost_px[1], "ghost keeps the cyan hue: {ghost_px:?}");
+    let lit = segment_pixel(&img, &speed_geom, cruise.cell_center(c, &speed_geom, 1), 6);
+    assert!(lit[1] > 200, "lit segment: {lit:?}");
+
+    // Idle 0: both leading cells are ghosts, and the one next to the lit 0 is not swallowed by
+    // its halo (it still reads as a segment, not as haze).
+    let idle = speeds[0];
+    assert_eq!(idle.value(), 0);
+    let ic = vec2(speed_x[0], speed_y);
+    let far = segment_green(&img, &speed_geom, idle.cell_center(ic, &speed_geom, 0), 6);
+    let near = segment_green(&img, &speed_geom, idle.cell_center(ic, &speed_geom, 1), 6);
+    assert!(far > ghost_green * 0.6, "far ghost visible: {far}");
+    assert!(near >= far && near < lit_green * 0.4, "near ghost: {near} (far {far})");
 
     // The clamped readout shows 999 with every segment of `9` lit (f lit, e unlit).
     let clamped = speeds[3];
     assert_eq!(clamped.value(), 999);
     let cc = clamped.cell_center(vec2(speed_x[3], speed_y), &speed_geom, 2);
-    assert!(segment_pixel(&img, &speed_geom, cc, 5)[1] > 150, "segment f of 9 lit");
-    assert!(
-        segment_pixel(&img, &speed_geom, cc, 4)[1] < 60,
-        "segment e of 9 ghosted"
-    );
+    let f = segment_green(&img, &speed_geom, cc, 5);
+    let e = segment_green(&img, &speed_geom, cc, 4);
+    assert!(f > 200.0, "segment f of 9 lit: {f}");
+    assert!(e < f * 0.45, "segment e of 9 ghosted: {e} vs lit {f}");
 
-    // The limiter rpm is magenta: red over green.
-    let lim = segment_pixel(
-        &img,
-        &rpm_geom,
-        rpm_limit.cell_center(vec2(row2_x[1], row2_y), &rpm_geom, 0),
-        0,
-    );
+    // The limiter rpm is magenta (red over green) on cyan ghosts.
+    let lc = vec2(row2_x[1], row2_y);
+    let lim = segment_pixel(&img, &rpm_geom, rpm_limit.cell_center(lc, &rpm_geom, 0), 0);
     assert!(lim[0] > 150 && lim[0] > lim[1], "accent phosphor: {lim:?}");
 
-    // The settled gear 4 is near-white ink; its segment a is a ghost.
+    // The settled gear 4 is near-white ink; its segment a is a cyan ghost.
     let g4 = vec2(gear_x[1], gear_y);
     let gear_lit = segment_pixel(&img, &gear_geom, g4, 6);
     assert!(
-        gear_lit.iter().take(3).all(|&v| v > 180),
+        gear_lit.iter().take(3).all(|&v| v > 200),
         "white gear core: {gear_lit:?}"
     );
     let gear_ghost = segment_pixel(&img, &gear_geom, g4, 0);
-    assert!(gear_ghost[1] < 60, "gear ghost segment: {gear_ghost:?}");
+    assert!(
+        gear_ghost[1] > gear_ghost[0] && gear_ghost[1] < 60,
+        "gear ghost is the cyan panel phosphor: {gear_ghost:?}"
+    );
 
-    // Mid-sequence: segment b of the new 4 is lit, the middle bar (last in the order) not yet.
+    // Neutral at 72% reads dimmer than the settled gear.
+    let gn = vec2(gear_x[2], gear_y);
+    let n_lit = segment_pixel(&img, &gear_geom, gn, 1);
+    let g4_lit = segment_pixel(&img, &gear_geom, g4, 1);
+    assert!(n_lit[0] < g4_lit[0], "N at 72%: {n_lit:?} vs {g4_lit:?}");
+    // The hero frames' N: its diagonal crosses the cell middle, over the ghost middle bar.
+    let (nx, ny) = to_px(gn);
+    let n_mid = img.pixel(nx, ny).unwrap_or([0; 4]);
+    assert!(n_mid[0] > 150, "N diagonal lit through the middle: {n_mid:?}");
+
+    // Mid-sequence: b, c and f of the new 4 are lit, the middle bar (last in the order) not yet.
     let gm = vec2(gear_x[0], gear_y);
-    assert!(segment_pixel(&img, &gear_geom, gm, 1)[1] > 180, "sequence started");
+    assert!(segment_pixel(&img, &gear_geom, gm, 1)[1] > 200, "sequence started");
+    assert!(segment_pixel(&img, &gear_geom, gm, 5)[1] > 200, "f lit at 67 ms");
     assert!(
         segment_pixel(&img, &gear_geom, gm, 6)[1] < 120,
         "middle bar lights last"
     );
 
-    // OLED black between the readouts: no fill, no haze.
-    let (bx, by) = to_px(vec2(-920.0, 230.0));
+    // On the bare overlay the ghosts hold the same 7%.
+    let bare_geom = Seg7Geometry::new(120.0);
+    let bare_cells = Seg7Number::<3>::new(&tokens, Reveal::Instant);
+    let bare = segment_green(&img, &bare_geom, bare_cells.cell_center(bare_speed, &bare_geom, 0), 3);
+    assert!(
+        bare > ghost_green * 0.6 && bare < ghost_green * 2.5,
+        "ghost without a cavity: {bare} vs {ghost_green}"
+    );
+
+    // OLED black between the cavities: no fill, no haze.
+    let (bx, by) = to_px(vec2(-920.0, 150.0));
     let off = img.pixel(bx, by).unwrap_or([255; 4]);
     assert!(off[0] < 4 && off[1] < 4 && off[2] < 4, "off pixels stay black: {off:?}");
 

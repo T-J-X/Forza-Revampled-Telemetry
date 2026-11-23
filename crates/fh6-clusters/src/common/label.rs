@@ -100,13 +100,13 @@ pub fn metric(
     let style = TextStyle {
         align: Align::Right,
         valign: VAlign::CapMiddle,
-        ..value_style.clone()
+        ..*value_style
     };
     let r = p.number(right, value, cells, &style, None);
     let ls = TextStyle {
         align: Align::Right,
         valign: VAlign::CapMiddle,
-        ..label_style.clone()
+        ..*label_style
     };
     p.text(Vec2::new(r.min.x - gap, right.y), label, &ls);
 }

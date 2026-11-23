@@ -1,8 +1,9 @@
 //! `--fit`: the cockpit fit review (Phase 8). Composites the kit scrim, its lip wash and a
 //! cluster over `assets/reference/cockpit_with_wheel.jpg` upscaled to 4K, exactly as the overlay
 //! would sit over the game frame:
-//! 3 clusters (Liquid Glass and Analog, the two kit clusters so far, plus Analog at user scale
-//! 1.25 to check that the dome scales with the cluster)
+//! 3 clusters (the Liquid Glass pilot and the Porsche Analog scaffold, whose brackets mark the
+//! view envelope, plus that scaffold at user scale 1.25 to check that the dome scales with the
+//! cluster)
 //! x 3 scrim opacities (0, 50, 100%) x 2 cluster heights (0 and +170 px)
 //! -> `mockups/fit/<cluster>_scrim<pct>_h<height>.png` plus a crop around the dome, a thumbnail
 //! and a script-free `mockups/fit/index.html`. Two extra frames put Liquid Glass over the

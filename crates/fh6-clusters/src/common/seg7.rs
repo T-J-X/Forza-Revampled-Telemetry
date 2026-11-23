@@ -8,8 +8,15 @@
 //! `8`); lit segments are the phosphor fill with the tokens' `glow.phosphor` lobes in a bloom
 //! layer and a hot core mixed 45% toward the white ink.
 //!
+//! Ghost segments are opaque: each channel shows 7% of the phosphor's displayed brightness on any
+//! black, whether the digits sit in an opaque VFD cavity (`materials.vfdCavity`, the family's
+//! normal case) or straight on the transparent overlay. Like a real VFD, an unlit segment is a
+//! physical part of the glass, so it also hides whatever is behind it.
+//!
 //! - [`Seg7Geometry`]: cell size, stroke, gap, slant and the segment polygons.
-//! - [`Seg7Digit`]: one animated cell (instant for live numbers, an 80 ms sequence for a gear).
+//! - [`Seg7Digit`]: one animated cell (instant for live numbers, an 80 ms sequence for a gear),
+//!   on a seven-segment glass or the gear bay's glass with the `N` diagonal ([`Segments`],
+//!   [`gear_mask`]).
 //! - [`Seg7Number`]: `N` fixed cells, right-aligned, ghost 8s in the leading cells, an optional
 //!   decimal point or colon; digits come from arithmetic, nothing allocates.
 //! - [`draw_speed`]: the `segment` variant of TabularSpeed (COMPONENTS.md §2), 3 cells.
@@ -18,7 +25,8 @@ use fh6_kit::color::{linear_to_srgb, srgb_to_linear};
 use fh6_kit::shape::{seven_seg_mask, SEVEN_SEG_DIGITS};
 use fh6_kit::tokens::GlowLevel;
 use fh6_kit::{
-    deg, vec2, Affine, Color, Glow, Gradient, LayerOptions, Painter, Palette, Rect, Shape, Spread, Tokens, Vec2,
+    deg, vec2, Affine, Bloom, Color, Gear, Glow, Gradient, LayerOptions, Painter, Palette, Rect, Shape, Spread, Tokens,
+    Vec2,
 };
 
 /// Digit slant in degrees (COMPONENTS.md §15); the top of the digit leans right.
@@ -33,7 +41,7 @@ pub const WIDTH_RATIO: f32 = 42.0 / 72.0;
 /// decimal point between two cells.
 pub const SPACING_RATIO: f32 = 0.2;
 /// Unlit segments show this fraction of the phosphor's displayed brightness (COMPONENTS.md §15:
-/// 7%, the hero frames and tokens `vfdGhostUnlit`).
+/// 7%; the hero frames show the same dim phosphor).
 pub const GHOST_LEVEL: f32 = 0.07;
 /// The lit core is the phosphor mixed this far toward the white ink (COMPONENTS.md §15: 45%).
 pub const CORE_WHITE: f32 = 0.45;
@@ -47,20 +55,73 @@ pub const SCANLINE_ALPHA: u8 = 34;
 pub const POINT: u8 = 0x80;
 /// The minus sign's cell mask (segment g).
 pub const MINUS: u8 = 0x40;
+/// The N diagonal's bit in a [`Seg7Digit`] mask (cells with [`Segments::Diagonal`] only).
+pub const DIAGONAL: u16 = 0x100;
+/// The hero frames' neutral: both verticals and the diagonal (`b c e f` + [`DIAGONAL`]).
+pub const NEUTRAL_DIAGONAL: u16 = 0x36 | DIAGONAL;
 
 /// Width of the hot core as a fraction of the stroke.
 const CORE_WIDTH: f32 = 0.4;
 /// Soft edge of the hot core as a fraction of the stroke.
 const CORE_SOFTNESS: f32 = 0.1;
 /// Digit height at which the `glow.phosphor` lobes apply unscaled (sci-fi.md: the ghost-888
-/// speed has a cap of 120); larger digits get a proportionally wider halo.
+/// speed has a cap of 120). The halo grows with the square root of the height above it, so a
+/// large gear keeps the tight VFD halo instead of a fog.
 const GLOW_REFERENCE_HEIGHT: f32 = 120.0;
+/// Share of the tokens' bloom intensity a lit phosphor of [`GLOW_REFERENCE_HEIGHT`] writes. VFD
+/// light is a tight core with a short halo (tokens `glow.phosphor`): the lobes carry the halo, the
+/// display bloom only a trace, so the true-black cavity around the digits stays black rather than
+/// fogged. Taller digits write proportionally less (see [`Seg7Geometry::bloom_scale`]).
+const PHOSPHOR_BLOOM: f32 = 0.25;
 /// Extra space a colon adds between its two cells, as a fraction of the stroke.
 const COLON_EXTRA: f32 = 1.4;
 /// Vertical offset of the colon dots from the digit middle, as a fraction of the height.
 const COLON_DOT_V: f32 = 0.2;
-/// Number of drawable elements in a cell: segments a–g and the decimal point.
-const ELEMENTS: usize = 8;
+/// Number of drawable elements in a cell: segments a–g, the decimal point and the N diagonal.
+const ELEMENTS: usize = 9;
+/// Element index of the decimal point.
+const POINT_INDEX: usize = 7;
+/// Element index of the N diagonal.
+const DIAGONAL_INDEX: usize = 8;
+
+/// The segments a cell's glass carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Segments {
+    /// Seven segments (numbers).
+    #[default]
+    Seven,
+    /// Seven segments plus the N diagonal from the top-left to the bottom-right corner: the Sci-Fi
+    /// gear bay, whose neutral is a real `N` and whose ghost shows the diagonal behind every gear.
+    Diagonal,
+}
+
+impl Segments {
+    /// The mask bits this glass can light.
+    fn allowed(self) -> u16 {
+        match self {
+            Segments::Seven => 0xFF,
+            Segments::Diagonal => 0xFF | DIAGONAL,
+        }
+    }
+}
+
+/// The mask for `gear` on a cell with `segments`: `r` for reverse, `N` for neutral (the diagonal
+/// `N` on [`Segments::Diagonal`], the seven-segment `N` otherwise) and the digit for 1–9. One cell
+/// has no room for two digits, so gears above 9 show their last digit with the decimal point
+/// lit (10th gear reads `0.`); a cluster that wants `10` draws a two-cell [`Seg7Number`].
+#[must_use]
+pub fn gear_mask(gear: Gear, segments: Segments) -> u16 {
+    match gear {
+        Gear::Reverse => u16::from(seven_seg_mask('r')),
+        Gear::Neutral => match segments {
+            Segments::Diagonal => NEUTRAL_DIAGONAL,
+            Segments::Seven => u16::from(seven_seg_mask('N')),
+        },
+        Gear::Forward(0) => u16::from(MINUS),
+        Gear::Forward(n) if n <= 9 => u16::from(SEVEN_SEG_DIGITS[usize::from(n)]),
+        Gear::Forward(n) => u16::from(SEVEN_SEG_DIGITS[usize::from(n % 10)] | POINT),
+    }
+}
 
 /// Which palette role a digit's phosphor takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -246,18 +307,42 @@ impl Seg7Geometry {
     /// hexagon, slanted, with its tips pulled back so neighbours keep the gap.
     #[must_use]
     pub fn segment(&self, center: Vec2, index: usize) -> [Vec2; 6] {
-        let half = self.stroke * 0.5;
-        self.hex(center, index, half, self.tip_pull())
+        let (a, b) = self.axis(index);
+        self.hex(center, a, b, self.stroke * 0.5, self.tip_pull())
     }
 
-    /// The hot core of segment `index`: the same hexagon inset to [`CORE_WIDTH`] of the stroke.
-    fn segment_core(&self, center: Vec2, index: usize) -> [Vec2; 6] {
+    /// The N diagonal ([`Segments::Diagonal`]) of the digit centred at `center`: a chamfered bar
+    /// from the top-left corner to the bottom-right corner, joining the tops of `f` and the
+    /// bottom of `c` like the hero frames' neutral.
+    #[must_use]
+    pub fn diagonal(&self, center: Vec2) -> [Vec2; 6] {
+        let (a, b) = self.diagonal_axis();
+        self.hex(center, a, b, self.stroke * 0.5, self.tip_pull())
+    }
+
+    /// The outline of element `index` (0..7 = a..g, [`DIAGONAL_INDEX`] = the diagonal).
+    fn element(&self, center: Vec2, index: usize) -> [Vec2; 6] {
+        if index == DIAGONAL_INDEX {
+            self.diagonal(center)
+        } else {
+            self.segment(center, index)
+        }
+    }
+
+    /// The hot core of element `index`: the same hexagon inset to [`CORE_WIDTH`] of the stroke.
+    fn element_core(&self, center: Vec2, index: usize) -> [Vec2; 6] {
+        let (a, b) = if index == DIAGONAL_INDEX {
+            self.diagonal_axis()
+        } else {
+            self.axis(index)
+        };
         let half = self.stroke * 0.5;
         let core = half * CORE_WIDTH;
         // A parallel chamfer inset by (half - core) moves the tip by that distance times sqrt(2).
         self.hex(
             center,
-            index,
+            a,
+            b,
             core,
             self.tip_pull() + (half - core) * std::f32::consts::SQRT_2,
         )
@@ -287,9 +372,18 @@ impl Seg7Geometry {
         self.stroke * COLON_EXTRA
     }
 
-    /// Glow sigma multiplier: the token lobes at the reference height, proportional above it.
+    /// Glow sigma multiplier: the token lobes at the reference height, growing with the square
+    /// root of the height (a large gear keeps a tight halo).
     fn glow_scale(&self) -> f32 {
-        (self.height / GLOW_REFERENCE_HEIGHT).clamp(0.5, 2.5)
+        (self.height / GLOW_REFERENCE_HEIGHT).sqrt().clamp(0.7, 1.6)
+    }
+
+    /// Bloom write multiplier: 1 up to [`GLOW_REFERENCE_HEIGHT`], then falling with the height.
+    /// The bloom pyramid has a fixed radius in pixels, so the veil a digit casts grows with its
+    /// lit area; without this a 300 px gear at the limiter fogs its whole bay and drowns its own
+    /// ghost segments.
+    fn bloom_scale(&self) -> f32 {
+        (GLOW_REFERENCE_HEIGHT / self.height).min(1.0)
     }
 
     /// How far each tip is pulled back along its axis: two 45° chamfers pulled back by `s` sit
@@ -305,11 +399,21 @@ impl Seg7Geometry {
         )
     }
 
+    /// The stroke-centre corners: half the width and half the height, each less half a stroke.
+    fn corners(&self) -> (f32, f32) {
+        let half = self.stroke * 0.5;
+        (self.width * 0.5 - half, self.height * 0.5 - half)
+    }
+
+    /// The centre line of the N diagonal in cell coordinates (top-left to bottom-right corner).
+    fn diagonal_axis(&self) -> (Vec2, Vec2) {
+        let (x, y) = self.corners();
+        (vec2(-x, -y), vec2(x, y))
+    }
+
     /// The centre line of segment `index` in cell coordinates (corner to corner).
     fn axis(&self, index: usize) -> (Vec2, Vec2) {
-        let half = self.stroke * 0.5;
-        let x = self.width * 0.5 - half;
-        let y = self.height * 0.5 - half;
+        let (x, y) = self.corners();
         let (tl, tr) = (vec2(-x, -y), vec2(x, -y));
         let (ml, mr) = (vec2(-x, 0.0), vec2(x, 0.0));
         let (bl, br) = (vec2(-x, y), vec2(x, y));
@@ -324,8 +428,9 @@ impl Seg7Geometry {
         }
     }
 
-    fn hex(&self, center: Vec2, index: usize, half: f32, pull: f32) -> [Vec2; 6] {
-        let (a, b) = self.axis(index);
+    /// A pointed hexagon of half-width `half` along `a -> b`, its tips pulled back by `pull`,
+    /// slanted and placed at `center`.
+    fn hex(&self, center: Vec2, a: Vec2, b: Vec2, half: f32, pull: f32) -> [Vec2; 6] {
         let d = (b - a).normalize_or_zero();
         let n = d.perp();
         [
@@ -353,57 +458,112 @@ impl Seg7Geometry {
 /// One VFD digit cell with per-segment phosphor levels.
 ///
 /// The mask uses the kit's bits (`a=1 b=2 c=4 d=8 e=16 f=32 g=64`, see
-/// [`fh6_kit::shape::seven_seg_mask`]) plus [`POINT`] for the decimal point. The point's ghost is
-/// not drawn by a lone digit; [`Seg7Number`] draws it on the cell that carries the point.
+/// [`fh6_kit::shape::seven_seg_mask`]) plus [`POINT`] for the decimal point and, on a
+/// [`Segments::Diagonal`] cell, [`DIAGONAL`]. The point's ghost is not drawn by a lone digit;
+/// [`Seg7Number`] draws it on the cell that carries the point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Seg7Digit {
-    mask: u8,
-    rising: u8,
+    mask: u16,
+    rising: u16,
     clock: f32,
     levels: [f32; ELEMENTS],
     reveal: Reveal,
     fade_seconds: f32,
+    segments: Segments,
     phosphor: Phosphor,
+    ghost: Phosphor,
+    brightness: f32,
 }
 
 impl Seg7Digit {
-    /// A blank digit (ghost `8` only) in the primary phosphor; old segments of a
+    /// A blank seven-segment digit (ghost `8` only) in the primary phosphor; old segments of a
     /// [`Reveal::Sequence`] digit fade over `tokens.durations.micro`.
     #[must_use]
     pub fn new(tokens: &Tokens, reveal: Reveal) -> Self {
-        let fade = tokens.durations.micro;
         Self {
             mask: 0,
             rising: 0,
             clock: 0.0,
             levels: [0.0; ELEMENTS],
             reveal,
-            fade_seconds: if fade.is_finite() && fade > 0.0 { fade } else { 0.05 },
+            fade_seconds: positive_or(tokens.durations.micro, 0.05),
+            segments: Segments::Seven,
             phosphor: Phosphor::Primary,
+            ghost: Phosphor::Primary,
+            brightness: 1.0,
         }
     }
 
-    /// The same digit in another phosphor.
+    /// The same digit on another glass ([`Segments::Diagonal`] for the Sci-Fi gear bay).
     #[must_use]
-    pub fn with_phosphor(mut self, phosphor: Phosphor) -> Self {
-        self.phosphor = phosphor;
+    pub fn with_segments(mut self, segments: Segments) -> Self {
+        self.segments = segments;
         self
     }
 
-    /// Switches the phosphor (the gear bay turns [`Phosphor::Accent`] on the limiter).
+    /// The segments this digit's glass carries.
+    #[must_use]
+    pub fn segments(&self) -> Segments {
+        self.segments
+    }
+
+    /// The same digit with `phosphor` for both its lit and its ghost segments (the cell's area
+    /// of the VFD glass).
+    #[must_use]
+    pub fn with_phosphor(mut self, phosphor: Phosphor) -> Self {
+        self.phosphor = phosphor;
+        self.ghost = phosphor;
+        self
+    }
+
+    /// The same digit with its ghost segments in `ghost` (a white [`Phosphor::Ink`] hero gear
+    /// sits on the panel's [`Phosphor::Primary`] ghosts, as in the Sci-Fi hero frames).
+    #[must_use]
+    pub fn with_ghost(mut self, ghost: Phosphor) -> Self {
+        self.ghost = ghost;
+        self
+    }
+
+    /// Switches the lit phosphor and keeps the ghost (reverse turns [`Phosphor::Warning`] on the
+    /// same glass).
     pub fn set_phosphor(&mut self, phosphor: Phosphor) {
         self.phosphor = phosphor;
     }
 
-    /// The phosphor in use.
+    /// The lit phosphor.
     #[must_use]
     pub fn phosphor(&self) -> Phosphor {
         self.phosphor
     }
 
-    /// Advances to `mask` (segments a–g in bits 0–6, [`POINT`] in bit 7) by `dt` seconds.
-    pub fn update(&mut self, mask: u8, dt: f32) {
+    /// The ghost phosphor.
+    #[must_use]
+    pub fn ghost(&self) -> Phosphor {
+        self.ghost
+    }
+
+    /// Scales the lit segments' light (0..=1; HeroGear shows `N` at 0.72). The light dims at full
+    /// coverage, so overlapping elements (the `N` diagonal over `f` and `c`) stay seamless; ghosts
+    /// stay at [`GHOST_LEVEL`]. A non-finite value resets to 1.
+    pub fn set_brightness(&mut self, brightness: f32) {
+        self.brightness = if brightness.is_finite() {
+            brightness.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+    }
+
+    /// The lit segments' light scale.
+    #[must_use]
+    pub fn brightness(&self) -> f32 {
+        self.brightness
+    }
+
+    /// Advances to `mask` (segments a–g in bits 0–6, [`POINT`] in bit 7, [`DIAGONAL`] in bit 8)
+    /// by `dt` seconds. Bits the cell's [`Segments`] cannot show are dropped.
+    pub fn update(&mut self, mask: u16, dt: f32) {
         let dt = if dt.is_finite() { dt.max(0.0) } else { 0.0 };
+        let mask = mask & self.segments.allowed();
         if mask != self.mask {
             // A sequence re-strikes the whole new digit: segments it shares with the old one
             // fade with the rest until their turn comes.
@@ -420,7 +580,7 @@ impl Seg7Digit {
         let steps = rising.count_ones().saturating_sub(1).max(1) as f32;
         let decay = dt / self.fade_seconds;
         for (i, level) in self.levels.iter_mut().enumerate() {
-            let bit = 1u8 << i;
+            let bit = 1u16 << i;
             let on = if mask & bit == 0 {
                 false
             } else if rising & bit == 0 {
@@ -439,16 +599,22 @@ impl Seg7Digit {
 
     /// Advances to the character `ch` (`0-9`, `-`, `r`, `n`, `N`, `P`, `E`, space).
     pub fn update_char(&mut self, ch: char, dt: f32) {
-        self.update(seven_seg_mask(ch), dt);
+        self.update(u16::from(seven_seg_mask(ch)), dt);
+    }
+
+    /// Advances to `gear` (see [`gear_mask`]; the diagonal `N` on a [`Segments::Diagonal`] cell).
+    pub fn update_gear(&mut self, gear: Gear, dt: f32) {
+        self.update(gear_mask(gear, self.segments), dt);
     }
 
     /// The target mask.
     #[must_use]
-    pub fn mask(&self) -> u8 {
+    pub fn mask(&self) -> u16 {
         self.mask
     }
 
-    /// The phosphor level (0..=1) of element `index` (0..7 = a..g, 7 = the point).
+    /// The phosphor level (0..=1) of element `index` (0..7 = a..g, 7 = the point, 8 = the
+    /// diagonal).
     #[must_use]
     pub fn level(&self, index: usize) -> f32 {
         self.levels.get(index).copied().unwrap_or(0.0)
@@ -458,7 +624,7 @@ impl Seg7Digit {
     #[must_use]
     pub fn animating(&self) -> bool {
         self.levels.iter().enumerate().any(|(i, &level)| {
-            if self.mask & (1u8 << i) != 0 {
+            if self.mask & (1u16 << i) != 0 {
                 level < 1.0
             } else {
                 level > 0.0
@@ -468,9 +634,13 @@ impl Seg7Digit {
 
     /// Draws the digit centred at `center`: ghost segments, then the lit phosphor.
     pub fn draw(&self, p: &mut Painter<'_>, center: Vec2, geom: &Seg7Geometry, palette: &Palette, emission: Emission) {
-        let inks = Inks::new(self.phosphor.color(palette), palette);
-        ghost_cell(p, geom, center, &self.levels, inks.ghost, false);
-        emit(p, emission, |p| {
+        let inks = Inks::new(self.phosphor, self.ghost, palette, self.brightness);
+        let glass = Glass {
+            point: false,
+            diagonal: self.segments == Segments::Diagonal,
+        };
+        ghost_cell(p, geom, center, &self.levels, inks.ghost, glass);
+        emit(p, geom, emission, |p| {
             lit_cell(p, geom, center, &self.levels, &inks, emission)
         });
     }
@@ -484,6 +654,7 @@ pub struct Seg7Number<const N: usize> {
     leading: Leading,
     separator: Separator,
     phosphor: Phosphor,
+    ghost: Phosphor,
     value: i64,
 }
 
@@ -496,6 +667,7 @@ impl<const N: usize> Seg7Number<N> {
             leading: Leading::Ghost,
             separator: Separator::Plain,
             phosphor: Phosphor::Primary,
+            ghost: Phosphor::Primary,
             value: 0,
         }
     }
@@ -514,16 +686,31 @@ impl<const N: usize> Seg7Number<N> {
         self
     }
 
-    /// The same readout in another phosphor.
+    /// The same readout with `phosphor` for both its lit and its ghost segments.
     #[must_use]
     pub fn with_phosphor(mut self, phosphor: Phosphor) -> Self {
         self.phosphor = phosphor;
+        self.ghost = phosphor;
         self
     }
 
-    /// Switches the phosphor.
+    /// The same readout with its ghost segments in `ghost`.
+    #[must_use]
+    pub fn with_ghost(mut self, ghost: Phosphor) -> Self {
+        self.ghost = ghost;
+        self
+    }
+
+    /// Switches the lit phosphor and keeps the ghost (the rpm readout turns
+    /// [`Phosphor::Accent`] on the limiter).
     pub fn set_phosphor(&mut self, phosphor: Phosphor) {
         self.phosphor = phosphor;
+    }
+
+    /// The lit phosphor.
+    #[must_use]
+    pub fn phosphor(&self) -> Phosphor {
+        self.phosphor
     }
 
     /// Advances to `value` (clamped to what `N` cells can show) by `dt` seconds.
@@ -531,7 +718,7 @@ impl<const N: usize> Seg7Number<N> {
         let (masks, shown) = number_masks::<N>(value, self.leading, self.separator);
         self.value = shown;
         for (cell, mask) in self.cells.iter_mut().zip(masks) {
-            cell.update(mask, dt);
+            cell.update(u16::from(mask), dt);
         }
     }
 
@@ -568,11 +755,15 @@ impl<const N: usize> Seg7Number<N> {
     /// Draws the block centred at `center`: all ghosts first, then the lit phosphor in one
     /// emissive group.
     pub fn draw(&self, p: &mut Painter<'_>, center: Vec2, geom: &Seg7Geometry, palette: &Palette, emission: Emission) {
-        let inks = Inks::new(self.phosphor.color(palette), palette);
+        let inks = Inks::new(self.phosphor, self.ghost, palette, 1.0);
         let point_cell = self.separator.point_cell(N);
         for (i, cell) in self.cells.iter().enumerate() {
             let c = self.cell_center(center, geom, i);
-            ghost_cell(p, geom, c, &cell.levels, inks.ghost, point_cell == Some(i));
+            let glass = Glass {
+                point: point_cell == Some(i),
+                diagonal: false,
+            };
+            ghost_cell(p, geom, c, &cell.levels, inks.ghost, glass);
         }
         let colon = self.separator.colon_after(N).map(|after| {
             let left = self.cell_center(center, geom, after - 1);
@@ -581,7 +772,7 @@ impl<const N: usize> Seg7Number<N> {
                 center.y,
             )
         });
-        emit(p, emission, |p| {
+        emit(p, geom, emission, |p| {
             for (i, cell) in self.cells.iter().enumerate() {
                 let c = self.cell_center(center, geom, i);
                 lit_cell(p, geom, c, &cell.levels, &inks, emission);
@@ -650,13 +841,13 @@ pub fn number_masks<const N: usize>(value: i64, leading: Leading, separator: Sep
 pub fn draw_speed(p: &mut Painter<'_>, center: Vec2, cell_height: f32, value: i64, palette: &Palette) {
     let geom = Seg7Geometry::new(cell_height);
     let (masks, _) = number_masks::<3>(value.max(0), Leading::Ghost, Separator::Plain);
-    let inks = Inks::new(Phosphor::Primary.color(palette), palette);
+    let inks = Inks::new(Phosphor::Primary, Phosphor::Primary, palette, 1.0);
     let levels = masks.map(mask_levels);
     for (i, cell) in levels.iter().enumerate() {
         let c = vec2(center.x + cell_offset(3, &geom, Separator::Plain, i), center.y);
-        ghost_cell(p, &geom, c, cell, inks.ghost, false);
+        ghost_cell(p, &geom, c, cell, inks.ghost, Glass::default());
     }
-    emit(p, Emission::Bloom, |p| {
+    emit(p, &geom, Emission::Bloom, |p| {
         for (i, cell) in levels.iter().enumerate() {
             let c = vec2(center.x + cell_offset(3, &geom, Separator::Plain, i), center.y);
             lit_cell(p, &geom, c, cell, &inks, Emission::Bloom);
@@ -711,7 +902,7 @@ fn pow10(n: usize) -> i64 {
 fn mask_levels(mask: u8) -> [f32; ELEMENTS] {
     let mut levels = [0.0; ELEMENTS];
     for (i, level) in levels.iter_mut().enumerate() {
-        if mask & (1u8 << i) != 0 {
+        if u16::from(mask) & (1u16 << i) != 0 {
             *level = 1.0;
         }
     }
@@ -739,7 +930,16 @@ fn cell_offset(cells: usize, geom: &Seg7Geometry, separator: Separator, index: u
     -block_width(cells, geom, separator) * 0.5 + geom.width * 0.5 + index as f32 * geom.advance() + colon
 }
 
-/// The three colours of one phosphor.
+/// `v` when it is finite and positive, else `fallback`.
+fn positive_or(v: f32, fallback: f32) -> f32 {
+    if v.is_finite() && v > 0.0 {
+        v
+    } else {
+        fallback
+    }
+}
+
+/// The three colours of one cell.
 #[derive(Debug, Clone, Copy)]
 struct Inks {
     lit: Color,
@@ -748,31 +948,46 @@ struct Inks {
 }
 
 impl Inks {
-    fn new(phosphor: Color, palette: &Palette) -> Self {
+    /// Lit and core from `phosphor` at `brightness`, the ghost from `ghost`.
+    fn new(phosphor: Phosphor, ghost: Phosphor, palette: &Palette, brightness: f32) -> Self {
+        let lit = phosphor.color(palette);
         Self {
-            lit: phosphor,
-            core: phosphor.lerp(palette.roles.ink, CORE_WHITE),
-            ghost: ghost_of(phosphor),
+            lit: lit.intensity(brightness),
+            core: lit.lerp(palette.roles.ink, CORE_WHITE).intensity(brightness),
+            ghost: ghost_of(ghost.color(palette)),
         }
     }
 }
 
-/// The ghost colour: [`GHOST_LEVEL`] of the phosphor's displayed (sRGB) brightness over black.
-/// The kit blends in linear light, so the coverage is converted from display space.
+/// The ghost colour: opaque, each channel at [`GHOST_LEVEL`] of the phosphor's displayed (sRGB)
+/// value. Being opaque, it shows the same 7% over a VFD cavity and over the transparent overlay
+/// (the resolve encodes covered light per pixel, so a translucent ghost would read 7% on one and
+/// far brighter on the other).
 fn ghost_of(phosphor: Color) -> Color {
     let (r, g, b) = phosphor.straight_rgb();
-    let peak = r.max(g).max(b);
-    if peak.is_nan() || peak <= 1e-6 {
-        return phosphor.with_alpha(0.0);
-    }
-    let shown = srgb_to_linear(GHOST_LEVEL * linear_to_srgb(peak.min(1.0)));
-    phosphor.with_alpha((shown / peak).clamp(0.0, 1.0))
+    let dim = |c: f32| srgb_to_linear(GHOST_LEVEL * linear_to_srgb(c.clamp(0.0, 1.0)));
+    Color::linear(dim(r), dim(g), dim(b), 1.0)
 }
 
-/// Runs `f` in a bloom layer for [`Emission::Bloom`], in the current layer otherwise.
-fn emit<'f>(p: &mut Painter<'f>, emission: Emission, f: impl FnOnce(&mut Painter<'f>)) {
+/// The bloom a phosphor layer of digits shaped by `geom` writes: the tokens' threshold, and the
+/// tokens' intensity scaled by [`PHOSPHOR_BLOOM`] and the digit size.
+fn phosphor_bloom(tokens: &Tokens, geom: &Seg7Geometry) -> Bloom {
+    Bloom {
+        threshold: tokens.glow.bloom_threshold,
+        intensity: tokens.glow.bloom_intensity * PHOSPHOR_BLOOM * geom.bloom_scale(),
+    }
+}
+
+/// Runs `f` in a phosphor bloom layer for [`Emission::Bloom`], in the current layer otherwise.
+fn emit<'f>(p: &mut Painter<'f>, geom: &Seg7Geometry, emission: Emission, f: impl FnOnce(&mut Painter<'f>)) {
     match emission {
-        Emission::Bloom => p.layer(LayerOptions::bloom(), f),
+        Emission::Bloom => {
+            let options = LayerOptions {
+                bloom: Some(phosphor_bloom(p.tokens(), geom)),
+                ..LayerOptions::default()
+            };
+            p.layer(options, f);
+        }
         Emission::Matte => f(p),
     }
 }
@@ -785,15 +1000,32 @@ fn glow_lobes(p: &Painter<'_>, geom: &Seg7Geometry, emission: Emission) -> Optio
     }
 }
 
-/// Ghost segments (and the point's ghost when `point`) that are not fully lit.
+/// The optional elements a cell's glass shows as ghosts besides segments a–g.
+#[derive(Debug, Clone, Copy, Default)]
+struct Glass {
+    /// The decimal point (the cell that carries a [`Separator::Decimal`] point).
+    point: bool,
+    /// The N diagonal ([`Segments::Diagonal`]).
+    diagonal: bool,
+}
+
+/// Ghost elements of the cell's glass that are not fully lit.
 fn ghost_cell(
     p: &mut Painter<'_>,
     geom: &Seg7Geometry,
     center: Vec2,
     levels: &[f32; ELEMENTS],
     ghost: Color,
-    point: bool,
+    glass: Glass,
 ) {
+    if glass.diagonal && levels[DIAGONAL_INDEX] < 1.0 {
+        p.fill(
+            &Shape::Polygon {
+                points: &geom.diagonal(center),
+            },
+            ghost,
+        );
+    }
     for (i, &level) in levels.iter().take(7).enumerate() {
         if level < 1.0 {
             p.fill(
@@ -804,7 +1036,7 @@ fn ghost_cell(
             );
         }
     }
-    if point && levels[7] < 1.0 {
+    if glass.point && levels[POINT_INDEX] < 1.0 {
         p.fill(
             &Shape::Polygon {
                 points: &geom.point(center),
@@ -825,17 +1057,19 @@ fn lit_cell(
 ) {
     let lobes = glow_lobes(p, geom, emission);
     let softness = geom.stroke * CORE_SOFTNESS;
-    for (i, &level) in levels.iter().take(7).enumerate() {
-        if level > 0.0 {
-            let outer = geom.segment(center, i);
-            let core = geom.segment_core(center, i);
-            light(p, &outer, &core, level, inks, lobes, softness);
+    for (i, &level) in levels.iter().enumerate() {
+        if level <= 0.0 || i == POINT_INDEX {
+            continue;
         }
+        let outer = geom.element(center, i);
+        let core = geom.element_core(center, i);
+        light(p, &outer, &core, level, inks, lobes, softness);
     }
-    if levels[7] > 0.0 {
+    let point = levels[POINT_INDEX];
+    if point > 0.0 {
         let outer = geom.point(center);
         let core = geom.square(center, geom.point_uv(), geom.stroke * 0.5 * CORE_WIDTH);
-        light(p, &outer, &core, levels[7], inks, lobes, softness);
+        light(p, &outer, &core, point, inks, lobes, softness);
     }
 }
 
@@ -989,25 +1223,92 @@ mod tests {
         for pt in g.point(center) {
             assert!(bounds.expand(1e-3).contains(pt));
         }
+        for pt in g.diagonal(center) {
+            assert!(bounds.expand(1e-3).contains(pt), "diagonal {pt:?} outside {bounds:?}");
+        }
+    }
+
+    /// True if `p` lies strictly inside the convex polygon `poly` (either winding).
+    fn inside_convex(poly: &[Vec2], p: Vec2) -> bool {
+        let sides = poly
+            .iter()
+            .zip(poly.iter().cycle().skip(1))
+            .map(|(a, b)| (*b - *a).cross(p - *a));
+        let (mut pos, mut neg) = (false, false);
+        for s in sides {
+            pos |= s > 0.0;
+            neg |= s < 0.0;
+        }
+        !(pos && neg)
     }
 
     #[test]
-    fn core_sits_inside_its_segment() {
-        let g = Seg7Geometry {
-            slant: 0.0,
-            ..Seg7Geometry::new(150.0)
-        };
-        for i in 0..7 {
-            let outer = g.segment(Vec2::ZERO, i);
-            let core = g.segment_core(Vec2::ZERO, i);
-            let lo = outer.iter().fold(vec2(f32::INFINITY, f32::INFINITY), |m, p| m.min(*p));
-            let hi = outer
-                .iter()
-                .fold(vec2(f32::NEG_INFINITY, f32::NEG_INFINITY), |m, p| m.max(*p));
-            for p in core {
-                assert!(p.x > lo.x && p.x < hi.x && p.y > lo.y && p.y < hi.y, "segment {i}");
+    fn core_sits_inside_its_element() {
+        let g = Seg7Geometry::new(150.0);
+        let center = vec2(40.0, -20.0);
+        for i in (0..7).chain([DIAGONAL_INDEX]) {
+            let outer = g.element(center, i);
+            for p in g.element_core(center, i) {
+                assert!(inside_convex(&outer, p), "element {i}: core point {p:?}");
             }
         }
+    }
+
+    #[test]
+    fn diagonal_runs_corner_to_corner_through_the_middle() {
+        let g = Seg7Geometry {
+            slant: 0.0,
+            ..Seg7Geometry::new(200.0)
+        };
+        let d = g.diagonal(Vec2::ZERO);
+        let (top, bottom) = (d[0], d[3]);
+        assert!(top.x < 0.0 && top.y < 0.0, "starts top-left: {top:?}");
+        assert!(bottom.x > 0.0 && bottom.y > 0.0, "ends bottom-right: {bottom:?}");
+        assert!(inside_convex(&d, Vec2::ZERO), "crosses the cell middle");
+        // Its stroke matches the segments'.
+        let across = (d[1] - d[5]).length();
+        assert!((across - g.stroke).abs() < 1e-3, "diagonal stroke {across}");
+    }
+
+    #[test]
+    fn gear_masks_cover_every_gear() {
+        assert_eq!(gear_mask(Gear::Reverse, Segments::Seven), u16::from(digit('r')));
+        assert_eq!(gear_mask(Gear::Neutral, Segments::Seven), u16::from(digit('N')));
+        assert_eq!(gear_mask(Gear::Neutral, Segments::Diagonal), NEUTRAL_DIAGONAL);
+        for n in 1..=9u8 {
+            let ch = char::from(b'0' + n);
+            assert_eq!(gear_mask(Gear::Forward(n), Segments::Diagonal), u16::from(digit(ch)));
+        }
+        assert_eq!(
+            gear_mask(Gear::Forward(10), Segments::Seven),
+            u16::from(digit('0') | POINT),
+            "10th gear reads 0."
+        );
+        assert_eq!(gear_mask(Gear::Forward(0), Segments::Seven), u16::from(MINUS));
+    }
+
+    #[test]
+    fn diagonal_lights_only_on_a_diagonal_glass() {
+        let t = Tokens::default();
+        let mut plain = Seg7Digit::new(&t, Reveal::Instant);
+        plain.update(NEUTRAL_DIAGONAL, DT);
+        assert_eq!(
+            plain.mask(),
+            NEUTRAL_DIAGONAL & !DIAGONAL,
+            "a seven-segment cell drops it"
+        );
+        assert_eq!(plain.level(DIAGONAL_INDEX), 0.0);
+        let mut bay = Seg7Digit::new(&t, Reveal::Sequence).with_segments(Segments::Diagonal);
+        assert_eq!(bay.segments(), Segments::Diagonal);
+        bay.update_gear(Gear::Neutral, DT);
+        assert_eq!(bay.mask(), NEUTRAL_DIAGONAL);
+        assert_eq!(bay.level(1), 1.0, "b strikes first");
+        assert_eq!(bay.level(DIAGONAL_INDEX), 0.0, "the diagonal strikes last");
+        for _ in 0..6 {
+            bay.update_gear(Gear::Neutral, DT);
+        }
+        assert_eq!(bay.level(DIAGONAL_INDEX), 1.0);
+        assert!(!bay.animating());
     }
 
     #[test]
@@ -1076,7 +1377,7 @@ mod tests {
             n.update(7450, DT);
         }
         assert!(!n.animating());
-        assert_eq!(n.cells()[0].mask(), digit('7'));
+        assert_eq!(n.cells()[0].mask(), u16::from(digit('7')));
     }
 
     #[test]
@@ -1101,18 +1402,72 @@ mod tests {
         let pal = Palette::family(&t, "sciFi");
         assert_eq!(Phosphor::Primary.color(&pal), pal.primary_text);
         assert_eq!(Phosphor::Ink.color(&pal), pal.roles.ink);
-        let inks = Inks::new(pal.primary, &pal);
-        // The ghost shows 7% of the phosphor's displayed brightness over black.
-        let (r, g, b) = pal.primary.straight_rgb();
-        let peak = r.max(g).max(b);
-        let shown = linear_to_srgb(inks.ghost.a * peak);
-        assert!(
-            (shown - GHOST_LEVEL * linear_to_srgb(peak)).abs() < 1e-3,
-            "ghost {shown}"
-        );
+        let inks = Inks::new(Phosphor::Primary, Phosphor::Primary, &pal, 1.0);
+        // The ghost is opaque and each channel shows 7% of the phosphor's displayed value.
+        assert_eq!(inks.ghost.a, 1.0);
+        let lit = pal.primary_text.to_srgb8();
+        let ghost = inks.ghost.to_srgb8();
+        for ch in 0..3 {
+            let want = GHOST_LEVEL * f32::from(lit[ch]);
+            assert!(
+                (f32::from(ghost[ch]) - want).abs() <= 1.0,
+                "channel {ch}: ghost {ghost:?} vs 7% of {lit:?}"
+            );
+        }
+        // The ghost keeps the phosphor's hue: the brightest channel stays the brightest.
+        let max_ch = |c: [u8; 4]| (0..3).max_by_key(|&i| c[i]).unwrap_or(0);
+        assert_eq!(max_ch(ghost), max_ch(lit));
         // The core is brighter than the phosphor and not pure white.
-        assert!(inks.core.luminance() > pal.primary.luminance());
+        assert!(inks.core.luminance() > pal.primary_text.luminance());
         assert!(inks.core.luminance() < pal.roles.ink.luminance());
+        // A non-finite colour cannot poison the ghost.
+        let bad = ghost_of(Color {
+            r: f32::NAN,
+            g: 0.5,
+            b: f32::INFINITY,
+            a: 1.0,
+        });
+        assert!(bad.r.is_finite() && bad.g.is_finite() && bad.b.is_finite());
+    }
+
+    #[test]
+    fn ghost_phosphor_is_the_glass_and_survives_a_lit_switch() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "sciFi");
+        let mut gear = Seg7Digit::new(&t, Reveal::Sequence)
+            .with_phosphor(Phosphor::Ink)
+            .with_ghost(Phosphor::Primary);
+        assert_eq!(gear.ghost(), Phosphor::Primary);
+        gear.set_phosphor(Phosphor::Warning);
+        assert_eq!(gear.phosphor(), Phosphor::Warning);
+        assert_eq!(gear.ghost(), Phosphor::Primary, "reverse keeps the panel's ghost");
+        let boost = Seg7Number::<3>::new(&t, Reveal::Instant).with_phosphor(Phosphor::Secondary);
+        assert_eq!(boost.phosphor(), Phosphor::Secondary);
+        let inks = Inks::new(Phosphor::Ink, Phosphor::Primary, &pal, 1.0);
+        let (r, g, _) = inks.ghost.straight_rgb();
+        assert!(g > r, "a white gear's ghost is the cyan panel phosphor");
+    }
+
+    #[test]
+    fn brightness_dims_lit_segments_only() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "sciFi");
+        let mut d = Seg7Digit::new(&t, Reveal::Instant);
+        assert_eq!(d.brightness(), 1.0);
+        d.set_brightness(0.72);
+        assert!((d.brightness() - 0.72).abs() < 1e-6);
+        d.set_brightness(3.0);
+        assert_eq!(d.brightness(), 1.0);
+        d.set_brightness(f32::NAN);
+        assert_eq!(d.brightness(), 1.0);
+        let full = Inks::new(Phosphor::Ink, Phosphor::Primary, &pal, 1.0);
+        let dim = Inks::new(Phosphor::Ink, Phosphor::Primary, &pal, 0.72);
+        // Light scales, coverage stays full (overlaps stay seamless).
+        assert!((dim.lit.g - 0.72 * full.lit.g).abs() < 1e-5);
+        assert!((dim.core.r - 0.72 * full.core.r).abs() < 1e-5);
+        assert_eq!(dim.lit.a, full.lit.a);
+        assert_eq!(dim.core.a, full.core.a);
+        assert_eq!(dim.ghost, full.ghost, "ghosts never dim");
     }
 
     #[test]

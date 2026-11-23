@@ -95,6 +95,11 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
+    // GPU validation errors and font warnings arrive as tracing events: show them.
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(std::io::stderr)
+        .try_init();
     let args = parse_args()?;
     let root = workspace_root();
     let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));

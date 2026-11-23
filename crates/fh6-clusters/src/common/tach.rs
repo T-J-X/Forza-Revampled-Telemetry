@@ -6,7 +6,7 @@
 //! switches on at the shift rpm and off 120 rpm below it, so the cue never flickers while the
 //! engine bounces off the limiter. `update` and `draw` allocate nothing.
 use fh6_kit::{
-    deg, vec2, Align, Axis, Cap, Color, FontId, Glow, Gradient, LayerOptions, Paint, Painter, Palette, Rect,
+    deg, vec2, Align, Axis, Bloom, Cap, Color, FontId, Glow, Gradient, LayerOptions, Paint, Painter, Palette, Rect,
     SegmentedBar, Shape, Signals, Spring, Stroke, TextStyle, TickRing, Tokens, VAlign, Vec2,
 };
 use std::f32::consts::TAU;
@@ -35,12 +35,20 @@ const MAX_THOUSANDS: u32 = 30;
 const MAX_SEGMENTS: u32 = 120;
 /// The arc fill's tail starts at this share of `primary`, so the ribbon brightens with the revs.
 const ARC_TAIL_STRENGTH: f32 = 0.42;
+/// The printed redline sector and its ticks show `warning` at this strength (a marking, not a
+/// light: it stays below the lit fill).
+const REDLINE_STRENGTH: f32 = 0.7;
 /// Width (rpm fraction) of the soft blend from `primary` into the caution stage on the arc.
 const ARC_STAGE_BLEND: f32 = 0.05;
 /// The hot head of the arc fill whitens to this share of `ink` at the very tip.
 const ARC_HEAD_WHITE: f32 = 0.6;
+/// Share of `ink` in the leading-edge glow: a near-white sparkle reads as heat, while a glow in a
+/// dark stage hue (warning red) reads as a smudge on black.
+const ARC_HEAD_GLOW_WHITE: f32 = 0.75;
 /// Share of white mixed into the core of a lit VFD chevron (phosphor core).
-const CHEVRON_CORE_WHITE: f32 = 0.38;
+const CHEVRON_CORE_WHITE: f32 = 0.24;
+/// Half height of the core band, as a fraction of the segment height.
+const CHEVRON_CORE_HALF: f32 = 0.3;
 /// Gap between chevron segments as a fraction of the segment pitch.
 const CHEVRON_GAP: f32 = 0.24;
 /// Horizontal lean of a slanted chevron per unit of height (tan 14 degrees).
@@ -49,10 +57,12 @@ const CHEVRON_LEAN: f32 = 0.249;
 const CHEVRON_ARROW_DEPTH: f32 = 0.22;
 /// Height of the first chevron as a fraction of the last (the staircase rise).
 const CHEVRON_RISE: f32 = 0.3;
-/// Lens glint band on top of bar cells, as a fraction of the cell height.
-const BAR_GLINT_HEIGHT: f32 = 0.3;
-/// Glint strength (share of `ink`) on lit bar cells.
-const BAR_LIT_GLINT: f32 = 0.2;
+/// The lens glint on lit bar cells fades out over this fraction of the cell height from the top.
+const BAR_GLINT_HEIGHT: f32 = 0.38;
+/// Glint strength (share of `ink`) at the top edge of a lit bar cell.
+const BAR_LIT_GLINT: f32 = 0.24;
+/// Lit bar cells shade toward their bottom edge to this share of `oledBlack` (a top-lit lens).
+const BAR_LENS_SHADE: f32 = 0.22;
 /// Rim strength (share of `hairline`) on unlit bar cells: a grey lens, no colour.
 const BAR_UNLIT_RIM: f32 = 0.6;
 /// The peak-hold cell shows its stage colour at this strength.
@@ -79,6 +89,36 @@ impl LimiterCue {
             Self::Ink => Some(palette.roles.ink),
         }
     }
+
+    /// Whether the cue keeps writing light to the bloom buffer. Steady ink does not: a white run
+    /// blooming at the limiter would outshine the strobing strip, which must keep the focus.
+    fn emissive(self) -> bool {
+        !matches!(self, Self::Ink)
+    }
+}
+
+/// The layer a lit fill draws in and the factor for its explicit glows: the tokens' bloom,
+/// fading out while a non-emissive limiter cue (amount `k`) takes over the fill.
+fn fill_layer(tokens: &Tokens, cue: LimiterCue, k: f32) -> (LayerOptions, f32) {
+    let fade = if cue.emissive() {
+        1.0
+    } else {
+        1.0 - finite(k).clamp(0.0, 1.0)
+    };
+    if fade <= 1e-3 {
+        return (LayerOptions::default(), 0.0);
+    }
+    let bloom = Bloom {
+        threshold: tokens.glow.bloom_threshold,
+        intensity: tokens.glow.bloom_intensity * fade,
+    };
+    (
+        LayerOptions {
+            bloom: Some(bloom),
+            ..LayerOptions::default()
+        },
+        fade,
+    )
 }
 
 /// The fill state every variant shares: the rpm fraction on the `ribbon` spring and the limiter
@@ -333,7 +373,7 @@ impl TachArc {
         let red_sweep = self.sweep * (1.0 - REDLINE_FROM_RPM_PCT);
         p.fill(
             &Shape::arc(center, outer + gap + band * 0.5, band, red_from, red_sweep, Cap::Butt),
-            roles.warning.fade(0.7),
+            roles.warning.fade(REDLINE_STRENGTH),
         );
 
         // Ticks every 1000 rpm (major) and at the half thousands (minor), red in the sector.
@@ -361,12 +401,22 @@ impl TachArc {
         let head_from = Vec2::polar(center, radius, tip_angle - head_sweep);
         let tip = Vec2::polar(center, radius, tip_angle);
         let radial = Vec2::from_angle(tip_angle);
-        let blade = Shape::line(tip - radial * (half * 0.92), tip + radial * (half * 0.92), (thickness * 0.16).max(2.0));
-        let glow = p.tokens().glow.medium;
-        p.layer(LayerOptions::bloom(), |p| {
+        let blade = Shape::line(
+            tip - radial * (half * 0.92),
+            tip + radial * (half * 0.92),
+            (thickness * 0.16).max(2.0),
+        );
+        // Only the tight core lobe of `glow.medium`: the bloom pass already lays the wide halo,
+        // and a second wide lobe on top of it smears the head into a blob.
+        let core = p.tokens().glow.medium.lobes().first().copied();
+        let (layer, glow_fade) = fill_layer(p.tokens(), self.cue, k);
+        p.layer(layer, |p| {
             fill_with_cue(p, &shape, ribbon.into(), cue, k);
-            for lobe in glow.lobes() {
-                p.glow(&head, head_color, Glow::new(lobe.sigma, lobe.intensity));
+            // The leading glow is a point light around the blade: glowing the whole head would
+            // outline it as a box over the fill behind it.
+            if let Some(lobe) = core {
+                let hot = head_color.lerp(roles.ink, ARC_HEAD_GLOW_WHITE);
+                p.glow(&blade, hot, Glow::new(lobe.sigma, lobe.intensity * glow_fade));
             }
             // The hot head whitens toward the tip, ending in a crisp white blade.
             p.fill(
@@ -413,16 +463,25 @@ impl TachArc {
             length: minor_len,
             width: 2.0,
         };
-        major(0, first_red).draw(p, roles.hairline.fade(1.0));
-        major(first_red, majors).draw(p, roles.warning.fade(0.7));
-        minor(0, first_red_minor).draw(p, roles.hairline.fade(0.6));
-        minor(first_red_minor, minors).draw(p, roles.warning.fade(0.45));
+        // Majors carry the scale like the numerals (label ink); minors stay hairlines.
+        major(0, first_red).draw(p, roles.ink_label);
+        major(first_red, majors).draw(p, roles.warning.fade(REDLINE_STRENGTH));
+        minor(0, first_red_minor).draw(p, roles.hairline);
+        minor(first_red_minor, minors).draw(p, roles.warning.fade(REDLINE_STRENGTH * 0.6));
     }
 
     /// Draws the scale numerals (thousands) at `radius` around `center`, `cap` px tall, in the
     /// label ink (text-safe warning inside the redline sector). Optional: clusters may set their
     /// own numerals.
-    pub fn draw_numerals(&self, p: &mut Painter<'_>, center: Vec2, radius: f32, font: FontId, cap: f32, palette: &Palette) {
+    pub fn draw_numerals(
+        &self,
+        p: &mut Painter<'_>,
+        center: Vec2,
+        radius: f32,
+        font: FontId,
+        cap: f32,
+        palette: &Palette,
+    ) {
         let thousands = self.fill.thousands();
         if thousands == 0 {
             return;
@@ -472,8 +531,8 @@ impl TickRun {
     }
 }
 
-/// Peak hold of the rev bar: holds the highest fraction for `hold` seconds, then falls on a
-/// spring.
+/// Peak hold of the rev bar: once the lit run drops below the highest cell it reached, that cell
+/// stays marked for `hold` seconds, then the marker falls back onto the run on a spring.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct PeakHold {
     level: Spring,
@@ -482,9 +541,11 @@ struct PeakHold {
 }
 
 impl PeakHold {
-    fn update(&mut self, fraction: f32, dt: f32) {
+    fn update(&mut self, fraction: f32, count: u32, dt: f32) {
         let dt = finite(dt).max(0.0);
-        if fraction >= self.level.value() {
+        if fraction >= self.level.value() || !self.visible(fraction, count) {
+            // A new peak, or the run still lights the peak cell (a settling spring's sub-cell
+            // overshoot is not a peak): the hold starts when the run falls below the cell.
             self.level.reset(fraction);
             self.left = self.hold;
         } else if self.left > 0.0 {
@@ -494,15 +555,17 @@ impl PeakHold {
         }
     }
 
-    fn animating(&self, fraction: f32) -> bool {
-        self.left > 0.0 || !self.level.settled(fraction, 1e-4)
+    /// True while the held cell sits above the lit run.
+    fn visible(&self, fraction: f32, count: u32) -> bool {
+        lit_segments(self.level.value(), count) > lit_segments(fraction, count)
     }
 }
 
 /// The `bar` tach (Race Dash): a segmented linear bar (45 segments, 5 px gaps) with step
-/// lighting. Lit cells are 72% of `primary` and take the caution, warning and shift stage
-/// colours above the car's thresholds; at the limiter they turn steady `ink`. Unlit cells are
-/// grey lenses. Optional peak hold.
+/// lighting. Lit cells are 72% of `primary` and take the caution and warning stage colours above
+/// the car's thresholds (Race Dash: 7300 / 8000 rpm); at the limiter they turn steady `ink`
+/// without bloom, so the strobing strip keeps the focus. Lit cells are top-lit lenses (glint and
+/// bottom shade); unlit cells are grey lenses. Optional peak hold.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TachBar {
     fill: FillModel,
@@ -556,8 +619,9 @@ impl TachBar {
     pub fn update(&mut self, sig: &Signals, dt: f32) {
         self.fill.update(sig, dt);
         let fraction = self.fill.fraction();
+        let count = self.count;
         if let Some(peak) = &mut self.peak {
-            peak.update(fraction, dt);
+            peak.update(fraction, count, dt);
         }
     }
 
@@ -587,10 +651,10 @@ impl TachBar {
         (top > self.lit()).then(|| top - 1)
     }
 
-    /// True while the fill, the limiter cue or the peak hold still moves.
+    /// True while the fill, the limiter cue or a shown peak marker still moves.
     #[must_use]
     pub fn animating(&self) -> bool {
-        self.fill.animating() || self.peak.is_some_and(|pk| pk.animating(self.fill.fraction()))
+        self.fill.animating() || self.peak.is_some_and(|pk| pk.visible(self.fill.fraction(), self.count))
     }
 
     /// Cell pitch and width in `rect`.
@@ -616,18 +680,15 @@ impl TachBar {
     }
 
     /// The lit-cell paint: a hard-stop ramp across the bar; each lit cell takes the colour at its
-    /// centre, so a cell lights in the stage of the rpm at which it lights.
+    /// centre, so a cell lights in the stage of the rpm at which it lights. Cells past the shift
+    /// rpm stay in the warning stage: the shift colour belongs to the strip and the REV lamp,
+    /// and at the limiter the lit run turns to the limiter cue instead (Race Dash: steady ink).
     fn paint(&self, rect: Rect, palette: &Palette) -> Gradient {
-        let [caution, warning, shift] = self.fill.stage_fractions(palette);
-        let (c, w, s) = (
-            self.stop_offset(rect, caution),
-            self.stop_offset(rect, warning),
-            self.stop_offset(rect, shift),
-        );
+        let [caution, warning, _] = self.fill.stage_fractions(palette);
+        let (c, w) = (self.stop_offset(rect, caution), self.stop_offset(rect, warning));
         let base = palette.primary.fade(BAR_BASE_STRENGTH);
         let caution_color = palette.rev_stage(palette.stages[1]);
         let warning_color = palette.rev_stage(palette.stages[2]);
-        let shift_color = palette.rev_stage(1.0);
         let y = rect.center().y;
         Gradient::linear(vec2(rect.min.x, y), vec2(rect.max.x, y))
             .stop(0.0, base)
@@ -635,9 +696,7 @@ impl TachBar {
             .stop(c, caution_color)
             .stop(w, caution_color)
             .stop(w, warning_color)
-            .stop(s, warning_color)
-            .stop(s, shift_color)
-            .stop(1.0, shift_color)
+            .stop(1.0, warning_color)
     }
 
     /// The colour segment `i` shows when lit (before the limiter cue).
@@ -653,8 +712,6 @@ impl TachBar {
         let roles = palette.roles;
         let (_, cell) = self.cell_metrics(rect);
         let radius = cell.min(rect.height()) * 0.14;
-        let glint = Rect::from_xywh(rect.min.x, rect.min.y, rect.width(), rect.height() * BAR_GLINT_HEIGHT);
-        let glint_radius = radius.min(glint.height() * 0.5);
         let lit = self.lit() as f32;
         let bar = |r: Rect, radius: f32, unlit: Color| {
             Shape::Bar(SegmentedBar {
@@ -681,11 +738,21 @@ impl TachBar {
             let k = self.fill.limiter();
             let cue = self.cue.color(palette);
             let lit_bar = bar(rect, radius, Color::TRANSPARENT);
-            p.layer(LayerOptions::bloom(), |p| {
+            let (layer, _) = fill_layer(p.tokens(), self.cue, k);
+            p.layer(layer, |p| {
                 fill_with_cue(p, &lit_bar, paint.into(), cue, k);
             });
-            // A lens glint across the top of each lit cell.
-            p.fill(&bar(glint, glint_radius, Color::TRANSPARENT), roles.ink.fade(BAR_LIT_GLINT));
+            // Lens optics on every lit cell (also the steady ink cue): a glint fading down from
+            // the top edge and a shade toward the bottom, so a cell reads as a lit lens.
+            let x = rect.min.x;
+            p.fill(
+                &lit_bar,
+                Gradient::linear(vec2(x, rect.min.y), vec2(x, rect.max.y))
+                    .stop(0.0, roles.ink.fade(BAR_LIT_GLINT))
+                    .stop(BAR_GLINT_HEIGHT, roles.ink.fade(0.0))
+                    .stop(0.55, roles.oled_black.fade(0.0))
+                    .stop(1.0, roles.oled_black.fade(BAR_LENS_SHADE)),
+            );
         }
 
         if let Some(i) = self.peak_segment() {
@@ -742,9 +809,7 @@ impl ChevronZones {
     /// All segments.
     #[must_use]
     pub fn total(&self) -> u32 {
-        self.primary
-            .saturating_add(self.secondary)
-            .saturating_add(self.accent)
+        self.primary.saturating_add(self.secondary).saturating_add(self.accent)
     }
 }
 
@@ -760,7 +825,7 @@ pub enum ChevronForm {
 
 /// The `chevron` tach (Sci-Fi VFD): a staircase of 24 stepped segments rising left to right
 /// (14 `primary`, 6 `secondary`, 4 `accent`), step lighting, lit segments in phosphor with a
-/// whiter core and a tight glow, unlit segments as ghosts at 7% of their colour. Steady at the
+/// whiter core and a bloom halo, unlit segments as ghosts at 7% of their colour. Steady at the
 /// limiter by default (the family's cue is the gear bay).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TachChevron {
@@ -905,7 +970,9 @@ impl TachChevron {
         }
     }
 
-    /// Draws the run in `rect`. Lit segments bloom with the phosphor glow (glance rank 3).
+    /// Draws the run in `rect`. Lit segments bloom (glance rank 3): the bloom pass lays the short
+    /// phosphor halo. The explicit `glow.phosphor` lobes are sized for thin 7-segment strokes; on
+    /// 24 broad blocks their sub-unity edge reads as a dark outline, so the run does not add them.
     pub fn draw(&self, p: &mut Painter<'_>, rect: Rect, palette: &Palette) {
         let n = self.count();
         let lit = self.lit();
@@ -920,8 +987,8 @@ impl TachChevron {
         let k = self.fill.limiter();
         let cue = self.cue.color(palette);
         let ink = palette.roles.ink;
-        let phosphor = p.tokens().glow.phosphor;
-        p.layer(LayerOptions::bloom(), |p| {
+        let (layer, _) = fill_layer(p.tokens(), self.cue, k);
+        p.layer(layer, |p| {
             for i in 0..lit {
                 let (pts, len) = self.segment(i, rect);
                 let shape = Shape::Polygon { points: &pts[..len] };
@@ -929,17 +996,18 @@ impl TachChevron {
                 if let Some(c) = cue {
                     color = color.lerp(c, k);
                 }
-                for lobe in phosphor.lobes() {
-                    p.glow(&shape, color, Glow::new(lobe.sigma, lobe.intensity));
-                }
-                // Phosphor core: whiter along the middle of the segment, full hue at its edges.
+                // Phosphor body in full hue with a whiter core band through the middle (the
+                // filament's line), so a lit block reads as light, not paint.
                 let bottom = (pts[0] + pts[1]) * 0.5;
                 let top = vec2(bottom.x, bottom.y - (pts[0].y - rect_top(&pts[..len])));
+                let hot = color.lerp(ink, CHEVRON_CORE_WHITE);
                 p.fill(
                     &shape,
                     Gradient::linear(bottom, top)
                         .stop(0.0, color)
-                        .stop(0.5, color.lerp(ink, CHEVRON_CORE_WHITE))
+                        .stop(0.5 - CHEVRON_CORE_HALF, color)
+                        .stop(0.5, hot)
+                        .stop(0.5 + CHEVRON_CORE_HALF, color)
                         .stop(1.0, color),
                 );
             }
@@ -1005,7 +1073,11 @@ mod tests {
     fn fill_settles_on_the_rpm_fraction() {
         let t = Tokens::default();
         let f = settle_fill(&t, 5200.0, 30);
-        assert!((f.fraction() - 5200.0 / LIMITER).abs() < 1e-3, "fraction {}", f.fraction());
+        assert!(
+            (f.fraction() - 5200.0 / LIMITER).abs() < 1e-3,
+            "fraction {}",
+            f.fraction()
+        );
         assert!(!f.animating());
         assert_eq!(f.limiter(), 0.0);
     }
@@ -1020,7 +1092,10 @@ mod tests {
         let mut s = sig(&t, rpm);
         for _ in 0..40 {
             rpm += rate * DT;
-            s = Signals { rpm_rate: rate, ..sig(&t, rpm) };
+            s = Signals {
+                rpm_rate: rate,
+                ..sig(&t, rpm)
+            };
             f.update(&s, DT);
         }
         let lag = (s.rpm_fraction - f.fraction()).abs();
@@ -1104,16 +1179,18 @@ mod tests {
         let n = bar.count();
         for i in 0..n {
             let lights_at = (i + 1) as f32 / n as f32;
-            let want = if lights_at >= shift_ratio {
-                pal.rev_stage(1.0)
-            } else if lights_at >= pal.stages[2] * shift_ratio {
+            let want = if lights_at >= pal.stages[2] * shift_ratio {
                 pal.roles.warning
             } else if lights_at >= pal.stages[1] * shift_ratio {
                 pal.roles.caution
             } else {
                 pal.primary.fade(BAR_BASE_STRENGTH)
             };
-            assert_eq!(bar.segment_color(rect, i, &pal), want, "segment {i} lights at {lights_at}");
+            assert_eq!(
+                bar.segment_color(rect, i, &pal),
+                want,
+                "segment {i} lights at {lights_at}"
+            );
         }
     }
 
@@ -1218,6 +1295,108 @@ mod tests {
         assert_eq!(LimiterCue::Ink.color(&pal), Some(pal.roles.ink));
         let hold = LimiterCue::ShiftHold.color(&pal).map(|c| c.a);
         assert_eq!(hold, Some(SHIFT_HOLD_STRENGTH));
+    }
+
+    #[test]
+    fn steady_ink_cue_stops_blooming_but_shift_hold_keeps_its_light() {
+        let t = Tokens::default();
+        let bloom = |cue: LimiterCue, k: f32| {
+            let (layer, fade) = fill_layer(&t, cue, k);
+            (layer.bloom.map(|b| b.intensity), fade)
+        };
+        let full = Some(t.glow.bloom_intensity);
+        assert_eq!(bloom(LimiterCue::Ink, 0.0), (full, 1.0));
+        assert_eq!(
+            bloom(LimiterCue::Ink, 1.0),
+            (None, 0.0),
+            "a white run at the limiter never glares"
+        );
+        let (half, fade) = bloom(LimiterCue::Ink, 0.5);
+        assert!(half.is_some_and(|i| (i - t.glow.bloom_intensity * 0.5).abs() < 1e-6) && (fade - 0.5).abs() < 1e-6);
+        assert_eq!(bloom(LimiterCue::ShiftHold, 1.0), (full, 1.0));
+        assert_eq!(bloom(LimiterCue::None, 1.0), (full, 1.0));
+        assert_eq!(
+            bloom(LimiterCue::Ink, f32::NAN),
+            (full, 1.0),
+            "a corrupt cue amount keeps the fill lit"
+        );
+    }
+
+    #[test]
+    fn bar_cells_past_the_shift_rpm_stay_in_the_warning_stage() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let bar = TachBar::new(&t);
+        let rect = Rect::from_xywh(0.0, 0.0, 1000.0, 36.0);
+        let top = bar.segment_color(rect, bar.count() - 1, &pal);
+        assert_eq!(
+            top, pal.roles.warning,
+            "the shift colour belongs to the strip and the REV lamp"
+        );
+        assert_ne!(top, pal.shift);
+    }
+
+    #[test]
+    fn a_settled_bar_with_peak_hold_stops_animating() {
+        let t = Tokens::default();
+        let mut bar = TachBar::new(&t).with_peak_hold(&t);
+        // The ribbon spring overshoots by a fraction of a cell on the way up; that is no peak.
+        for _ in 0..120 {
+            bar.update(&sig(&t, 7400.0), DT);
+        }
+        assert_eq!(bar.peak_segment(), None);
+        assert!(!bar.animating(), "nothing moves at a steady rpm");
+    }
+
+    #[test]
+    fn zz_experiment_upshift_undershoot() {
+        let t = Tokens::default();
+        let mut f = FillModel::new(&t);
+        let mut rate_s = fh6_kit::Smoothed::new(0.0f32, 0.04);
+        let mut last = 8400.0f32;
+        for _ in 0..60 {
+            let s = Signals { rpm_rate: rate_s.update(0.0, DT), ..sig(&t, 8400.0) };
+            f.update(&s, DT);
+        }
+        let mut min = 1.0f32;
+        for frame in 0..30 {
+            let rpm = 6000.0;
+            let rate = rate_s.update((rpm - last) / DT, DT);
+            last = rpm;
+            let s = Signals { rpm_rate: rate, ..sig(&t, rpm) };
+            f.update(&s, DT);
+            min = min.min(f.fraction());
+            eprintln!("frame {frame} rate {rate:.0} frac {:.4} lit45 {}", f.fraction(), lit_segments(f.fraction(), 45));
+        }
+        eprintln!("target {:.4} ({} cells) min {:.4} ({} cells)", 6000.0 / LIMITER, lit_segments(6000.0 / LIMITER, 45), min, lit_segments(min, 45));
+        for w in [0.04f32, 0.06, 0.1] {
+            let run = |from: f32, to: f32, ramp: f32| {
+                let mut sp = Spring::new(t.springs.ribbon, from / LIMITER);
+                let mut rs = fh6_kit::Smoothed::new(0.0f32, 0.04);
+                let mut rpm = from;
+                let mut last = from;
+                let mut min = 1.0f32;
+                let mut max_lag = 0.0f32;
+                let mut below = 0;
+                for frame in 0..60 {
+                    if ramp != 0.0 { rpm += ramp * DT; } else if frame == 1 { rpm = to; }
+                    let rate = rs.update((rpm - last) / DT, DT);
+                    last = rpm;
+                    let target = rpm / LIMITER;
+                    let err = (target - sp.value()).abs();
+                    let g = (1.0 - err / w).clamp(0.0, 1.0);
+                    sp.update_tracking(target, rate / LIMITER * g, DT);
+                    min = min.min(sp.value());
+                    if frame > 20 { max_lag = max_lag.max((target - sp.value()).abs()); }
+                    if lit_segments(sp.value(), 45) < lit_segments(target, 45) { below += 1; }
+                }
+                (min, max_lag, below)
+            };
+            let (min, _, below) = run(8400.0, 6000.0, 0.0);
+            let (_, lag6k, _) = run(2000.0, 0.0, 6000.0);
+            let (_, lag20k, _) = run(1000.0, 0.0, 20000.0);
+            eprintln!("w {w}: step min {:.4} ({} cells, {below} frames below) lag6k {:.5} lag20k {:.5} (frame {:.5})", min, lit_segments(min, 45), lag6k, lag20k, 20000.0*DT/LIMITER);
+        }
     }
 
     #[test]

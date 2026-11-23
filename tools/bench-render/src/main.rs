@@ -165,25 +165,25 @@ fn main() -> Result<()> {
 
     let scenarios = [
         Scenario {
-            name: "Liquid Glass sample (bloom on)",
+            name: "Liquid Glass (pilot, bloom on)",
             theme: Some(ClusterTheme::LiquidGlass),
             bloom: true,
             extra: Extra::None,
         },
         Scenario {
-            name: "Liquid Glass sample (bloom off)",
+            name: "Liquid Glass (pilot, bloom off)",
             theme: Some(ClusterTheme::LiquidGlass),
             bloom: false,
             extra: Extra::None,
         },
         Scenario {
-            name: "Analog sample (bloom on)",
+            name: "Porsche Analog scaffold (bloom on)",
             theme: Some(ClusterTheme::PorscheAnalog),
             bloom: true,
             extra: Extra::None,
         },
         Scenario {
-            name: "Analog sample (bloom off)",
+            name: "Porsche Analog scaffold (bloom off)",
             theme: Some(ClusterTheme::PorscheAnalog),
             bloom: false,
             extra: Extra::None,
@@ -201,13 +201,13 @@ fn main() -> Result<()> {
             extra: Extra::GlassWorld,
         },
         Scenario {
-            name: "Analog sample + fluid (256x128, 20 Jacobi)",
+            name: "Porsche Analog scaffold + fluid (256x128, 20 Jacobi)",
             theme: Some(ClusterTheme::PorscheAnalog),
             bloom: true,
             extra: Extra::Fluid,
         },
         Scenario {
-            name: "Liquid Glass sample + OEM scrim 100% + wash",
+            name: "Liquid Glass (pilot) + OEM scrim 100% + wash",
             theme: Some(ClusterTheme::LiquidGlass),
             bloom: true,
             extra: Extra::Scrim,

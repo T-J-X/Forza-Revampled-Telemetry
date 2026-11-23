@@ -1,11 +1,12 @@
 //! SignedBar (COMPONENTS.md §13, tokens `components.signedBar`): an F1 MGU-K style bar above
 //! the gear.
 //!
-//! It grows from the centre: right for acceleration / deploy in `go`, left for braking in
-//! `warning`. Its height is 8–12% of the gear cap, it follows the tokens `fast` spring, and it
-//! fades out near zero so a coasting car shows nothing but a ghost track. Rank 4: no glow.
+//! It grows from the centre: right for acceleration / deploy in `go` (or neutral `ink` for the
+//! Race Dash family, [`AccelTone`]), left for braking in `warning`. Its height is 8–12% of the
+//! gear cap, it follows the tokens `fast` spring, and it fades out near zero so a coasting car
+//! shows nothing but a ghost track. Rank 4: no glow.
 use fh6_kit::math::{finite_or, smoothstep};
-use fh6_kit::{vec2, Gradient, Painter, Palette, Radii, Rect, Shape, Signals, Spring, Stroke, Tokens, Vec2};
+use fh6_kit::{vec2, Color, Gradient, Painter, Palette, Radii, Rect, Shape, Signals, Spring, Stroke, Tokens, Vec2};
 
 /// Height range as a fraction of the gear cap (tokens `components.signedBar.heightPctOfGear`).
 pub const HEIGHT_PCT_RANGE: (f32, f32) = (0.08, 0.12);
@@ -19,7 +20,8 @@ const FADE_FULL: f32 = 0.10;
 /// What the bar shows, as a signed fraction of full scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SignedSource {
-    /// Longitudinal G (verified acceleration channel), full scale at `full_scale_g`.
+    /// Longitudinal G (verified acceleration channel), full scale at `full_scale_g`. It is the
+    /// literal G along the car: accelerating backwards in reverse reads left, like braking.
     LongitudinalG {
         /// The G that fills one half of the bar.
         full_scale_g: f32,
@@ -40,25 +42,55 @@ impl SignedSource {
     }
 }
 
+/// The colour of the positive (accelerate / deploy) half. Braking is always `warning`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum AccelTone {
+    /// `go` (COMPONENTS.md §13).
+    #[default]
+    Go,
+    /// Neutral `ink` (Race Dash: nominal states are never green, race-dash.md Z4).
+    Ink,
+}
+
+impl AccelTone {
+    /// The accelerate colour from the palette.
+    #[must_use]
+    pub fn color(self, palette: &Palette) -> Color {
+        match self {
+            AccelTone::Go => palette.roles.go,
+            AccelTone::Ink => palette.roles.ink,
+        }
+    }
+}
+
 /// The signed bar state.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SignedBar {
     source: SignedSource,
+    tone: AccelTone,
     spring: Spring,
     target: f32,
     height_pct: f32,
 }
 
 impl SignedBar {
-    /// A bar at zero reading `source`, on the tokens' `fast` spring.
+    /// A bar at zero reading `source`, on the tokens' `fast` spring, accelerating in `go`.
     #[must_use]
     pub fn new(tokens: &Tokens, source: SignedSource) -> Self {
         Self {
             source,
+            tone: AccelTone::Go,
             spring: Spring::new(tokens.springs.fast, 0.0),
             target: 0.0,
             height_pct: DEFAULT_HEIGHT_PCT,
         }
+    }
+
+    /// With the colour of the accelerate half.
+    #[must_use]
+    pub fn with_accel_tone(mut self, tone: AccelTone) -> Self {
+        self.tone = tone;
+        self
     }
 
     /// With a height as a fraction of the gear cap, clamped to [`HEIGHT_PCT_RANGE`].
@@ -133,7 +165,7 @@ impl SignedBar {
         let len = v.abs() * half_width;
         let (color, fill, radii, tip_x) = if v >= 0.0 {
             (
-                roles.go,
+                self.tone.color(palette),
                 Rect::from_xywh(center.x, track.min.y, len, h),
                 Radii::new(0.0, r, r, 0.0),
                 center.x + len,
@@ -234,6 +266,17 @@ mod tests {
         assert!(mid > 0.0 && mid < 1.0, "{mid}");
         bar.update_value(-0.4, 1.0);
         assert_eq!(bar.opacity(), 1.0);
+    }
+
+    #[test]
+    fn accel_tone_colours_come_from_roles() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        assert_eq!(AccelTone::Go.color(&pal), pal.roles.go);
+        assert_eq!(AccelTone::Ink.color(&pal), pal.roles.ink);
+        let bar = SignedBar::new(&t, SignedSource::Pedals);
+        assert_eq!(bar.tone, AccelTone::Go, "COMPONENTS.md default");
+        assert_eq!(bar.with_accel_tone(AccelTone::Ink).tone, AccelTone::Ink);
     }
 
     #[test]

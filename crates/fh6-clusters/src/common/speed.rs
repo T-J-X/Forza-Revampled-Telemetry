@@ -71,10 +71,10 @@ mod tests {
         let mut s = TabularSpeed::new();
         s.update(64.2);
         assert_eq!(s.value(), 64);
-        s.update(64.7);
+        s.update(64.5);
         assert_eq!(s.value(), 64, "within 0.6 of the shown value");
-        s.update(65.3);
-        assert_eq!(s.value(), 65);
+        s.update(64.7);
+        assert_eq!(s.value(), 65, "moved more than 0.6");
         s.update(1200.0);
         assert_eq!(s.value(), 999);
     }

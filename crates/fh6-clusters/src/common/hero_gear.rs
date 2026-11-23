@@ -58,7 +58,11 @@ impl HeroGear {
         }
         self.glyph.update(gear, dt);
         self.limiter_held = limiter_held.max(0.0);
-        self.pulse_t = if self.limiter_held > 0.5 { self.pulse_t + dt } else { 0.0 };
+        self.pulse_t = if self.limiter_held > 0.5 {
+            self.pulse_t + dt
+        } else {
+            0.0
+        };
     }
 
     /// The gear shown.

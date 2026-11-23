@@ -11,6 +11,11 @@
 //!
 //! Every highlight follows one light angle (`common::VirtualLight::angle()`), so the metal moves
 //! with lateral G. Static surfaces stay at or below about 24% luminance (tokens `materials`).
+//!
+//! The metal and carbon builds sit on an opaque `oledBlack` body, so the game never shows through
+//! the ring and every material level reads the same over any backdrop. Material levels are
+//! linear-light coverage of `ink` over that body (the kit blends linear premultiplied).
+use fh6_kit::color::srgb_to_linear;
 use fh6_kit::math::finite_or;
 use fh6_kit::{
     deg, vec2, Color, Gradient, ImageId, ImagePaint, Paint, Painter, Palette, Rect, Shadow, Shape, Spread, Stroke,
@@ -21,36 +26,47 @@ use std::f32::consts::{PI, TAU};
 /// `2 - sqrt(2)`: how much a 45° corner cut grows when its octagon is offset outwards by 1 px.
 const CHAMFER_GROWTH: f32 = 2.0 - std::f32::consts::SQRT_2;
 /// Brushed titanium: lobe peak, far lobe and trough opacity of `ink` (tokens
-/// `materials.brushedTitanium`: at most 24% luminance).
+/// `materials.brushedTitanium`: at most 24% luminance). The trough is kept deep so the light,
+/// not a grey base, makes the metal read (family rule: static surfaces at or below 20%).
 const TITANIUM_PEAK: f32 = 0.24;
 /// See [`TITANIUM_PEAK`].
-const TITANIUM_FAR: f32 = 0.11;
+const TITANIUM_FAR: f32 = 0.08;
 /// See [`TITANIUM_PEAK`].
-const TITANIUM_TROUGH: f32 = 0.035;
+const TITANIUM_TROUGH: f32 = 0.012;
+/// Turned bevels: outer (facing the light) and inner (inverted) lobe levels, as
+/// `(peak, far, trough)`.
+const BEVEL_OUTER: (f32, f32, f32) = (0.34, 0.10, 0.016);
+/// See [`BEVEL_OUTER`].
+const BEVEL_INNER: (f32, f32, f32) = (0.26, 0.08, 0.012);
 /// Brushed banding (tokens fallback: 48 bands).
 const TITANIUM_BANDS: u32 = 48;
-/// Band amplitude as an opacity of `ink` (tokens fallback: 6%).
-const TITANIUM_BAND_ALPHA: f32 = 0.06;
+/// Band amplitude (tokens fallback: 6% on screen). The kit blends in linear light, where 6%
+/// over the dark trough would read as a knurl; 1.2% coverage stays a brushed shimmer.
+const TITANIUM_BAND_ALPHA: f32 = 0.012;
 /// Width of the turned bevels at each edge of a titanium ring, as a fraction of its width.
 const BEVEL_PCT: f32 = 0.2;
-/// Chamfer frame: bevel facing levels (COMPONENTS.md §9: lit 55%, shadowed 18%).
+/// Chamfer frame: bevel facing levels as seen on screen (COMPONENTS.md §9: lit 55%, shadowed
+/// 18%); [`on_screen`] converts them to the kit's linear-light opacity.
 pub const CHAMFER_LIT: f32 = 0.55;
 /// See [`CHAMFER_LIT`].
 pub const CHAMFER_SHADOW: f32 = 0.18;
-/// Chamfer frame: the flat gunmetal face, lit and far side (opacity of `ink`).
-const GUNMETAL_LIT: f32 = 0.15;
+/// Chamfer frame: the flat gunmetal face, lit and far side, as seen on screen (about the tokens'
+/// `brushedTitanium.base` `#2A2E35` on the lit side).
+const GUNMETAL_LIT: f32 = 0.22;
 /// See [`GUNMETAL_LIT`].
-const GUNMETAL_DARK: f32 = 0.05;
+const GUNMETAL_DARK: f32 = 0.09;
 /// Share of a chamfer frame's width that is the outer 45° bevel.
 const CHAMFER_BEVEL_PCT: f32 = 0.38;
 /// Carbon twill pitch (tokens `materials.carbonTwill.weavePx`).
 const CARBON_WEAVE: f32 = 12.0;
-/// Carbon base and weave contrast (opacity of `ink`).
-const CARBON_BASE: f32 = 0.05;
+/// Carbon base and weave contrast (opacity of `ink`, linear light: a near-black resin with the
+/// tows a few levels above it).
+const CARBON_BASE: f32 = 0.009;
 /// See [`CARBON_BASE`].
-const CARBON_WEAVE_ALPHA: f32 = 0.05;
-/// Carbon diagonal sheen (tokens `materials.carbonTwill.sheenAlpha`: 18 / 255).
-const CARBON_SHEEN: f32 = 18.0 / 255.0;
+const CARBON_WEAVE_ALPHA: f32 = 0.02;
+/// Carbon diagonal sheen (tokens `materials.carbonTwill.sheenAlpha`: 18/255 on screen over the
+/// resin; linear light).
+const CARBON_SHEEN: f32 = 0.025;
 /// Texture tile size for an optional carbon image: four twill repeats.
 const CARBON_TILE: f32 = CARBON_WEAVE * 4.0;
 /// Falloff steps for a rounded-rect cavity (nested inner strokes).
@@ -260,13 +276,21 @@ impl Bezel {
         }
         let c = form.center();
         let ink = roles.ink;
-        // The body: two anisotropic lobes, toward the light and opposite it.
+        // The body: opaque black metal, then two anisotropic lobes, toward the light and
+        // opposite it.
+        band(p, form, 0.0, w, roles.oled_black);
         band(
             p,
             form,
             0.0,
             w,
-            brushed(c, light, ink.with_alpha(TITANIUM_PEAK), ink.with_alpha(TITANIUM_FAR), ink.with_alpha(TITANIUM_TROUGH)),
+            brushed(
+                c,
+                light,
+                ink.with_alpha(TITANIUM_PEAK),
+                ink.with_alpha(TITANIUM_FAR),
+                ink.with_alpha(TITANIUM_TROUGH),
+            ),
         );
         // Brushed banding: 48 radial bands whose strength follows the lobes.
         if let BezelForm::Circle { center, radius } = form {
@@ -283,33 +307,49 @@ impl Bezel {
                     )
                     .minor(w, pitch * 0.5),
                 ),
-                brushed(c, light, ink.with_alpha(a), ink.with_alpha(a * 0.5), ink.with_alpha(a * 0.15)),
+                brushed(
+                    c,
+                    light,
+                    ink.with_alpha(a),
+                    ink.with_alpha(a * 0.5),
+                    ink.with_alpha(a * 0.15),
+                ),
             );
         }
         // Turning marks: two concentric hairlines across the face of the ring.
         for f in [0.38, 0.62] {
             p.stroke(
                 &form.grown(w * f).shape(),
-                brushed(c, light, ink.with_alpha(0.10), ink.with_alpha(0.05), ink.with_alpha(0.015)),
+                brushed(
+                    c,
+                    light,
+                    ink.with_alpha(0.10),
+                    ink.with_alpha(0.05),
+                    ink.with_alpha(0.015),
+                ),
                 device_stroke(StrokeAlign::Center),
             );
         }
         // Turned bevels: the outer one faces the light, the inner one faces the cavity (inverted).
         let bevel = w * BEVEL_PCT;
-        band(
-            p,
-            form,
-            w - bevel,
-            w,
-            brushed(c, light, ink.with_alpha(0.34), ink.with_alpha(0.12), ink.with_alpha(0.04)),
-        );
-        band(
-            p,
-            form,
-            0.0,
-            bevel,
-            brushed(c, light + PI, ink.with_alpha(0.28), ink.with_alpha(0.10), ink.with_alpha(0.03)),
-        );
+        for (d0, d1, facing, (peak, far, trough)) in [
+            (w - bevel, w, light, BEVEL_OUTER),
+            (0.0, bevel, light + PI, BEVEL_INNER),
+        ] {
+            band(
+                p,
+                form,
+                d0,
+                d1,
+                brushed(
+                    c,
+                    facing,
+                    ink.with_alpha(peak),
+                    ink.with_alpha(far),
+                    ink.with_alpha(trough),
+                ),
+            );
+        }
         // 1 px rims: top-lit outer, inverted inner.
         p.stroke(
             &form.grown(w).shape(),
@@ -318,7 +358,12 @@ impl Bezel {
         );
         p.stroke(
             &form.shape(),
-            lit_rim(c, light + PI, roles.rim_specular.with_alpha(0.7), roles.hairline.with_alpha(0.06)),
+            lit_rim(
+                c,
+                light + PI,
+                roles.rim_specular.with_alpha(0.7),
+                roles.hairline.with_alpha(0.06),
+            ),
             device_stroke(StrokeAlign::Outer),
         );
     }
@@ -337,7 +382,8 @@ impl Bezel {
         let bevel_from = octagon_grown(rect, cut, w * (1.0 - CHAMFER_BEVEL_PCT));
         let outer = octagon_grown(rect, cut, w);
 
-        // Flat gunmetal face: one closed polyline on the mid-line, shaded along the light.
+        // Flat gunmetal face: one closed polyline on the mid-line over an opaque black body,
+        // shaded along the light.
         let ext = rect.size().length() * 0.5 + w;
         p.fill(
             &Shape::Polyline {
@@ -345,9 +391,17 @@ impl Bezel {
                 width: w,
                 closed: true,
             },
+            roles.oled_black,
+        );
+        p.fill(
+            &Shape::Polyline {
+                points: &mid,
+                width: w,
+                closed: true,
+            },
             Gradient::linear(c + l * ext, c - l * ext)
-                .stop(0.0, roles.ink.with_alpha(GUNMETAL_LIT))
-                .stop(1.0, roles.ink.with_alpha(GUNMETAL_DARK)),
+                .stop(0.0, roles.ink.with_alpha(on_screen(GUNMETAL_LIT)))
+                .stop(1.0, roles.ink.with_alpha(on_screen(GUNMETAL_DARK))),
         );
         // Outer 45° bevel: each of the 8 facets lit by its facing.
         for i in 0..8 {
@@ -355,7 +409,9 @@ impl Bezel {
             let quad = [bevel_from[i], bevel_from[j], outer[j], outer[i]];
             p.fill(
                 &Shape::Polygon { points: &quad },
-                roles.ink.with_alpha(chamfer_level(OCTAGON_NORMALS[i], light)),
+                roles
+                    .ink
+                    .with_alpha(on_screen(chamfer_level(OCTAGON_NORMALS[i], light))),
             );
         }
         // Rationed screws: one near each end of the top and bottom sides, clocked alike.
@@ -380,7 +436,12 @@ impl Bezel {
         );
         p.stroke(
             &Shape::Polygon { points: &inner },
-            lit_rim(c, light + PI, roles.rim_specular.with_alpha(0.6), roles.hairline.with_alpha(0.05)),
+            lit_rim(
+                c,
+                light + PI,
+                roles.rim_specular.with_alpha(0.6),
+                roles.hairline.with_alpha(0.05),
+            ),
             device_stroke(StrokeAlign::Outer),
         );
     }
@@ -394,11 +455,18 @@ impl Bezel {
         let c = form.center();
         let ink = roles.ink;
         let l = Vec2::from_angle(light);
+        band(p, form, 0.0, w, roles.oled_black);
         band(p, form, 0.0, w, ink.with_alpha(CARBON_BASE));
         match weave {
             Some(image) => {
                 let tile = Rect::from_center_size(c, Vec2::splat(CARBON_TILE));
-                band(p, form, 0.0, w, ImagePaint::new(image, tile).repeat().tint(ink.with_alpha(0.55)));
+                band(
+                    p,
+                    form,
+                    0.0,
+                    w,
+                    ImagePaint::new(image, tile).repeat().tint(ink.with_alpha(0.55)),
+                );
             }
             None => {
                 // 2x2 twill: diagonal tows one way, the crossing tows at half contrast.
@@ -446,7 +514,8 @@ impl Bezel {
                 BezelForm::RoundRect { rect, radius } => {
                     let half = rect.size() * 0.5;
                     let dir = Vec2::from_angle(a);
-                    let corner_center = c + vec2(dir.x.signum() * (half.x - radius), dir.y.signum() * (half.y - radius));
+                    let corner_center =
+                        c + vec2(dir.x.signum() * (half.x - radius), dir.y.signum() * (half.y - radius));
                     corner_center + dir * (radius + w * 0.5)
                 }
             };
@@ -460,7 +529,12 @@ impl Bezel {
         );
         p.stroke(
             &form.shape(),
-            lit_rim(c, light + PI, roles.rim_specular.with_alpha(0.5), roles.hairline.with_alpha(0.05)),
+            lit_rim(
+                c,
+                light + PI,
+                roles.rim_specular.with_alpha(0.5),
+                roles.hairline.with_alpha(0.05),
+            ),
             device_stroke(StrokeAlign::Outer),
         );
     }
@@ -472,7 +546,12 @@ impl Bezel {
         // inverted back face 2 px out.
         p.stroke(
             &form.shape(),
-            lit_rim(c, light, roles.rim_specular.with_alpha(0.7), roles.hairline.with_alpha(0.0)),
+            lit_rim(
+                c,
+                light,
+                roles.rim_specular.with_alpha(0.7),
+                roles.hairline.with_alpha(0.0),
+            ),
             device_stroke(StrokeAlign::Outer),
         );
         p.stroke(
@@ -506,6 +585,14 @@ pub fn lit_rim(center: Vec2, light: f32, peak: Color, floor: Color) -> Gradient 
 pub fn chamfer_level(normal: Vec2, light: f32) -> f32 {
     let facing = (normal.normalize_or_zero().dot(Vec2::from_angle(light)) + 1.0) * 0.5;
     CHAMFER_SHADOW + (CHAMFER_LIT - CHAMFER_SHADOW) * facing.clamp(0.0, 1.0).powf(1.5)
+}
+
+/// The kit's linear-light opacity of `ink` over an opaque black body that shows `level`
+/// (0..=1) on screen. The kit blends linear premultiplied, so a design level of 18% is about
+/// 2.7% coverage.
+#[must_use]
+pub fn on_screen(level: f32) -> f32 {
+    srgb_to_linear(finite_or(level, 0.0).clamp(0.0, 1.0))
 }
 
 /// The 8 corners of `rect` with 45° corner cuts of `cut` px, clockwise from the top-left end
@@ -543,18 +630,21 @@ fn chamfer_frame(form: BezelForm) -> (Rect, f32) {
     }
 }
 
-/// A conic brushed-metal paint: `peak` facing `light`, `far` on the opposite lobe and
-/// `trough` between them.
+/// A conic brushed-metal paint for a circularly turned surface: two anisotropic lobes, `peak`
+/// facing `light` (about ±45°, with a bright core) and a narrower `far` lobe opposite it,
+/// `trough` everywhere else. The seam sits in a trough, so the ramp is continuous.
 fn brushed(center: Vec2, light: f32, peak: Color, far: Color, trough: Color) -> Gradient {
-    let shoulder = peak.lerp(trough, 0.55);
-    Gradient::conic(center, light)
-        .stop(0.0, peak)
-        .stop(0.07, shoulder)
-        .stop(0.25, trough)
-        .stop(0.5, far)
-        .stop(0.75, trough)
-        .stop(0.93, shoulder)
-        .stop(1.0, peak)
+    let shoulder = peak.lerp(trough, 0.6);
+    // t = 0 at a quarter turn past the light: t = 0.25 faces away from it, t = 0.75 faces it.
+    Gradient::conic(center, light + PI * 0.5)
+        .stop(0.17, trough)
+        .stop(0.25, far)
+        .stop(0.33, trough)
+        .stop(0.62, trough)
+        .stop(0.70, shoulder)
+        .stop(0.75, peak)
+        .stop(0.80, shoulder)
+        .stop(0.88, trough)
 }
 
 /// A 1 device-pixel stroke with the given alignment.
@@ -589,7 +679,10 @@ fn fastener_head(p: &mut Painter<'_>, at: Vec2, r: f32, palette: &Palette, light
     let roles = palette.roles;
     let l = Vec2::from_angle(light);
     let head = Shape::circle(at, r);
-    p.shadow(&head, Shadow::new(-l * (r * 0.35), r * 0.35, roles.oled_black.with_alpha(0.7)));
+    p.shadow(
+        &head,
+        Shadow::new(-l * (r * 0.35), r * 0.35, roles.oled_black.with_alpha(0.7)),
+    );
     p.fill(
         &head,
         Gradient::radial(at + l * (r * 0.45), r * 1.5)
@@ -599,7 +692,12 @@ fn fastener_head(p: &mut Painter<'_>, at: Vec2, r: f32, palette: &Palette, light
     );
     p.stroke(
         &head,
-        lit_rim(at, light, roles.rim_specular.with_alpha(0.75), roles.hairline.with_alpha(0.05)),
+        lit_rim(
+            at,
+            light,
+            roles.rim_specular.with_alpha(0.75),
+            roles.hairline.with_alpha(0.05),
+        ),
         Stroke::rim_px(1.0),
     );
 }
@@ -625,7 +723,12 @@ fn allen_bolt(p: &mut Painter<'_>, at: Vec2, r: f32, palette: &Palette, light: f
     p.fill(&socket, palette.roles.oled_black);
     p.stroke(
         &socket,
-        lit_rim(at, light + PI, palette.roles.rim_specular.with_alpha(0.45), palette.roles.hairline.with_alpha(0.0)),
+        lit_rim(
+            at,
+            light + PI,
+            palette.roles.rim_specular.with_alpha(0.45),
+            palette.roles.hairline.with_alpha(0.0),
+        ),
         Stroke::rim_px(1.0),
     );
 }
@@ -649,7 +752,10 @@ mod tests {
             let j = (i + 1) % 8;
             let da = line_distance(outer[i], inner[i], inner[j]);
             let db = line_distance(outer[j], inner[i], inner[j]);
-            assert!((da - 14.0).abs() < 1e-3 && (db - 14.0).abs() < 1e-3, "side {i}: {da} {db}");
+            assert!(
+                (da - 14.0).abs() < 1e-3 && (db - 14.0).abs() < 1e-3,
+                "side {i}: {da} {db}"
+            );
         }
     }
 
@@ -662,7 +768,10 @@ mod tests {
         for i in 0..8 {
             let j = (i + 1) % 8;
             assert!(((o[j] - o[i]).length() - first).abs() < 1e-2, "side {i} length");
-            assert!((line_distance(center, o[i], o[j]) - 200.0).abs() < 1e-2, "side {i} touches");
+            assert!(
+                (line_distance(center, o[i], o[j]) - 200.0).abs() < 1e-2,
+                "side {i} touches"
+            );
         }
     }
 
@@ -702,6 +811,32 @@ mod tests {
         assert!((g.sample(1.0).a - peak).abs() < 1e-6, "wraps seamlessly");
         assert!(g.sample(0.5).a < peak * 0.5, "far side is dim");
         assert!(g.sample(0.02).a > g.sample(0.1).a, "narrow lobe");
+    }
+
+    #[test]
+    fn brushed_lobes_face_the_light_and_wrap_seamlessly() {
+        let ink = fh6_kit::Color::WHITE;
+        let (peak, far, trough) = (ink.with_alpha(0.24), ink.with_alpha(0.11), ink.with_alpha(0.035));
+        let g = brushed(Vec2::ZERO, deg(-135.0), peak, far, trough);
+        // t = 0.75 is the light's own azimuth, t = 0.25 the opposite one.
+        assert!((g.sample(0.75).a - 0.24).abs() < 1e-6, "near lobe peaks at the light");
+        assert!((g.sample(0.25).a - 0.11).abs() < 1e-6, "far lobe opposite");
+        assert!((g.sample(0.5).a - 0.035).abs() < 1e-6, "trough a quarter turn away");
+        assert!((g.sample(0.0).a - g.sample(1.0).a).abs() < 1e-6, "no seam");
+        // Anisotropic: the near lobe is wider than the far one but both stay narrow.
+        assert!(g.sample(0.75 - 0.06).a > g.sample(0.25 - 0.06).a);
+        assert!(
+            (g.sample(0.75 - 0.14).a - 0.035).abs() < 1e-6,
+            "near lobe within about ±50°"
+        );
+    }
+
+    #[test]
+    fn on_screen_levels_convert_to_linear_coverage() {
+        assert!((on_screen(0.55) - 0.2633).abs() < 1e-3);
+        assert!((on_screen(0.18) - 0.0273).abs() < 1e-3);
+        assert_eq!(on_screen(f32::NAN), 0.0);
+        assert_eq!(on_screen(2.0), 1.0);
     }
 
     #[test]

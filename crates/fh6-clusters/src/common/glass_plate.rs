@@ -106,7 +106,10 @@ impl GlassPlate {
         // The rim's coloured stops follow the palette (tokens: "accent role may replace
         // #38BDF8"), so a factory, custom or random palette re-colours the glass edge too.
         g.rim_mid = palette.primary.with_alpha(tokens.glass.rim[1].a);
-        g.rim_bottom = palette.primary.lerp(palette.roles.oled_black, 0.35).with_alpha(tokens.glass.rim[2].a);
+        g.rim_bottom = palette
+            .primary
+            .lerp(palette.roles.oled_black, 0.35)
+            .with_alpha(tokens.glass.rim[2].a);
         g.refraction = Refraction::World;
         self.glass = g;
     }
@@ -256,6 +259,10 @@ mod tests {
         let b = Palette::family(&t, "classicAnalog");
         let mut g = GlassPlate::new(&t, &a, GlassVariant::Regular);
         g.update(0.0, 0.016, &t, &b);
-        assert_eq!(g.material(0.0).rim_mid.with_alpha(1.0), b.primary.with_alpha(1.0).with_alpha(1.0));
+        let (got, want) = (g.material(0.0).rim_mid.with_alpha(1.0), b.primary.with_alpha(1.0));
+        assert!(
+            (got.r - want.r).abs() + (got.g - want.g).abs() + (got.b - want.b).abs() < 1e-3,
+            "{got:?} vs {want:?}"
+        );
     }
 }

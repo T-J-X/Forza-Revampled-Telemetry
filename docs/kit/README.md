@@ -2,19 +2,19 @@
 
 `crates/fh6-kit` is the GPU 2D/2.5D kit every FH6 WheelDash cluster is built with. A cluster gets crisp vector shapes, bloom, Liquid Glass, motorsport typography and spring motion in a few lines, and costs about 0.2–0.3 ms of GPU at 4K (`docs/perf/render-kit.md`).
 
-Every snippet below is compiled and rendered by `crates/fh6-kit/tests/guide_examples.rs` (section numbers match), so the guide cannot drift from the code. Design decisions are in `docs/adr/0002-render-kit.md`; the two showcase clusters in `crates/fh6-clusters/src/kit/` are complete, working examples.
+Every snippet below is compiled and rendered by `crates/fh6-kit/tests/guide_examples.rs` (section numbers match), so the guide cannot drift from the code. Design decisions are in `docs/adr/0002-render-kit.md`. Complete, working examples: the Phase 7 pilot `crates/fh6-clusters/src/clusters/liquid_glass/` (the pattern every cluster follows) and the two Phase 5 showcase samples in `crates/fh6-clusters/src/kit/`.
 
-Contents: [1 Start](#1-start-a-new-cluster) · [2 Shapes](#2-shapes) · [3 Paint](#3-paint) · [4 Light and material](#4-light-and-material) · [5 Text](#5-text) · [6 Animation](#6-animation) · [7 Effects](#7-effects) · [8 Contract, registry, layout](#8-cluster-contract-registry-layout) · [9 Palette and tokens](#9-palette-tokens-logo-zone) · [10 Check your work](#10-check-your-work) · [11 Rules](#11-rules-that-keep-the-budget)
+Contents: [1 Start](#1-start-a-new-cluster) · [2 Shapes](#2-shapes) · [3 Paint](#3-paint) · [4 Light and material](#4-light-and-material) · [5 Text](#5-text) · [6 Animation](#6-animation) · [7 Effects](#7-effects) · [8 Contract, registry, layout](#8-cluster-contract-registry-layout) · [9 Palette and tokens](#9-palette-tokens-logo-zone) · [10 Check your work](#10-check-your-work) · [11 Rules](#11-rules-that-keep-the-budget) · [12 Shared components](#12-shared-components-fh6-clusterscommon) · [13 Lessons from the pilot](#13-lessons-from-the-pilot)
 
 ---
 
 ## 1. Start a new cluster
 
 1. Read your family spec in `docs/design/families/`, `docs/design/TOKENS.md` and `docs/design/COMPONENTS.md`.
-2. Create `crates/fh6-clusters/src/kit/<name>.rs` with a struct that implements [`Cluster`](#8-cluster-contract-registry-layout).
-3. Register it: one row in `crates/fh6-clusters/src/registry.rs` (`REGISTRY`).
-4. Render it: `cargo run --release -p preview-export` (4K PNGs, thumbnails, measured badges in `mockups/index.html`), then add goldens (`FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images`).
-5. See it live: set `"CockpitHudStyle": "<Theme>"` in `config.json` and run `FH6_WheelDash --demo`, or open the WebGPU page (`cargo run -p web-preview --bin web-preview-build`, then `--bin web-preview-serve`, http://127.0.0.1:5310/).
+2. Every catalog cluster already has its module, `crates/fh6-clusters/src/clusters/<snake_name>/mod.rs`, drawing the Phase 7 scaffold. Replace the scaffold with your struct that implements [`Cluster`](#8-cluster-contract-registry-layout) and keep `pub fn make`. Your brief is `spec.md` beside it.
+3. It is already registered (`registry::REGISTRY`, generated from `catalog::CATALOG`) and has its golden test. Do not edit those shared files.
+4. Render it: `cargo run --release -p preview-export -- --cluster <Theme>` (4 states per view at 4K, crops, the cockpit composite, the 60-frame sequence and badges in `mockups/<Theme>/index.html`), then write your goldens (`FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters <snake_name>`).
+5. See it live: `FH6_WheelDash --demo --cluster <Theme> --stats` (or set `"CockpitHudStyle": "<Theme>"` in `config.json`), or open the WebGPU page (`cargo run -p web-preview --bin web-preview-build`, then `--bin web-preview-serve`, http://127.0.0.1:5310/?cluster=<Theme>).
 
 **Coordinates.** Draw in **local units = 4K pixels at user scale 1.0, around the anchor** (0, 0). The host sets the transform from the `Layout` (anchor, user scale 0.70–1.40, height offset, target size). Your cluster must fit the view's envelope: cockpit `(-720, -320, 1440, 560)`, hood `(-880, -220, 1760, 400)` (`layout.envelope`). y points **down**; angles are radians, **clockwise from 3 o'clock** (`deg(135.0)` is 7:30, the usual tach start). Use `deg()` for degrees.
 
@@ -259,17 +259,17 @@ impl Cluster for MyCluster {
 
 - `update(&mut self, &FrameInput)`: `telemetry` (raw packet), `signals` (decoded and smoothed: speed in the user's unit, rpm and its rate, `rpm_fraction`, `shift_fraction`, `Gear`, pedals, smoothed G and slip, yaw rate, position), `dt`, `t`, `config`, `palette`, `tokens`, `fonts` (display / text / wide, with the user's font override), `logo`, `view`, `reduced_flash`.
 - `draw(&self, &mut Painter, &Layout)`: record only; no state changes, no allocation.
-- Register in `crates/fh6-clusters/src/registry.rs`:
+- Each cluster module exports its constructor, and the registry row (generated once in Phase 7 from `catalog::CATALOG`, never edited by a cluster chat) points at it:
 
 ```rust
 fn make_my_cluster(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
     Box::new(MyCluster::new(setup)) // load images, meshes and fonts here, once
 }
-// in REGISTRY:
+// the row in registry::REGISTRY (already there for every catalog cluster):
 ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDash", make: make_my_cluster },
 ```
 
-`ClusterTheme` stays the identifier (config values). Themes without a kit implementation resolve to their family's sample.
+`ClusterTheme` stays the identifier (config values). Every theme has its own row; until its cluster chat builds it, its module draws the Phase 7 scaffold (`common::scaffold`).
 - `Layout`: `anchor` (target px), `scale` (target px per local unit), `height_offset`, `view` (`Cockpit`, `Hood`, `Chase`), `envelope` (local), `safe` (target px). Draw in local units; use `layout.view` to adapt (hood: wider, lower, frameless).
 
 ## 9. Palette, tokens, logo zone
@@ -283,10 +283,11 @@ ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDa
 
 | Tool | What it gives |
 |---|---|
+| `cargo run --release -p preview-export -- --cluster <Theme>` | one cluster's review set in `mockups/<Theme>/`: 4 states per view at 4K, 1:1 crops, the cockpit composite over the reference photo with the scrim, the 60-frame sequence (idle → redline strobe → gear change) with GPU p50 / p99, and `index.html` with the badges |
 | `cargo run --release -p preview-export` | `mockups/kit/<Theme>/<state>.png` (4K over OLED black), `<state>_crop.png` (1:1 cluster), `_thumbs/` (box-downsampled 960x540), `index.html` with measured badges: GPU ms, CPU ms, draws, instances, colour budget (base hue ≥ 80%, white ≤ 15%, red ≤ 5%), transparent outside |
-| `cargo test -p fh6-clusters --test golden_images` | perceptual comparison with `tests/golden/images/` (OKLab ΔE > 3 on at most 0.5% of pixels). `FH6_UPDATE_GOLDEN=1` rewrites them; review the PNGs before committing |
+| `cargo test -p fh6-clusters <snake_name>` | that cluster's golden test: every view and review state against `tests/golden/images/<Theme>[_hood]_<state>.png` (OKLab ΔE > 3 on at most 0.5% of pixels). `FH6_UPDATE_GOLDEN=1` rewrites them; review the PNGs before committing. `--test golden_images` runs all 48 |
 | `cargo run --release -p bench-render -- --frames 600` | CPU and GPU per scenario at 4K |
-| `FH6_WheelDash --demo --stats` | the live overlay with synthetic telemetry and latency/CPU lines |
+| `FH6_WheelDash --demo --cluster <Theme> --stats` | the live overlay with synthetic telemetry, that cluster forced in every view, and latency/CPU lines |
 | `web-preview` | the same cluster in a browser (WebGPU) |
 
 ## 11. Rules that keep the budget
