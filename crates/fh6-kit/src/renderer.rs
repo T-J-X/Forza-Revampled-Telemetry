@@ -3,7 +3,7 @@
 //! A frame is: one upload (every instance, paint, clip, point and uniform packed into a single
 //! buffer write), then per layer segment an optional backdrop snapshot and blur, the instanced
 //! shape pass (scene + emissive targets, depth for meshes), an optional layer blur and
-//! composite, then bloom (dual-filter Kawase) and the resolve into the caller's target.
+//! composite, then bloom (dual-filter Kawase, one compute pass) and the resolve into the caller's target.
 //!
 //! All work targets are sized to the **work rectangle** (the union of what was drawn, plus the
 //! bloom margin), not the screen, so a cluster costs what it covers.
@@ -253,8 +253,23 @@ impl Targets {
                 rt | U::COPY_DST,
             ),
             depth: Tex::new(device, "fh6-kit depth", cap, DEPTH_FORMAT, 1, U::RENDER_ATTACHMENT),
-            pyr: Tex::new(device, "fh6-kit pyramid", half, SCENE_FORMAT, PYRAMID_LEVELS, rt),
-            tmp: Tex::new(device, "fh6-kit pyramid tmp", half, SCENE_FORMAT, PYRAMID_LEVELS, rt),
+            // STORAGE_BINDING: the bloom chain writes these from compute (`shaders/bloom.wgsl`).
+            pyr: Tex::new(
+                device,
+                "fh6-kit pyramid",
+                half,
+                SCENE_FORMAT,
+                PYRAMID_LEVELS,
+                rt | U::STORAGE_BINDING,
+            ),
+            tmp: Tex::new(
+                device,
+                "fh6-kit pyramid tmp",
+                half,
+                SCENE_FORMAT,
+                PYRAMID_LEVELS,
+                rt | U::STORAGE_BINDING,
+            ),
             bpyr: Tex::new(
                 device,
                 "fh6-kit backdrop pyramid",
@@ -332,8 +347,11 @@ pub(crate) struct Renderer {
     post_layout: wgpu::PipelineLayout,
     post_module: wgpu::ShaderModule,
     down: wgpu::RenderPipeline,
-    up: wgpu::RenderPipeline,
     blur: wgpu::RenderPipeline,
+    /// The bloom chain as compute (`shaders/bloom.wgsl`): one pass, one dispatch per level.
+    bloom_bgl: wgpu::BindGroupLayout,
+    bloom_down: wgpu::ComputePipeline,
+    bloom_up: wgpu::ComputePipeline,
     composite: wgpu::RenderPipeline,
     resolve: Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
     upload: wgpu::Buffer,
@@ -350,6 +368,8 @@ pub(crate) struct Renderer {
     targets: Option<Targets>,
     shape_group: Option<wgpu::BindGroup>,
     post_groups: HashMap<(V, V), wgpu::BindGroup>,
+    /// Bloom dispatch groups by (source, base, destination).
+    bloom_groups: HashMap<(V, V, V), wgpu::BindGroup>,
     pub(crate) meshes: Meshes,
     timer: Option<GpuTimer>,
     timing_enabled: bool,
@@ -570,7 +590,7 @@ impl Renderer {
         let post_pipe =
             |entry: &str, format, blend| make_post(device, &post_layout, &post_module, entry, format, blend);
         let down = post_pipe("fs_down", SCENE_FORMAT, None);
-        let up = post_pipe("fs_up", SCENE_FORMAT, None);
+        let (bloom_bgl, bloom_down, bloom_up) = make_bloom(device);
         let blur = post_pipe("fs_blur", SCENE_FORMAT, None);
         let composite = post_pipe(
             "fs_composite",
@@ -677,8 +697,10 @@ impl Renderer {
             post_layout,
             post_module,
             down,
-            up,
             blur,
+            bloom_bgl,
+            bloom_down,
+            bloom_up,
             composite,
             resolve: Vec::with_capacity(2),
             upload,
@@ -694,6 +716,7 @@ impl Renderer {
             targets: None,
             shape_group: None,
             post_groups: HashMap::with_capacity(64),
+            bloom_groups: HashMap::with_capacity(2 * PYRAMID_LEVELS as usize),
             meshes: Meshes::new(device, DEPTH_FORMAT),
             timer,
             timing_enabled: false,
@@ -775,6 +798,7 @@ impl Renderer {
         self.targets = Some(Targets::new(device, cap));
         self.shape_group = None;
         self.post_groups.clear();
+        self.bloom_groups.clear();
     }
 
     fn upload_atlas(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, fonts: &mut Fonts) {
@@ -959,7 +983,6 @@ impl Renderer {
         };
         let pipeline = match pipe {
             PostPipe::Down => &self.down,
-            PostPipe::Up => &self.up,
             PostPipe::Blur => &self.blur,
             PostPipe::Composite => &self.composite,
         };
@@ -1058,7 +1081,48 @@ impl Renderer {
         }
     }
 
-    /// Dual-filter bloom of the emissive target: result in `Tmp(0)` (half resolution).
+    /// The bind group of one bloom dispatch: `src` and `base` sampled, `dst` written.
+    fn bloom_group(&mut self, device: &wgpu::Device, src: V, base: V, dst: V) {
+        if self.bloom_groups.contains_key(&(src, base, dst)) {
+            return;
+        }
+        let Some(t) = self.targets.as_ref() else { return };
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fh6-kit bloom group"),
+            layout: &self.bloom_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &self.upload,
+                        offset: 0,
+                        size: wgpu::BufferSize::new(size_of::<PostParams>() as u64),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(t.view(src)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(t.view(base)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(t.view(dst)),
+                },
+            ],
+        });
+        self.bloom_groups.insert((src, base, dst), group);
+    }
+
+    /// Dual-filter bloom of the emissive target: result in `Tmp(0)` (half resolution). One
+    /// compute pass: `PYRAMID_LEVELS` down dispatches, then `PYRAMID_LEVELS - 1` up dispatches,
+    /// each the same maths as the former render pass of that level (`shaders/bloom.wgsl`).
     fn bloom(
         &mut self,
         device: &wgpu::Device,
@@ -1068,55 +1132,51 @@ impl Renderer {
         uv_max: [f32; 2],
         post_base: u64,
     ) {
-        for m in 0..PYRAMID_LEVELS {
+        const STEPS: usize = 2 * PYRAMID_LEVELS as usize - 1;
+        /// One dispatch: up (or down), its parameter offset, (src, base, dst) and viewport.
+        type Step = (bool, u32, (V, V, V), (u32, u32));
+        let mut steps: [Option<Step>; STEPS] = [None; STEPS];
+        let downs = (0..PYRAMID_LEVELS).map(|m| {
             let from = if m == 0 { V::Emissive } else { V::Pyr(m - 1) };
-            let vp = (work.0.div_ceil(2 << m), work.1.div_ceil(2 << m));
-            let params = PostParams {
-                src_texel: self.texel(from),
-                src_max: uv_max,
-                dst_texel: self.texel(V::Pyr(m)),
-                ..zero_params()
-            };
-            self.post_pass(
-                device,
-                encoder,
-                stats,
-                PostPipe::Down,
-                from,
-                from,
-                V::Pyr(m),
-                vp,
-                true,
-                params,
-                post_base,
-            );
-        }
-        for m in (0..PYRAMID_LEVELS - 1).rev() {
+            (false, m, (from, from, V::Pyr(m)))
+        });
+        let ups = (0..PYRAMID_LEVELS - 1).rev().map(|m| {
             let from = if m == PYRAMID_LEVELS - 2 {
                 V::Pyr(m + 1)
             } else {
                 V::Tmp(m + 1)
             };
+            (true, m, (from, V::Pyr(m), V::Tmp(m)))
+        });
+        for (slot, (up, m, views)) in steps.iter_mut().zip(downs.chain(ups)) {
             let vp = (work.0.div_ceil(2 << m), work.1.div_ceil(2 << m));
             let params = PostParams {
-                src_texel: self.texel(from),
+                src_texel: self.texel(views.0),
                 src_max: uv_max,
-                dst_texel: self.texel(V::Tmp(m)),
+                dst_texel: self.texel(views.2),
+                // The bloom shaders read `origin` as the viewport, in destination texels.
+                origin: [vp.0 as f32, vp.1 as f32],
                 ..zero_params()
             };
-            self.post_pass(
-                device,
-                encoder,
-                stats,
-                PostPipe::Up,
-                from,
-                V::Pyr(m),
-                V::Tmp(m),
-                vp,
-                true,
-                params,
-                post_base,
-            );
+            let Some(offset) = self.push_post(post_base, params) else {
+                return;
+            };
+            self.bloom_group(device, views.0, views.1, views.2);
+            *slot = Some((up, offset, views, vp));
+        }
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("fh6-kit bloom"),
+            timestamp_writes: None,
+        });
+        stats.passes += 1;
+        for (up, offset, views, vp) in steps.into_iter().flatten() {
+            let Some(group) = self.bloom_groups.get(&views) else {
+                continue;
+            };
+            pass.set_pipeline(if up { &self.bloom_up } else { &self.bloom_down });
+            pass.set_bind_group(0, group, &[offset]);
+            pass.dispatch_workgroups(vp.0.max(1).div_ceil(8), vp.1.max(1).div_ceil(8), 1);
+            stats.draw_calls += 1;
         }
     }
 
@@ -1576,7 +1636,6 @@ enum Chain {
 #[derive(Debug, Clone, Copy)]
 enum PostPipe {
     Down,
-    Up,
     Blur,
     Composite,
 }
@@ -1641,6 +1700,75 @@ fn color_attachment(view: &wgpu::TextureView, clear: bool) -> wgpu::RenderPassCo
             store: wgpu::StoreOp::Store,
         },
     }
+}
+
+/// The bloom chain's layout and its two compute pipelines (`shaders/bloom.wgsl`).
+fn make_bloom(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline, wgpu::ComputePipeline) {
+    let sampled = |binding| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fh6-kit bloom layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(size_of::<PostParams>() as u64),
+                },
+                count: None,
+            },
+            sampled(1),
+            sampled(2),
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: SCENE_FORMAT,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                count: None,
+            },
+        ],
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fh6-kit bloom pipeline layout"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fh6-kit bloom shaders"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/bloom.wgsl").into()),
+    });
+    let pipe = |entry: &str| {
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(entry),
+            layout: Some(&layout),
+            module: &module,
+            entry_point: Some(entry),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        })
+    };
+    let down = pipe("cs_down");
+    let up = pipe("cs_up");
+    (bgl, down, up)
 }
 
 fn make_post(

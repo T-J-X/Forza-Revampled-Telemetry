@@ -1,5 +1,6 @@
-// fh6-kit post passes: dual-filter (Kawase) down/upsampling for bloom, separable Gaussian blur,
-// layer compositing and the final resolve to the presentation format.
+// fh6-kit post passes: dual-filter (Kawase) downsampling for the backdrop and layer blur chains,
+// separable Gaussian blur, layer compositing and the final resolve to the presentation format.
+// The bloom chain runs as compute in bloom.wgsl, with the same downsample.
 //
 // Every pass draws one full-viewport triangle. Sources are sampled by normalised coordinates of
 // their own texture; `src_max` clamps sampling to the valid (work) region so texels outside it,
@@ -52,23 +53,6 @@ fn fs_down(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     c = c + tap(uv + vec2<f32>(-o.x, o.y));
     c = c + tap(uv + vec2<f32>(o.x, o.y));
     return c * 0.125;
-}
-
-// Dual-filter upsample (8-tap tent) of `src`, plus `base` (the matching down level).
-@fragment
-fn fs_up(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-    let uv = pos.xy * pp.dst_texel;
-    let o = pp.src_texel;
-    var c = tap(uv + vec2<f32>(-2.0 * o.x, 0.0));
-    c = c + tap(uv + vec2<f32>(2.0 * o.x, 0.0));
-    c = c + tap(uv + vec2<f32>(0.0, -2.0 * o.y));
-    c = c + tap(uv + vec2<f32>(0.0, 2.0 * o.y));
-    c = c + tap(uv + vec2<f32>(-o.x, -o.y)) * 2.0;
-    c = c + tap(uv + vec2<f32>(o.x, -o.y)) * 2.0;
-    c = c + tap(uv + vec2<f32>(-o.x, o.y)) * 2.0;
-    c = c + tap(uv + vec2<f32>(o.x, o.y)) * 2.0;
-    let b = textureSampleLevel(base, samp, clamp(uv, vec2<f32>(0.0), pp.src_max), pp.base_lod);
-    return c / 12.0 + b;
 }
 
 // Separable Gaussian, 9 bilinear taps covering +-~4 sigma for sigma <= 3 texels.
