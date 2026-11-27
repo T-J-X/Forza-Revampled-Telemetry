@@ -57,6 +57,26 @@ $ cargo run -p preview-export -- --out target\fix-e\mockups
 Export complete: 192 kit renders     (index.html written, 106,693 bytes)
 ```
 
+### Final run on the PC, commit `e629575` (the review fixes and this handover)
+The same clone and target folder, at `e629575` with a clean `git status`. The full test run held `gpu.lock` (taken 23:29:52 UTC, after fix D's run released it, and removed by the run's exit trap):
+```
+$ cargo fmt --all -- --check
+exit 0
+$ cargo check --workspace
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.68s
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.43s     (no lints)
+$ cargo run -p parity-dump -- tests/golden/packets
+20/20 OK
+$ cargo build -p fh6-kit --target wasm32-unknown-unknown
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.05s
+$ cargo check -p web-preview --target wasm32-unknown-unknown
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.30s
+$ cargo test --workspace --no-fail-fast
+exit 0; 46 'test result' lines, all ok: 911 passed, 0 failed, 1 ignored (the fluid.rs doctest)
+golden_images: 49 passed in 97.08 s
+```
+
 ### Live run (release build, the stand-in game window, `mock-udp --scenario bmw_m4_cs` at 60 Hz, `--stats`, 25 s)
 Bosch DDU, cockpit view, 1920x1080 at 300 Hz, on `b123a71`:
 
@@ -156,7 +176,7 @@ How it was checked: a `rust-review` pass on the diff, then an independent agent 
 
 **D. Thread rules**
 23. The thread opened with an introduction and is not archived. **Yes.** [AGENTS 13]
-24. The GPU lock was held for every GPU job and released after it. **Yes.** No GPU job ran in the cloud; on the PC the lock was taken at 23:00:31 UTC for the tests, `preview-export` and the live run and removed afterwards. [SKILLS 5]
+24. The GPU lock was held for every GPU job and released after it. **Yes.** No GPU job ran in the cloud; on the PC the lock was taken at 23:00:31 UTC for the tests, `preview-export` and the live run and removed afterwards, and again at 23:29:52 UTC for the final test run, removed when it ended. [SKILLS 5]
 25. A `rust-review` pass and an independent review ran, and their findings are applied or listed. **Yes.** "Review findings".
 26. The review is yes/no only, with no scores anywhere. **Yes.** [AGENTS 12]
 27. The handover follows `program/HANDOVER_TEMPLATE.md`, and `docs/PROGRESS.md`, `AGENTS.md` and `SKILLS.md` match the code. **Yes.**
