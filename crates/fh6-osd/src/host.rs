@@ -128,6 +128,9 @@ impl OsdHost {
     /// Feeds one frame of controller input; edits land in `cfg`.
     pub fn step(&mut self, input: &NavInput, cfg: &mut AppConfig) -> NavOutput {
         let out = self.ctl.step(input, cfg, &mut *self.fit);
+        if out.changed {
+            self.anim.energise();
+        }
         if self.ctl.tab() != self.last_tab {
             self.last_tab = self.ctl.tab();
             self.anim.tab_changed();

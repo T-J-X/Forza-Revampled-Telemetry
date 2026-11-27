@@ -1,39 +1,86 @@
-# OSD: the shipped design (Phase 9)
+# OSD: the Liquid Glass rebuild (2026-11-27)
 
-The controller-first Liquid Glass OSD, as built in `crates/fh6-osd` and drawn with the render kit. It extends the Phase 3 direction ([OSD_DIRECTION.md](OSD_DIRECTION.md)). The board with every state is [boards/osd/index.html](boards/osd/index.html); the images in [osd/](osd/) are real 4K kit renders (960×540 downsamples) from `cargo run --release -p preview-export` (full size in `mockups/osd/`).
+The controller-first OSD, rebuilt on the optical glass of the rebuilt Liquid Glass pilot (`fh6_kit::OpticalGlass`, [docs/specs/optics.md](../specs/optics.md)). It replaces the Phase 9 look (one tinted, frosted glass slab behind every row), which had the same faults TJX rejected in the first pilot. The research is [OSD_RESEARCH.md](OSD_RESEARCH.md); the Phase 3 direction it still follows for layout and input is [OSD_DIRECTION.md](OSD_DIRECTION.md). The code is `crates/fh6-osd` (`draw.rs`, `anim.rs`, `host.rs`); `preview-export --osd` renders every state into `mockups/osd/` and writes the product page `mockups/osd/index.html`.
 
-Design file: the OSD page is `09 · OSD` in the Penpot master file ([PENPOT.md](PENPOT.md), board IDs there). The HTML board stays alongside as the rendered reference.
+Design file: the Penpot page `09 · OSD` ([PENPOT.md](PENPOT.md), board IDs there), redrawn for this rebuild from the kit renders.
 
-## Layout
-- **Live zone (left, about 60%).** The real selected cluster at its real height and scale, gliding from its normal anchor to the live-zone centre (`(2380 + extra width) / 2`) when the OSD opens. Header: "LIVE VIEW", the cluster name, and the data source ("Game paused · live dyno" or "Live telemetry") with the edited view. Under the header, a **focus echo**: the focused row's label and value in 110 px type, a slider mirror, the row's help line. Camera rows add a side-view schematic (eye at seat height, FOV wedge, wheel); cluster height adds a dashed default-height line.
-- **Panel (right).** Glass at x 2380–3700, y 140–2020, radius 56, right-aligned on wider screens. Five tabs: Cluster · Colour · Type & logo · Fit & camera · Controls. Rows are 116 px (sliders 164, carousel 340, info 124); the focused row grows to 148 px (sliders 208) when it has a help line, so the help sits inside the focus ring. Rows scroll on a spring and fade at the viewport edges. Hint bar and the gearbox line at the bottom.
-- **Dim.** The game is dimmed 62% through the kit underlay. The direction asked for about 45% plus a blur; the overlay cannot blur a game it does not capture, so it dims harder and adds feathered black pools behind the echo (45%) and the live cluster (35%).
+## Intent
+
+The OSD is where the driver changes the dash while the game is paused: pick a cluster, colour it, fit it, set the camera. It must feel like the same product as the Liquid Glass cluster beside it, read from a couch on a 55" OLED, and stay out of the way: the live cluster is the picture, the menu is the frame.
+
+- **Goals:** glass that is physically the pilot's material; focus that reads at a glance from 2.2 m; motion that feels liquid; every change previewed live; inside the frame budget.
+- **Non-goals:** new settings, new tabs or new inputs (the row model, navigation and the ABXY lock are unchanged); per-car editing (Phase 10).
+- **Anti-goals:** any panel, slab or card behind the rows; frost, tint or a painted rim, sheen or fresnel band; glass on glass; a grey or navy box; a menu that outshines the live cluster.
+
+## Approaches
+
+| | Approach | Trade-off | Verdict |
+|---|---|---|---|
+| A | **Glass is the navigation only.** Rows are light on black; glass marks the tab bar, the hint bar and what has focus. | Follows Apple's own rule (glass is the navigation layer, lists are content) and the pilot's "separate pieces on black". Least glass, so each piece must be excellent. | **Chosen** (my call). |
+| B | Every row is its own glass pill. | Lots of glass; text sits on glass everywhere (Apple says lists stay content), the column turns into a stack of capsules, and the GPU pays for 10 to 15 pieces. | Rejected. |
+| C | Keep one panel, rebuilt as optical glass. | Still a slab (AGENTS 3A forbids a glass panel), and a flat face over black only shows a rim. | Rejected. |
+
+## Layout (4K units)
+
+- **Live zone (left, about 60%).** Unchanged in content: the real selected cluster at its real height and scale, gliding to the live-zone centre on open; the header ("Live view", the cluster name, the data source and the edited view); the focus echo (the focused row's label, its value at 110 px, a slider mirror, its help line); for camera rows, the driving-position view (below); for cluster height, the dashed default-height line. Feathered black pools behind the echo (45%) and the live cluster (35%).
+- **Control column (right, x 2380 to 3700 before the right-align offset).** No panel. A feathered black pool (a shadow of the column's rounded rectangle, σ 90, 78% at the core) keeps it dark over a bright game frame and is invisible on OLED black.
+  - **Tab bar:** a glass capsule, x 2436 to 3644, y 228 to 324. The five tab labels sit under its level face; the selected tab is a soft accent fill under the glass (22%), with its label in full ink.
+  - **Rows:** viewport y 424 to 1736. Label edge x 2488 (`TX`), value edge x 3552 (`VX`). Rows are 116 px (sliders 164, carousel 340, info 124); a focused row with a help line grows to 148 (sliders 208). Rows fade at the viewport edges.
+  - **Focus platter:** a glass rounded rectangle (radius 44) over the focused row, x 2436 to 3644. Under it the row lights from within (below).
+  - **Hint bar:** a glass capsule, x 2436 to 3644, y 1802 to 1890, holding the keycap chips. The gearbox line ("A, B, X and Y stay with your gearbox: the menu never uses them.") sits under it at y 1972, 70 px clear of its edge.
+  - **Notice:** a small glass pill at y 140 above the tab bar while a notice shows.
+- **Keyboard and remapper** replace the rows. The focused key wears a glass key cap (radius 18) and lights from within; other keys are a hairline outline only.
+
+## The glass
+
+- **Material:** `Tokens::optical_glass` (clear synthetic sapphire, n_d 1.768, exact Fresnel, Snell, Beer-Lambert) with the token clarity and no lean of its own: the OSD's glass holds text. It mirrors the Liquid Glass cluster's studio (`assets/clusters/liquid_glass/studio_env.png`, loaded once by `OsdHost::prepare`; the kit's analytic studio when it is missing), leans to the palette's primary colour by the same 40%, and takes the same half share of the key light, so the menu and the cluster read as one material. Refraction is `World` (the captured game when glass refraction is on, else our own layers).
+- **Pieces:** every piece is a `Piece` with a level face 14 px above its rim, a 36 px rounded edge (k = 2) and 4 px of base (key caps and the notice: 10 px, 20 px). All text inside a piece sits at least 52 px in from its outline, under the level face, where the glass does not bend it. All of it is one glass layer, drawn after everything it bends.
+- **Clearance:** nothing outside a piece comes within 64 px of its edge: a rounded edge mirrors what lies beside it (optics.md §7), and closer text showed as a squeezed ghost in the rim (seen in the spike).
+- **Light from within:** under the focused platter or key, an accent gradient rises from 0 at the top to 20% at the floor. The glass's rounded edge bends a band of it into a lit rim. This is the only accent field in the column, and it is how focus reads from the couch.
+- **No glass on glass:** the platter, the bars and the notice never overlap.
+
+## Type, colour and focus
+
+- Labels and values 30 px cap, help, hints and status 26, keycaps 22, section headings 24 in sentence case ("Field of view", not "FIELD OF VIEW"; a single short word such as "OSD" stays). Secondary text is `inkMuted`.
+- Focus is the platter, its inner light, the label going to full ink and the value to the accent. No ring, no bloom glow.
+- The accent is the palette accent unless it sits within 25° of hue of the warning red; then the primary, then sapphire `#38BDF8`.
+
+## Motion
+
+- **Open:** the game dims and the content fades in over 200 ms; the glass materialises (thickness from 0) on the same ease; the cluster glides on the `default` spring. No slide. Close: one frame.
+- **Focus and tab moves stretch like liquid:** the platter's leading edge moves on `fast` and its trailing edge on `expressive`, so it stretches toward the new row and settles; the tab fill does the same left and right. With `ReducedFlash` both edges use `fast` (no stretch).
+- **Energise:** while a value is being changed the inner light rises and then decays (a spring, never a strobe, so hold-to-repeat cannot flicker). Off with `ReducedFlash`.
+- **Parallax:** the key light's tilt follows the platter's height in the column (a few degrees), so the highlights travel as focus moves.
+- Scroll on `default`; a 150 ms crossfade of the rows on a tab change.
+
+## Driving-position view (camera rows)
+
+The Fit & camera tab's side view becomes rendered hardware: a Blender side cutaway of a racing seat (its upholstery a ComfyUI texture), the steering wheel and column, and the dash, rendered in 4K as separate layers so the seat moves with seat height and the wheel with its offset. The eye point, the FOV wedge and the default-eye ring are drawn live on top. With the asset missing, the vector schematic is the fallback. Recipe: `tools/asset-forge/src/recipes/osd.rs` (set `osd`), ledger rows in `assets/osd/ASSETS.md`.
 
 ## Rows
+
+Unchanged by the rebuild:
+
 | Tab | Rows |
 |---|---|
 | Cluster | Edit view (Cockpit / Hood / Chase; the live view follows), Cluster (carousel of 5 live thumbnails, all 29 themes), Speed units, Power units, Shift point (80–100%), Limiter light (10 Hz strobe / Gentle pulse) |
 | Colour | Colour mode (Factory / Custom / Random). Factory: brand swatches. Custom: Colour (primary, secondary, accent, shift light), Hue on a spectrum track, Saturation, Brightness, Preset (6). Random: Re-roll, Same palette on every car. Then Glass refraction |
 | Type & logo | Font (pack default plus every loaded family), Logo, Custom name (on-screen keyboard, 14 characters) |
-| Fit & camera | Cockpit / Hood / Chase FOV (40–110°; Cockpit edits the wheel-less FOV the patcher writes), Seat height (−100..+50 mm), Wheel offset (−80..+20 mm), Camera patch (the `CameraPatchAuto` switch), Cluster height (±240 px, per view: the view being edited), Cluster scale (70–140%), the nine Phase 8 dash-blocker rows (opacity, width, height, crown arch, corner softness, left/right, up/down, edge feather, steering-column gap), Resync when the patcher offers it. Camera rows say "Applies on next launch (camera file)" when the patch is on, "Camera patch is off: saved in config only" when it is off, and that the camera files were not found when the patcher has no install |
+| Fit & camera | Cockpit / Hood / Chase FOV (40–110°), Seat height (−100..+50 mm), Wheel offset (−80..+20 mm), Camera patch, Cluster height (±240 px, per view), Cluster scale (70–140%), the nine dash-blocker rows, Resync when the patcher offers it |
 | Controls | OSD button (remapper), Hold time (200–1000 ms), Pause game when open, Stats overlay |
 
-## Type, colour and focus
-- Labels and values 30 cap; help, hints and status 26 cap; keycaps 22; section headings 18 caps at +24% tracking. Secondary text uses `inkMuted` (no `inkLabel` text in the OSD).
-- One left text edge (2488) and one value edge (3552); Choice rows always show both chevrons.
-- Focus: a white 0.07 lift, a 3 px accent rim in a bloom layer and a σ 14 glow. The accent is the palette accent unless it sits within 25° of hue of the warning red; then the primary, then sapphire `#38BDF8`.
-- Panel glass: tint alpha 64, frost 0.9, backdrop σ 28, crown sheen 28/255 that ends above the tabs, OLED black 0.62 underneath.
-
 ## Input
-D-pad moves and adjusts (repeat after 280 ms, every 65 ms, every 25 ms after 900 ms; sliders take ×4 steps after 1.2 s and ×10 after 2.5 s), LB/RB switch tabs, View or Menu goes back. A, B, X and Y are stripped before any input is read. Keyboard: RB types, LB deletes, Menu done, View cancel. Remapper: hold the new combination for 1 s (A/B/X/Y and the D-pad ignored, LB or RB alone refused, 10 s timeout).
 
-## Motion
-Open 200 ms (fade and a 64 px slide), cluster glide on the `default` spring, focus ring and tab underline on `fast`, scroll on `default`, a 150 ms crossfade on a tab change.
+Unchanged: D-pad moves and adjusts (repeat after 280 ms, every 65 ms, every 25 ms after 900 ms; sliders take ×4 steps after 1.2 s and ×10 after 2.5 s), LB/RB switch tabs, View or Menu goes back. A, B, X and Y are stripped before any input is read. Keyboard: RB types, LB deletes, Menu done, View cancel. Remapper: hold the new combination for 1 s (A/B/X/Y and the D-pad ignored, LB or RB alone refused, 10 s timeout).
 
-## Critique
-Round 1 (independent `ui-ux-designer` review of the renders): fail, with six must-fixes. Text below the 26 px floor, the backdrop on bright frames, rows hard-clipped by the scroll viewport, a ragged value edge, the crown sheen behind the header, and the missing font pack. All six were fixed or waived (fonts: see PROGRESS). Round 2: one must-fix, the help line overlapping the focus ring on focused rows. The focused row now grows to hold it (above). Re-review of 02, 06 and 07: **pass** for the Phase 9 exit. Carried over (not blocking): a check over the real pause menu, LB/RB chips in the tab row, a live preview of the draft name (the blocker preview is done, below). See `program/phases/09-osd/HANDOVER.md`.
+## Budget
 
-## After the merge with Phases 6 and 8
-- **Fonts.** The OSD draws in the Phase 6 motorsport pack (`assets/fonts/fonts.json`, per-family folders, variable fonts instanced at 300/400/500/600). The Phase 9 font waiver is closed.
-- **Live blocker preview.** While a dash-blocker row has focus, the live view draws the real Phase 8 dome and wash (`fh6_kit::scrim`) under the cluster, so every blocker change shows on the cluster it frames.
-- **Car profiles.** The rows show and edit the global `config.json`; the live view shows what the current car really gets (its `car_profiles.json` overlay on top). When the focused row reads differently for this car, its help line says "This car's profile overrides this setting", and the default-height line follows the car's anchor. Editing per-car values is Phase 10.
+The whole OSD frame (live cluster included) stays under 1.5 ms GPU at 4K, as Phase 9 set; the rebuild drops the slab's 1320 × 1880 frosted backdrop and adds three or four small pieces. The OSD's own render-thread work stays allocation-free.
+
+## My calls (the thread's, not TJX's)
+
+- Approach A, and the tab bar and hint bar as glass capsules (Apple's floating tab bar and toolbar), with the selection as a fill under the glass rather than a second piece of glass.
+- One material with the cluster: the pilot's studio and lean, not a studio of the OSD's own.
+- Focus reads by inner light rather than a ring; the accent gradient is the one coloured field in the column.
+- Section headings to sentence case at 24 px (Apple's list headers, and 18 px capitals were below every ten-foot minimum).
+- The driving-position view as the bespoke Blender and ComfyUI assets: it is the one picture in the menu that is about hardware.

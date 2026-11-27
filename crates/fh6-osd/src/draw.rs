@@ -208,13 +208,17 @@ pub fn targets(ctl: &OsdController, cfg: &AppConfig, fit: &dyn CockpitFit, fonts
     let scroll = (g.top + g.h * 0.5 - visible * 0.5).clamp(0.0, max_scroll);
     let (centres, widths, _) = tab_slots(fonts);
     let ti = ctl.tab().index();
+    let half = widths[ti] * 0.5 + TAB_FILL_PAD;
+    let key = key_rect(ctl);
     AnimTargets {
         glide: frame.live_centre_x(),
-        focus_y: g.top,
-        focus_h: g.h,
-        underline_x: centres[ti],
-        underline_w: widths[ti] + 24.0,
+        focus_top: g.top,
+        focus_bot: g.top + g.h,
+        tab_left: centres[ti] - half,
+        tab_right: centres[ti] + half,
+        key: [key.min.x, key.min.y, key.max.x, key.max.y],
         scroll,
+        calm: model::reduced_flash(cfg),
     }
 }
 
@@ -572,6 +576,8 @@ const POOL_SIGMA: f32 = 90.0;
 const ENV_WHITE: f32 = 16.0;
 const AMBIENT_TINT: f32 = 0.4;
 const KEY_SHARE: f32 = 0.5;
+/// How far the key light leans (radians) when focus is at the top or bottom of the column.
+const PARALLAX_TILT: f32 = 0.07;
 
 /// Loads the studio environment the Liquid Glass cluster's glass mirrors. The image cache
 /// keys files by path, so when that cluster is live both share one texture.
@@ -596,7 +602,7 @@ pub fn load_environment(setup: &mut Setup<'_>) -> Option<ImageId> {
 
 /// The OSD's optical glass: clear sapphire under the Liquid Glass cluster's studio, leaning to
 /// the palette's primary colour like the cluster's, with no tint of its own (it holds text).
-fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32) -> OpticalGlass {
+fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32, lean_y: f32) -> OpticalGlass {
     let t = p.tokens();
     let op = &t.optics;
     let mut glass = t.optical_glass(p.palette());
@@ -613,37 +619,62 @@ fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32) -> Optical
         *light *= lean * KEY_SHARE;
     }
     glass.refraction = Refraction::World;
+    // Parallax: the key light leans with the focus's height in the column, so its highlights
+    // travel round the pieces as focus moves. The environment turns but does not lean, so its
+    // dark cone stays on the view axis and no studio light reaches the text (as in the cluster).
+    let azimuth = fh6_kit::LIGHT_REST_AZIMUTH;
+    let elevation = op.key_elevation;
+    let mut level = glass;
+    level.aim(azimuth, elevation, Vec2::ZERO);
+    glass.aim(azimuth, elevation, vec2(PARALLAX_TILT * lean_y.clamp(-1.0, 1.0), 0.0));
+    glass.env_rotation = level.env_rotation;
     glass.materialize = materialize;
     glass
 }
+
+/// The inner light's strength at mid height and at the floor, and how much the energise light
+/// adds on top (a share of it) while a value changes.
+const INNER_MID: f32 = 0.05;
+const INNER_FLOOR: f32 = 0.20;
+const ENERGY_GAIN: f32 = 0.5;
 
 /// Corner radius of a keyboard key (its glass cap when focused).
 const KEY_R: f32 = 18.0;
 
 /// The light a focused piece gives from within: a glow rising from its floor, under the glass,
 /// so the rounded edge bends a band of it into the rim (Liquid Glass "illuminates from within").
-fn inner_light(p: &mut Painter<'_>, rect: Rect, radius: f32, ink: &Ink) {
+/// `energy` (0..1) raises it while a value is being changed.
+fn inner_light(p: &mut Painter<'_>, rect: Rect, radius: f32, ink: &Ink, energy: f32) {
+    let lift = 1.0 + ENERGY_GAIN * energy.clamp(0.0, 1.0);
     p.fill(
         &Shape::round_rect(rect, radius),
         Gradient::linear(vec2(0.0, rect.min.y), vec2(0.0, rect.max.y))
             .stop(0.0, ink.acc.with_alpha(0.0))
-            .stop(0.55, ink.acc.with_alpha(0.05))
-            .stop(1.0, ink.acc.with_alpha(0.20)),
+            .stop(0.55, ink.acc.with_alpha(INNER_MID * lift))
+            .stop(1.0, ink.acc.with_alpha(INNER_FLOOR * lift)),
     );
 }
 
-/// The focused key of the on-screen keyboard, in panel units.
-fn focused_key_rect(inp: &DrawInput<'_>) -> Option<Rect> {
-    let kb = inp.ctl.keyboard();
+/// The on-screen keyboard's focused key, in panel units (its glass cap's target).
+fn key_rect(ctl: &OsdController) -> Rect {
+    let kb = ctl.keyboard();
     let (first, span) = keyboard::key_span(kb.row, kb.col);
     let x0 = CX0 + ((CX1 - CX0) - (10.0 * KEY_W + 9.0 * KEY_GAP)) * 0.5;
     let y0 = ROWS_Y0 + KEYS_TOP;
-    Some(Rect::from_xywh(
+    Rect::from_xywh(
         x0 + f32::from(first) * (KEY_W + KEY_GAP),
         y0 + f32::from(kb.row) * (KEY_H + KEY_GAP),
         f32::from(span) * KEY_W + f32::from(span.saturating_sub(1)) * KEY_GAP,
         KEY_H,
-    ))
+    )
+}
+
+/// The keyboard's glass key cap where its springs have it (never thinner than 40 px).
+fn key_cap(inp: &DrawInput<'_>) -> Rect {
+    let [l, t, r, b] = inp.anim.key.map(|s| s.value());
+    let (x0, x1) = (l.min(r), l.max(r).max(l.min(r) + 40.0));
+    let (y0, y1) = (t.min(b), t.max(b).max(t.min(b) + 40.0));
+    Rect::from_points(vec2(x0, y0), vec2(x1, y1))
 }
 
 /// Keyboard key size, gap and the keys' top below `ROWS_Y0`.
@@ -654,11 +685,10 @@ const KEYS_TOP: f32 = 290.0;
 
 /// The focused row's platter, in panel units (content scrolled into place).
 fn focus_rect(inp: &DrawInput<'_>) -> Rect {
-    let fy = ROWS_Y0 + inp.anim.focus_y.value() - inp.anim.scroll.value();
-    Rect::from_points(
-        vec2(GLASS_X0, fy),
-        vec2(GLASS_X1, fy + inp.anim.focus_h.value().max(40.0)),
-    )
+    let y = ROWS_Y0 - inp.anim.scroll.value();
+    let top = inp.anim.focus_top.value();
+    let bottom = inp.anim.focus_bot.value().max(top + 40.0);
+    Rect::from_points(vec2(GLASS_X0, y + top), vec2(GLASS_X1, y + bottom))
 }
 
 fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
@@ -692,9 +722,12 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let modal = inp.ctl.mode() != Mode::Browse;
     let tab_k = if modal { 0.4 } else { 1.0 };
     // The selected tab: a soft accent fill under the bar's glass, sliding between tabs.
-    let ux = inp.anim.underline_x.value();
-    let uw = (inp.anim.underline_w.value() - 24.0).max(0.0) + 2.0 * TAB_FILL_PAD;
-    let fill = Rect::from_center_size(vec2(ux, TABS_Y), vec2(uw.max(TAB_FILL_H), TAB_FILL_H));
+    let left = inp.anim.tab_left.value();
+    let right = inp.anim.tab_right.value().max(left + TAB_FILL_H);
+    let fill = Rect::from_points(
+        vec2(left, TABS_Y - TAB_FILL_H * 0.5),
+        vec2(right, TABS_Y + TAB_FILL_H * 0.5),
+    );
     p.fill(
         &Shape::round_rect(fill, TAB_FILL_H * 0.5),
         ink.acc.with_alpha(0.22 * tab_k),
@@ -720,7 +753,12 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     // The glass, in one layer over everything it bends.
     let open = inp.anim.open.progress();
     let grown = 1.0 - (1.0 - open) * (1.0 - open);
-    let glass = osd_glass(p, inp.env, grown);
+    let focus_y = match inp.ctl.mode() {
+        Mode::Keyboard => key_cap(inp).center().y,
+        _ => focus_rect(inp).center().y,
+    };
+    let lean = (focus_y - (ROWS_Y0 + ROWS_Y1) * 0.5) / ((ROWS_Y1 - ROWS_Y0) * 0.5);
+    let glass = osd_glass(p, inp.env, grown, lean);
     let bar = Rect::from_points(
         vec2(GLASS_X0, TABS_Y - BAR_H * 0.5),
         vec2(GLASS_X1, TABS_Y + BAR_H * 0.5),
@@ -733,9 +771,7 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         Mode::Browse => {
             Some(Piece::round_rect(focus_rect(inp), PLATTER_R).section(GLASS_RISE, GLASS_BEVEL, GLASS_BASE))
         }
-        Mode::Keyboard => {
-            focused_key_rect(inp).map(|r| Piece::round_rect(r, KEY_R).section(KEY_RISE, KEY_BEVEL, GLASS_BASE))
-        }
+        Mode::Keyboard => Some(Piece::round_rect(key_cap(inp), KEY_R).section(KEY_RISE, KEY_BEVEL, GLASS_BASE)),
         Mode::Remap => None,
     };
     let pieces = [
@@ -781,7 +817,7 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     );
     p.set_opacity(inp.anim.tab_fade.progress());
 
-    inner_light(p, focus_rect(inp), PLATTER_R, ink);
+    inner_light(p, focus_rect(inp), PLATTER_R, ink, inp.anim.energy.value());
 
     for (i, row) in list.as_slice().iter().enumerate() {
         let g = geo[i];
@@ -1035,6 +1071,8 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         &ink.style(ink.text, 24.0, ink.muted(), Align::Right),
     );
 
+    // The focused key lights from within under its glass cap, which glides between keys.
+    inner_light(p, key_cap(inp), KEY_R, ink, inp.anim.energy.value());
     let (key_w, key_h, gap) = (KEY_W, KEY_H, KEY_GAP);
     let x0 = CX0 + ((CX1 - CX0) - (10.0 * key_w + 9.0 * gap)) * 0.5;
     let y0 = ROWS_Y0 + KEYS_TOP;
@@ -1052,10 +1090,7 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             );
             let focused = kb.row == row && keyboard::key_span(row, kb.col).0 == first;
             let shape = Shape::round_rect(rect, KEY_R);
-            if focused {
-                // The same focus as a row: the key lights from within under its glass cap.
-                inner_light(p, rect, KEY_R, ink);
-            } else {
+            if !focused {
                 p.stroke(&shape, ink.hair(), Stroke::rim_px(1.0));
             }
             let (label, style) = match key {
