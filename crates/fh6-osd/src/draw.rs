@@ -9,10 +9,12 @@ use crate::model::{self, EditState, Line, RowId, RowKind, RowList, Tab, MAX_ROWS
 use crate::nav::{Mode, OsdController};
 use crate::remap;
 use fh6_core::{AppConfig, ClusterTheme, ScrimFit};
+use fh6_kit::optics::absorption_coefficient;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    deg, vec2, Affine, Align, Cluster, Color, FontId, FontRole, Fonts, Glass, Glow, Gradient, LayerOptions, Layout,
-    Painter, Palette, Rect, Shape, Stroke, TextStyle, VAlign, Vec2, View,
+    deg, vec2, Affine, Align, Cluster, Color, Environment, FontId, FontRole, Fonts, Glow, Gradient, ImageId,
+    LayerOptions, Layout, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Setup, Shadow, Shape, Stroke,
+    TextStyle, VAlign, Vec2, View,
 };
 use std::fmt::Write as _;
 use std::time::Duration;
@@ -25,8 +27,6 @@ pub const PANEL: Rect = Rect {
     max: vec2(3700.0, 2020.0),
 };
 const PANEL_R: f32 = 56.0;
-/// Black under the panel glass (on top of the underlay).
-const PANEL_BLACK: f32 = 0.62;
 const CX0: f32 = 2460.0;
 const CX1: f32 = 3620.0;
 /// The one left text edge in the panel.
@@ -34,15 +34,14 @@ const TX: f32 = CX0 + 28.0;
 /// The one right edge of every value, slider track and toggle.
 const VX: f32 = CX1 - 68.0;
 const TABS_Y: f32 = 276.0;
-const UNDERLINE_Y: f32 = 318.0;
-const ROWS_Y0: f32 = 392.0;
-const ROWS_Y1: f32 = 1800.0;
-const HINT_Y: f32 = 1896.0;
+const ROWS_Y0: f32 = 424.0;
+const ROWS_Y1: f32 = 1736.0;
+const HINT_Y: f32 = 1846.0;
 const NOTE_Y: f32 = 1972.0;
 const LABEL_CAP: f32 = 30.0;
 const VALUE_CAP: f32 = 30.0;
 const HELP_CAP: f32 = 26.0;
-const SECTION_CAP: f32 = 18.0;
+const SECTION_CAP: f32 = 24.0;
 const SECTION_GAP: f32 = 76.0;
 const TAB_CAP: f32 = 30.0;
 /// Smallest tab cap when the labels have to shrink to fit.
@@ -123,6 +122,8 @@ pub struct DrawInput<'a> {
     pub status: LiveStatus,
     /// Carousel cells, in order −2..=+2 around the selected cluster (may be empty).
     pub thumbs: &'a [Option<Thumb<'a>>; 5],
+    /// The studio environment the glass mirrors (see [`load_environment`]).
+    pub env: Option<ImageId>,
 }
 
 /// A row's place in the scrolling content (relative to its top).
@@ -251,7 +252,6 @@ impl Ink {
         TextStyle::new(self.text, SECTION_CAP)
             .paint(self.muted())
             .align(Align::Left, VAlign::CapMiddle)
-            .tracking(0.24)
     }
 }
 
@@ -345,7 +345,7 @@ pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
 
 fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let x = 160.0;
-    p.text(vec2(x, 196.0), "LIVE VIEW", &ink.section());
+    p.text(vec2(x, 196.0), "Live view", &ink.section());
     p.text(
         vec2(x, 270.0),
         inp.live_name,
@@ -370,7 +370,7 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     match inp.ctl.mode() {
         Mode::Browse => focus_echo(p, inp, ink, cx),
         Mode::Keyboard => {
-            p.text(vec2(cx, 740.0), "CUSTOM NAME", &centered(ink.section()));
+            p.text(vec2(cx, 740.0), "Custom name", &centered(ink.section()));
             let name = inp.ctl.keyboard().text.as_str();
             p.text(
                 vec2(cx, 860.0),
@@ -379,7 +379,7 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             );
         }
         Mode::Remap => {
-            p.text(vec2(cx, 740.0), "NEW OSD BUTTON", &centered(ink.section()));
+            p.text(vec2(cx, 740.0), "New OSD button", &centered(ink.section()));
             let mut l = Line::new();
             let cand = inp.ctl.remap().candidate();
             if cand == 0 {
@@ -406,16 +406,29 @@ fn centered(mut s: TextStyle) -> TextStyle {
     s
 }
 
+/// A heading in sentence case ("FIELD OF VIEW" becomes "Field of view"): Liquid Glass lists no
+/// longer set section headers in capitals. A single short word ("OSD") is an acronym and stays.
+fn sentence_case(text: &str, out: &mut Line) {
+    out.clear();
+    if !text.contains(' ') && text.chars().count() <= 3 {
+        let _ = out.write_str(text);
+        return;
+    }
+    for (i, ch) in text.chars().enumerate() {
+        let _ = out.write_char(if i == 0 {
+            ch.to_ascii_uppercase()
+        } else {
+            ch.to_ascii_lowercase()
+        });
+    }
+}
+
 fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
     let Some(row) = inp.ctl.focused_row(inp.cfg, inp.fit) else {
         return;
     };
     let ctx = inp.ctl.ctx(inp.cfg, inp.fit);
-    let mut caps = Line::new();
-    for ch in model::label(row, inp.fit).chars() {
-        let _ = caps.write_char(ch.to_ascii_uppercase());
-    }
-    p.text(vec2(cx, 740.0), caps.as_str(), &centered(ink.section()));
+    p.text(vec2(cx, 740.0), model::label(row, inp.fit), &centered(ink.section()));
     let mut value = Line::new();
     model::format_value(row, ctx, &mut value);
     p.text(
@@ -523,43 +536,169 @@ fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         p.fill(&Shape::line(vec2(x, y), vec2((x + 28.0).min(x1), y), 3.0), ink.muted());
         x += 48.0;
     }
-    p.text(vec2(200.0, y - 36.0), "DEFAULT HEIGHT", &ink.section());
+    p.text(vec2(200.0, y - 36.0), "Default height", &ink.section());
 }
 
 // ----- panel --------------------------------------------------------------------------------
 
+/// Left and right edges of the glass pieces: wider than the text column, so every label sits
+/// under a level face (`TX` is `GLASS_X0 + 52`, past the 36 px rounded edge).
+const GLASS_X0: f32 = CX0 - 24.0;
+const GLASS_X1: f32 = CX1 + 24.0;
+/// Corner radius of the focus platter.
+const PLATTER_R: f32 = 44.0;
+/// The glass cross-section: rise of the level face, width of the rounded edge, glass below.
+const GLASS_RISE: f32 = 14.0;
+const GLASS_BEVEL: f32 = 36.0;
+const GLASS_BASE: f32 = 4.0;
+/// Small pieces (a key cap, the notice pill) have a shallower cross-section.
+const KEY_RISE: f32 = 10.0;
+const KEY_BEVEL: f32 = 20.0;
+/// The tab bar capsule and the hint capsule.
+const BAR_H: f32 = 96.0;
+const HINT_H: f32 = 88.0;
+/// The notice pill above the tab bar: centre and height.
+const NOTICE_Y: f32 = 140.0;
+const NOTICE_H: f32 = 60.0;
+/// The selected tab's fill, under the tab bar's glass: padding round the label and height.
+const TAB_FILL_PAD: f32 = 30.0;
+const TAB_FILL_H: f32 = 68.0;
+/// Black pool behind the control column: core opacity and softness.
+const POOL_ALPHA: f32 = 0.78;
+const POOL_SIGMA: f32 = 90.0;
+/// Radiance white in `studio_env.png` (`assets/clusters/liquid_glass/ASSETS.md`), how far the
+/// studio leans to the car's primary colour, and the key light's share, all as the Liquid
+/// Glass cluster sets them, so the two read as one material.
+const ENV_WHITE: f32 = 16.0;
+const AMBIENT_TINT: f32 = 0.4;
+const KEY_SHARE: f32 = 0.5;
+
+/// Loads the studio environment the Liquid Glass cluster's glass mirrors. The image cache
+/// keys files by path, so when that cluster is live both share one texture.
+pub fn load_environment(setup: &mut Setup<'_>) -> Option<ImageId> {
+    let path = setup
+        .assets?
+        .join("clusters")
+        .join("liquid_glass")
+        .join("studio_env.png");
+    if !path.is_file() {
+        return None;
+    }
+    match setup.images.load_file(setup.device, setup.queue, &path, None) {
+        Ok(image) => Some(image),
+        Err(error) => {
+            // The OSD still draws: its glass mirrors the kit's analytic studio instead.
+            tracing::warn!(%error, "the OSD's studio environment did not load");
+            None
+        }
+    }
+}
+
+/// The OSD's optical glass: clear sapphire under the Liquid Glass cluster's studio, leaning to
+/// the palette's primary colour like the cluster's, with no tint of its own (it holds text).
+fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32) -> OpticalGlass {
+    let t = p.tokens();
+    let op = &t.optics;
+    let mut glass = t.optical_glass(p.palette());
+    glass.absorption = [absorption_coefficient(op.clarity, op.tint_depth); 3];
+    if let Some(env) = env {
+        glass.environment = Environment::Map(env);
+        glass.env_gain = glass.env_gain.map(|g| g * ENV_WHITE);
+    }
+    let hue = p.palette().primary;
+    let peak = hue.r.max(hue.g).max(hue.b).max(1e-4);
+    let lean = [hue.r, hue.g, hue.b].map(|c| 1.0 - AMBIENT_TINT * (1.0 - c / peak));
+    for ((env, light), lean) in glass.env_gain.iter_mut().zip(glass.light.iter_mut()).zip(lean) {
+        *env *= lean;
+        *light *= lean * KEY_SHARE;
+    }
+    glass.refraction = Refraction::World;
+    glass.materialize = materialize;
+    glass
+}
+
+/// Corner radius of a keyboard key (its glass cap when focused).
+const KEY_R: f32 = 18.0;
+
+/// The light a focused piece gives from within: a glow rising from its floor, under the glass,
+/// so the rounded edge bends a band of it into the rim (Liquid Glass "illuminates from within").
+fn inner_light(p: &mut Painter<'_>, rect: Rect, radius: f32, ink: &Ink) {
+    p.fill(
+        &Shape::round_rect(rect, radius),
+        Gradient::linear(vec2(0.0, rect.min.y), vec2(0.0, rect.max.y))
+            .stop(0.0, ink.acc.with_alpha(0.0))
+            .stop(0.55, ink.acc.with_alpha(0.05))
+            .stop(1.0, ink.acc.with_alpha(0.20)),
+    );
+}
+
+/// The focused key of the on-screen keyboard, in panel units.
+fn focused_key_rect(inp: &DrawInput<'_>) -> Option<Rect> {
+    let kb = inp.ctl.keyboard();
+    let (first, span) = keyboard::key_span(kb.row, kb.col);
+    let x0 = CX0 + ((CX1 - CX0) - (10.0 * KEY_W + 9.0 * KEY_GAP)) * 0.5;
+    let y0 = ROWS_Y0 + KEYS_TOP;
+    Some(Rect::from_xywh(
+        x0 + f32::from(first) * (KEY_W + KEY_GAP),
+        y0 + f32::from(kb.row) * (KEY_H + KEY_GAP),
+        f32::from(span) * KEY_W + f32::from(span.saturating_sub(1)) * KEY_GAP,
+        KEY_H,
+    ))
+}
+
+/// Keyboard key size, gap and the keys' top below `ROWS_Y0`.
+const KEY_W: f32 = 104.0;
+const KEY_H: f32 = 100.0;
+const KEY_GAP: f32 = 12.0;
+const KEYS_TOP: f32 = 290.0;
+
+/// The focused row's platter, in panel units (content scrolled into place).
+fn focus_rect(inp: &DrawInput<'_>) -> Rect {
+    let fy = ROWS_Y0 + inp.anim.focus_y.value() - inp.anim.scroll.value();
+    Rect::from_points(
+        vec2(GLASS_X0, fy),
+        vec2(GLASS_X1, fy + inp.anim.focus_h.value().max(40.0)),
+    )
+}
+
 fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
-    let tokens = p.tokens();
-    let tint_alpha = tokens.glass.tint_alpha[2];
-    let base = tokens.glass(ink.pal.glass_tint);
-    let glass = Glass {
-        tint: ink.pal.glass_tint.with_alpha8(tint_alpha),
-        frost: 0.9,
-        lens: 6.0,
-        // A faint crown that ends above the tabs: the tokens' sheen (alpha 76, 18% tall) would
-        // lift a grey arch behind the header on a panel this tall (OLED rule 7).
-        sheen: 28.0 / 255.0,
-        sheen_height: 120.0 / PANEL.height(),
-        ..base
-    };
-    let plate = Shape::round_rect(PANEL, PANEL_R);
-    // OLED black under the glass: with the underlay the game sits about 85% down behind the
-    // panel, so labels stay legible over a bright sky or Forza's pause menu.
-    p.fill(&plate, Color::BLACK.with_alpha(PANEL_BLACK));
-    p.layer(LayerOptions::glass(28.0), |p| p.fill(&plate, glass));
+    // No panel: a feathered black pool keeps the column dark over a bright frame, and on OLED
+    // black it is invisible. The rows are light on black; the glass is the navigation: the tab
+    // bar, the hint bar and the focus platter.
+    let col = Rect::from_points(
+        vec2(PANEL.min.x + 60.0, PANEL.min.y + 40.0),
+        vec2(PANEL.max.x - 60.0, PANEL.max.y - 40.0),
+    );
+    p.shadow(
+        &Shape::round_rect(col, PANEL_R),
+        Shadow {
+            offset: Vec2::ZERO,
+            sigma: POOL_SIGMA,
+            spread: 0.0,
+            color: Color::BLACK.with_alpha(POOL_ALPHA),
+        },
+    );
 
     // Header and tabs. While the keyboard or remapper has LB/RB, the tabs dim.
-    p.text(vec2(TX, 200.0), "SETTINGS", &ink.section());
-    if let Some(n) = inp.ctl.notice(inp.now) {
+    // A notice ("Saved", "Restored") floats above the tab bar in its own glass pill.
+    let notice = inp.ctl.notice(inp.now).map(|n| {
         let style = ink.style(ink.text, HINT_CAP, ink.ink(), Align::Center);
-        let w = p.measure(n, &style).width + 56.0;
-        let pill = Rect::from_center_size(vec2((CX0 + CX1) * 0.5, 200.0), vec2(w, 52.0));
-        p.fill(&Shape::round_rect(pill, 26.0), ink.acc.with_alpha(0.18));
-        p.stroke(&Shape::round_rect(pill, 26.0), ink.accent(), Stroke::inner(2.0));
+        let w = p.measure(n, &style).width + 72.0;
+        let pill = Rect::from_center_size(vec2((CX0 + CX1) * 0.5, NOTICE_Y), vec2(w, NOTICE_H));
+        p.fill(&Shape::round_rect(pill, NOTICE_H * 0.5), ink.acc.with_alpha(0.18));
         p.text(pill.center(), n, &style);
-    }
+        pill
+    });
     let modal = inp.ctl.mode() != Mode::Browse;
     let tab_k = if modal { 0.4 } else { 1.0 };
+    // The selected tab: a soft accent fill under the bar's glass, sliding between tabs.
+    let ux = inp.anim.underline_x.value();
+    let uw = (inp.anim.underline_w.value() - 24.0).max(0.0) + 2.0 * TAB_FILL_PAD;
+    let fill = Rect::from_center_size(vec2(ux, TABS_Y), vec2(uw.max(TAB_FILL_H), TAB_FILL_H));
+    p.fill(
+        &Shape::round_rect(fill, TAB_FILL_H * 0.5),
+        ink.acc.with_alpha(0.22 * tab_k),
+    );
     let (centres, _, cap) = tab_slots(p.fonts());
     for (i, tab) in Tab::ALL.into_iter().enumerate() {
         let active = tab == inp.ctl.tab();
@@ -570,18 +709,6 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             &ink.style(ink.text, cap, paint.fade(tab_k), Align::Center),
         );
     }
-    p.fill(
-        &Shape::line(vec2(CX0, UNDERLINE_Y + 10.0), vec2(CX1, UNDERLINE_Y + 10.0), 1.5),
-        ink.hair(),
-    );
-    let ux = inp.anim.underline_x.value();
-    let uw = inp.anim.underline_w.value().max(0.0);
-    p.layer(LayerOptions::bloom(), |p| {
-        p.fill(
-            &Shape::round_rect(Rect::from_xywh(ux - uw * 0.5, UNDERLINE_Y + 6.0, uw, 6.0), 3.0),
-            ink.acc.fade(tab_k),
-        );
-    });
 
     match inp.ctl.mode() {
         Mode::Browse => rows(p, inp, ink),
@@ -589,6 +716,45 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         Mode::Remap => remap_card(p, inp, ink),
     }
     hint_bar(p, inp, ink);
+
+    // The glass, in one layer over everything it bends.
+    let open = inp.anim.open.progress();
+    let grown = 1.0 - (1.0 - open) * (1.0 - open);
+    let glass = osd_glass(p, inp.env, grown);
+    let bar = Rect::from_points(
+        vec2(GLASS_X0, TABS_Y - BAR_H * 0.5),
+        vec2(GLASS_X1, TABS_Y + BAR_H * 0.5),
+    );
+    let hint = Rect::from_points(
+        vec2(GLASS_X0, HINT_Y - HINT_H * 0.5),
+        vec2(GLASS_X1, HINT_Y + HINT_H * 0.5),
+    );
+    let focus = match inp.ctl.mode() {
+        Mode::Browse => {
+            Some(Piece::round_rect(focus_rect(inp), PLATTER_R).section(GLASS_RISE, GLASS_BEVEL, GLASS_BASE))
+        }
+        Mode::Keyboard => {
+            focused_key_rect(inp).map(|r| Piece::round_rect(r, KEY_R).section(KEY_RISE, KEY_BEVEL, GLASS_BASE))
+        }
+        Mode::Remap => None,
+    };
+    let pieces = [
+        Some(Piece::pill(bar).section(GLASS_RISE, GLASS_BEVEL, GLASS_BASE)),
+        Some(Piece::pill(hint).section(GLASS_RISE, GLASS_BEVEL, GLASS_BASE)),
+        focus,
+        notice.map(|r| Piece::pill(r).section(KEY_RISE, KEY_BEVEL, GLASS_BASE)),
+    ];
+    p.layer(LayerOptions::glass(0.0), |p| {
+        for piece in pieces.iter().flatten() {
+            p.fill(
+                &Shape::Blob {
+                    pieces: std::slice::from_ref(piece),
+                    smooth: 0.0,
+                },
+                glass,
+            );
+        }
+    });
 }
 
 /// How much of a row (or its section heading) shows inside the viewport, eased: rows fade at
@@ -615,14 +781,7 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     );
     p.set_opacity(inp.anim.tab_fade.progress());
 
-    // Focus ring (behind the content): a brighter pad, then a blooming accent rim.
-    let fy = ROWS_Y0 + inp.anim.focus_y.value() - scroll;
-    let ring = Rect::from_xywh(CX0, fy, CX1 - CX0, inp.anim.focus_h.value().max(40.0));
-    p.fill(&Shape::round_rect(ring, 28.0), Color::WHITE.with_alpha(0.07));
-    p.layer(LayerOptions::bloom(), |p| {
-        p.stroke(&Shape::round_rect(ring, 28.0), ink.acc, Stroke::inner(3.0));
-    });
-    p.glow(&Shape::round_rect(ring, 28.0), ink.acc, Glow::new(14.0, 0.22));
+    inner_light(p, focus_rect(inp), PLATTER_R, ink);
 
     for (i, row) in list.as_slice().iter().enumerate() {
         let g = geo[i];
@@ -635,7 +794,9 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             if k > 0.01 {
                 p.save();
                 p.set_opacity(k);
-                p.text(vec2(TX, top - 30.0), sec, &ink.section());
+                let mut title = Line::new();
+                sentence_case(sec, &mut title);
+                p.text(vec2(TX, top - 30.0), title.as_str(), &ink.section());
                 p.restore();
             }
         }
@@ -848,7 +1009,6 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         &ink.style(ink.text, 34.0, ink.ink(), Align::Left),
     );
     let field = Rect::from_xywh(CX0, ROWS_Y0 + 92.0, CX1 - CX0, 128.0);
-    p.fill(&Shape::round_rect(field, 26.0), Color::BLACK.with_alpha(0.55));
     p.stroke(&Shape::round_rect(field, 26.0), ink.accent(), Stroke::inner(2.0));
     let text_style = ink.style(ink.display, 58.0, ink.ink(), Align::Left);
     let r = p.text(
@@ -875,11 +1035,9 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         &ink.style(ink.text, 24.0, ink.muted(), Align::Right),
     );
 
-    let key_w = 104.0;
-    let key_h = 100.0;
-    let gap = 12.0;
+    let (key_w, key_h, gap) = (KEY_W, KEY_H, KEY_GAP);
     let x0 = CX0 + ((CX1 - CX0) - (10.0 * key_w + 9.0 * gap)) * 0.5;
-    let y0 = ROWS_Y0 + 290.0;
+    let y0 = ROWS_Y0 + KEYS_TOP;
     let mut buf = [0u8; 4];
     for row in 0..keyboard::ROWS {
         let mut col = 0u8;
@@ -893,14 +1051,11 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
                 key_h,
             );
             let focused = kb.row == row && keyboard::key_span(row, kb.col).0 == first;
-            let shape = Shape::round_rect(rect, 18.0);
+            let shape = Shape::round_rect(rect, KEY_R);
             if focused {
-                // The same focus as a row: a white lift, the accent rim blooming, a soft glow.
-                p.fill(&shape, Color::WHITE.with_alpha(0.12));
-                p.layer(LayerOptions::bloom(), |p| p.stroke(&shape, ink.acc, Stroke::inner(3.0)));
-                p.glow(&shape, ink.acc, Glow::new(14.0, 0.3));
+                // The same focus as a row: the key lights from within under its glass cap.
+                inner_light(p, rect, KEY_R, ink);
             } else {
-                p.fill(&shape, Color::WHITE.with_alpha(0.06));
                 p.stroke(&shape, ink.hair(), Stroke::rim_px(1.0));
             }
             let (label, style) = match key {
@@ -931,7 +1086,6 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left),
     );
     let card = Rect::from_xywh(CX0, ROWS_Y0 + 170.0, CX1 - CX0, 420.0);
-    p.fill(&Shape::round_rect(card, 32.0), Color::BLACK.with_alpha(0.45));
     p.stroke(&Shape::round_rect(card, 32.0), ink.hair(), Stroke::rim_px(1.0));
     let cand = cap.candidate();
     let mut l = Line::new();
@@ -953,7 +1107,7 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let prog = cap.progress(inp.now);
     let bar = Rect::from_xywh(mid - 400.0, card.min.y + 250.0, 800.0, 14.0);
     p.fill(&Shape::round_rect(bar, 7.0), ink.ghost());
-    p.text(vec2(bar.min.x, bar.min.y - 26.0), "HOLD", &ink.section());
+    p.text(vec2(bar.min.x, bar.min.y - 30.0), "Hold", &ink.section());
     if prog > 0.0 {
         p.layer(LayerOptions::bloom(), |p| {
             p.fill(
@@ -981,10 +1135,6 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
 }
 
 fn hint_bar(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
-    p.fill(
-        &Shape::line(vec2(CX0, HINT_Y - 56.0), vec2(CX1, HINT_Y - 56.0), 1.5),
-        ink.hair(),
-    );
     let text_style = ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left);
     // Keycap chips only name buttons the menu really uses; the remapper has none to name.
     let hints: &[(&str, &str)] = match inp.ctl.mode() {

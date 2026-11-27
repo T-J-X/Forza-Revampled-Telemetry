@@ -14,7 +14,7 @@ use crate::fit::CockpitFit;
 use crate::model::{self, Tab};
 use crate::nav::{Mode, NavInput, NavOutput, OsdController};
 use fh6_core::{AppConfig, ClusterTheme};
-use fh6_kit::{wgpu, Cluster, FrameInput, Kit, Layout, Painter, Tokens, View};
+use fh6_kit::{wgpu, Cluster, FrameInput, ImageId, Kit, Layout, Painter, Tokens, View};
 use std::path::Path;
 use std::time::Duration;
 
@@ -31,6 +31,10 @@ pub struct OsdHost {
     thumbs: Vec<(ClusterTheme, Box<dyn Cluster>)>,
     order: [Option<ClusterTheme>; 5],
     last_tab: Tab,
+    /// The studio the OSD's glass mirrors (the Liquid Glass cluster's, so both look like one
+    /// material); `None` falls back to the kit's analytic studio.
+    env: Option<ImageId>,
+    env_tried: bool,
 }
 
 impl std::fmt::Debug for OsdHost {
@@ -54,6 +58,8 @@ impl OsdHost {
             thumbs: Vec::with_capacity(THUMB_CACHE + 1),
             order: [None; 5],
             last_tab: Tab::Cluster,
+            env: None,
+            env_tried: false,
         }
     }
 
@@ -142,6 +148,11 @@ impl OsdHost {
         assets: Option<&Path>,
         cfg: &AppConfig,
     ) {
+        if !self.env_tried {
+            self.env_tried = true;
+            let mut setup = kit.setup(device, queue, assets);
+            self.env = draw::load_environment(&mut setup);
+        }
         if !self.carousel_visible() {
             return;
         }
@@ -235,6 +246,7 @@ impl OsdHost {
                 live_name,
                 status,
                 thumbs: &thumbs,
+                env: self.env,
             },
         );
     }

@@ -207,7 +207,7 @@ fn over_image(fg: &RgbaImage, bg: &RgbaImage) -> RgbaImage {
     }
 }
 
-/// Renders every OSD state into `out/osd/`.
+/// Renders every OSD state into `out/osd/` (with `only`, the states whose name contains it).
 #[allow(clippy::too_many_arguments)]
 pub fn render_all(
     ctx: &GpuContext,
@@ -217,13 +217,14 @@ pub fn render_all(
     out: &Path,
     timing: bool,
     backdrop: Option<&RgbaImage>,
+    only: Option<&str>,
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
     let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
-    for state in STATES {
+    for state in STATES.iter().filter(|s| only.is_none_or(|o| s.name.contains(o))) {
         let mut cfg = AppConfig {
             current_camera_index: 3,
             cockpit_hud_style: "LiquidGlass".into(),

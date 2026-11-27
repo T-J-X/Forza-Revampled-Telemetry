@@ -13,6 +13,9 @@
 //!
 //! `--fit` renders only the Phase 8 cockpit fit review into `mockups/fit/` (see `fit.rs`).
 //!
+//! `--osd` renders only the OSD states into `mockups/osd/`; `--osd-state <name>` renders only the
+//! states whose name contains `<name>` (both skip the clusters, the scrims and the gallery).
+//!
 //! `--cluster <Name>` renders only one catalog cluster's review set into `mockups/<Theme>/`
 //! (4 states per view at 4K, crops, in-cockpit composites, the 60-frame sequence; `cluster.rs`).
 //!
@@ -52,6 +55,9 @@ struct Args {
     out: Option<PathBuf>,
     cluster: Option<String>,
     backdrop: Option<PathBuf>,
+    osd: bool,
+    osd_state: Option<String>,
+    no_timing: bool,
 }
 
 fn parse_args() -> Result<Args> {
@@ -62,6 +68,9 @@ fn parse_args() -> Result<Args> {
         out: None,
         cluster: None,
         backdrop: None,
+        osd: false,
+        osd_state: None,
+        no_timing: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -72,9 +81,15 @@ fn parse_args() -> Result<Args> {
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
             "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
+            "--osd" => args.osd = true,
+            "--no-timing" => args.no_timing = true,
+            "--osd-state" => {
+                args.osd = true;
+                args.osd_state = Some(it.next().ok_or("--osd-state needs a name")?);
+            }
             "-h" | "--help" => {
                 println!(
-                    "preview-export [--legacy] [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
+                    "preview-export [--legacy] [--fit] [--osd] [--osd-state NAME] [--no-timing] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
                 );
                 std::process::exit(0);
             }
@@ -120,7 +135,8 @@ fn run() -> Result<()> {
     let ctx = GpuContext::headless()?;
     println!("GPU: {}", ctx.adapter_summary());
     let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
-    let timing = kit.set_gpu_timing(true);
+    // `--no-timing` renders two frames per OSD state instead of 120 (software adapters).
+    let timing = !args.no_timing && kit.set_gpu_timing(true);
     let assets = root.join("assets");
     if assets.join("fonts").is_dir() {
         let faces = kit.fonts_mut().load_dir(&assets.join("fonts"))?;
@@ -146,6 +162,24 @@ fn run() -> Result<()> {
     if args.fit {
         fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames)?;
         println!("Fit review written to {}", out.join("fit").display());
+        return Ok(());
+    }
+    let backdrop = match &args.backdrop {
+        Some(p) => {
+            let (width, height, pixels) = fh6_kit::images::decode_png(&fs::read(p)?)?;
+            Some(RgbaImage { width, height, pixels })
+        }
+        None => None,
+    };
+    if args.osd {
+        let only = args.osd_state.as_deref();
+        let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), only)?;
+        verify_osd(&out, &osd_renders)?;
+        println!(
+            "OSD: {} states written to {}",
+            osd_renders.len(),
+            out.join("osd").display()
+        );
         return Ok(());
     }
     let target = Offscreen::new(&ctx.device, W, H);
@@ -250,14 +284,7 @@ fn run() -> Result<()> {
         }
     }
 
-    let backdrop = match &args.backdrop {
-        Some(p) => {
-            let (width, height, pixels) = fh6_kit::images::decode_png(&fs::read(p)?)?;
-            Some(RgbaImage { width, height, pixels })
-        }
-        None => None,
-    };
-    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref())?;
+    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), None)?;
     fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
     if args.legacy {
         legacy::clusters(&out)?;
@@ -278,7 +305,7 @@ fn rel(root: &Path, p: &Path) -> String {
     p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
 }
 
-fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> {
+fn verify_osd(out: &Path, osd: &[osd::OsdRender]) -> Result<()> {
     for r in osd {
         for f in [&r.full, &r.thumb] {
             if !out.join(f).is_file() {
@@ -286,6 +313,11 @@ fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> 
             }
         }
     }
+    Ok(())
+}
+
+fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> {
+    verify_osd(out, osd)?;
     for r in renders {
         for f in [&r.full, &r.thumb] {
             let p = out.join(f);
