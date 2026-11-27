@@ -3,31 +3,38 @@
 The coordinator starts you with: *"You are the cluster thread for `<Name>` (catalog row `<n>`). Read the approved plan, then `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."* You own exactly one cluster:
 - its module directory `crates/fh6-clusters/src/clusters/<snake_name>/` (`mod.rs`, private submodules, `spec.md`, `README.md`, `RESEARCH.md`, `HANDOVER.md`)
 - its goldens `tests/golden/images/<Name>_*.png` and `<Name>_hood_*.png`
-- its assets `assets/clusters/<snake_name>/` and its recipe `tools/asset-forge/src/recipes/<snake_name>.rs`
+- its assets `assets/clusters/<snake_name>/` (with their own `ASSETS.md`) and its recipe `tools/asset-forge/src/recipes/<snake_name>.rs`
 - its design board: the Penpot page `07 · <Name>` (see "Design boards" in `CATALOG.md`), plus its product page `mockups/<Name>/index.html`
 - its masters folder `<snake_name>\` inside the Google Drive folder `FH6 WheelDash v2 - 4K Masters`
 - its own row in `CATALOG.md` (the status and design-board cells only)
 
 **Edit nothing outside them.** The catalog table (`catalog.rs`), the registry, `ClusterTheme`, `common/`, the golden harness, the kit and the tools are shared. If a shared helper or the kit needs a change, write it in your handover so the coordinator can schedule it.
 
-Four shared places are yours to touch in a small way, each noted in your handover:
+Five shared places are yours to touch in a small way, each noted in your handover:
 - the three lines that register your recipe in asset-forge (`tools/asset-forge/src/main.rs`, `src/recipes/mod.rs` and `src/sets/mod.rs`)
 - a missing part or material added to the hero library (`tools/asset-forge/src/hero/`)
 - an effect added to `docs/specs/optics.md`, with its source
 - your own crops in `docs/handover-shots/cluster-<snake_name>-*.png`
+- one appended row in the decision log of `docs/PROGRESS.md`, only when you add a dependency or a design token
+
+`asset-forge build` also rewrites the shared ledger files (`assets/ASSETS.md`, `assets/assets.json`, `assets/forge.lock.json`, `assets/contact-sheet.html`) and `assets/_thumbs/`. Never commit those from a dash thread: the coordinator regenerates them on `main` after a merge.
 
 ## How every thread runs (TJX, 2026-11-27)
 - **Open with an introduction** to TJX in your thread: the task, the rule files that apply, and what done looks like.
 - **No scores, no critic loops.** Never score your own work, never ask a reviewer for a score, and never iterate "until the critic passes". Never rewrite a prompt to chase a score. The review is the fixed checklist at the end of this file plus TJX's judgement.
 - **Close only after** the closing review has every line answered yes, and TJX has signed off in the thread. Only TJX's own message counts; no other session answers for TJX.
 - **The thread is never archived.**
+- **Messages.** Post in your own thread: TJX reads it, and so does the coordinator. Say plainly when a note is for the coordinator (a finished job, a GPU lock older than 30 minutes, a request for shared code). Attach a render by sending the local file itself; `mockups/` is not in git.
 
 ## Read first
 - The approved plan (the coordinator gives you the link).
 - Root `AGENTS.md` / `SKILLS.md`, this folder's `AGENTS.md` / `SKILLS.md`.
 - Your catalog row, your `spec.md` and `README.md`, your family spec in `docs/design/families/`, the matching hero frames in `docs/design/heroes/`, `docs/kit/README.md` (sections 12 and 13 cover the shared components and the first pilot's lessons) and `assets/ASSETS.md`.
 - `docs/specs/optics.md` before any glass, reflective or spectral effect. The pilot thread writes it, and it reaches `main` with the pilot's merge; if it is missing from your checkout, stop and tell the coordinator. A dash that needs an effect that is not in that document adds it there, with its source, before using it.
-- The Liquid Glass pilot is being rebuilt. Until TJX signs the rebuild off, read `crates/fh6-clusters/src/clusters/liquid_glass/` for module conventions only (file layout, the `Geom` zone table, tests, the handover shape), not for its look: TJX rejected the first version. Also read one finished cluster from `CATALOG.md` (status ✅) to match conventions. Ignore the scores in older handovers and READMEs: they are records of the old review process.
+- The Liquid Glass pilot is being rebuilt. Until TJX signs the rebuild off, read `crates/fh6-clusters/src/clusters/liquid_glass/` for code conventions only (file layout, the `Geom` zone table, tests), not for its look and not for its handover: TJX rejected the first version. Also read the `mod.rs` of one merged cluster from `CATALOG.md` for code conventions. Those clusters were built before the 2026-11-27 rules: don't copy their order of work, their critique rounds or their scored handovers. Your handover follows `program/HANDOVER_TEMPLATE.md` and step 9.
+- **Your `spec.md` is a starting point.** It says the catalog is the source of truth; for the look, this file wins. The real display leads (step 1). Where the brief or the family spec holds a finish to a low luminance, or asks for a change to shared code, follow this file and note the difference in your handover.
+- **If your dash has earlier work** (a branch or a Penpot page from before 2026-11-27; the coordinator names them when it starts you), read it first and say in your introduction whether you salvage it or restart.
+- **Keep a "before".** Before you change anything, render the dash as it is on `main` (`cargo run --release -p preview-export -- --cluster <Name>`, a GPU job) and keep its `02_mid_cruise` full-frame render for the before and after pair in your handover.
 
 ## The bar
 - **It recreates a real dash.** These are modern sim dashes of specific cars, supercars and hypercars included, not generic designs. An owner should recognise it.
@@ -44,20 +51,20 @@ Four shared places are yours to touch in a small way, each noted in your handove
 - **Never:** an opaque full-screen fill, flat rectangles posing as glow, hardcoded telemetry, block digits, or anything over budget.
 
 ## Shared machine rules
-- **One GPU job at a time, across all threads** (one 8 GB card). Before any GPU job (ComfyUI, Blender, `asset-forge`, `preview-export`, the live demo), create `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` holding your thread name, the start time (UTC) and the job. Delete it as soon as the job ends. If the file exists, wait. If it is older than 30 minutes, ask its owner (through the coordinator) before removing it. Work on steps that need no GPU while you wait: research, Penpot, Rust code, review.
+- **One GPU job at a time, across all threads** (one 8 GB card). Section 5 of root `SKILLS.md` is the rule: it lists the GPU jobs (the golden tests and every other `cargo test` that renders are among them) and gives the one command that takes the lock and the one that releases it. Work on steps that need no GPU while you wait: research, Penpot, Rust code, review.
 - **A cloud GPU is not used** unless TJX has approved the provider and the cost.
 - **One Penpot tab serves every thread.** In each `execute_code` call: check the file ID, open your own page, check the page name, then write. Never touch another page and never call `closePlugin`.
 - **Threads can share one checkout.** Commit with explicit paths, never `git add -A`, and never switch the branch under another thread. If your thread shares the main checkout, ask the coordinator which branch or worktree to commit on before your first commit; a dash is never committed straight to `main`.
-- Run Blender, ComfyUI and asset-forge through the Bash tool, not PowerShell. `cargo run --release -p asset-forge -- doctor|build` already finds both tools.
+- Run Blender, ComfyUI and asset-forge through the Bash tool, not PowerShell. `cargo run --release -p asset-forge -- doctor|build` already finds both tools. Your build command is `cargo run --release -p asset-forge -- build --set <snake_name>`. asset-forge starts ComfyUI itself when it is not running; never stop that server, because other threads share it.
 - Local tools on this machine (write them as `%USERPROFILE%` paths in any repo file):
   - Blender 5.3: `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64`
   - ComfyUI portable: `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable`
   - Penpot through the `penpot` MCP (hosted; TJX keeps the Penpot file open with ⋮ → MCP server connected).
-  - Masters: the Google Drive desktop app mounts the Drive folder at `G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (check the drive letter). Write a file there and it syncs. Never create another Drive folder. The Drive connector cannot upload files over about 7 MB, so it is for reading and checking only.
+  - Masters: the Google Drive desktop app mounts the Drive folder at `G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (check the drive letter). Copy a master there with the Bash tool (`cp <file> "/g/My Drive/FH6 WheelDash v2 - 4K Masters/<snake_name>/"`) and it syncs. Create your `<snake_name>` subfolder first if it is missing; that is not another Drive folder. No tool copies masters for you: the full-size renders stay in `target/asset-forge/` until you copy them. Never create another Drive folder. The Drive connector cannot upload files over about 7 MB, so it is for reading and checking only.
 
 ## Steps
 
-**Order of work, enforced (TJX, 2026-11-27):** R&D on the web → Penpot → ComfyUI → final 3D in Blender → a first build and the direction check with TJX → build and verify → product page → closing review → TJX's sign-off.
+**Order of work, enforced (TJX, 2026-11-27):** R&D on the web → Penpot → ComfyUI → final 3D in Blender → a first build and the direction check with TJX → build and verify → product page → handover draft → closing review → TJX's sign-off.
 
 Each step's skills and tools are listed in this folder's `SKILLS.md`; call a skill with the Skill tool, and load MCP tools with ToolSearch first (root `SKILLS.md`, "How to call them"). Load `fh6-hmi-design-rules` at the start.
 
@@ -78,23 +85,25 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
 3. **ComfyUI: material and environment textures at 4K** (`comfyui-hero-textures` skill, through `cargo run -p asset-forge`).
    - Organic surfaces (leather, alcantara, forged carbon, enamel), seamless plates and environment plates. Generate near 1 megapixel and upscale with 4x-UltraSharp to 4096×4096 with tiled VAE; that fits the 8 GB card (measured 2026-11-27: 58 s, 7.5 GB peak).
    - These textures are inputs for the Blender step (`mat::leather(..).set("texture", path)` and the like), and visible surfaces in the final cluster.
-   - Write each master to your Drive folder, and record the prompt name, seed and models in your `ASSETS.md` row.
+   - Write each master to your Drive folder, and give each asset a row in your `ASSETS.md`: recipe (with the prompt name and the models), seed, licence and the master's file name.
 4. **Blender: final 3D** (`blender-hero-assets` skill, through `cargo run -p asset-forge`). Every cluster.
    - Rendered hardware and light: bezels, faces, LED caps, lit-in-face bands, housings, needles and hub caps, lenses and crystals, plus real 3D where the design moves or turns.
    - For glass families: normal, thickness, environment and caustic maps at 4K.
-   - **Use the hero library, don't hand-roll bpy.** `tools/asset-forge/src/hero/` already has the studio rig, camera matching to the binnacle, the PBR cookbook (machined, anodised, brushed and sunray metal, guilloché, polished and knurled bezels, carbon, piano black, sapphire, enamel, lume, LED caps, leather, alcantara), physical parts (`Part::bezel`, `face`, `ring`, `crystal`, `dome`, `extrude`, `mesh` with `geom::blade` needles and `part::stitches`) and the ComfyUI graphs (refiner, ControlNet, seamless). In your recipe: build a `Scene` over `Frame::envelope(&frame::COCKPIT)`, add parts, `render` (beauty at three key azimuths plus normal, height, AO, rmh and emission), save each pass with `ctx.image`, draw the plate at full strength under your vectors. `hero/demo.rs` (`asset-forge hero-demo`) is the worked PorscheAnalog example; it rewrites three tracked files in `docs/handover-shots/`, so restore them with `git checkout` after a test run. If the library lacks a part or material, add it there (it is shared) and say so in your handover.
+   - **Use the hero library, don't hand-roll bpy.** `tools/asset-forge/src/hero/` already has the studio rig, camera matching to the binnacle, the PBR cookbook (machined, anodised, brushed and sunray metal, guilloché, polished and knurled bezels, carbon, piano black, sapphire, enamel, lume, LED caps, leather, alcantara), physical parts (`Part::bezel`, `face`, `ring`, `crystal`, `dome`, `extrude`, `mesh` with `geom::blade` needles and `part::stitches`) and the ComfyUI graphs (refiner, ControlNet, seamless). In your recipe: build a `Scene` over `Frame::envelope(&frame::COCKPIT)`, add parts, `render` (beauty at three key azimuths plus normal, height, AO, rmh and emission), save each pass into `assets/clusters/<snake_name>/` and write that folder's `ASSETS.md` from your recipe, as `recipes/bosch_ddu.rs` does, then draw the plate at full strength under your vectors. `hero/demo.rs` (`asset-forge hero-demo`) is the worked PorscheAnalog example; it rewrites three tracked files in `docs/handover-shots/`, so restore them with `git checkout` after a test run. If the library lacks a part or material, add it there (it is shared) and say so in your handover.
    - Write each 4K master (16-bit PNG or EXR) to your Drive folder. Git gets the compressed runtime file.
-5. **First build, then the direction check with TJX (mandatory).** The check needs a real render, so do a first build: replace the scaffold with a module that draws your Blender plate at full strength with the live data roughed in on top, and render it with `cargo run --release -p preview-export -- --cluster <Name>` (holding the GPU lock). Don't polish. As soon as that first real render of `02_mid_cruise` sits in the cockpit composite, post one message to TJX in your own thread: `DIRECTION CHECK <Name>`, the full-frame cockpit render and the Penpot board export attached, then two or three lines on the idea and the references it follows. TJX answers go, go with changes, or no-go; apply every change TJX lists. Until TJX answers, carry on only with work that the answer can't invalidate (module plumbing, tests, telemetry). A no-go means redesign, then a new check. Repeat the check after any major redesign.
+5. **First build, then the direction check with TJX (mandatory).** The check needs a real render, so do a first build: replace the scaffold with a module that draws your Blender plate at full strength with the live data roughed in on top, and render it with `cargo run --release -p preview-export -- --cluster <Name>` (holding the GPU lock). Don't polish. As soon as that first real render of `02_mid_cruise` sits in the cockpit composite, post one message to TJX in your own thread: `DIRECTION CHECK <Name>`, the full-frame cockpit render attached (the 4K hood render for a hood-only dash), the Penpot board export attached if your session can save it and otherwise the page name and the board ID, then two or three lines on the idea and the references it follows. TJX answers go, go with changes, or no-go; apply every change TJX lists. Until TJX answers, carry on only with work that the answer can't invalidate (module plumbing, tests, telemetry). A no-go means redesign, then a new check. Repeat the check after any major redesign.
 6. **Build:** load `rust-best-practices` before you write any `.rs`, the first build of step 5 included (`rust-skills` is the rule reference, `rust-testing` covers the goldens). Finish your `Cluster` in `mod.rs` (keep `pub fn make`). Use the kit and the `common/` components. Keep `update()` and `draw()` allocation-free after warm-up.
-7. **Verify** (from the repo root, holding the GPU lock for the GPU jobs):
-   - `cargo run --release -p preview-export -- --cluster <Name>` writes `mockups/<Name>/`: 4 states per view at 4K, crops, the cockpit composite, the 60-frame sequence and `index.html`. It prints the GPU time of every frame and the sequence p50 / p99: that is your budget number (under 0.5 ms at 4K).
-   - `FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters <snake_name>` writes your goldens; review the PNGs, then `cargo test -p fh6-clusters <snake_name>` must pass.
-   - `cargo clippy -p fh6-clusters --all-targets -- -D warnings`, and format only your files: `rustfmt --edition 2021 crates/fh6-clusters/src/clusters/<snake_name>/*.rs`.
-   - Live: `cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster <Name> --stats` for 60 seconds; watch for jitter and read the CPU and latency lines.
+7. **Verify** (from the repo root; the renders, the goldens and the live bench are GPU jobs, so hold the lock):
+   - `cargo check -p fh6-clusters -p asset-forge`.
+   - `cargo run --release -p preview-export -- --cluster <Name>` writes `mockups/<Name>/`: 4 states per view at 4K, crops, the cockpit composite, the 60-frame sequence and `index.html`. It prints the GPU time of every frame and the sequence p50 / p99: that is your budget number (under 0.5 ms at 4K), in every view the catalog lists.
+   - `FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters <snake_name>` writes your goldens; review the PNGs, then `cargo test -p fh6-clusters <snake_name>` must pass twice in a row without rewriting a golden.
+   - `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings`. Format only your files with `rustfmt --edition 2021 crates/fh6-clusters/src/clusters/<snake_name>/*.rs tools/asset-forge/src/recipes/<snake_name>.rs`, then run the same command with `--check`.
+   - Live bench. Tell TJX first, because it draws on the main display. Build both tools (`cargo build --release -p fh6-app -p mock-udp`), start the stream (`cargo run --release -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 120 --rate-hz 60`), then run `cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster <Name> --stats --bench-seconds 60 --bench-out mockups/<Name>/live_bench.md`. Always pass `--bench-out`: the default overwrites the tracked `docs/perf/engine.md`. The run quits by itself and writes the percentiles. Run the same bench once on a scaffold dash for the baseline.
    - Compare the renders with your board side by side, and fix the gaps.
+   - The workspace-wide gate (check, test, clippy and fmt over everything) is the coordinator's at merge.
 8. **Product page.** `mockups/<Name>/index.html`, generated by `preview-export` (Rust; only HTML and CSS are written), is the thread's final output: the fully rendered page of the dash. Read the Penpot page `10 · Configurator` first, because this page grows into the local catalog and configurator that the exe serves.
-9. **Closing review.** Walk the fixed checklist below line by line and answer each line yes or no with its evidence. Fix every no, then walk the whole list again. You may run `design:design-critique` or the `ui-ux-designer` agent once to collect findings; ask for findings only, never a score, and treat them as input to the checklist, not as a verdict.
-10. **Handover and sign-off.** Write `crates/fh6-clusters/src/clusters/<snake_name>/HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`, with renders (copy the four crops you want reviewed into `docs/handover-shots/cluster-<snake_name>-*.png`), a before and after pair (the same full-frame cockpit state rendered with `setup.assets = None` and with your assets), perf numbers, the asset list, the Drive master list, the completed checklist and "my calls". Commit as TJX with no co-author trailer, on your thread's branch. Report the finished job to the coordinator: once its checks pass, the coordinator merges it into `main` and pushes (AGENTS.md rule 16). Then post the product page and the completed checklist to TJX and ask for the sign-off; the thread closes only on it. Your `CATALOG.md` row stays ◐ until TJX has signed off; set it to ✅ (both tables) after that.
+9. **Handover draft.** Write `crates/fh6-clusters/src/clusters/<snake_name>/HANDOVER.md` from `program/HANDOVER_TEMPLATE.md` (its "Dash threads" part lists the sections), with renders (copy the four crops you want reviewed into `docs/handover-shots/cluster-<snake_name>-*.png`), the before and after pair (the render you kept before you started and the final one, both full-frame), perf numbers, the asset list, the Drive master list and "my calls".
+10. **Closing review, then sign-off.** Walk the fixed checklist below line by line and write each answer, yes or no with its evidence, into the handover. Fix every no, then walk the whole list again. You may start the `ui-ux-designer` agent (the Agent tool) or run `design:design-critique` once to collect findings; ask for findings only, never a score, and treat them as input to the checklist, not as a verdict. Commit as TJX with no co-author trailer, on your thread's branch. Report the finished job to the coordinator: once its checks pass, the coordinator merges it into `main` and pushes (AGENTS.md rule 16). Then post the product page and the completed checklist to TJX and ask for the sign-off; the thread closes only on it. Your `CATALOG.md` row stays ◐ until TJX has signed off; set it to ✅ (both tables) after that, and record the sign-off in the handover.
 
 ## Asset rules (TJX)
 - **Bespoke assets are mandatory.** Every cluster ships **at least one bespoke ComfyUI asset and at least one bespoke Blender asset**, both visibly used in the final cluster, not token. Procedural-only clusters are not accepted. The bar is the best, not acceptable.
@@ -116,7 +125,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
 - **Designs with 3D elements** (cars, mechanisms, gyros and tourbillons, spaceframes, origami, prisms, liquid volumes, anything that turns or has parallax) get real 3D from Blender. That means glTF meshes drawn by the kit's mesh pass, or pre-rendered sprite and flipbook sequences with matching normal maps, lit to match the cluster. A flat texture standing in for a 3D object does not pass.
 - "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.
 - Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
-- **Where files go.** Compressed runtime assets (KTX2 or optimised PNG) go to `assets/clusters/<snake_name>/`, with a row in `assets/clusters/<snake_name>/ASSETS.md` (recipe, seed, licence, and the name of the master). The uncompressed 4K masters go to your Drive folder.
+- **Where files go.** Compressed runtime assets (KTX2 or optimised PNG) go to `assets/clusters/<snake_name>/`, each with a row in `assets/clusters/<snake_name>/ASSETS.md` (recipe, seed, licence and the master's file name), written by your recipe. The uncompressed 4K masters go to your Drive folder.
 - Every textured look keeps a procedural fallback: `setup.assets` may be `None`.
 
 ## Lessons from the first pilot build (save yourself the time)
@@ -137,56 +146,58 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 
 **A. Hard rules**
 1. The module reads, binds or requires none of A, B, X, Y (`0xF000`). [AGENTS 4]
-2. No placeholder: no `todo!()`, no stub, no hardcoded value standing in for live telemetry; unverified telemetry fields are derived or verified, and named in the handover. [AGENTS 2]
+2. No placeholder: no `todo!()`, no stub, no hardcoded value standing in for live telemetry. A telemetry field that the golden packets do not cover is derived from covered fields or verified first, and named in the handover. [AGENTS 1, AGENTS 2]
 3. No `unwrap()`, `expect()` or `panic!` in new non-test code, and no new `unsafe`. [AGENTS 6; Agent 2 keeps `unsafe` in `fh6-win` and `fh6-input`]
-4. `update()` and `draw()` do no heap allocation, file I/O, logging or locking after warm-up. [AGENTS 6, SKILLS 3.8]
-5. GPU time is under 0.5 ms at 3840×2160 (sequence p99) and CPU under 1 ms per frame, with both numbers in the handover. [AGENTS 7, SKILLS 3.9]
-6. The cluster adds no path that draws while the app hides the dash (menus, pause, stale stream, Forza not in front). [AGENTS 9]
-7. No non-Rust source file was added; bpy lives as Rust strings in the recipe. [AGENTS 11]
-8. Commits are by TJX with no co-author trailer; no real name, `C:\Users\<name>` path or personal email is in any file. [AGENTS 10]
-9. Nothing was copied into the game folder or the mirror. [AGENTS 8]
-10. Any new dependency has its line in the `docs/PROGRESS.md` decision log. [AGENTS 6]
-11. `cargo check`, `cargo test -p fh6-clusters <snake_name>`, `cargo clippy -D warnings` and the format check pass, with their real output in the handover. [AGENTS 3]
+4. `update()` and `draw()` do no heap allocation, file I/O, logging or locking after warm-up: a search of your module for `format!`, `vec!`, `collect`, `to_string`, `String::from`, `Box::new`, `tracing::`, `.lock()` and `std::fs` finds hits only in `new()` and in tests. [AGENTS 6, SKILLS 3.8]
+5. GPU time is under 0.5 ms at 3840×2160: the sequence p99 and every per-state GPU line that `preview-export` prints, in every view the catalog lists, with the numbers in the handover. [AGENTS 7, SKILLS 3.9]
+6. The live bench's CPU-per-frame p50 and p99 are in the handover, beside the same bench run on a scaffold dash. An app total over 1 ms that the scaffold shows too is known defect 10 in `docs/PROGRESS.md`: it is reported to the coordinator, and no shared code is edited for it. [AGENTS 7]
+7. The dash adds no smoothing of its own to rpm, speed or gear beyond the kit springs from the tokens, so telemetry still reaches the screen within one display frame. [AGENTS 7, the bar]
+8. The cluster adds no path that draws while the app hides the dash (menus, pause, stale stream, Forza not in front). [AGENTS 9]
+9. No non-Rust source file was added; bpy lives as Rust strings in the recipe. [AGENTS 11]
+10. Commits are by TJX with no co-author trailer. No tracked file holds a real name, a `C:\Users\<name>` path or a personal email, mentions the legacy C# build, or names the design tool that Penpot replaced; the source links in `RESEARCH.md` are checked for this too. [AGENTS 10, ONBOARDING 3]
+11. Nothing was copied into the game folder or the mirror. [AGENTS 8]
+12. Any new dependency has its line in the `docs/PROGRESS.md` decision log. [AGENTS 6]
+13. `cargo check -p fh6-clusters -p asset-forge`, `cargo test -p fh6-clusters <snake_name>`, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and the `rustfmt --check` of step 7 pass, with their real output in the handover. [AGENTS 3]
 
 **B. Rendering laws**
-12. Colour is premultiplied linear end to end; alpha is never multiplied twice; transparent is `(0,0,0,0)`. [SKILLS 3.1]
-13. Sizes, radii and stroke widths are clamped to at least 1 px, and NaN or Inf telemetry is sanitised before a shader. [SKILLS 3.2]
-14. Every textured look has a procedural fallback: the cluster renders with `setup.assets = None`, and assets load once at startup. [SKILLS 3.4]
-15. Text is MSDF from the kit, speed and RPM use tabular figures, and a user font is honoured. [SKILLS 3.5]
-16. Off pixels are `#000000` (transparent). There is no opaque grey or navy box and no full-canvas fill. [SKILLS 3.6]
-17. The cluster never reads the wall clock; its state lives in `&mut self`; the goldens render the fixed sequence. [SKILLS 3.7]
-18. Colours and type come from tokens and palette roles; no hex colour is hardcoded where a token exists. [SKILLS 2]
-19. Glass, reflective and spectral effects use the equations in `docs/specs/optics.md`; any new effect was added there, with its source, first. [Read first]
+14. Colour is premultiplied linear end to end; alpha is never multiplied twice; transparent is `(0,0,0,0)`. [SKILLS 3.1]
+15. Sizes, radii and stroke widths are clamped to at least 1 px, and NaN or Inf telemetry is sanitised before a shader. [SKILLS 3.2]
+16. Every textured look has a procedural fallback: each asset lookup in your module has a branch that draws without the asset, and assets load once at startup, never in `update()` or `draw()`. [SKILLS 3.4]
+17. Text is MSDF from the kit, speed and RPM use tabular figures, and the numerals follow `input.fonts.display` when the user picks a font. [SKILLS 3.5]
+18. Off pixels are `#000000` (transparent). There is no opaque grey or navy box and no full-canvas fill. [SKILLS 3.6]
+19. The cluster never reads the wall clock and keeps its state in `&mut self`: `cargo test -p fh6-clusters <snake_name>` passes twice in a row without rewriting a golden. [SKILLS 3.7]
+20. Colours and type come from tokens and palette roles; no hex colour is hardcoded where a token exists. [SKILLS 2]
+21. Glass, reflective and spectral effects use the equations in `docs/specs/optics.md`; any new effect was added there, with its source, first. [Read first]
 
 **C. Design**
-20. The rank order holds in all 4 states: gear and shift light, then speed, then the tach, then the secondary visual, then bezel and labels. [fh6-hmi-design-rules 3]
-21. Gear, speed and shift lights read at a glance in the full-frame cockpit composite at 100%. [AGENTS, Agent 1]
-22. The anchors are (1920, 1835) for cockpit and (1920, 1760) for hood, everything stays inside `layout.envelope`, and the hood variant exists if the catalog lists one. [fh6-hmi-design-rules 1]
-23. `RESEARCH.md` names the real display this dash recreates, with its sources. For a catalog concept with no single real display, it names the real dash the concept is benchmarked against. Each feature that makes that display recognisable is matched or listed as a deliberate change. [the bar, TJX 2026-11-23]
-24. The parts float as separate pieces, each its own zone in the `Geom` table; there is no forced backing panel, and a housing only where the real display has one. [the bar, TJX 2026-11-23]
-25. Every physical part reads as a rendered object in the full 4K frame without zooming, and the ComfyUI textures are clearly visible surfaces. [TJX 2026-11-23]
-26. The limiter or shift strobe and the gear change each show their own behaviour in `mockups/<Name>/sequence/`. [the bar]
-27. Colours follow the palette roles (factory, custom, random), the font swaps, and the car's logo or the custom name shows where the design has a logo zone. [the bar]
+22. The rank order holds in all 4 states: gear and shift light, then speed, then the tach, then the secondary visual, then bezel and labels. [fh6-hmi-design-rules 3]
+23. Gear, speed and shift lights read at a glance at 100% in the full-frame render of each view the catalog lists: the cockpit composite for cockpit and raised-HUD rows, the 4K hood render for hood rows. [AGENTS, Agent 1]
+24. The cluster draws round the layout anchor ((1920, 1835) for cockpit, (1920, 1760) for hood, (1920, 1595) for the raised HUD), stays inside that view's envelope, and every view the catalog lists exists. [fh6-hmi-design-rules 1, the bar]
+25. `RESEARCH.md` names the real display this dash recreates, with its sources. For a catalog concept with no single real display, it names the real dash the concept is benchmarked against. Each feature that makes that display recognisable is matched or listed as a deliberate change. [the bar, TJX 2026-11-23]
+26. The parts float as separate pieces, each its own zone in the `Geom` table; there is no forced backing panel, and a housing only where the real display has one. [the bar, TJX 2026-11-23]
+27. Every physical part reads as a rendered object in the full 4K frame without zooming, and each ComfyUI and Blender asset is used as your family's asset rule says: visible surfaces (leather, carbon, metal, enamel, plates) on hardware dashes; for the Liquid Glass family only environment, caustic and normal maps, with no texture inside the glass. [Asset rules, TJX 2026-11-23]
+28. The limiter or shift strobe and the gear change each show their own behaviour in `mockups/<Name>/sequence/`. [the bar]
+29. Colours follow the palette roles, the numerals follow the user's font, and the logo zone shows the car's logo or the custom name: the code takes each from the frame input, with no literal colour, font name or brand name in `draw()`. [the bar]
 
 **D. Workflow and assets**
-28. The order was followed: `RESEARCH.md`, then the Penpot page, then ComfyUI, then Blender; every later Penpot change was followed by a ComfyUI and Blender pass. [AGENTS 14]
-29. The Penpot page `07 · <Name>` has 4 states per view, and its page ID is in the handover. [step 2]
-30. At least one bespoke ComfyUI asset and one bespoke Blender asset are visibly used, each with an `ASSETS.md` row (recipe, seed, licence). [TJX 2026-11-23]
-31. All assets are 4K as "The bar" defines it; the compressed runtime files are in git, and the masters are in the Drive folder under `<snake_name>\` and listed in the handover. [AGENTS 14]
-32. The GPU lock was held for every GPU job and released after it. [AGENTS 15]
-33. TJX's own answer to the direction check (go, or go with changes) is quoted in the handover, and every change TJX listed is done. [AGENTS 12]
-34. The product page `mockups/<Name>/index.html` exists and was generated by `preview-export`. [step 8]
-35. The 60-second live demo ran with no jitter seen, and its CPU and latency lines are in the handover. [AGENTS 7]
-36. The handover holds findings and yes/no answers only: no scores anywhere. [AGENTS 12]
+30. The order was followed: `RESEARCH.md`, then the Penpot page, then ComfyUI, then Blender; every later Penpot change was followed by a ComfyUI and Blender pass. [AGENTS 14]
+31. The Penpot page `07 · <Name>` has 4 states per view, and its page and board IDs are in your `CATALOG.md` row and in the handover. [step 2]
+32. At least one bespoke ComfyUI asset and one bespoke Blender asset are visibly used, each with a row in your `ASSETS.md` (recipe, seed, licence and the master's file name). [Asset rules, TJX 2026-11-23]
+33. All assets are 4K as "The bar" defines it; the compressed runtime files are in git, and the masters are in the Drive folder under `<snake_name>\` and listed in the handover. [AGENTS 14]
+34. The GPU lock was held for every GPU job that section 5 of `SKILLS.md` lists, and released after it; no cloud GPU was used. [AGENTS 15]
+35. TJX's own answer to the direction check (go, or go with changes) is quoted in the handover, and every change TJX listed is done. [AGENTS 12]
+36. The product page `mockups/<Name>/index.html` exists and was generated by `preview-export`. [step 8]
+37. The 60-second live bench ran with `mock-udp` streaming and no error; its frame count and its receive-to-present and CPU-per-frame rows are in the handover. TJX judges smoothness at the sign-off. [AGENTS 7]
+38. The handover holds findings and yes/no answers only: no scores anywhere. [AGENTS 12]
 
 ## Exit criteria
 - The introduction was posted, and the thread is not archived.
 - `RESEARCH.md` is written, with sources.
-- The design board is the Penpot page `07 · <Name>` with 4 states per view (its page ID is in the handover); the HTML page alone is not enough.
-- At least one bespoke ComfyUI asset and one bespoke Blender asset are in `assets/clusters/<snake_name>/`, used in the cluster, with ASSETS rows (recipe plus seed) and the before and after pair in the handover. The 4K masters are in the Drive folder.
+- The design board is the Penpot page `07 · <Name>` with 4 states per view; its page and board IDs are in your `CATALOG.md` row and in the handover. The HTML page alone is not enough.
+- At least one bespoke ComfyUI asset and one bespoke Blender asset are in `assets/clusters/<snake_name>/`, used in the cluster, each with an `ASSETS.md` row (recipe, seed, licence and the master's file name), and the before and after pair is in the handover. The 4K masters are in the Drive folder.
 - The module is complete, with no TODOs, and goldens pass.
 - 4K renders plus the 60-frame sequence and the product page are in `mockups/<Name>/`.
-- Live demo verified, with the GPU time under 0.5 ms recorded.
+- The live bench report is in the handover, and the GPU time under 0.5 ms from `preview-export` is recorded.
 - The direction check got a go from TJX, quoted in the handover, with any listed changes done.
-- Every line of the closing review is yes.
+- Every line of the closing review is yes, or TJX has decided on a line that could not be fixed afterwards.
 - The handover is written, and TJX has signed off in the thread.

@@ -17,7 +17,7 @@ description: Design rules for the FH6 WheelDash instrument clusters, Unified OSD
 4. **Things sit beside what they are about.** The road or map visual goes directly under the speedometer and gear pod.
 5. **Use the lines already there.** Align to the steering-column centreline `X = 1920` and to symmetric vanishing points.
 6. **The same thing looks the same.** Manufacturer colours come from `assets/car_brands/car_brands.json` (AutoBrand), across clusters, shift lights, the ego car and the OSD.
-7. **LG C1 OLED first.** Use true `#000000` for off pixels (VFD cavities, 100% OEM blackout), or ultra-translucent glass at alpha 28..64 with crisp 1 px rims. Never a muddy grey or navy opaque box, and never a full-canvas fill.
+7. **LG C1 OLED first.** Use true `#000000` for off pixels (VFD cavities, 100% OEM blackout), or glass with crisp rims. New glass uses `fh6_kit::OpticalGlass` and `docs/specs/optics.md` (clear, tinted by absorption, no flat alpha); the legacy slab glass of the OSD and `common::glass_plate` keeps alpha 28..64 until they are rebuilt. Never a muddy grey or navy opaque box, and never a full-canvas fill.
 
 ## Glanceability
 Hero gear, speed and shift lights must read in under 150 ms in peripheral vision at 220+ MPH.
@@ -32,27 +32,7 @@ Hero gear, speed and shift lights must read in under 150 ms in peripheral vision
 A domed binnacle shape, not a rectangle. The inner core is 100% `#000000` at alpha 255 and covers about 80% of the area behind the cluster. A feathered skirt fades from alpha 255 to 0, and the steering-column gap is masked out.
 
 ## Cluster briefs
-- `BoschDdu`: carbon weave, CARTEK 16-LED pod
-- `LiquidGlass`: CarPlay Ultra 18–24% sapphire, rim `#FFFFFF→#38BDF8`, light-ribbon tach and meniscus orb
-- `WindshieldHud`: collimated +240 px, live road-map ribbon
-- `TeslaAdas`: 3D road, ego car plus 3–4 traffic cars, FSD target boxes, blind-spot arcs
-- `RetroCyber`: 45° chamfer, `#000` VFD, 2 px scanlines, 24-segment arc (14 cyan, 6 yellow, 4 magenta)
-- `PorscheAnalog`: 992 GT3 dial
-- `DriftGlass`: smoked glass and a G vector
-- `Gt7HoodPro`: frameless swept tach, 4-corner tyre slip
-- `AmgMbuxSuperscreen`: MBUX with a 3D map
-- `LfaV10Nurburgring`: 10K titanium ring
-- `PaganiHorologerie`: Swiss chronograph
-- `F35HelmetHmd`: aviation HUD with articulated horizon
-- `BugattiTourbillon`: coaxial skeleton
-- `EvaBioSync`: NERV hex bars
-- `KoenigseggGyro`: gyro horizon
-- `ValkyrieLmp1`: FIA 15-LED
-- `SynthwaveOutrun`: sun and grid
-- `ChronoMultiverse`: warping ferrofluid
-- `ChronoEventHorizon`, `NeuralCyberSynapse`, `Gt7ModularTripod`, `ArNavWayfinder`, `SolarisWarpCore`, `VisionSpatialGlass`, `GlyphDotMatrix`, `AeroPlasmaBlade`, `CymaticResonanceField`, `KineticLiquidMetal`, `ShibuyaChromaticPrisma`: see `docs/specs/phase-8-materials-and-shaders.md`
-
-The full list of 48 themes is in `crates/fh6-core/src/theme.rs`, and the catalog rows are in `fh6_clusters::catalog`.
+Each cluster's brief is `crates/fh6-clusters/src/clusters/<snake_name>/spec.md` and its row in `program/phases/07-cluster-factory/CATALOG.md` (48 clusters; the theme list is `crates/fh6-core/src/theme.rs`). The brief is a starting point: the real car's display comes first (`RESEARCH.md` in the same folder). Glass, reflective and spectral optics follow `docs/specs/optics.md`.
 
 ## Hybrid rendering
 Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/design_tokens.json`, not hardcoded hex values.

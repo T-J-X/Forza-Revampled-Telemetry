@@ -93,13 +93,13 @@ The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and m
 | 47 | `HarmonographDrive` | new concept | Fluid / Generative | cockpit | high | ☐ |
 | 48 | `FibreOpticCorona` | new concept | Liquid Glass | cockpit | high | ☐ |
 
-The start prompt for row *n* is: *"You are the cluster chat for `<Name>` (catalog row `<n>`). Read `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."*
+The start prompt for row *n* is the first line of [CLUSTER_PROMPT.md](CLUSTER_PROMPT.md).
 
 ## Design boards (Penpot)
 Phase 7 designs in **Penpot** (unlimited plan; see [PENPOT.md](../../../docs/design/PENPOT.md)).
 
 - **One Penpot page per cluster:** `07 · <Theme>` in the Penpot master file, holding a 3840×2160 board with the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). The file ID and page IDs go in `docs/design/PENPOT.md`; each row's page / board ID goes in the "Design board" column below, next to its HTML board.
-- **Not created yet.** The setup chat's session started before the `penpot` MCP was registered, so it has no Penpot tools. There is no Penpot master file yet either. A Penpot session has to create the master file (tokens and themes mirroring `data/design_tokens.json`, which stays the source of truth) and the 48 pages, then fill this column. Until then a cluster chat creates its own page when its session has the `penpot` tools.
+- **The master file exists** (ID `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, built 2026-11-23; see PENPOT.md). Each cluster thread creates its own `07 · <Theme>` page there in step 2 of `CLUSTER_PROMPT.md`, if it is missing, and writes the page and board IDs in this column. Never create another file.
 - **The HTML board stays in use alongside Penpot:** `cargo run --release -p preview-export -- --cluster <Theme>` writes `mockups/<Theme>/index.html` (the 4 states at 4K per view over OLED black, 1:1 crops, the cockpit composite over the reference photo with the scrim, the 60-frame sequence and measured badges). The hosted Penpot MCP cannot import local images, so the renders are reviewed there, not pasted into Penpot.
 - **The brief and targets:** each row's `spec.md`, its family spec and template (`docs/design/families/`) and the family hero frames (`docs/design/heroes/<family>/`).
 

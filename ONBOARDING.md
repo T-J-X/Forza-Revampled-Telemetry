@@ -45,7 +45,7 @@ program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENT
    - **Add no `Co-Authored-By` trailer.**
    - Never put a real name, a `C:\Users\<name>` path or a personal email in a file. Use `%USERPROFILE%`.
 4. **Verify with real output.** Show the real output of `cargo check`, `cargo test` and `cargo clippy` before calling anything done.
-5. **97% rule.** When unsure about an offset, bitmask, coordinate or crate API, look it up (context7 for crates, the golden packets for telemetry). Ask only if it truly blocks.
+5. **97% rule.** When unsure about an offset, bitmask, coordinate or crate API, look it up (context7 for crates, the golden packets for telemetry). The golden packets are synthetic and cover only the fields `mock-udp` writes; any other offset is unverified until it is checked against the real game. Ask only if it truly blocks.
 6. **No placeholders.** Never present a stub, a hardcoded stand-in for live telemetry, or an opaque full-screen fill as finished work.
 7. **No mention of the legacy C# build** in repo files.
 8. **Rust only.** The repo contains no C, C++, C#, Python, JS, TS, PowerShell or shell source files.
@@ -59,8 +59,8 @@ program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENT
 - Windows 11, rustc and cargo 1.100 (MSVC), GPU RTX 3070 Ti Laptop (8 GB).
 - Display: LG C1 55" 4K OLED at 3840x2160.
 - **Blender 5.3:** `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe`. Run headless with `blender.exe -b -P script.py`.
-- **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. Installed models: SDXL base 1.0 and refiner, the depth and canny ControlNets and 4x-UltraSharp (`cargo run --release -p asset-forge -- doctor` lists them). A 4096×4096 texture fits the 8 GB card.
-- **One GPU, one job:** every GPU job (ComfyUI, Blender, `asset-forge`, `preview-export`, the live demo) holds `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` while it runs. The rule is in `SKILLS.md` section 5.
+- **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. asset-forge starts it when it is not running (`run_nvidia_gpu.bat` starts it by hand); the API is on `127.0.0.1:8188`, and every thread shares it, so never stop it. Installed models: SDXL base 1.0 and refiner, the depth and canny ControlNets and 4x-UltraSharp (`cargo run --release -p asset-forge -- doctor` lists them). A 4096×4096 texture fits the 8 GB card.
+- **One GPU, one job:** every GPU job holds `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` while it runs. `SKILLS.md` section 5 lists the GPU jobs (any `cargo test` that renders is one) and gives the command that takes the lock.
 - **4K masters:** the Google Drive desktop app mounts the folder `FH6 WheelDash v2 - 4K Masters` at `G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (check the drive letter). Write masters there, one subfolder per dash plus `shared\`, and it syncs. Git keeps only the compressed runtime assets. The Drive connector can't upload files over about 7 MB.
 - **Penpot** (the design tool since 2026-11-23): Penpot's hosted MCP is registered at user scope as the `penpot` server (`execute_code`, `high_level_overview`, `penpot_api_info`, `export_shape`). It only reaches the design file while that file is **open in a browser tab and connected** (main menu ⋮ → MCP server → Connect; a green ● MCP badge shows in the toolbar), so the tab must stay open. Call `high_level_overview` once before the first `execute_code`. Setup, limits and the master file are in `docs/design/PENPOT.md`. Never ask for the MCP key or write it into a file. HTML boards are the fallback.
 - **context7 MCP** for crate docs (it needs no API key); the **built-in browser** for viewing `mockups/index.html` and HTML boards, served over loopback (a `file://` page loads without its images; see `SKILLS.md` section 2).
@@ -74,6 +74,6 @@ program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENT
 6. **Review with a fixed checklist,** line by line against `AGENTS.md` and `SKILLS.md`, with yes/no answers. No scores and no critic loops. A dash uses the checklist in `CLUSTER_PROMPT.md`.
 7. **Finish:**
    1. Fill in your `HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`.
-   2. Update `docs/PROGRESS.md`.
+   2. Update `docs/PROGRESS.md`. A dash thread only appends decision-log rows there (a new dependency or token); the coordinator keeps the status table.
    3. Commit, and report the finished job to the coordinator. Once its checks pass, the coordinator merges it into `main` and pushes.
    4. Ask TJX for the sign-off. The thread closes only on it, and it is never archived.

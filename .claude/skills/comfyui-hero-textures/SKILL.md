@@ -98,7 +98,10 @@ text in a prompt.
   seed and models → no GPU work.
 - Record seed, prompt name, models and licence (SDXL output: CreativeML Open RAIL++-M, as the
   existing comfy rows do) via `Spec::licence` in `ctx.image`, so
-  `assets/ASSETS.md` stays reproducible.
+  `assets/ASSETS.md` stays reproducible. In a dash recipe, write the dash's own
+  `assets/clusters/<snake_name>/ASSETS.md` instead (recipe, seed, licence and the master's file
+  name), as `recipes/bosch_ddu.rs` does, and never commit the shared ledger files that
+  `asset-forge build` rewrites.
 
 ## 8 GB VRAM safety
 

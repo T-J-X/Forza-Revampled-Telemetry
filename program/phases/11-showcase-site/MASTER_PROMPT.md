@@ -13,8 +13,9 @@ It is built from the same Rust/WASM code, with no framework needed. The page log
 
 ## Steps
 1. **Design** in Penpot on page `11 · Showcase` (`docs/design/PENPOT.md`), reviewed against a fixed yes/no checklist, with TJX's direction check before the build. No scores and no critic loops (AGENTS.md rule 12).
-2. **Build** a `site/` output from `tools/web-preview` and the configurator crates (`cargo run -p site-build`), compressing renders to WebP or AVIF and videos to MP4/WebM.
+2. **Build** a `site/` output from `tools/web-preview` and the configurator crates (`cargo run -p site-build`, a new tool that this phase adds; it does not exist yet), compressing renders to WebP or AVIF and videos to MP4/WebM.
 3. **Deploy with Vercel:**
+   - The `vercel` plugin is not enabled (checked 2026-11-27): ask TJX to enable it before this step.
    - Use the `vercel:vercel-cli` and `vercel:deploy` skills. Check login with `vercel whoami`.
    - **Not logged in:** stop and ask TJX to log in (`vercel login`). Never handle credentials yourself.
    - Deploy a preview, verify it with `vercel:verification` and the built-in browser, then deploy to production.

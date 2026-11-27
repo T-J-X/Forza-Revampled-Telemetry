@@ -7,6 +7,6 @@
 | **Agent 5 · Technical Artist** | Bespoke assets through asset-forge recipes, ComfyUI textures first and the final 3D in Blender, plus fluid flipbooks and flow maps. |
 | **Agent 1 · HMI/UX** | Glanceability under 150 ms, rank order, binnacle fit, hood variant, logo and custom-name zone. |
 | **Agent 4 · QA** | Golden images, perf numbers and the handover evidence. |
-| **Agent 0 · Research Scout** (as needed) | Pulls fresh references when the brief names a real car or film. |
+| **Agent 0 · Research Scout** | Step 1 of every dash: the real display from real sources, written to `RESEARCH.md`. |
 
 TJX has the final say on looks, through the direction check and the sign-off (AGENTS.md rule 12). The family director leads the design, and QA owns the evidence for the closing review.

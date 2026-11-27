@@ -63,7 +63,7 @@ Penpot shape IDs are UUIDs (`shape.id`). Record board IDs, not names, in catalog
 | `08 · Scrim fit` | `6fe75c5e-bb22-8084-8008-fd8a2bcc057a` | 3 scrim-fit boards with the dome core outline (`fh6-core::fit` defaults) and a spec table |
 | `09 · OSD` | `6fe75c5e-bb22-8084-8008-fd8a2bcd3335` | 11 OSD states with a `Grid · OSD.md (4K units)` group (shown on OSD 09, hidden on the rest), the Phase 3 OSD direction, and the grid/type and navigation tables |
 | `10 · Configurator` | `6fe75c5e-bb22-8084-8008-fd8a2bce3f4e` | The Phase 3 configurator direction (1920×1080); Phase 10 builds here |
-| `07 · <Name>` | not created | Phase 7 cluster pages, one per cluster, made by each cluster chat (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`); board IDs go in `CATALOG.md` |
+| `07 · <Name>` | one per cluster; 11 exist as of 2026-11-27 (list them with `penpotUtils.getPages()`) | Phase 7 cluster pages, made by each cluster thread in step 2 of `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`; page and board IDs go in `CATALOG.md` |
 | `11 · Showcase` | not created | Phase 11 |
 
 ### `01 · Tokens` boards

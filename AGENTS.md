@@ -2,7 +2,7 @@
 
 **Project:** a Forza Horizon 6 overlay. It draws ultrawide cockpit/hood instrument clusters (a catalog of 48 dashes, each rebuilt in its own thread), a 0–100% OEM dash blackout scrim, and a gamepad-driven OSD from the game's UDP telemetry. It also patches the game's camera FOV and seat position.
 **Root:** the repository root (locally `%USERPROFILE%\Documents\FOV and Dash digtal clusters\`). This is a Cargo workspace; run every command from the root.
-**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, MSRV 1.87 (`Cargo.toml` and `clippy.toml`).
+**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, declared MSRV 1.87 (`Cargo.toml` and `clippy.toml`; the locked dependencies need about 1.90, so 1.87 is untested).
 **Display target:** 55" LG C1 4K OLED at `3840x2160` and 200% DPI. Off pixels are true black, `#000000`.
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
@@ -17,24 +17,25 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 |---|---|---|
 | `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail (these four modules exist, but nothing calls them yet) | std, serde, arc-swap, thiserror |
 | `crates/fh6-render` | The v1 tiny-skia layer, kept for the v1 clusters in `legacy/` and for `preview-export --legacy`: theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, and CPU twins of the scrim and wash. The live scrim, wash, tokens and text are in `fh6-kit` | fh6-core, tiny-skia |
-| `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), the two Phase 5 samples (`kit/`), and the 29 v1 tiny-skia clusters (`legacy/`) behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
-| `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, the OEM scrim and ambient wash, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
+| `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), the two Phase 5 samples (`kit/`), and the 29 v1 tiny-skia clusters (`legacy/`) behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render, tiny-skia (the v1 path only) |
+| `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, physically based optical glass (`optics`, `OpticalGlass`; `docs/specs/optics.md`), MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, the OEM scrim and ambient wash, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu, bytemuck, png, image, ktx2, ruzstd, resvg, gltf, ttf-parser, rustybuzz, fdsm |
 | `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
-| `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
+| `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD keyboard or remapper has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
 | `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
 | `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
 | `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, OSD wiring (the remapper moved to fh6-osd), status server (no `unsafe`) | all crates |
 | `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause`, `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
-| `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-gpu, fh6-kit, fh6-clusters |
-| `tools/web-preview` | WebGPU page rendering a kit cluster from a synthetic drivetrain (Rust → WASM); `web-preview-build`, `web-preview-serve` | fh6-kit, fh6-clusters |
+| `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-core, fh6-gpu, fh6-kit, fh6-clusters |
+| `tools/web-preview` | WebGPU page rendering a kit cluster from a synthetic drivetrain (Rust → WASM); `web-preview-build`, `web-preview-serve` | fh6-core, fh6-kit, fh6-clusters |
 | `tools/wgc-bench` | Windows.Graphics.Capture cost benchmark for the glass refraction source | fh6-win |
 | `tools/screen-capture` | DPI-aware desktop or region screenshot to PNG | fh6-win |
 | `tools/stand-in-game` | Solid, focusable full-screen window (`fh6-stand-in.exe`) for focus and screenshot checks | fh6-win |
 | `tools/asset-forge` | Builds every asset from Rust: headless Blender (bpy as Rust string constants) and ComfyUI over HTTP, the hero library (`src/hero/`: light rigs, camera matching, PBR materials, parts, SDXL graphs), per-set and per-cluster recipes, and the asset ledger (`assets/ASSETS.md`). Commands: `doctor`, `build --set <name>`, `sheet`, `hero-demo`, `hero-detail`, `hero-versus` | std, serde, image, resvg, ureq |
 
 Rules for the layers:
+- Every crate may also use serde, serde_json, thiserror and tracing; the map does not repeat them.
 - Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
 - Runtime data lives in `data/`: `config.json`, `car_profiles.json`, `fh6_car_ordinals.json`, `forza_ordinals_masterlist.json`, `design_tokens.json`, `CameraPhysics.xml`, `CameraSettings.ini`.
 - Textures live in `assets/`. Reference photos live in `assets/reference/`. Specs live in `docs/specs/`.
@@ -66,7 +67,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 
 ## Global directives (every agent)
 
-1. **The 97% rule.** If you are 97% sure or less about a coordinate, packet offset, controller bitmask, blend mode, asset size, data schema or crate API, stop. Ask TJX one short question, or look it up: context7 for crates, `tests/golden/packets` for telemetry. Never guess.
+1. **The 97% rule.** If you are 97% sure or less about a coordinate, packet offset, controller bitmask, blend mode, asset size, data schema or crate API, stop. Ask TJX one short question, or look it up: context7 for crates, `tests/golden/packets` for telemetry. Those 20 packets are synthetic: they cover only the fields `mock-udp` writes (the race flag, the timestamp, the three RPMs, acceleration, velocity, car ordinal, drivetrain, speed, power, boost, throttle, brake, gear and steer). Any other offset is unverified until it is checked against the real game. Never guess.
 2. **No placeholders, no truncation.** Never write `// ... existing code ...`, `todo!()` stubs presented as done, or hardcoded values that stand in for live telemetry. Make surgical edits; when a file must be rewritten, write all of it.
 3. **Work until it's verified.** Take as many passes as the task needs. A task is done only when the real output of `cargo check`, `cargo test` and `cargo clippy` is shown. Never say "should compile".
 4. **Manual-transmission button lock.** TJX drives a manual gearbox on the controller:
@@ -160,7 +161,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
   - an arched upper crown sheen and floating light-weight typography in the OFL motorsport default, Saira Condensed (Bahnschrift is not OFL, so it is not shipped)
   - a sculpted crystal hero-gear prism
   - a luminous fluid light-ribbon tach with a glowing radial meniscus orb
-- Optical maths is in `docs/specs/phase-8-materials-and-shaders.md` (card P8-1).
+- Optical maths is in `docs/specs/optics.md`, which replaces card P8-1 of `docs/specs/phase-8-materials-and-shaders.md`. Where the bullets above differ from that document or from the clear-glass rule in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`, those two win until the pilot thread rewrites this mandate.
 
 ### 3B: Overhead AR Road-Map & GT7 Telemetry Director (`WindshieldHud`, `Gt7HoodPro`, `BoschDdu`, `PorscheAnalog`)
 - **`WindshieldHud`:**

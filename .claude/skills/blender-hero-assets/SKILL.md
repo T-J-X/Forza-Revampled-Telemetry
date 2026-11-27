@@ -167,3 +167,7 @@ the kit after the needle), as `hero-demo` does.
 - The hardware reads at arm's length on the full-frame shot, with no zoom.
 - Before/after and Penpot-vs-render images in `docs/handover-shots/`.
 - Every output goes through `ctx.image` so `assets/ASSETS.md` records recipe, seed and licence.
+  In a dash recipe, write the dash's own `assets/clusters/<snake_name>/ASSETS.md` instead, as
+  `recipes/bosch_ddu.rs` does. A dash thread never commits the shared ledger files that
+  `asset-forge build` rewrites (`assets/ASSETS.md`, `assets.json`, `forge.lock.json`,
+  `contact-sheet.html`, `assets/_thumbs/`).

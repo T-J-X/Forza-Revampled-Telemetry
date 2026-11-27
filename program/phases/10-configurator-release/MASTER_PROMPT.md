@@ -33,7 +33,7 @@ You lead Phase 10 of FH6 WheelDash v2, running in your own chat and worktree. **
 6. **Release:**
    - A `cargo build --release` profile (LTO, `codegen-units=1`, `strip`, `panic=abort` where safe).
    - A portable zip containing `FH6_WheelDash.exe`, `FH6_SteamLauncher.exe`, `config.json`, `assets/` (if not embedded), `fonts/`, `README.txt` and `LICENSE`.
-   - `docs/RELEASE.md` checklist, made with `engineering:deploy-checklist`.
+   - `docs/RELEASE.md` checklist, made with `engineering:deploy-checklist`. The `engineering` plugin is not enabled (checked 2026-11-27): ask TJX to enable it, or write the checklist from Agent 4's deploy rules in `AGENTS.md`.
    - A GitHub Release (tag `v2.0.0`) with the zip, created through the GitHub web UI or the API using the user's existing git credentials. If neither works, prepare everything and leave the publish step for TJX.
    - **Deploy guard:** never copy into the game folder or the mirrors without TJX's GO.
 

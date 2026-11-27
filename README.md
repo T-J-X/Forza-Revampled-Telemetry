@@ -10,7 +10,7 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 ```
 
-Rust 1.87+ (developed on 1.100, MSVC). Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
+Rust 1.90 or newer (developed on 1.100, MSVC). The manifest declares 1.87, but the locked dependencies need about 1.90. Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
 
 ## Tools
 
@@ -24,12 +24,12 @@ Rust 1.87+ (developed on 1.100, MSVC). Windows is needed for `fh6-win`, `fh6-inp
 ## Layout
 
 ```
-crates/   fh6-core  fh6-render  fh6-clusters  fh6-osd  fh6-input  fh6-win  fh6-app
-tools/    preview-export  mock-udp  parity-dump  bench-render
-tests/golden/packets/   324-byte telemetry captures + expected JSON
+crates/   fh6-core  fh6-gpu  fh6-kit  fh6-render  fh6-clusters  fh6-osd  fh6-input  fh6-win  fh6-app
+tools/    preview-export  asset-forge  mock-udp  parity-dump  bench-render  web-preview  wgc-bench  screen-capture  stand-in-game
+tests/golden/packets/   324-byte golden telemetry packets (synthetic) + expected JSON
 assets/   textures, car brand colours, reference photos
 data/     config.json, car profiles, ordinals, design tokens, camera files
-docs/     PROGRESS.md (status and backlog), specs/
+docs/     PROGRESS.md (status and backlog), specs/, design/, kit/, adr/, perf/
 ```
 
 ## Working on it

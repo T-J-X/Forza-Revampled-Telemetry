@@ -25,3 +25,15 @@
 
 ## What the next phases must know
 <APIs, file locations, gotchas, Penpot board IDs>
+
+## Dash threads
+A dash handover lives in the dash's own module directory. Title it `# HANDOVER: Dash · <Name> (catalog row <n>)`, copy the exit criteria from `program/phases/07-cluster-factory/CLUSTER_PROMPT.md` (not from a MASTER_PROMPT), and add these sections. Findings and yes/no answers only: no scores.
+
+- `## Closing review`: every line of the checklist, each yes or no with its evidence.
+- `## TJX's direction check`: TJX's answer quoted, each change TJX listed and where it was done.
+- `## Before and after pair`: the full-frame render kept before the work started, and the final one.
+- `## Assets and masters`: the runtime files with recipe, seed and licence; the master file names in the Drive folder.
+- `## Changes from the real display and from the brief`.
+- `## Shared places touched` and `## Requests for shared code`.
+- `## What sibling dashes must know` (in place of "What the next phases must know").
+- `## TJX's sign-off`: filled in by a later commit, when TJX gives it.
