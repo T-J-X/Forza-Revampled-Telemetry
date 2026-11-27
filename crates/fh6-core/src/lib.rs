@@ -9,7 +9,6 @@ pub mod fit;
 pub mod oled_care;
 pub mod profiles;
 mod serde_str;
-pub mod shift_guard;
 pub mod telemetry;
 pub mod theme;
 pub mod trail;
