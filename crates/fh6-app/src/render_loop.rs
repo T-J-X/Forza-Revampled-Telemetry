@@ -886,6 +886,10 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         on_bench_done,
         osd: osd_setup,
     } = setup;
+    // Frame work runs from wake to `present` without being parked behind the game's threads
+    // (known defect 10: the p99 of "CPU per frame" is wall-clock time on this thread).
+    let priority = fh6_win::system::raise_frame_thread();
+    tracing::info!(class = ?priority.class(), "render thread scheduling class");
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
         .unwrap_or(FALLBACK_REFRESH);

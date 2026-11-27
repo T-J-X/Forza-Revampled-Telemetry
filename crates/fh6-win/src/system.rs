@@ -1,5 +1,5 @@
 //! Small system services: the single-instance mutex, process enumeration, opening files or
-//! URLs with the shell, and DWM composition timing.
+//! URLs with the shell, DWM composition timing and the render thread's scheduling class.
 use crate::WinError;
 use std::time::Duration;
 use windows::core::{w, HSTRING, PCWSTR};
@@ -9,7 +9,10 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
-use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::System::Threading::{
+    AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateMutexW, GetCurrentThread, SetThreadPriority,
+    THREAD_PRIORITY_ABOVE_NORMAL,
+};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -160,6 +163,80 @@ pub fn composition_timing() -> Option<CompositionTiming> {
     })
 }
 
+/// How the calling thread was raised by [`raise_frame_thread`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameThreadClass {
+    /// Registered with the Multimedia Class Scheduler Service as a "Games" task.
+    Mmcss,
+    /// MMCSS refused (service off, or no task slot); the thread runs at above-normal priority.
+    AboveNormal,
+    /// Neither worked; the thread keeps its normal priority.
+    Normal,
+}
+
+/// Keeps the calling thread in its raised scheduling class; dropping it reverts the class.
+/// It belongs to the thread that made it (it is neither `Send` nor `Sync`).
+#[derive(Debug)]
+pub struct FrameThreadGuard {
+    mmcss: Option<HANDLE>,
+    class: FrameThreadClass,
+    /// The MMCSS handle is per thread: the guard must be dropped where it was made.
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl FrameThreadGuard {
+    /// The class the thread runs in.
+    #[must_use]
+    pub fn class(&self) -> FrameThreadClass {
+        self.class
+    }
+}
+
+impl Drop for FrameThreadGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.mmcss.take() {
+            // SAFETY: `handle` came from `AvSetMmThreadCharacteristicsW` on this thread (the guard
+            // is not `Send`), and it is reverted once (`take`).
+            if let Err(err) = unsafe { AvRevertMmThreadCharacteristics(handle) } {
+                tracing::debug!(error = %err.message(), "MMCSS revert failed");
+            }
+        }
+    }
+}
+
+/// Raises the calling thread for frame work that must not be preempted mid-frame: an MMCSS
+/// "Games" task (the class Windows gives game render threads), or above-normal priority when MMCSS
+/// is unavailable. The frame thread works for well under 1 ms per refresh and then waits, so it
+/// takes no time from the game; it only stops a busy game's threads from parking it between the
+/// start of a frame and its `present`.
+#[must_use = "dropping the guard reverts the thread's class at once"]
+pub fn raise_frame_thread() -> FrameThreadGuard {
+    let mut index = 0u32;
+    // SAFETY: the task name is a static wide string; `index` is a valid out-param (0 asks for a new
+    // task). The handle is reverted by the guard on this thread.
+    match unsafe { AvSetMmThreadCharacteristicsW(w!("Games"), &mut index) } {
+        Ok(handle) if !handle.is_invalid() => {
+            return FrameThreadGuard {
+                mmcss: Some(handle),
+                class: FrameThreadClass::Mmcss,
+                _not_send: std::marker::PhantomData,
+            }
+        }
+        Ok(_) => tracing::debug!("MMCSS returned no handle"),
+        Err(err) => tracing::debug!(error = %err.message(), "MMCSS refused the frame thread"),
+    }
+    // SAFETY: `GetCurrentThread` is a pseudo-handle that is always valid for the calling thread.
+    let class = match unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL) } {
+        Ok(()) => FrameThreadClass::AboveNormal,
+        Err(_) => FrameThreadClass::Normal,
+    };
+    FrameThreadGuard {
+        mmcss: None,
+        class,
+        _not_send: std::marker::PhantomData,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +248,20 @@ mod tests {
         assert!(names.iter().all(|n| *n == n.to_ascii_lowercase()));
         assert!(is_process_running("explorer.exe") || is_process_running("svchost.exe"));
         assert!(!is_process_running("definitely-not-a-real-process-fh6.exe"));
+    }
+
+    #[test]
+    fn the_frame_thread_is_raised_and_reverted_on_its_own_thread() {
+        let class = std::thread::spawn(|| {
+            let guard = raise_frame_thread();
+            let class = guard.class();
+            drop(guard);
+            class
+        })
+        .join()
+        .expect("the test thread ran");
+        // MMCSS runs on every desktop Windows; a stripped-down one still gets the priority bump.
+        assert_ne!(class, FrameThreadClass::Normal);
     }
 
     #[test]
