@@ -1,45 +1,11 @@
 //! Dispatch logic for camera view routing and theme resolution.
 use fh6_core::{AppConfig, ClusterTheme};
 
-/// Short and legacy names accepted besides each theme's own name.
-const ALIASES: &[(&str, ClusterTheme)] = &[
-    ("bosch", ClusterTheme::BoschDdu),
-    ("drift", ClusterTheme::DriftGlass),
-    ("porsche", ClusterTheme::PorscheAnalog),
-    ("analog", ClusterTheme::PorscheAnalog),
-    ("windshield", ClusterTheme::WindshieldHud),
-    ("tesla", ClusterTheme::TeslaAdas),
-    ("retro", ClusterTheme::RetroCyber),
-    ("gt7hood", ClusterTheme::Gt7HoodPro),
-    ("hood", ClusterTheme::Gt7HoodPro),
-    ("amg", ClusterTheme::AmgMbuxSuperscreen),
-    ("mbux", ClusterTheme::AmgMbuxSuperscreen),
-    ("lfa", ClusterTheme::LfaV10Nurburgring),
-    ("pagani horologerie", ClusterTheme::PaganiHorologerie),
-    ("pagani", ClusterTheme::PaganiHorologerie),
-    ("f35helmet hmd", ClusterTheme::F35HelmetHmd),
-    ("f35", ClusterTheme::F35HelmetHmd),
-    ("helmet", ClusterTheme::F35HelmetHmd),
-    ("bugatti", ClusterTheme::BugattiTourbillon),
-    ("eva", ClusterTheme::EvaBioSync),
-    ("koenigsegg", ClusterTheme::KoenigseggGyro),
-    ("valkyrie", ClusterTheme::ValkyrieLmp1),
-    ("synthwave", ClusterTheme::SynthwaveOutrun),
-    ("outrun", ClusterTheme::SynthwaveOutrun),
-    ("chrono", ClusterTheme::ChronoMultiverse),
-];
-
 /// The theme a config style name selects: any theme's own name (case-insensitive) or a short
-/// alias; unknown names select `BoschDdu`. Allocation-free.
+/// alias, as [`ClusterTheme`]'s `FromStr` parses it; unknown names select `BoschDdu`.
+/// Allocation-free.
 pub fn style_to_theme(s: &str) -> ClusterTheme {
-    let name = s.trim();
-    if let Some(t) = ClusterTheme::all().iter().find(|t| t.name().eq_ignore_ascii_case(name)) {
-        return *t;
-    }
-    ALIASES
-        .iter()
-        .find(|(alias, _)| alias.eq_ignore_ascii_case(name))
-        .map_or(ClusterTheme::BoschDdu, |(_, t)| *t)
+    s.parse().unwrap_or(ClusterTheme::BoschDdu)
 }
 
 pub struct DispatchContext {

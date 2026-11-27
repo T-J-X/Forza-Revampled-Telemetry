@@ -24,7 +24,7 @@ pub use config_watch::{ConfigHandle, ConfigWatcher};
 pub use fit::{FitView, ScrimFit, ViewPlacement};
 pub use profiles::{CarProfile, CarProfilesFile, ProfilesHandle};
 pub use telemetry::FH6TelemetryData;
-pub use theme::ClusterTheme;
+pub use theme::{ClusterTheme, ParseClusterThemeError};
 pub use trail::WorldMapTrailBuffer;
 pub use udp::{TelemetryEngine, TelemetryFrame, TelemetryReader};
 pub use visibility::{HideReason, Visibility, VisibilityController, VisibilityInputs};
