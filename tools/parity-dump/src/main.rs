@@ -5,35 +5,43 @@
 //!
 //! Usage: `parity-dump [--write-missing] <packet.bin | directory>`
 use fh6_core::telemetry::decode;
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-fn telemetry_to_json(data: &fh6_core::telemetry::FH6TelemetryData) -> serde_json::Value {
-    serde_json::json!({
-        "IsRaceOn": data.is_race_on,
-        "TimestampMS": data.timestamp_ms,
-        "EngineMaxRpm": data.engine_max_rpm,
-        "EngineIdleRpm": data.engine_idle_rpm,
-        "CurrentEngineRpm": data.current_engine_rpm,
-        "Acceleration": [data.acceleration_x, data.acceleration_y, data.acceleration_z],
-        "Velocity": [data.velocity_x, data.velocity_y, data.velocity_z],
-        "CarOrdinal": data.car_ordinal,
-        "DrivetrainType": data.drivetrain_type,
-        "SpeedMS": data.speed_ms,
-        "SpeedMPH": data.speed_mph(),
-        "SpeedKMH": data.speed_kmh(),
-        "PowerWatts": data.power_watts,
-        "PowerHP": data.power_watts / 745.7,
-        "BoostPSI": data.boost_psi,
-        "Accel": data.accel,
-        "Brake": data.brake,
-        "Clutch": data.clutch,
-        "Handbrake": data.hand_brake,
-        "Gear": data.gear,
-        "Steer": data.steer,
-    })
+/// The golden's fields, keyed in sorted order. A `BTreeMap` keeps that order whatever
+/// `serde_json` features the build unifies (`fh6-win` turns on `preserve_order`, which would
+/// otherwise write the keys in insertion order and mismatch every golden in a workspace build).
+fn telemetry_to_json(data: &fh6_core::telemetry::FH6TelemetryData) -> BTreeMap<&'static str, Value> {
+    BTreeMap::from([
+        ("IsRaceOn", json!(data.is_race_on)),
+        ("TimestampMS", json!(data.timestamp_ms)),
+        ("EngineMaxRpm", json!(data.engine_max_rpm)),
+        ("EngineIdleRpm", json!(data.engine_idle_rpm)),
+        ("CurrentEngineRpm", json!(data.current_engine_rpm)),
+        (
+            "Acceleration",
+            json!([data.acceleration_x, data.acceleration_y, data.acceleration_z]),
+        ),
+        ("Velocity", json!([data.velocity_x, data.velocity_y, data.velocity_z])),
+        ("CarOrdinal", json!(data.car_ordinal)),
+        ("DrivetrainType", json!(data.drivetrain_type)),
+        ("SpeedMS", json!(data.speed_ms)),
+        ("SpeedMPH", json!(data.speed_mph())),
+        ("SpeedKMH", json!(data.speed_kmh())),
+        ("PowerWatts", json!(data.power_watts)),
+        ("PowerHP", json!(data.power_watts / 745.7)),
+        ("BoostPSI", json!(data.boost_psi)),
+        ("Accel", json!(data.accel)),
+        ("Brake", json!(data.brake)),
+        ("Clutch", json!(data.clutch)),
+        ("Handbrake", json!(data.hand_brake)),
+        ("Gear", json!(data.gear)),
+        ("Steer", json!(data.steer)),
+    ])
 }
 
 /// Git may check the goldens out with CRLF on Windows; compare line content only.
@@ -192,6 +200,21 @@ mod tests {
         let path = dir.join(format!("{stem}.bin"));
         fs::write(&path, bytes).unwrap();
         path
+    }
+
+    /// The output's keys are sorted, as in the goldens, with or without `preserve_order`.
+    #[test]
+    fn keys_are_written_sorted() {
+        let data = decode(&[0u8; PACKET_LEN]).unwrap();
+        let pretty = serde_json::to_string_pretty(&telemetry_to_json(&data)).unwrap();
+        let keys: Vec<&str> = pretty
+            .lines()
+            .filter_map(|l| l.strip_prefix("  \"").and_then(|l| l.split('"').next()))
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        assert_eq!(keys.len(), 21);
+        assert_eq!(keys, sorted);
     }
 
     #[test]

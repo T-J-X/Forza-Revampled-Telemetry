@@ -99,14 +99,6 @@ impl FH6TelemetryData {
     pub fn rear_tire_slip_angle_rad(&self) -> f32 {
         (self.tire_slip_angle_rl + self.tire_slip_angle_rr) * 0.5
     }
-    pub fn normalized_rpm(&self) -> f32 {
-        if self.engine_max_rpm <= 500.0 {
-            (self.power_watts / 1_400_000.0).clamp(0.0, 1.0)
-        } else {
-            let max = self.engine_max_rpm.max(1.0);
-            (self.current_engine_rpm / max).clamp(0.0, 1.2)
-        }
-    }
     pub fn gear_string(&self) -> String {
         if self.gear == 0 {
             "R".to_string()
