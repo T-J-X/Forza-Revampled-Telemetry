@@ -35,7 +35,7 @@ The criteria are the goals the coordinator set when it started the thread, plus 
 - Changed: `main.rs` (the `--lane` and `--masters` flags, the `cloud` and `selftest` commands), `paths.rs` (the tools folder, the lane, the masters folder), `comfy.rs` (connects to the lane's ComfyUI; copies master-sized images), `blender.rs` (runs on the lane; copies the output folder).
 - Docs: `docs/cloud-gpu.md` (new), `SKILLS.md` section 5 and the lines that point at it (see "Shared places touched"), this tool's `README.md`, and `docs/PROGRESS.md`.
 - No dependency was added: `tools/asset-forge/Cargo.toml` and `Cargo.lock` are unchanged.
-- On Runpod (TJX's account): the network volume `asset-forge` (30 GB, EU-RO-1) and the template `asset-forge-gpu`. No pod is left running.
+- On Runpod (TJX's account): the network volume `asset-forge` (EU-RO-1; created at 30 GB, grown to 100 GB at TJX's request) and the template `asset-forge-gpu`. No pod is left running.
 - On this PC, outside the repo: `%USERPROFILE%\Documents\Dash_Tools\cloud\` (the key, the SSH key pair, `lane.json`, `spend.jsonl`, `run.lock`).
 
 ## Verification output
@@ -170,7 +170,7 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 ## Known issues / debt
 
 1. **A pod start takes about 3 minutes,** most of it ComfyUI importing its Python packages from the network volume. Keeping the environment as one archive and unpacking it to the pod's own disk at start would likely cut that and free about 5 GB of the volume. It needs a paid test run of about $0.30, so it is left for TJX to ask for.
-2. **The volume is 26.7 GB full of 30.** It now grows only with uploaded inputs, which are cleared after 14 days. `cloud doctor` warns under 3 GB free. A bigger volume costs $0.07 a month for each GB (question 9 in `docs/PROGRESS.md`).
+2. ~~**The volume is 26.7 GB full of 30.**~~ TJX answered on 2026-11-27 ("100"): the volume was grown to 100 GB through Runpod's API (`PATCH /v2/network-volumes/{id}` with the new size) and now costs $7 a month. Runpod cannot shrink it again. `cloud doctor` still warns under 3 GB free.
 3. **The API key may expire on 2026-12-27.** Runpod's key dialog showed that date, and its API does not report it. A `status 401` then says how to save a new key.
 4. **The budget is counted from this PC's spend log** (rate times seconds). Runpod's own billing history runs behind, so it only raises the figure later. A pod started from Runpod's console is not in the log until Runpod bills it.
 5. **The two fallback GPU types have never been used.** They are Blackwell cards; the CUDA 13.0 torch build should run on them, but no pod has proved it.

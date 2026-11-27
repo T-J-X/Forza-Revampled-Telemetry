@@ -231,7 +231,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 6. (Phase 8) Which INI key sets the FOV of the wheel-less cockpit view [3] in FH6, `CockpitCam\FOV` or `Driver\FOV`? The patcher writes `CockpitCam\FOV` ← `WheelLessCockpitFOV` and `Driver\FOV` ← `StandardCockpitFOV`.
 7. (Phase 8) With LB held, does RB still change the in-game camera? The LB + RB resync assumes it does (the ring advances on that RB, then the hold sets `ResyncCameraIndex`).
 8. (Phase 8) The scrim at the default width overlaps the A-pillar vent and the left edge of the centre screen in the stock-seat reference. Tune per car after real low-seat captures (SCRIM_FIT §5), or narrow the default?
-9. (Cloud GPU lane) The 30 GB network volume is 26.7 GB full. Job folders no longer use it, so it grows only with uploaded inputs, which are cleared after 14 days. Leave it at 30 GB ($2.10 a month), or grow it at $0.07 a month for each GB? `asset-forge cloud doctor` warns under 3 GB free.
+9. ~~(Cloud GPU lane) The 30 GB network volume is 26.7 GB full. Job folders no longer use it, so it grows only with uploaded inputs, which are cleared after 14 days. Leave it at 30 GB ($2.10 a month), or grow it at $0.07 a month for each GB? `asset-forge cloud doctor` warns under 3 GB free.~~ Answered 2026-11-27: TJX chose 100 GB, and the volume was grown to 100 GB that day ($7 a month). Runpod cannot shrink a volume.
 
 ## Decision log (append only)
 | Date | Decision | Why |

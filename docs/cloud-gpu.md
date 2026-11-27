@@ -23,7 +23,7 @@ cargo run --release -p asset-forge -- cloud down      # when your batch is done;
 | RTX 4090 pod (first choice) | $0.89 an hour, billed per second | only while a pod is up |
 | RTX PRO 4500 Blackwell, 32 GB (fallback) | $0.72 an hour | when no 4090 is free |
 | RTX PRO 4000 Blackwell, 24 GB (fallback) | $0.57 an hour | when neither is free |
-| 30 GB network volume | about $2.10 a month | always, until it is deleted, also while the lane is closed |
+| 100 GB network volume | $7 a month | always, until it is deleted, also while the lane is closed |
 
 The 4090's price is what the three test pods were billed. The other prices are Runpod's secure-cloud list prices on 2026-11-27, and neither fallback card has been used yet.
 
@@ -38,7 +38,7 @@ Five things keep the cost down, and none of them depends on a thread remembering
    - At $50 no pod starts. A pod that is still up then is deleted by the next cloud job, `cloud up` or `cloud down`.
    - A pod that starts close to $50 gets only the lifetime the rest of the budget pays for at the price cap. Its own watchdog enforces that, from a deadline set when the pod is created. So pod time cannot take the total past $50 even if this PC is off. When the rest pays for less than 10 minutes, no pod starts.
    - What counts: the spend log plus the pod that is up now, or Runpod's own billing for pods when that is higher, plus the volume storage Runpod has billed.
-   - The volume keeps costing about $2.10 a month after the lane closes, until it is deleted. The budget counts that too, as Runpod bills it.
+   - The volume keeps costing $7 a month after the lane closes, until it is deleted. The budget counts that too, as Runpod bills it.
    - If a line of the spend log is damaged, the budget cannot be counted, and no pod starts until the line is fixed or removed.
    - Only TJX raises the budget. A thread never edits `budget_usd`.
 2. **No pod over the price cap.** `max_usd_per_hour` in `lane.json` is $0.90. `cloud setup` lists only GPU types at or under it, and a pod that comes back dearer is deleted at once and booked. A pod whose answer gives no price is booked at the cap.
@@ -144,6 +144,8 @@ Two things about the numbers in the spend log:
 - **Names sent to Runpod are neutral** (`asset-forge`, `asset-forge-gpu`), and so is the client name in requests.
 - **The budget counts everything the lane has cost**, the set-up included, not only the dash threads' jobs.
 
+TJX's own choice: the volume was created at 30 GB and grown to 100 GB on 2026-11-27 at TJX's request ("100"), once the software filled 26.7 GB of it.
+
 ## When something goes wrong
 
 | What you see | What it means | What to do |
@@ -158,7 +160,7 @@ Two things about the numbers in the spend log:
 | `... has ... line(s) that are not a session` | The spend log is damaged, so the budget cannot be counted. | Fix or remove the named lines in `spend.jsonl`. |
 | `cloud doctor` fails on `pins` | The volume was installed by an older asset-forge. | Run any cloud job: it brings the volume up to date first. |
 | `cloud doctor` fails on `python packages` | A package on the pod is not at its pinned version, although the installer's stamp is current: something changed the environment by hand. | Tell TJX. The line names the packages. The installer brings them back the next time any pin in `cloud/pod.rs` changes. |
-| `cloud doctor` says the disk is low | Under 3 GB of the volume is free. | Tell TJX: a bigger volume costs $0.07 a month for each GB. |
+| `cloud doctor` says the disk is low | Under 3 GB of the volume is free. | Tell TJX: a bigger volume costs $0.07 a month for each GB, and Runpod can grow a volume but never shrink it. |
 | `status 401` from Runpod | The API key is wrong or has expired. Runpod's key dialog defaults to a 30-day expiry, so the key made on 2026-11-27 may stop on 2026-12-27. | TJX makes a new key on Runpod's Credentials page; save it with `asset-forge cloud key`, which asks for it. |
 | A pod is up and nobody is using it | A run was interrupted. | `asset-forge cloud down`. Without it, the pod deletes itself after 10 idle minutes. |
 
