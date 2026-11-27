@@ -41,7 +41,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 ## State of the code (after the host CPU phase, 2026-11-27)
 | Check | Result |
 |---|---|
-| `cargo test --workspace --no-fail-fast` | ✅ exit 0 (`golden_images` 49/49) |
+| `cargo test --workspace --no-fail-fast` | ✅ 895 passed, 0 failed (1 ignored; `golden_images` 49/49) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
 | `cargo fmt --all -- --check` | ✅ clean |
 | `parity-dump tests/golden/packets` | ✅ 20/20 OK |

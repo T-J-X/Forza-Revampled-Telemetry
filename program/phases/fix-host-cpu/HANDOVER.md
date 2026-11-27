@@ -25,8 +25,8 @@ On the test PC (RTX 3070 Ti Laptop, DX12), commit 8a999d4:
 ```
 cargo test -p fh6-clusters --test golden_images   49 passed; 0 failed
 cargo test -p fh6-kit                              121 + 2 + 8 + 1 + 6 + 1 passed, 1 ignored
-cargo test --workspace --no-fail-fast              exit 0, every test binary ok
-cargo clippy --workspace --all-targets -- -D warnings   clean (G, ca79536; 8a999d4 changes only the kit's bloom, clippy-clean)
+cargo test --workspace --no-fail-fast              895 passed, 0 failed, 1 ignored (after the merge with main, 0ede846)
+cargo clippy --workspace --all-targets -- -D warnings   clean (0ede846)
 cargo fmt --all -- --check                         clean
 parity-dump tests/golden/packets                   20/20 OK
 cargo build -p fh6-kit --target wasm32-unknown-unknown   ok
