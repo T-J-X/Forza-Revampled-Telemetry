@@ -91,7 +91,7 @@ pub struct FrameStats {
     pub receive_to_present: SampleRing,
     /// Packet receive to the first vblank after `present` (estimated on-screen time).
     pub receive_to_vblank: SampleRing,
-    /// CPU time per presented frame (build + draw + upload/record/submit + present).
+    /// CPU time per presented frame: the whole iteration from the wake, less the latency wait.
     pub cpu_frame: SampleRing,
     /// The same, for frames the OLED idle dim turned down (a parked car).
     pub cpu_frame_dimmed: SampleRing,
@@ -106,8 +106,12 @@ pub struct FrameStats {
     pub encode_submit: SampleRing,
     /// Of `encode_submit`: the swapchain view, the encoder, the kit's render and `finish`.
     pub record: SampleRing,
-    /// Of `record`: the kit's own render (pack, the upload's `write_buffer`, pass recording).
+    /// Of `record`: the kit's own render (pack, the upload copy, pass recording).
     pub kit: SampleRing,
+    /// The loop's checks between the wake and the build.
+    pub before_build: SampleRing,
+    /// After `present` returned: the kit's staging hand-back and the failure checks.
+    pub after_present: SampleRing,
     /// Of `encode_submit`: `Queue::submit`.
     pub submit: SampleRing,
     /// The `present` call.
@@ -135,6 +139,8 @@ impl FrameStats {
         self.encode_submit.clear();
         self.record.clear();
         self.kit.clear();
+        self.before_build.clear();
+        self.after_present.clear();
         self.submit.clear();
         self.present.clear();
         self.passes = 0;

@@ -236,14 +236,16 @@ fn warm_frames_do_not_grow_the_arena() {
 
 #[test]
 fn recycled_upload_staging_draws_every_frame_exactly_like_write_buffer() {
-    // Kit `a` hands its staging slots back after every submit (the live app's path); kit `b`
-    // never does, so from its fourth frame on it uploads with `Queue::write_buffer`. Each frame
-    // moves the shapes, so a slot that carried stale bytes would show as a difference.
+    // Kit `a` hands its staging slots back after each submit (the live app's path), except on
+    // frames 5 to 8: by frame 8 all three slots are out, so frames 8 and 9 fall back to
+    // `Queue::write_buffer`, and frame 10 is a slot frame right after fallback frames. Kit `b`
+    // never hands back, so from its fourth frame on it always falls back. Each frame moves the
+    // shapes, so a slot that carried stale bytes would show as a difference.
     let (ctx, mut a) = setup();
     let mut b = Kit::new(&ctx.device, &ctx.queue, Tokens::default()).expect("kit");
     let font = a.fonts().role(fh6_kit::FontRole::Text);
     let mut previous: Option<RgbaImage> = None;
-    for frame in 0..12u32 {
+    for frame in 0..16u32 {
         let draw = |p: &mut Painter<'_>| {
             let shift = frame as f32 * 37.0;
             for i in 0..40 {
@@ -259,7 +261,9 @@ fn recycled_upload_staging_draws_every_frame_exactly_like_write_buffer() {
             );
         };
         let got = render(&mut a, &ctx, draw);
-        a.frame_submitted();
+        if !(5..=8).contains(&frame) {
+            a.frame_submitted();
+        }
         let want = render(&mut b, &ctx, draw);
         assert!(got == want, "frame {frame}: the recycled upload drew something else");
         if let Some(prev) = &previous {

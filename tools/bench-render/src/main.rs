@@ -353,6 +353,8 @@ fn main() -> Result<()> {
             let t2 = Instant::now();
             ctx.queue.submit(Some(encoder.finish()));
             let t3 = Instant::now();
+            // As the live loop does: the kit's upload staging slot goes back after the submit.
+            kit.frame_submitted();
             let g = kit.gpu_time(&ctx.device);
             if f >= WARMUP {
                 rec.push((t_recorded - t0).as_secs_f64() * 1e3);

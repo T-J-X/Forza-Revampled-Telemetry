@@ -181,7 +181,8 @@ pub struct RenderSummary {
     pub receive_to_present: Percentiles,
     /// Packet receive to the first vblank after `present`.
     pub receive_to_vblank: Percentiles,
-    /// CPU time per presented frame (build + draw + upload/record/submit + present).
+    /// CPU time per presented frame: the whole iteration from the wake to the end of the frame,
+    /// less the latency wait.
     pub cpu_frame: Percentiles,
     /// CPU time per presented frame that the OLED idle dim turned down.
     pub cpu_frame_dimmed: Percentiles,
@@ -195,8 +196,13 @@ pub struct RenderSummary {
     pub encode_submit: Percentiles,
     /// Of `encode_submit`: the swapchain view, the encoder, the kit's render and `finish`.
     pub record: Percentiles,
-    /// Of `record`: the kit's own render (pack, the upload's `write_buffer`, pass recording).
+    /// Of `record`: the kit's own render (pack, the upload copy, pass recording).
     pub kit: Percentiles,
+    /// The loop's checks between the wake and the build (config, telemetry, OSD edges,
+    /// visibility, OLED care).
+    pub before_build: Percentiles,
+    /// After `present` returned: the kit's staging hand-back and the failure checks.
+    pub after_present: Percentiles,
     /// Of `encode_submit`: `Queue::submit`.
     pub submit: Percentiles,
     /// The `present` call.
@@ -1231,9 +1237,18 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             lp.render(fade, &layout, true, stats_on, scrim, osd_draw.as_ref())
         {
             lp.frames += 1;
-            // The whole frame on this thread: build, draw (known defect 17), the kit's render
-            // and submit, and present. Only the latency wait is left out (it is not CPU work).
-            let cpu = built + drawn + timings.cpu();
+            // The whole iteration on this thread, from the wake to the end of `render` (the
+            // checks before the build, the build, the draw (known defect 17), the kit's render,
+            // submit, present and the staging hand-back). Only the latency wait is left out (it
+            // is not CPU work).
+            let frame_end = Instant::now();
+            let cpu = frame_end
+                .saturating_duration_since(wake)
+                .saturating_sub(timings.acquire_wait);
+            lp.stats
+                .before_build
+                .record(build_start.saturating_duration_since(wake));
+            lp.stats.after_present.record(frame_end.saturating_duration_since(at));
             lp.stats.cpu_frame.record(cpu);
             if is_dimmed(care.dim) {
                 lp.stats.cpu_frame_dimmed.record(cpu);
@@ -1288,6 +1303,8 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         encode_submit: lp.stats.encode_submit.percentiles(&mut lp.scratch),
         record: lp.stats.record.percentiles(&mut lp.scratch),
         kit: lp.stats.kit.percentiles(&mut lp.scratch),
+        before_build: lp.stats.before_build.percentiles(&mut lp.scratch),
+        after_present: lp.stats.after_present.percentiles(&mut lp.scratch),
         submit: lp.stats.submit.percentiles(&mut lp.scratch),
         present: lp.stats.present.percentiles(&mut lp.scratch),
         passes: lp.stats.passes,

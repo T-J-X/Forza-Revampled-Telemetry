@@ -16,7 +16,7 @@ use windows::Win32::System::Threading::{
     AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateMutexW, GetCurrentThread,
     SetThreadInformation, SetThreadPriority, SetThreadSelectedCpuSets, ThreadPowerThrottling,
     THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
-    THREAD_PRIORITY_ABOVE_NORMAL,
+    THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
@@ -179,7 +179,8 @@ pub enum FrameThreadClass {
     Normal,
 }
 
-/// Keeps the calling thread in its raised scheduling class; dropping it reverts the class.
+/// Keeps the calling thread in its raised scheduling class; dropping it puts the thread back
+/// (MMCSS or the priority, the throttling policy and the CPU sets).
 /// It belongs to the thread that made it (it is neither `Send` nor `Sync`).
 #[derive(Debug)]
 pub struct FrameThreadGuard {
@@ -216,6 +217,15 @@ impl FrameThreadGuard {
 
 impl Drop for FrameThreadGuard {
     fn drop(&mut self) {
+        if self.class == FrameThreadClass::AboveNormal {
+            // SAFETY: the pseudo-handle names this thread (the guard is not `Send`).
+            if unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL) }.is_err() {
+                tracing::debug!("restoring the frame thread's priority failed");
+            }
+        }
+        if self.full_speed {
+            set_execution_speed_policy(false);
+        }
         if self.performance_cores > 0 {
             // SAFETY: the pseudo-handle names this thread (the guard is not `Send`); an empty list
             // clears its CPU-set selection.
@@ -241,8 +251,9 @@ impl Drop for FrameThreadGuard {
 /// - on a hybrid CPU, onto the performance cores only, where the same frame takes about half the
 ///   time it takes on an efficiency core.
 ///
-/// The frame thread works for well under 1 ms per refresh and then waits, so it takes no time
-/// from the game; it only stops the frame from being parked or slowed between its wake and its
+/// MMCSS "Games" runs the thread in a real-time priority band, so for its well under 1 ms per
+/// refresh it can take a performance core from the game's own threads; the rest of each refresh
+/// it waits. What it buys is a frame that is not parked or slowed between its wake and its
 /// `present`.
 #[must_use = "dropping the guard reverts the thread's class at once"]
 pub fn raise_frame_thread() -> FrameThreadGuard {
@@ -362,9 +373,19 @@ fn keep_on_performance_cores() -> usize {
 /// Turns execution-speed throttling off for the calling thread (control the policy, state off:
 /// always full speed). False when Windows refuses (before Windows 11 the thread class is unknown).
 fn opt_out_of_power_throttling() -> bool {
+    set_execution_speed_policy(true)
+}
+
+/// With `own` true the calling thread controls its execution-speed policy and turns throttling
+/// off; with `own` false the system decides again. True when Windows accepted it.
+fn set_execution_speed_policy(own: bool) -> bool {
     let state = THREAD_POWER_THROTTLING_STATE {
         Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
-        ControlMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+        ControlMask: if own {
+            THREAD_POWER_THROTTLING_EXECUTION_SPEED
+        } else {
+            0
+        },
         StateMask: 0,
     };
     let size = u32::try_from(std::mem::size_of::<THREAD_POWER_THROTTLING_STATE>()).unwrap_or(0);

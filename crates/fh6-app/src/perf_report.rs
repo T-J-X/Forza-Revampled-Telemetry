@@ -81,8 +81,13 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
     );
     row(
         &mut out,
-        "**CPU per frame** (build + draw + upload/record/submit + present)",
+        "**CPU per frame** (the whole render-thread iteration, less the latency wait)",
         &s.cpu_frame,
+    );
+    row(
+        &mut out,
+        "  of which: loop checks before the build (config, telemetry, OSD, visibility, OLED care)",
+        &s.before_build,
     );
     row(
         &mut out,
@@ -102,11 +107,16 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
     );
     row(
         &mut out,
-        "      of which: kit render (pack, `write_buffer`, pass recording)",
+        "      of which: kit render (pack, upload copy, pass recording)",
         &s.kit,
     );
     row(&mut out, "    of which: `Queue::submit`", &s.submit);
     row(&mut out, "  of which: `present` call", &s.present);
+    row(
+        &mut out,
+        "  of which: after `present` (staging hand-back, checks)",
+        &s.after_present,
+    );
     if s.cpu_frame_dimmed.count > 0 {
         row(
             &mut out,
@@ -158,9 +168,10 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
          frame can add up to one more refresh on some display paths, which this method cannot observe.\n\
          - Only frames that showed a new packet count towards the receive series; CPU time counts every \
          presented frame.\n\
-         - \"CPU per frame\" is everything the render thread does for a frame except the frame-latency wait: \
-         building it, drawing the scrim, the cluster and the OSD into the kit's arena, the kit's render and \
-         submit, and `present`."
+         - \"CPU per frame\" is the render thread's whole iteration for a presented frame, from its wake to \
+         the end of the frame, less the frame-latency wait: the loop's checks, building the frame, drawing the \
+         scrim, the cluster and the OSD into the kit's arena, the kit's render and submit, `present` and the \
+         kit's staging hand-back. The rows under it are its parts; the small rest is the sample bookkeeping."
     );
     if s.cpu_frame_dimmed.count == 0 {
         let _ = writeln!(
@@ -169,6 +180,8 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
              longer than the 30 s idle wait (`--bench-seconds 60`)."
         );
     }
+    // The stream outlasts the bench and its warm-up, so no frame falls back to the dyno.
+    let stream = seconds + 30;
     let scenario = if s.cpu_frame_dimmed.count > 0 {
         "parked"
     } else {
@@ -178,7 +191,7 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
         out,
         "\n## Reproduce\n\n```\ncargo build --release -p fh6-app -p mock-udp\n\
          target/release/fh6-stand-in   (focused, full screen)\n\
-         target/release/mock-udp --scenario {scenario} --duration 120 --rate-hz 60\n\
+         target/release/mock-udp --scenario {scenario} --duration {stream} --rate-hz 60\n\
          target/release/FH6_WheelDash --game-process fh6-stand-in.exe --bench-seconds {seconds} \
          --bench-out docs/perf/engine.md\n```"
     );
@@ -216,6 +229,8 @@ mod tests {
             encode_submit: p,
             record: p,
             kit: p,
+            before_build: p,
+            after_present: p,
             submit: p,
             present: p,
             passes: 13_200,
@@ -239,7 +254,8 @@ mod tests {
             "no dimmed frames, no dimmed row"
         );
         assert!(md.contains("No frame was idle-dimmed"));
-        assert!(md.contains("--scenario bmw_m4_cs"));
+        assert!(md.contains("--scenario bmw_m4_cs --duration 50"));
+        assert!(md.contains("loop checks before the build"));
         let parked = RenderSummary {
             cpu_frame_dimmed: p,
             ..s

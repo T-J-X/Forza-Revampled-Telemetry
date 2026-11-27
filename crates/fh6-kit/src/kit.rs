@@ -215,8 +215,11 @@ impl Kit {
         )
     }
 
-    /// Call after the command buffer that carried the last [`Kit::render`] was submitted (or
-    /// dropped). The kit then reuses its upload staging buffers instead of letting
+    /// Call once every command buffer that carries a [`Kit::render`] since the previous call has
+    /// been submitted (or dropped): the frame loop calls it right after its submit. Every staging
+    /// slot written since then is mapped again, so a command buffer recorded before this call but
+    /// submitted after it would fail its submit. The kit then reuses its upload staging buffers
+    /// instead of letting
     /// `Queue::write_buffer` create one per frame; without the call it falls back to
     /// `write_buffer` after a few frames, which is correct but costs more CPU.
     pub fn frame_submitted(&mut self) {
