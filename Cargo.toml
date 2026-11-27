@@ -65,3 +65,9 @@ opt-level = 3
 
 [profile.dev.package.nalgebra]
 opt-level = 3
+
+# The live overlay is CPU-bound in wgpu-core and the DX12 backend (known defect 10): whole-program
+# optimisation lets the frame path inline across crates. `panic` stays `unwind` (known defect 18).
+[profile.release]
+lto = "thin"
+codegen-units = 1
