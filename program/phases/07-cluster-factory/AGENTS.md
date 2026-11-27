@@ -9,4 +9,4 @@
 | **Agent 4 · QA** | Golden images, perf numbers and the handover evidence. |
 | **Agent 0 · Research Scout** | Step 1 of every dash: the real display from real sources, written to `RESEARCH.md`. |
 
-TJX has the final say on looks, through the direction check and the sign-off (AGENTS.md rule 12). The family director leads the design, and QA owns the evidence for the closing review.
+TJX is hands-off (AGENTS.md rule 12): the thread's self-review with the review skills and agents stands in for TJX's direction check and sign-off, and TJX's own words win whenever TJX answers. The family director leads the design and its direction check, and QA owns the evidence for the closing review.

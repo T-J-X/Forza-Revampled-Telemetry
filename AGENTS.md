@@ -97,8 +97,8 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
     - Blender's bpy snippets live as Rust string constants inside `tools/asset-forge`.
     - Web logic is Rust compiled to WASM; generated JS is never committed.
     - Prefer pure-Rust crates.
-12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers, then TJX's sign-off. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. Direction checks and sign-offs come from TJX only; no session answers for TJX.
-13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like). It closes only after a line-by-line review against this file and `SKILLS.md`, and TJX's sign-off. No thread is ever archived.
+12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. TJX is hands-off (16:00 UTC that day): each thread runs its own direction check and closing review with the installed review skills and agents (`design:design-critique`, `design:accessibility-review`, `rust-review` with `rust-skills`, and the fixed checklist), posts the results and renders in its thread, and does not wait for TJX. Where TJX does answer, TJX's own words win and are quoted in the handover; no session answers for TJX.
+13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like), and posts a short update with a render or screenshot at each milestone, at least every 20 to 30 minutes. It closes only after a line-by-line review against this file and `SKILLS.md` (rule 12). No thread is ever archived.
 14. **Order for every dash (TJX, 2026-11-27).** R&D on the web → Penpot → ComfyUI → final 3D in Blender. All assets are 4K. The 4K masters go to the one Google Drive folder (`SKILLS.md` section 2); git keeps the compressed runtime assets.
 15. **Two GPU lanes, one job each (TJX, 2026-11-27).** The local card and the rented cloud pod each run one GPU job at a time across all threads, each under its own lock file (`SKILLS.md` section 5). The cloud lane is Runpod, started only through `asset-forge`, inside the $50 budget TJX set (`docs/cloud-gpu.md`). Another provider, or a higher budget, needs TJX first.
 16. **Merging (TJX, 2026-11-27).** When a job is finished and its checks pass, the coordinator merges it into `main` and pushes. Threads that share a checkout commit with explicit paths and never switch its branch.
@@ -158,13 +158,13 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 
 ### 3A: Optical Glassmorphism & Apple CarPlay Ultra Director (`LiquidGlass`, OLED OSD)
 - Ex-Apple Human Interface and Leica optics.
-- **Mandate:** an authentic iOS 26 / CarPlay Ultra / visionOS Liquid Glass cluster:
-  - an 18–24% ultra-translucent frosted sapphire lens that the 3D cockpit refracts through
-  - the optional cached caustic overlay `assets/liquid_glass_caustic_lens.png`, composited with procedural 1 px multi-stop specular bevel rims (`#FFFFFF -> #38BDF8`)
-  - an arched upper crown sheen and floating light-weight typography in the OFL motorsport default, Saira Condensed (Bahnschrift is not OFL, so it is not shipped)
-  - a sculpted crystal hero-gear prism
-  - a luminous fluid light-ribbon tach with a glowing radial meniscus orb
-- Optical maths is in `docs/specs/optics.md`, which replaces card P8-1 of `docs/specs/phase-8-materials-and-shaders.md`. Where the bullets above differ from that document or from the clear-glass rule in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`, those two win until the pilot thread rewrites this mandate.
+- **Mandate:** an authentic iOS 26 / CarPlay Ultra / visionOS Liquid Glass cluster, as the rebuilt pilot (2026-11-27) and the family spec `docs/design/families/liquid-glass.md` define it:
+  - separate drops of clear synthetic sapphire (n_d 1.768, no frost) float over OLED black, one per instrument, each a real optical object (`fh6_kit::OpticalGlass`: exact Fresnel, Snell refraction and Beer-Lambert absorption, lit by one studio)
+  - the light lives under the glass: the shift lights, the rev ribbon and the numerals are drawn first and the glass bends them; a dome over a numeral magnifies it (the pilot's gear about 1.15 times)
+  - thin rims from one studio (a Blender environment with a ComfyUI panorama on its cyclorama, and the kit's analytic studio as the fallback) whose light swings with lateral G and leans to the palette's primary colour
+  - liquid behaviour by smooth union: the shift-light cabochons fuse into one bar on the limiter, the side pieces reach for the gear lens under braking, and an upshift ripple runs out through the gear lens's rim while the numeral stays still
+  - a graduated light-ribbon rod with a ray-traced liquid-light caustic and a meniscus bead, and OFL type: Saira Condensed for the gear, Saira for the figures, Titillium Web for the labels (Bahnschrift is not OFL, so it is not shipped)
+- Optical maths is in `docs/specs/optics.md`, which replaces card P8-1 of `docs/specs/phase-8-materials-and-shaders.md`. Never a frosted or tinted panel, a painted rim, sheen or fresnel band, or a texture inside the glass.
 
 ### 3B: Overhead AR Road-Map & GT7 Telemetry Director (`WindshieldHud`, `Gt7HoodPro`, `BoschDdu`, `PorscheAnalog`)
 - **`WindshieldHud`:**

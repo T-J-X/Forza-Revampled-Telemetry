@@ -12,7 +12,7 @@ The steps run in this order (TJX, 2026-11-27). `CLUSTER_PROMPT.md` has the detai
 | 4. Blender (final 3D) | `blender-hero-assets`, through asset-forge; hold the lock of the lane you run on. The `Blender` MCP is for looking and checking |
 | Masters | write the 4K masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`; the Google Drive desktop app syncs them. `asset-forge --masters <snake_name>` copies its own Blender and ComfyUI outputs there |
 | Rust | `rust-best-practices` (before any `.rs`), `rust-skills` (the 265-rule reference: open the rule you need), `rust-patterns`, `rust-testing` (goldens) |
-| Review | the closing review in `CLUSTER_PROMPT.md` (a fixed checklist, no scores), `rust-review`, `requesting-code-review`. The `ui-ux-designer` agent or `design:design-critique` may list findings once; never ask them for a score |
+| Review (self-review, AGENTS.md rule 12) | the direction check (step 5) and the closing review (step 10) in `CLUSTER_PROMPT.md`: a fixed checklist, no scores. `design:design-critique` (step 5 and step 10), `design:accessibility-review` and `rust-review` (step 10), and `requesting-code-review`; the `ui-ux-designer` agent is optional. Each lists findings once; never ask one for a score |
 | Optional fan-out | the Workflow tool, at most 4 agents (for example findings from 3 director viewpoints plus a perf check); findings only, no scores |
 
 MCP: Penpot (`penpot`; run `ToolSearch "penpot"` to load it; if nothing shows, the session started before the server was registered: ask for a fresh session), context7 (kit dependencies when needed; no API key) and the built-in browser (`mockups/index.html`, served over loopback).

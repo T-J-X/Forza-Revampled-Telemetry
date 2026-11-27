@@ -69,11 +69,11 @@ program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENT
 1. Read in this order: the approved plan (the coordinator gives you the link) → this file → root `AGENTS.md` → root `SKILLS.md` → your phase's files in `program/phases/<phase>/` (`MASTER_PROMPT.md`, `AGENTS.md`, `SKILLS.md`; a dash thread follows `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`) → `docs/PROGRESS.md` → the `HANDOVER.md` of every phase you depend on.
 2. **Open with an introduction** to TJX in your thread: the task, the rule files that apply, and what done looks like.
 3. Load the skills your phase's `SKILLS.md` lists, at the step it names. Root `SKILLS.md` says how to call a skill or an MCP tool.
-4. Work without check-in questions. Stop for TJX only where the rules ask for TJX: the direction check on design work, a sign-in, a paid service, a deploy, anything that cannot be undone, and the sign-off. Record your other decisions as "my call" in your handover. The downloads TJX pre-approved are listed in `program/README.md`.
+4. Work without check-in questions. Stop for TJX only where the rules ask for TJX: a sign-in, a paid service, a deploy, and anything that cannot be undone. TJX is hands-off on reviews (AGENTS.md rule 12): you run the direction check on design work and the closing review yourself with the review skills, post the results, and carry on. Record your other decisions as "my call" in your handover. The downloads TJX pre-approved are listed in `program/README.md`.
 5. Hold the lock of its lane for every GPU job (`SKILLS.md` section 5). Threads can share one checkout: commit as TJX with explicit paths, and never switch its branch.
 6. **Review with a fixed checklist,** line by line against `AGENTS.md` and `SKILLS.md`, with yes/no answers. No scores and no critic loops. A dash uses the checklist in `CLUSTER_PROMPT.md`.
 7. **Finish:**
    1. Fill in your `HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`.
    2. Update `docs/PROGRESS.md`. A dash thread only appends decision-log rows there (a new dependency or token); the coordinator keeps the status table.
    3. Commit, and report the finished job to the coordinator. Once its checks pass, the coordinator merges it into `main` and pushes.
-   4. Ask TJX for the sign-off. The thread closes only on it, and it is never archived.
+   4. Post the result and the completed checklist in your thread. Your self-review stands in for TJX's sign-off (AGENTS.md rule 12); where TJX answers later, apply what TJX asks. The thread is never archived.
