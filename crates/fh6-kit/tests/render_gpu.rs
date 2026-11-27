@@ -235,6 +235,45 @@ fn warm_frames_do_not_grow_the_arena() {
 }
 
 #[test]
+fn recycled_upload_staging_draws_every_frame_exactly_like_write_buffer() {
+    // Kit `a` hands its staging slots back after each submit (the live app's path), except on
+    // frames 5 to 8: by frame 8 all three slots are out, so frames 8 and 9 fall back to
+    // `Queue::write_buffer`, and frame 10 is a slot frame right after fallback frames. Kit `b`
+    // never hands back, so from its fourth frame on it always falls back. Each frame moves the
+    // shapes, so a slot that carried stale bytes would show as a difference.
+    let (ctx, mut a) = setup();
+    let mut b = Kit::new(&ctx.device, &ctx.queue, Tokens::default()).expect("kit");
+    let font = a.fonts().role(fh6_kit::FontRole::Text);
+    let mut previous: Option<RgbaImage> = None;
+    for frame in 0..16u32 {
+        let draw = |p: &mut Painter<'_>| {
+            let shift = frame as f32 * 37.0;
+            for i in 0..40 {
+                let at = vec2(-700.0 + shift + i as f32 * 30.0, -200.0 + (i % 7) as f32 * 40.0);
+                p.fill(&Shape::circle(at, 12.0), Color::rgb_u32(0x38BDF8));
+            }
+            p.number(
+                vec2(0.0, 250.0),
+                100 + i64::from(frame),
+                3,
+                &TextStyle::new(font, 80.0),
+                None,
+            );
+        };
+        let got = render(&mut a, &ctx, draw);
+        if !(5..=8).contains(&frame) {
+            a.frame_submitted();
+        }
+        let want = render(&mut b, &ctx, draw);
+        assert!(got == want, "frame {frame}: the recycled upload drew something else");
+        if let Some(prev) = &previous {
+            assert!(prev != &got, "frame {frame} repeats the previous frame");
+        }
+        previous = Some(got);
+    }
+}
+
+#[test]
 fn dome_scrim_is_opaque_black_core_with_feather_and_void() {
     let (ctx, mut kit) = setup();
     // The image spans local +-960 x +-540, so this dome is the SCRIM_FIT shape at about 60%.

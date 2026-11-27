@@ -215,6 +215,17 @@ impl Kit {
         )
     }
 
+    /// Call once every command buffer that carries a [`Kit::render`] since the previous call has
+    /// been submitted (or dropped): the frame loop calls it right after its submit. Every staging
+    /// slot written since then is mapped again, so a command buffer recorded before this call but
+    /// submitted after it would fail its submit. The kit then reuses its upload staging buffers
+    /// instead of letting
+    /// `Queue::write_buffer` create one per frame; without the call it falls back to
+    /// `write_buffer` after a few frames, which is correct but costs more CPU.
+    pub fn frame_submitted(&mut self) {
+        self.renderer.frame_submitted();
+    }
+
     /// Attaches (or detaches) the refraction source: the captured game frame, as a texture
     /// view covering `rect` of the target in pixels. Glass with `Refraction::World` samples it.
     pub fn set_refraction_source(&mut self, source: Option<(wgpu::TextureView, Rect)>) {

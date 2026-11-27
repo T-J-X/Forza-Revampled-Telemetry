@@ -15,8 +15,8 @@ use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, Kit, Layout, Logo, Painter, Palette, Rect,
-    Shape, SignalSmoother, TextStyle, VAlign, View,
+    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
+    Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
@@ -181,16 +181,36 @@ pub struct RenderSummary {
     pub receive_to_present: Percentiles,
     /// Packet receive to the first vblank after `present`.
     pub receive_to_vblank: Percentiles,
-    /// CPU time per presented frame.
+    /// CPU time per presented frame: the whole iteration from the wake to the end of the frame,
+    /// less the latency wait.
     pub cpu_frame: Percentiles,
+    /// CPU time per presented frame that the OLED idle dim turned down.
+    pub cpu_frame_dimmed: Percentiles,
     /// Blocked on the swapchain latency wait.
     pub acquire_wait: Percentiles,
-    /// Cluster update and draw recording.
+    /// Config, layout, signals and the cluster's `update`.
     pub build: Percentiles,
+    /// Scrim, wash, the cluster's `draw`, the dim and the OSD, recorded into the kit's arena.
+    pub draw: Percentiles,
     /// Kit render (pack, upload, record) and submit.
     pub encode_submit: Percentiles,
+    /// Of `encode_submit`: the swapchain view, the encoder, the kit's render and `finish`.
+    pub record: Percentiles,
+    /// Of `record`: the kit's own render (pack, the upload copy, pass recording).
+    pub kit: Percentiles,
+    /// The loop's checks between the wake and the build (config, telemetry, OSD edges,
+    /// visibility, OLED care).
+    pub before_build: Percentiles,
+    /// After `present` returned: the kit's staging hand-back and the failure checks.
+    pub after_present: Percentiles,
+    /// Of `encode_submit`: `Queue::submit`.
+    pub submit: Percentiles,
     /// The `present` call.
     pub present: Percentiles,
+    /// Render passes the kit recorded, over every presented frame.
+    pub passes: u64,
+    /// Draw calls the kit recorded, over every presented frame.
+    pub draw_calls: u64,
     /// New packets shown at the first vblank after arrival.
     pub vsync_hits: u64,
     /// New packets checked for that.
@@ -718,7 +738,8 @@ impl Loop {
     }
 
     /// Records and presents one frame at `fade`. With `draw` false, presents a fully transparent
-    /// frame (hide). `None` when nothing was presented.
+    /// frame (hide). `None` when nothing was presented; otherwise the outcome, the time spent
+    /// drawing into the kit's arena (before `render_with`) and the kit's own render time.
     ///
     /// The OLED idle dim turns down the light of the wash and of the cluster ([`dim_dash`]). The
     /// scrim is black, so it stays as it is: a faded scrim would uncover the game's own gauges
@@ -731,7 +752,8 @@ impl Loop {
         stats_on: bool,
         scrim: Option<(ScrimFit, Wash)>,
         osd: Option<&OsdFrame<'_>>,
-    ) -> Option<FrameOutcome> {
+    ) -> Option<(FrameOutcome, Duration, KitFrameStats)> {
+        let draw_start = Instant::now();
         let gpu = self.gpu.as_mut()?;
         let Gpu { ctx, surface, kit } = gpu;
         let Some(kit) = kit.as_mut() else {
@@ -754,7 +776,9 @@ impl Loop {
                     multiview_mask: None,
                 }));
             });
-            return result.ok();
+            return result
+                .ok()
+                .map(|outcome| (outcome, Duration::ZERO, KitFrameStats::default()));
         };
         // The OSD dims the game through the kit's underlay (free in the resolve); a hide frame
         // and the normal dash have none.
@@ -800,12 +824,17 @@ impl Loop {
                 }
             }
         }
+        let drawn = draw_start.elapsed();
+        let mut kit_stats = KitFrameStats::default();
         let result = surface.render_with(ctx, |ctx, encoder, view, format, size| {
-            kit.render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity);
+            kit_stats = kit.render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity);
         });
+        // `render_with` has submitted the frame (or dropped it): the kit may map its upload
+        // staging buffer again.
+        kit.frame_submitted();
         let failed = ctx.has_failed();
         match result {
-            Ok(outcome) if !failed => Some(outcome),
+            Ok(outcome) if !failed => Some((outcome, drawn, kit_stats)),
             Ok(_) => {
                 self.lose_gpu("wgpu reported an error");
                 None
@@ -875,6 +904,15 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         on_bench_done,
         osd: osd_setup,
     } = setup;
+    // Frame work runs from wake to `present` without being parked behind the game's threads or
+    // slowed as background work (known defect 10: "CPU per frame" is wall-clock time here).
+    let priority = fh6_win::system::raise_frame_thread();
+    tracing::info!(
+        class = ?priority.class(),
+        full_speed = priority.full_speed(),
+        performance_cores = priority.performance_cores(),
+        "render thread scheduling class"
+    );
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
         .unwrap_or(FALLBACK_REFRESH);
@@ -1093,7 +1131,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
                 // Hide = one fully transparent frame, then idle.
                 blank_presented = matches!(
                     lp.render(HIDDEN, &layout, false, false, None, None),
-                    Some(FrameOutcome::Presented { .. })
+                    Some((FrameOutcome::Presented { .. }, _, _))
                 );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
             }
@@ -1195,14 +1233,35 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             },
             blocker: osd.host.blocker_focused(&rows_cfg),
         });
-        if let Some(FrameOutcome::Presented { timings, at }) =
+        if let Some((FrameOutcome::Presented { timings, at }, drawn, kit_stats)) =
             lp.render(fade, &layout, true, stats_on, scrim, osd_draw.as_ref())
         {
             lp.frames += 1;
-            lp.stats.cpu_frame.record(built + timings.cpu());
+            // The whole iteration on this thread, from the wake to the end of `render` (the
+            // checks before the build, the build, the draw (known defect 17), the kit's render,
+            // submit, present and the staging hand-back). Only the latency wait is left out (it
+            // is not CPU work).
+            let frame_end = Instant::now();
+            let cpu = frame_end
+                .saturating_duration_since(wake)
+                .saturating_sub(timings.acquire_wait);
+            lp.stats
+                .before_build
+                .record(build_start.saturating_duration_since(wake));
+            lp.stats.after_present.record(frame_end.saturating_duration_since(at));
+            lp.stats.cpu_frame.record(cpu);
+            if is_dimmed(care.dim) {
+                lp.stats.cpu_frame_dimmed.record(cpu);
+            }
             lp.stats.acquire_wait.record(timings.acquire_wait);
             lp.stats.build.record(built);
+            lp.stats.draw.record(drawn);
             lp.stats.encode_submit.record(timings.encode_submit);
+            lp.stats.record.record(timings.record);
+            lp.stats.kit.record(kit_stats.cpu);
+            lp.stats.passes += u64::from(kit_stats.passes);
+            lp.stats.draw_calls += u64::from(kit_stats.draw_calls);
+            lp.stats.submit.record(timings.submit);
             lp.stats.present.record(timings.present);
             if new_packet {
                 lp.packets += 1;
@@ -1237,10 +1296,19 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         receive_to_present: lp.stats.receive_to_present.percentiles(&mut lp.scratch),
         receive_to_vblank: lp.stats.receive_to_vblank.percentiles(&mut lp.scratch),
         cpu_frame: lp.stats.cpu_frame.percentiles(&mut lp.scratch),
+        cpu_frame_dimmed: lp.stats.cpu_frame_dimmed.percentiles(&mut lp.scratch),
         acquire_wait: lp.stats.acquire_wait.percentiles(&mut lp.scratch),
         build: lp.stats.build.percentiles(&mut lp.scratch),
+        draw: lp.stats.draw.percentiles(&mut lp.scratch),
         encode_submit: lp.stats.encode_submit.percentiles(&mut lp.scratch),
+        record: lp.stats.record.percentiles(&mut lp.scratch),
+        kit: lp.stats.kit.percentiles(&mut lp.scratch),
+        before_build: lp.stats.before_build.percentiles(&mut lp.scratch),
+        after_present: lp.stats.after_present.percentiles(&mut lp.scratch),
+        submit: lp.stats.submit.percentiles(&mut lp.scratch),
         present: lp.stats.present.percentiles(&mut lp.scratch),
+        passes: lp.stats.passes,
+        draw_calls: lp.stats.draw_calls,
         vsync_hits: lp.stats.vsync_hits,
         vsync_checked: lp.stats.vsync_checked,
         refresh,

@@ -9,8 +9,14 @@ use std::time::{Duration, Instant};
 pub struct FrameTimings {
     /// Blocked in `get_current_texture` (the frame-latency waitable object). Not CPU work.
     pub acquire_wait: Duration,
-    /// Uploading buffers, recording and submitting.
+    /// Uploading buffers, recording and submitting: [`FrameTimings::record`] plus
+    /// [`FrameTimings::submit`].
     pub encode_submit: Duration,
+    /// Of `encode_submit`: the swapchain view, the command encoder, the caller's recording
+    /// (uploads and render passes) and `CommandEncoder::finish`.
+    pub record: Duration,
+    /// Of `encode_submit`: `Queue::submit`.
+    pub submit: Duration,
     /// The `present` call itself.
     pub present: Duration,
 }
@@ -176,7 +182,9 @@ impl OverlaySurface {
             self.config.format,
             (self.config.width, self.config.height),
         );
-        ctx.queue.submit(Some(encoder.finish()));
+        let commands = encoder.finish();
+        let recorded = Instant::now();
+        ctx.queue.submit(Some(commands));
         let t2 = Instant::now();
         ctx.queue.present(frame);
         let t3 = Instant::now();
@@ -187,6 +195,8 @@ impl OverlaySurface {
             timings: FrameTimings {
                 acquire_wait: t1 - t0,
                 encode_submit: t2 - t1,
+                record: recorded - t1,
+                submit: t2 - recorded,
                 present: t3 - t2,
             },
             at: t3,
@@ -227,7 +237,9 @@ impl OverlaySurface {
             label: Some("fh6 overlay frame"),
         });
         self.renderer.record(&mut encoder, &view);
-        ctx.queue.submit(Some(encoder.finish()));
+        let commands = encoder.finish();
+        let recorded = Instant::now();
+        ctx.queue.submit(Some(commands));
         let t2 = Instant::now();
         ctx.queue.present(frame);
         let t3 = Instant::now();
@@ -238,6 +250,8 @@ impl OverlaySurface {
             timings: FrameTimings {
                 acquire_wait: t1 - t0,
                 encode_submit: t2 - t1,
+                record: recorded - t1,
+                submit: t2 - recorded,
                 present: t3 - t2,
             },
             at: t3,

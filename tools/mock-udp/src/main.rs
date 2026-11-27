@@ -193,6 +193,16 @@ fn scenario_menu_pause(t: f32, ordinal: i32) -> [u8; PACKET_SIZE] {
     pkt
 }
 
+/// A parked car: race on, standing still in first gear, engine at idle (800 rpm with a 20 rpm
+/// lope, well under the OLED care's 1100 rpm revving floor) and no pedals. Nothing keeps the
+/// dash awake, so after 30 s the OLED idle dim turns it down: the bench's dimmed-frame row.
+fn scenario_parked(t: f32, ordinal: i32) -> [u8; PACKET_SIZE] {
+    let rpm = 800.0 + 20.0 * (t * 2.0).sin();
+    build_packet(
+        1, 0, 7600.0, 800.0, rpm, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ordinal, 1, 0.0, 0.0, 0.0, 0, 0, 0, 0, 1, 0,
+    )
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut scenario = "bmw_m4_cs";
@@ -277,6 +287,7 @@ fn main() {
             "watchdog_drop" => scenario_watchdog_drop(t, ordinal),
             "night_tunnel" => scenario_night_tunnel(t, ordinal),
             "menu_pause" => scenario_menu_pause(t, ordinal),
+            "parked" => scenario_parked(t, ordinal),
             _ => scenario_bmw_m4_cs(t, ordinal),
         };
         // build with timestamp

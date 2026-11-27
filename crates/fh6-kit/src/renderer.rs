@@ -3,7 +3,7 @@
 //! A frame is: one upload (every instance, paint, clip, point and uniform packed into a single
 //! buffer write), then per layer segment an optional backdrop snapshot and blur, the instanced
 //! shape pass (scene + emissive targets, depth for meshes), an optional layer blur and
-//! composite, then bloom (dual-filter Kawase) and the resolve into the caller's target.
+//! composite, then bloom (dual-filter Kawase, one compute pass) and the resolve into the caller's target.
 //!
 //! All work targets are sized to the **work rectangle** (the union of what was drawn, plus the
 //! bloom margin), not the screen, so a cluster costs what it covers.
@@ -19,6 +19,8 @@ use crate::text::{Fonts, ATLAS_WIDTH};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Format of the linear scene, emissive and layer targets.
@@ -41,6 +43,9 @@ pub(crate) const ADD_BLEND: wgpu::BlendState = wgpu::BlendState {
 
 /// Pyramid levels for blur and bloom (1/2 .. 1/32 resolution).
 const PYRAMID_LEVELS: u32 = 5;
+/// Texels past a bloom dispatch's viewport that it writes as zero: as far as a bilinear tap
+/// clamped to `src_max` reaches past the viewport, with the pyramid's rounding (see `bloom`).
+const BLOOM_MARGIN: u32 = 2;
 /// Uniform slot stride (WebGPU's minimum dynamic offset alignment).
 const SLOT: u64 = 256;
 /// Most post passes per frame.
@@ -102,6 +107,52 @@ const CLIPS_CAP: u64 = (size_of::<GpuClip>() * MAX_CLIPS) as u64;
 const POINTS_CAP: u64 = (8 * MAX_POINTS) as u64;
 /// Upload buffer size: every region at capacity, aligned (the worst-case offsets plus sizes).
 const UPLOAD_SIZE: u64 = GLOBALS_CAP + POST_CAP + INSTANCES_CAP + PAINTS_CAP + CLIPS_CAP + POINTS_CAP + 8 * SLOT;
+
+/// Host-visible staging buffers for the frame upload, reused frame after frame. `Queue::write_buffer`
+/// creates (and later frees) a staging buffer on every call and submits it in a command list of its
+/// own; a ring slot is mapped once, written, unmapped, copied into the upload buffer at the start of
+/// the frame's own command buffer, and mapped again after the frame is submitted.
+const STAGING_SLOTS: usize = 3;
+
+/// A slot is mapped and free to write.
+const SLOT_READY: u8 = 0;
+/// A slot was written and unmapped for this frame; it waits for [`Renderer::frame_submitted`].
+const SLOT_WRITTEN: u8 = 1;
+/// A slot's `map_async` is pending (its frame is on the GPU).
+const SLOT_MAPPING: u8 = 2;
+/// A slot's map failed (device lost); it is never used again.
+const SLOT_LOST: u8 = 3;
+
+#[derive(Debug)]
+struct StagingSlot {
+    buffer: wgpu::Buffer,
+    /// One of the `SLOT_*` states. The map callback sets it from the thread that polls the device.
+    state: Arc<AtomicU8>,
+}
+
+impl StagingSlot {
+    fn new(device: &wgpu::Device) -> Self {
+        Self {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("fh6-kit upload staging"),
+                size: UPLOAD_SIZE,
+                usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: true,
+            }),
+            state: Arc::new(AtomicU8::new(SLOT_READY)),
+        }
+    }
+
+    fn state(&self) -> u8 {
+        self.state.load(Ordering::Acquire)
+    }
+}
+
+/// The bytes a frame copies from its staging slot: everything before the post parameters, and the
+/// post parameters at capacity (they are pushed while passes are recorded, after the copy).
+fn staged_len(post_offset: u64) -> u64 {
+    (post_offset + POST_CAP).min(UPLOAD_SIZE)
+}
 
 /// A texture with views of each mip and of the whole chain.
 #[derive(Debug)]
@@ -205,8 +256,23 @@ impl Targets {
                 rt | U::COPY_DST,
             ),
             depth: Tex::new(device, "fh6-kit depth", cap, DEPTH_FORMAT, 1, U::RENDER_ATTACHMENT),
-            pyr: Tex::new(device, "fh6-kit pyramid", half, SCENE_FORMAT, PYRAMID_LEVELS, rt),
-            tmp: Tex::new(device, "fh6-kit pyramid tmp", half, SCENE_FORMAT, PYRAMID_LEVELS, rt),
+            // STORAGE_BINDING: the bloom chain writes these from compute (`shaders/bloom.wgsl`).
+            pyr: Tex::new(
+                device,
+                "fh6-kit pyramid",
+                half,
+                SCENE_FORMAT,
+                PYRAMID_LEVELS,
+                rt | U::STORAGE_BINDING,
+            ),
+            tmp: Tex::new(
+                device,
+                "fh6-kit pyramid tmp",
+                half,
+                SCENE_FORMAT,
+                PYRAMID_LEVELS,
+                rt | U::STORAGE_BINDING,
+            ),
             bpyr: Tex::new(
                 device,
                 "fh6-kit backdrop pyramid",
@@ -251,9 +317,9 @@ pub struct FrameStats {
     pub cpu: Duration,
     /// Shape instances drawn.
     pub instances: u32,
-    /// Draw calls issued (shapes + meshes + post passes).
+    /// Draw calls issued (shapes + meshes + post passes), counting each bloom dispatch as one.
     pub draw_calls: u32,
-    /// Render passes recorded.
+    /// Render and compute passes recorded (bloom is one compute pass).
     pub passes: u32,
     /// Work rectangle area in pixels.
     pub work_pixels: u64,
@@ -284,12 +350,17 @@ pub(crate) struct Renderer {
     post_layout: wgpu::PipelineLayout,
     post_module: wgpu::ShaderModule,
     down: wgpu::RenderPipeline,
-    up: wgpu::RenderPipeline,
     blur: wgpu::RenderPipeline,
+    /// The bloom chain as compute (`shaders/bloom.wgsl`): one pass, one dispatch per level.
+    bloom_bgl: wgpu::BindGroupLayout,
+    bloom_down: wgpu::ComputePipeline,
+    bloom_up: wgpu::ComputePipeline,
     composite: wgpu::RenderPipeline,
     resolve: Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
     upload: wgpu::Buffer,
     staging: Vec<u8>,
+    /// Reused staging buffers for `upload` (see [`STAGING_SLOTS`]).
+    staging_ring: [StagingSlot; STAGING_SLOTS],
     sampler: wgpu::Sampler,
     sampler_rep: wgpu::Sampler,
     sampler_aniso: wgpu::Sampler,
@@ -300,6 +371,8 @@ pub(crate) struct Renderer {
     targets: Option<Targets>,
     shape_group: Option<wgpu::BindGroup>,
     post_groups: HashMap<(V, V), wgpu::BindGroup>,
+    /// Bloom dispatch groups by (source, base, destination).
+    bloom_groups: HashMap<(V, V, V), wgpu::BindGroup>,
     pub(crate) meshes: Meshes,
     timer: Option<GpuTimer>,
     timing_enabled: bool,
@@ -520,7 +593,7 @@ impl Renderer {
         let post_pipe =
             |entry: &str, format, blend| make_post(device, &post_layout, &post_module, entry, format, blend);
         let down = post_pipe("fs_down", SCENE_FORMAT, None);
-        let up = post_pipe("fs_up", SCENE_FORMAT, None);
+        let (bloom_bgl, bloom_down, bloom_up) = make_bloom(device);
         let blur = post_pipe("fs_blur", SCENE_FORMAT, None);
         let composite = post_pipe(
             "fs_composite",
@@ -627,12 +700,15 @@ impl Renderer {
             post_layout,
             post_module,
             down,
-            up,
             blur,
+            bloom_bgl,
+            bloom_down,
+            bloom_up,
             composite,
             resolve: Vec::with_capacity(2),
             upload,
             staging: Vec::with_capacity(UPLOAD_SIZE as usize),
+            staging_ring: std::array::from_fn(|_| StagingSlot::new(device)),
             sampler,
             sampler_rep,
             sampler_aniso,
@@ -643,6 +719,7 @@ impl Renderer {
             targets: None,
             shape_group: None,
             post_groups: HashMap::with_capacity(64),
+            bloom_groups: HashMap::with_capacity(2 * PYRAMID_LEVELS as usize),
             meshes: Meshes::new(device, DEPTH_FORMAT),
             timer,
             timing_enabled: false,
@@ -677,6 +754,25 @@ impl Renderer {
         self.shape_group = None;
     }
 
+    /// Tells the renderer that the command buffer of its last [`Renderer::render`] was submitted
+    /// (or dropped), so the staging slot it used can be mapped again. Mapping a buffer that a
+    /// recorded but unsubmitted command buffer reads would fail that submit, so slots are only
+    /// recycled through this call; without it the renderer falls back to `Queue::write_buffer`
+    /// once every slot has been used.
+    pub(crate) fn frame_submitted(&mut self) {
+        for slot in &self.staging_ring {
+            if slot.state() != SLOT_WRITTEN {
+                continue;
+            }
+            slot.state.store(SLOT_MAPPING, Ordering::Release);
+            let state = Arc::clone(&slot.state);
+            slot.buffer.slice(..).map_async(wgpu::MapMode::Write, move |result| {
+                let next = if result.is_ok() { SLOT_READY } else { SLOT_LOST };
+                state.store(next, Ordering::Release);
+            });
+        }
+    }
+
     pub(crate) fn has_world(&self) -> bool {
         self.world.is_some()
     }
@@ -705,6 +801,7 @@ impl Renderer {
         self.targets = Some(Targets::new(device, cap));
         self.shape_group = None;
         self.post_groups.clear();
+        self.bloom_groups.clear();
     }
 
     fn upload_atlas(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, fonts: &mut Fonts) {
@@ -889,7 +986,6 @@ impl Renderer {
         };
         let pipeline = match pipe {
             PostPipe::Down => &self.down,
-            PostPipe::Up => &self.up,
             PostPipe::Blur => &self.blur,
             PostPipe::Composite => &self.composite,
         };
@@ -988,7 +1084,48 @@ impl Renderer {
         }
     }
 
-    /// Dual-filter bloom of the emissive target: result in `Tmp(0)` (half resolution).
+    /// The bind group of one bloom dispatch: `src` and `base` sampled, `dst` written.
+    fn bloom_group(&mut self, device: &wgpu::Device, src: V, base: V, dst: V) {
+        if self.bloom_groups.contains_key(&(src, base, dst)) {
+            return;
+        }
+        let Some(t) = self.targets.as_ref() else { return };
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fh6-kit bloom group"),
+            layout: &self.bloom_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &self.upload,
+                        offset: 0,
+                        size: wgpu::BufferSize::new(size_of::<PostParams>() as u64),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(t.view(src)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(t.view(base)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(t.view(dst)),
+                },
+            ],
+        });
+        self.bloom_groups.insert((src, base, dst), group);
+    }
+
+    /// Dual-filter bloom of the emissive target: result in `Tmp(0)` (half resolution). One
+    /// compute pass: `PYRAMID_LEVELS` down dispatches, then `PYRAMID_LEVELS - 1` up dispatches,
+    /// each the same maths as the former render pass of that level (`shaders/bloom.wgsl`).
     fn bloom(
         &mut self,
         device: &wgpu::Device,
@@ -998,55 +1135,58 @@ impl Renderer {
         uv_max: [f32; 2],
         post_base: u64,
     ) {
-        for m in 0..PYRAMID_LEVELS {
+        const STEPS: usize = 2 * PYRAMID_LEVELS as usize - 1;
+        /// One dispatch: up (or down), its parameter offset, (src, base, dst) and the texels it
+        /// covers (the viewport and its zeroed margin).
+        type Step = (bool, u32, (V, V, V), (u32, u32));
+        let mut steps: [Option<Step>; STEPS] = [None; STEPS];
+        let downs = (0..PYRAMID_LEVELS).map(|m| {
             let from = if m == 0 { V::Emissive } else { V::Pyr(m - 1) };
-            let vp = (work.0.div_ceil(2 << m), work.1.div_ceil(2 << m));
-            let params = PostParams {
-                src_texel: self.texel(from),
-                src_max: uv_max,
-                dst_texel: self.texel(V::Pyr(m)),
-                ..zero_params()
-            };
-            self.post_pass(
-                device,
-                encoder,
-                stats,
-                PostPipe::Down,
-                from,
-                from,
-                V::Pyr(m),
-                vp,
-                true,
-                params,
-                post_base,
-            );
-        }
-        for m in (0..PYRAMID_LEVELS - 1).rev() {
+            (false, m, (from, from, V::Pyr(m)))
+        });
+        let ups = (0..PYRAMID_LEVELS - 1).rev().map(|m| {
             let from = if m == PYRAMID_LEVELS - 2 {
                 V::Pyr(m + 1)
             } else {
                 V::Tmp(m + 1)
             };
+            (true, m, (from, V::Pyr(m), V::Tmp(m)))
+        });
+        for (slot, (up, m, views)) in steps.iter_mut().zip(downs.chain(ups)) {
             let vp = (work.0.div_ceil(2 << m), work.1.div_ceil(2 << m));
             let params = PostParams {
-                src_texel: self.texel(from),
+                src_texel: self.texel(views.0),
                 src_max: uv_max,
-                dst_texel: self.texel(V::Tmp(m)),
+                dst_texel: self.texel(views.2),
+                // The bloom shaders read `origin` as the viewport, in destination texels.
+                origin: [vp.0 as f32, vp.1 as f32],
                 ..zero_params()
             };
-            self.post_pass(
-                device,
-                encoder,
-                stats,
-                PostPipe::Up,
-                from,
-                V::Pyr(m),
-                V::Tmp(m),
-                vp,
-                true,
-                params,
-                post_base,
-            );
+            let Some(offset) = self.push_post(post_base, params) else {
+                return;
+            };
+            self.bloom_group(device, views.0, views.1, views.2);
+            // The render passes cleared their whole target; the dispatch zeroes a margin of
+            // `BLOOM_MARGIN` texels round the viewport instead. Bilinear taps clamped to `src_max`
+            // reach at most that far past it, so stale texels of an earlier, larger work
+            // rectangle never bleed in.
+            let size = self.targets.as_ref().map_or(vp, |t| t.size(views.2));
+            let grid = ((vp.0 + BLOOM_MARGIN).min(size.0), (vp.1 + BLOOM_MARGIN).min(size.1));
+            *slot = Some((up, offset, views, grid));
+        }
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("fh6-kit bloom"),
+            timestamp_writes: None,
+        });
+        stats.passes += 1;
+        for (up, offset, views, grid) in steps.into_iter().flatten() {
+            let Some(group) = self.bloom_groups.get(&views) else {
+                continue;
+            };
+            pass.set_pipeline(if up { &self.bloom_up } else { &self.bloom_down });
+            pass.set_bind_group(0, group, &[offset]);
+            pass.dispatch_workgroups(grid.0.max(1).div_ceil(8), grid.1.max(1).div_ceil(8), 1);
+            stats.draw_calls += 1;
         }
     }
 
@@ -1175,6 +1315,13 @@ impl Renderer {
         if !scene.meshes.is_empty() {
             self.meshes
                 .prepare(queue, &scene.meshes, [wx as f32, wy as f32], [ww as f32, wh as f32]);
+        }
+
+        // The upload's copy goes first in the command buffer, before any pass reads it; the bytes
+        // land in the mapped slot at the end of the frame, before the buffer is submitted.
+        let staged = self.staging_ring.iter().position(|slot| slot.state() == SLOT_READY);
+        if let Some(i) = staged {
+            encoder.copy_buffer_to_buffer(&self.staging_ring[i].buffer, 0, &self.upload, 0, staged_len(offs.post));
         }
 
         // ----- record -----------------------------------------------------------------------
@@ -1427,7 +1574,32 @@ impl Renderer {
             self.staging.extend_from_slice(bytemuck::bytes_of(p));
             self.staging.resize(at + SLOT as usize, 0);
         }
-        queue.write_buffer(&self.upload, 0, &self.staging);
+        match staged.and_then(|i| self.staging_ring.get(i)) {
+            Some(slot) => {
+                // The post parameters are capped at MAX_POST, so the bytes always fit the copy.
+                let len = self.staging.len().min(staged_len(offs.post) as usize);
+                let written = match slot.buffer.slice(..).get_mapped_range_mut() {
+                    Ok(mut mapped) => {
+                        mapped.slice(..len).copy_from_slice(&self.staging[..len]);
+                        true
+                    }
+                    Err(err) => {
+                        // A ready slot is mapped, so this does not happen. The copy is already
+                        // recorded and the buffer is not mapped, so the submit stays valid; this
+                        // one frame shows the slot's previous bytes, and the slot is retired.
+                        tracing::warn!(error = %err, "fh6-kit upload staging slot was not mapped; slot retired");
+                        false
+                    }
+                };
+                if written {
+                    slot.buffer.unmap();
+                    slot.state.store(SLOT_WRITTEN, Ordering::Release);
+                } else {
+                    slot.state.store(SLOT_LOST, Ordering::Release);
+                }
+            }
+            None => queue.write_buffer(&self.upload, 0, &self.staging),
+        }
         stats.cpu = t0.elapsed();
         stats
     }
@@ -1474,7 +1646,6 @@ enum Chain {
 #[derive(Debug, Clone, Copy)]
 enum PostPipe {
     Down,
-    Up,
     Blur,
     Composite,
 }
@@ -1541,6 +1712,75 @@ fn color_attachment(view: &wgpu::TextureView, clear: bool) -> wgpu::RenderPassCo
     }
 }
 
+/// The bloom chain's layout and its two compute pipelines (`shaders/bloom.wgsl`).
+fn make_bloom(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline, wgpu::ComputePipeline) {
+    let sampled = |binding| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fh6-kit bloom layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(size_of::<PostParams>() as u64),
+                },
+                count: None,
+            },
+            sampled(1),
+            sampled(2),
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: SCENE_FORMAT,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                count: None,
+            },
+        ],
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fh6-kit bloom pipeline layout"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fh6-kit bloom shaders"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/bloom.wgsl").into()),
+    });
+    let pipe = |entry: &str| {
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(entry),
+            layout: Some(&layout),
+            module: &module,
+            entry_point: Some(entry),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        })
+    };
+    let down = pipe("cs_down");
+    let up = pipe("cs_up");
+    (bgl, down, up)
+}
+
 fn make_post(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -1595,6 +1835,18 @@ mod tests {
         assert_eq!(blur_level(8.0), 2);
         assert_eq!(blur_level(30.0), 4);
         assert_eq!(blur_level(1000.0), PYRAMID_LEVELS);
+    }
+
+    #[test]
+    fn a_staged_copy_covers_every_post_slot_and_stays_inside_the_upload() {
+        // The copy is recorded before the post parameters are known, so it covers all of them.
+        let post = align(GLOBALS_CAP + INSTANCES_CAP);
+        assert_eq!(staged_len(post), post + POST_CAP);
+        assert!(post + POST_CAP <= UPLOAD_SIZE);
+        // Never past the end, and a multiple of the 4-byte copy alignment.
+        assert_eq!(staged_len(UPLOAD_SIZE), UPLOAD_SIZE);
+        assert_eq!(staged_len(post) % wgpu::COPY_BUFFER_ALIGNMENT, 0);
+        assert_eq!(UPLOAD_SIZE % wgpu::COPY_BUFFER_ALIGNMENT, 0);
     }
 
     #[test]

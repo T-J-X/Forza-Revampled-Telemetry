@@ -316,7 +316,7 @@ ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDa
 
 - Budget per cluster: under 0.5 ms GPU at 4K, and keep `update` + `draw` well under 0.1 ms CPU.
 - No heap allocation in `update` or `draw`: keep point arrays in your struct or on the stack, format numbers with `p.number`, clone strings only when they change (`clone_from`). The arena never grows after the first frame (tested).
-- Fewer passes = less CPU in wgpu's submit (about 10 µs per pass): every `glass` layer adds a backdrop copy and three blur passes; bloom adds 9. Use one glass layer and group bloom draws.
+- Fewer passes = less host CPU in wgpu (each render pass costs about 15–20 µs between recording, `finish` and `submit`): every `glass` layer adds a backdrop copy and three blur passes; bloom is one compute pass for its whole pyramid. Use one glass layer and group bloom draws.
 - Group draws by blend mode and image; a change starts a new draw call.
 - Strobes only on the shift strip (≤ 42 px tall), 10 Hz max; honour `reduced_flash`.
 - Hide is the host's job: never draw "hidden" states yourself.
