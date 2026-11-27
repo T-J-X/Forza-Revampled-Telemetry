@@ -349,8 +349,31 @@ impl Images {
         premul: &[u8],
         label: &str,
     ) -> ImageId {
-        let (width, height) = (width.max(1), height.max(1));
-        let mips = width.max(height).ilog2() + 1;
+        let chain = MipChain::from_premultiplied(width, height, premul.to_vec(), u32::MAX);
+        self.upload_chain(device, queue, &chain, label)
+    }
+
+    /// Uploads a [`MipChain`] that was built without a device (on any thread, by
+    /// [`decode_png_mips`]): one texture holding the chain's levels, sized as its largest level.
+    /// The calling thread only creates the texture and copies the texels.
+    ///
+    /// # Errors
+    /// [`ImageError::Size`] when the image is larger than the device allows, or the store is full.
+    pub fn upload_mips(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        chain: &MipChain,
+        label: &str,
+    ) -> Result<ImageId, ImageError> {
+        let (width, height) = chain.size();
+        self.check_size(width, height)?;
+        Ok(self.upload_chain(device, queue, chain, label))
+    }
+
+    fn upload_chain(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, chain: &MipChain, label: &str) -> ImageId {
+        let (width, height) = chain.size();
+        let mips = chain.levels.len().max(1) as u32;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
@@ -365,9 +388,7 @@ impl Images {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let mut level = premul.to_vec();
-        let (mut w, mut h) = (width, height);
-        for mip in 0..mips {
+        for (mip, (w, h, level)) in (0u32..).zip(&chain.levels) {
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,
@@ -375,24 +396,18 @@ impl Images {
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                &level,
+                level,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(w * 4),
-                    rows_per_image: Some(h),
+                    rows_per_image: Some(*h),
                 },
                 wgpu::Extent3d {
-                    width: w,
-                    height: h,
+                    width: *w,
+                    height: *h,
                     depth_or_array_layers: 1,
                 },
             );
-            if mip + 1 < mips {
-                let (nw, nh, next) = downsample_srgb8(&level, w, h);
-                level = next;
-                w = nw;
-                h = nh;
-            }
         }
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.push(device, Some(texture), &view, (width, height), mips, false)
@@ -456,6 +471,87 @@ impl Images {
         });
         ImageId((self.entries.len() - 1) as u32)
     }
+}
+
+/// Premultiplied sRGB RGBA8 texels and their mip chain, built without a device and uploaded by
+/// [`Images::upload_mips`]. A loader builds it on a worker thread ([`decode_png_mips`]), so the
+/// render thread only copies the levels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MipChain {
+    /// Each level's width, height and texels, the largest first, down to 1 x 1.
+    levels: Vec<(u32, u32, Vec<u8>)>,
+}
+
+impl MipChain {
+    /// The chain of `premul` (premultiplied sRGB RGBA8 of `width` x `height`; a zero side counts
+    /// as 1), each level a 2x2 box filter of the one above in linear light, down to 1 x 1. A level
+    /// whose longer side is over `max_side` is built, because the next level comes from it, but
+    /// not kept: every kept level is the same texels as in the full chain. The 1 x 1 level is
+    /// always kept.
+    fn from_premultiplied(width: u32, height: u32, premul: Vec<u8>, max_side: u32) -> Self {
+        let (width, height) = (width.max(1), height.max(1));
+        let count = width.max(height).ilog2() + 1;
+        let mut levels = Vec::with_capacity(count as usize);
+        let mut current = (width, height, premul);
+        for mip in 0..count {
+            let next = (mip + 1 < count).then(|| downsample_srgb8(&current.2, current.0, current.1));
+            if current.0.max(current.1) <= max_side || next.is_none() {
+                levels.push(current);
+            }
+            match next {
+                Some(level) => current = level,
+                None => break,
+            }
+        }
+        Self { levels }
+    }
+
+    /// The size of the largest kept level, which is the texture's size.
+    #[must_use]
+    pub fn size(&self) -> (u32, u32) {
+        self.levels.first().map_or((1, 1), |&(w, h, _)| (w, h))
+    }
+
+    /// The number of kept levels.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.levels.len()
+    }
+
+    /// Never true: a chain always keeps its 1 x 1 level.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty()
+    }
+
+    /// The bytes of all kept levels: what the texture takes in video memory.
+    #[must_use]
+    pub fn byte_len(&self) -> usize {
+        self.levels.iter().map(|(_, _, texels)| texels.len()).sum()
+    }
+}
+
+/// The width and height in a PNG's header, read without decoding the image.
+///
+/// # Errors
+/// [`ImageError::Png`] when the header is malformed.
+pub fn png_size(bytes: &[u8]) -> Result<(u32, u32), ImageError> {
+    let reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .map_err(|e| ImageError::Png(e.to_string()))?;
+    let info = reader.info();
+    Ok((info.width, info.height))
+}
+
+/// Decodes any PNG into a premultiplied [`MipChain`] whose largest kept level is at most
+/// `max_side` on its longer side (`u32::MAX` keeps every level). Needs no device, so it can run
+/// on any thread.
+///
+/// # Errors
+/// [`ImageError::Png`] on malformed input.
+pub fn decode_png_mips(bytes: &[u8], max_side: u32) -> Result<MipChain, ImageError> {
+    let (w, h, rgba) = decode_png(bytes)?;
+    Ok(MipChain::from_premultiplied(w, h, premultiply_srgb8(&rgba), max_side))
 }
 
 /// Decodes any PNG into straight-alpha sRGB RGBA8.
@@ -676,6 +772,81 @@ mod tests {
         let row = (20 * 40 * 4) as usize;
         assert_eq!(&px[row..row + 4], &[255, 0, 0, 255], "centre band is red");
         assert_eq!(px[3], 0, "letterbox top is transparent");
+    }
+
+    /// Pseudo-random premultiplied-looking texels (any bytes do for the chain's bookkeeping).
+    fn noise(w: u32, h: u32) -> Vec<u8> {
+        let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+        (0..w * h * 4)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 40) as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_full_chain_halves_down_to_one_texel() {
+        for (w, h, count) in [(64u32, 16u32, 7usize), (37, 5, 6), (1, 1, 1), (1, 9, 4)] {
+            let chain = MipChain::from_premultiplied(w, h, noise(w, h), u32::MAX);
+            assert_eq!(chain.len(), count, "{w}x{h}");
+            assert_eq!(chain.size(), (w, h));
+            assert_eq!(
+                chain.levels.last().map(|l| (l.0, l.1)),
+                Some((1, 1)),
+                "{w}x{h} ends at 1 x 1"
+            );
+            let bytes: usize = chain.levels.iter().map(|l| (l.0 * l.1 * 4) as usize).sum();
+            assert_eq!(chain.byte_len(), bytes);
+        }
+    }
+
+    #[test]
+    fn a_capped_chain_keeps_the_full_chains_own_levels() {
+        for (w, h, cap, skipped) in [
+            (64u32, 16u32, 16u32, 2usize),
+            (37, 5, 20, 1),
+            (1024, 90, 512, 1),
+            (8, 8, 8, 0),
+        ] {
+            let full = MipChain::from_premultiplied(w, h, noise(w, h), u32::MAX);
+            let capped = MipChain::from_premultiplied(w, h, noise(w, h), cap);
+            assert_eq!(capped.levels, full.levels[skipped..], "{w}x{h} capped at {cap}");
+            assert!(capped.size().0.max(capped.size().1) <= cap);
+        }
+        // A cap below one texel still keeps the 1 x 1 level, so the texture is never empty.
+        let tiny = MipChain::from_premultiplied(16, 4, noise(16, 4), 0);
+        assert_eq!(tiny.len(), 1);
+        assert_eq!(tiny.size(), (1, 1));
+        assert!(!tiny.is_empty());
+    }
+
+    #[test]
+    fn the_header_gives_the_size_and_the_chain_is_premultiplied() {
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 4, 2);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut w = enc.write_header().expect("header");
+            let mut px = [255u8; 4 * 2 * 4];
+            px[3] = 0; // the first texel is transparent white
+            w.write_image_data(&px).expect("data");
+        }
+        assert_eq!(png_size(&bytes).expect("header"), (4, 2));
+        assert!(png_size(&bytes[..10]).is_err(), "a cut header is an error");
+        let chain = decode_png_mips(&bytes, 2).expect("decode");
+        assert_eq!(chain.size(), (2, 1), "the 4 px level is over the cap");
+        assert_eq!(chain.len(), 2);
+        let full = decode_png_mips(&bytes, u32::MAX).expect("decode");
+        assert_eq!(
+            &full.levels[0].2[..4],
+            &[0, 0, 0, 0],
+            "transparent texels premultiply to zero"
+        );
+        assert_eq!(full.levels[1..], chain.levels[..]);
     }
 
     #[test]

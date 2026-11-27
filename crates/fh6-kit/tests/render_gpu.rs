@@ -350,30 +350,30 @@ fn a_file_loads_once_until_it_changes() {
 }
 
 /// The brand logo path the app takes on a car change: the index names the car's brand, its dial
-/// image loads once (another car of the brand gets the same image, nothing is uploaded again)
-/// and the logo zone draws that image instead of the wordmark.
+/// is decoded without a device (the app does that on its worker thread) and uploaded from 512 px
+/// down, and the logo zone draws that image instead of the wordmark.
 #[test]
-fn a_cars_brand_logo_loads_once_and_draws() {
+fn a_cars_brand_logo_decodes_uploads_and_draws() {
     let (ctx, mut kit) = setup();
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
     let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
-    // The 2021 Porsche 911 GT3, then the 2019 911 (992).
+    // The 2021 Porsche 911 GT3, and the 2019 911 (992) of the same brand.
     let porsche = index.car_brand(&cars, 3667).logo.expect("the GT3 has a brand logo");
-    let image = index
-        .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, porsche)
-        .expect("the dial loads");
-    let count = kit.images().len();
-    let other = index.car_brand(&cars, 3123).logo.expect("the 992 has a brand logo");
-    assert_eq!(other, porsche, "one brand");
-    let again = index
-        .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, other)
-        .expect("the dial loads again");
-    assert_eq!(again, image, "the same image");
-    assert_eq!(kit.images().len(), count, "and nothing uploaded twice");
+    assert_eq!(index.car_brand(&cars, 3123).logo, Some(porsche), "one brand");
+    let chain = index.decode_dial(porsche).expect("the dial decodes");
+    let image = kit
+        .images_mut()
+        .upload_mips(&ctx.device, &ctx.queue, &chain, "PORSCHE")
+        .expect("the dial uploads");
     let size = kit.images().size(image).expect("a loaded image has a size");
-    assert!(size.0.max(size.1) <= 1024, "dial size {size:?}");
-    assert!(kit.images().mip_count(image) > 1, "mipped for small sizes");
+    assert_eq!(size, chain.size());
+    assert!(size.0.max(size.1) <= logo::DIAL_TEXTURE_SIDE, "dial size {size:?}");
+    assert_eq!(
+        kit.images().mip_count(image) as usize,
+        chain.len(),
+        "every level down to 1 x 1"
+    );
 
     let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(600.0, 200.0));
     let style = LogoStyle::new(kit.font_choice(None).wide);
@@ -392,4 +392,59 @@ fn a_cars_brand_logo_loads_once_and_draws() {
         .filter(|&(x, y)| img.pixel(x, y).is_some_and(|px| px[3] > 128))
         .count();
     assert!(lit > 500, "the logo puts pixels on screen ({lit})");
+}
+
+/// A dial uploaded from 512 px down draws the same pixels as its full 1024 px chain: the kit
+/// picks the mip level from the drawn size, so the dropped level is never sampled. Checked in
+/// Liquid Glass's 240 x 48 zone at user scale 1.0 and 1.4 (the widest use) and PorscheAnalog's
+/// 160 x 20 zone, in 4K pixels, for a wordmark, a roundel and the widest wordmark.
+#[test]
+fn a_dial_from_512_px_down_draws_the_same_pixels_as_the_full_chain() {
+    let (ctx, mut kit) = setup();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
+    let style = LogoStyle::new(kit.font_choice(None).wide);
+    for key in ["PORSCHE", "BMW", "BAC"] {
+        let brand = index
+            .resolve(key, "")
+            .unwrap_or_else(|| panic!("{key} is in the index"));
+        let path = index.dial_path(brand).expect("a dial path");
+        let bytes = std::fs::read(&path).expect("the dial file");
+        let full = kit
+            .images_mut()
+            .load_png(&ctx.device, &ctx.queue, &bytes, key)
+            .expect("the full chain");
+        let capped = index
+            .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, brand)
+            .expect("the 512 px chain");
+        assert_eq!(
+            kit.images().mip_count(full),
+            kit.images().mip_count(capped) + 1,
+            "{key}: only the 1024 px level is dropped"
+        );
+        // Zone sizes in 4K pixels; the test layout draws half a pixel per local unit.
+        for (w, h) in [(240.0_f32, 48.0_f32), (336.0, 67.2), (160.0, 20.0)] {
+            let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(w * 2.0, h * 2.0));
+            let only = |image| Logo {
+                image: Some(image),
+                ..Logo::default()
+            };
+            let (a_logo, b_logo) = (only(full), only(capped));
+            let a = render_named(&mut kit, &ctx, &format!("dial_full_{key}_{w}"), |p| {
+                logo::draw(p, zone, &a_logo, &style);
+            });
+            let b = render_named(&mut kit, &ctx, &format!("dial_512_{key}_{w}"), |p| {
+                logo::draw(p, zone, &b_logo, &style);
+            });
+            let worst = a
+                .pixels
+                .iter()
+                .zip(&b.pixels)
+                .map(|(x, y)| x.abs_diff(*y))
+                .max()
+                .unwrap_or(0);
+            assert!(worst <= 1, "{key} in a {w}x{h} zone: a channel differs by {worst}");
+            assert!(a.covered() > 20, "{key} in a {w}x{h} zone puts pixels on screen");
+        }
+    }
 }

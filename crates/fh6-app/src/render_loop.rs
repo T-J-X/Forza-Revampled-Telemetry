@@ -13,11 +13,11 @@ use fh6_gpu::seven_seg::StackStr;
 use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
-use fh6_kit::logo::BrandId;
+use fh6_kit::logo::{Dial, DialLoader};
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, ImageId, Kit,
-    Layout, Logo, Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,
+    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
+    Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
@@ -414,16 +414,6 @@ struct Gpu {
     ctx: GpuContext,
     surface: OverlaySurface,
     kit: Option<Kit>,
-    /// The brand logos loaded into this kit's image store.
-    logos: LogoCache,
-}
-
-/// The brand logo last asked of a kit, and the brands whose dial image failed to load on it
-/// (each warned about once and not read again). A new kit starts empty: its images are new.
-#[derive(Debug, Default)]
-struct LogoCache {
-    last: Option<(BrandId, Option<ImageId>)>,
-    failed: Vec<BrandId>,
 }
 
 /// The cluster on screen and what it was built for.
@@ -457,6 +447,10 @@ struct Loop {
     palette_cache: Option<(*const AppConfig, i32, &'static str)>,
     palette: Palette,
     logo: Logo,
+    /// Each brand's dial in the kit, decoded on the `fh6-logos` worker thread.
+    dials: DialLoader,
+    /// The logo the car shows once its dial arrives; until then `logo` is empty.
+    logo_waiting: Option<Logo>,
     last_update: Instant,
     refraction: Option<RefractionSource>,
     refraction_retry: Instant,
@@ -590,12 +584,9 @@ impl Loop {
         // Clusters and the refraction texture belong to the old device: rebuild them.
         self.active = None;
         self.refraction = None;
-        self.gpu = Some(Gpu {
-            ctx,
-            surface,
-            kit,
-            logos: LogoCache::default(),
-        });
+        self.gpu = Some(Gpu { ctx, surface, kit });
+        // The new kit has none of the dials: each loads again the next time its brand shows.
+        self.dials.new_kit();
         self.lost_since = None;
     }
 
@@ -671,12 +662,26 @@ impl Loop {
         let tokens = &self.resources.tokens;
         self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family);
         // `ShowLogo: false` empties the logo zone (no image, wordmark or name) and loads nothing.
+        self.logo_waiting = None;
         self.logo = if model::show_logo(cfg) {
             let brand = self.resources.logos.car_brand(&self.resources.cars, car_ordinal);
-            Logo {
-                image: self.brand_logo(brand.logo),
+            let named = Logo {
+                image: None,
                 brand_name: brand.name,
                 custom_name: cfg.custom_driver_name.clone(),
+            };
+            match self.dials.dial(brand.logo) {
+                Dial::Ready(image) => Logo {
+                    image: Some(image),
+                    ..named
+                },
+                Dial::Missing => named,
+                Dial::Loading => {
+                    // The zone stays empty for the frame or two the worker takes, then shows the
+                    // dial (`poll_logos`), so it never flashes the name first.
+                    self.logo_waiting = Some(named);
+                    Logo::default()
+                }
             }
         } else {
             Logo::default()
@@ -693,40 +698,23 @@ impl Loop {
         self.palette_cache = Some(key);
     }
 
-    /// The dial image of `brand` in this kit. It is read and uploaded the first time a car of
-    /// that brand appears (from `ensure_palette`, so on a car change and never per frame); the
-    /// kit's image store keeps it for later cars of the brand. `None` without a brand or a kit,
-    /// or when the file cannot be loaded: the wordmark then shows the brand name.
-    fn brand_logo(&mut self, brand: Option<BrandId>) -> Option<ImageId> {
-        let brand = brand?;
-        let gpu = self.gpu.as_mut()?;
-        if let Some((last, image)) = gpu.logos.last {
-            if last == brand {
-                return image;
-            }
+    /// Uploads the brand dials the worker has decoded (only while one is decoding, so most frames
+    /// skip this with one comparison), and shows the car's logo when its dial arrives.
+    fn poll_logos(&mut self) {
+        if !self.dials.busy() {
+            return;
         }
-        let kit = gpu.kit.as_mut()?;
-        let logos = &self.resources.logos;
-        let name = logos.name(brand).unwrap_or_default();
-        let image = if gpu.logos.failed.contains(&brand) {
-            None
-        } else {
-            let started = Instant::now();
-            match logos.load_dial(kit.images_mut(), &gpu.ctx.device, &gpu.ctx.queue, brand) {
-                Ok(image) => {
-                    let ms = started.elapsed().as_secs_f64() * 1000.0;
-                    tracing::info!(brand = name, ms, "brand logo ready");
-                    Some(image)
-                }
-                Err(err) => {
-                    tracing::warn!(brand = name, error = %err, "brand logo not loaded; the logo zone shows the brand name");
-                    gpu.logos.failed.push(brand);
-                    None
-                }
-            }
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        let Some(dial) = self.dials.poll(kit.images_mut(), &gpu.ctx.device, &gpu.ctx.queue) else {
+            return;
         };
-        gpu.logos.last = Some((brand, image));
-        image
+        if let Some(mut logo) = self.logo_waiting.take() {
+            if let Dial::Ready(image) = dial {
+                logo.image = Some(image);
+            }
+            self.logo = logo;
+        }
     }
 
     /// Creates the OSD carousel's thumbnail clusters when the selection moved.
@@ -802,7 +790,7 @@ impl Loop {
     ) -> Option<(FrameOutcome, Duration, KitFrameStats)> {
         let draw_start = Instant::now();
         let gpu = self.gpu.as_mut()?;
-        let Gpu { ctx, surface, kit, .. } = gpu;
+        let Gpu { ctx, surface, kit } = gpu;
         let Some(kit) = kit.as_mut() else {
             // No kit: present an empty frame so nothing stale stays on screen.
             let result = surface.render_with(ctx, |_, enc, view, _, _| {
@@ -980,6 +968,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         epoch: Instant::now(),
         fonts_listed: false,
     };
+    let dials = DialLoader::start(&resources.logos);
     let mut lp = Loop {
         gpu: None,
         resources,
@@ -1020,6 +1009,8 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         palette_cache: None,
         palette,
         logo: Logo::default(),
+        dials,
+        logo_waiting: None,
         last_update: Instant::now(),
         refraction: None,
         refraction_retry: Instant::now(),
@@ -1225,6 +1216,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         let layout = orbited(layout, care.offset_px);
         lp.ensure_cluster(&cfg, view);
         lp.ensure_palette(&cfg, data.car_ordinal);
+        lp.poll_logos();
         lp.update_refraction(&cfg, &layout, &game_process);
         let update_dt = (build_start - lp.last_update).as_secs_f32().min(MAX_DT);
         lp.last_update = build_start;
