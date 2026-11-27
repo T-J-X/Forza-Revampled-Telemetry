@@ -5,8 +5,9 @@
 // The maths is that of the former bloom render passes, tap for tap (cs_down is fs_down of
 // post.wgsl; cs_up was its fs_up): an invocation is the pixel whose centre a fragment would see
 // (id + 0.5), it samples with the same sampler, clamp and level, and stores what the fragment
-// would return. Pixels outside the dispatch's viewport are not written; like the
-// render passes' cleared texels they are never sampled, because every tap is clamped to `src_max`.
+// would return. The dispatch also covers a margin of two texels past the viewport and stores zero
+// there, as the render passes' clear did: a bilinear tap clamped to `src_max` reaches into that
+// margin, and without the zeroes it would read what an earlier, larger work rectangle left.
 
 struct Params {
     src_texel: vec2<f32>,
@@ -33,6 +34,7 @@ fn tap(uv: vec2<f32>) -> vec4<f32> {
     return textureSampleLevel(src, samp, clamp(uv, vec2<f32>(0.0), pp.src_max), pp.src_lod);
 }
 
+// True inside the viewport; the margin past it is stored as zero.
 fn inside(id: vec3<u32>) -> bool {
     return f32(id.x) < pp.origin.x && f32(id.y) < pp.origin.y;
 }
@@ -41,6 +43,7 @@ fn inside(id: vec3<u32>) -> bool {
 @compute @workgroup_size(8, 8, 1)
 fn cs_down(@builtin(global_invocation_id) id: vec3<u32>) {
     if (!inside(id)) {
+        textureStore(dst, vec2<i32>(id.xy), vec4<f32>(0.0));
         return;
     }
     let uv = (vec2<f32>(id.xy) + vec2<f32>(0.5)) * pp.dst_texel;
@@ -57,6 +60,7 @@ fn cs_down(@builtin(global_invocation_id) id: vec3<u32>) {
 @compute @workgroup_size(8, 8, 1)
 fn cs_up(@builtin(global_invocation_id) id: vec3<u32>) {
     if (!inside(id)) {
+        textureStore(dst, vec2<i32>(id.xy), vec4<f32>(0.0));
         return;
     }
     let uv = (vec2<f32>(id.xy) + vec2<f32>(0.5)) * pp.dst_texel;

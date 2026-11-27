@@ -43,6 +43,9 @@ pub(crate) const ADD_BLEND: wgpu::BlendState = wgpu::BlendState {
 
 /// Pyramid levels for blur and bloom (1/2 .. 1/32 resolution).
 const PYRAMID_LEVELS: u32 = 5;
+/// Texels past a bloom dispatch's viewport that it writes as zero: as far as a bilinear tap
+/// clamped to `src_max` reaches past the viewport, with the pyramid's rounding (see `bloom`).
+const BLOOM_MARGIN: u32 = 2;
 /// Uniform slot stride (WebGPU's minimum dynamic offset alignment).
 const SLOT: u64 = 256;
 /// Most post passes per frame.
@@ -1133,7 +1136,8 @@ impl Renderer {
         post_base: u64,
     ) {
         const STEPS: usize = 2 * PYRAMID_LEVELS as usize - 1;
-        /// One dispatch: up (or down), its parameter offset, (src, base, dst) and viewport.
+        /// One dispatch: up (or down), its parameter offset, (src, base, dst) and the texels it
+        /// covers (the viewport and its zeroed margin).
         type Step = (bool, u32, (V, V, V), (u32, u32));
         let mut steps: [Option<Step>; STEPS] = [None; STEPS];
         let downs = (0..PYRAMID_LEVELS).map(|m| {
@@ -1162,20 +1166,26 @@ impl Renderer {
                 return;
             };
             self.bloom_group(device, views.0, views.1, views.2);
-            *slot = Some((up, offset, views, vp));
+            // The render passes cleared their whole target; the dispatch zeroes a margin of
+            // `BLOOM_MARGIN` texels round the viewport instead. Bilinear taps clamped to `src_max`
+            // reach at most that far past it, so stale texels of an earlier, larger work
+            // rectangle never bleed in.
+            let size = self.targets.as_ref().map_or(vp, |t| t.size(views.2));
+            let grid = ((vp.0 + BLOOM_MARGIN).min(size.0), (vp.1 + BLOOM_MARGIN).min(size.1));
+            *slot = Some((up, offset, views, grid));
         }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fh6-kit bloom"),
             timestamp_writes: None,
         });
         stats.passes += 1;
-        for (up, offset, views, vp) in steps.into_iter().flatten() {
+        for (up, offset, views, grid) in steps.into_iter().flatten() {
             let Some(group) = self.bloom_groups.get(&views) else {
                 continue;
             };
             pass.set_pipeline(if up { &self.bloom_up } else { &self.bloom_down });
             pass.set_bind_group(0, group, &[offset]);
-            pass.dispatch_workgroups(vp.0.max(1).div_ceil(8), vp.1.max(1).div_ceil(8), 1);
+            pass.dispatch_workgroups(grid.0.max(1).div_ceil(8), grid.1.max(1).div_ceil(8), 1);
             stats.draw_calls += 1;
         }
     }
