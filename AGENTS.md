@@ -7,7 +7,7 @@
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
 
-**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The scrim (Phase 8) and the OSD (Phase 9) draw with the kit too. The v1 tiny-skia clusters were removed in Rust fix phase E (2026-11-27); a rebuild that wants to read a v1 cluster finds it at commit `21e8a06` (`git show 21e8a06:crates/fh6-clusters/src/legacy/<snake_name>.rs`).
+**v2 renderer:** clusters draw with `crates/fh6-kit` (Phase 5, ADR 0002, guide `docs/kit/README.md`) on the `crates/fh6-gpu` device (Phase 4, ADR 0001). The scrim (Phase 8) and the OSD (Phase 9) draw with the kit too. The v1 tiny-skia clusters and their `fh6-render` layer were removed in Rust fix phase E (2026-11-27); a rebuild that wants to read a v1 cluster finds it at commit `21e8a06` (`git show 21e8a06:crates/fh6-clusters/src/legacy/<snake_name>.rs`).
 
 ---
 
@@ -16,10 +16,9 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | Crate / tool | Owns | May depend on |
 |---|---|---|
 | `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, OLED care (`oled_care`: pixel orbit and idle dimmer on the render loop's clock, applied by `fh6-app`), shift guard and world-map trail (both modules exist, but no live code uses them yet) | std, serde, arc-swap, thiserror |
-| `crates/fh6-render` | The v1 tiny-skia layer. Only `dispatch::style_to_theme` is still used (by `fh6-osd`); Rust fix phase E deletes the crate once phase D moves that function to `fh6-core`. The live scrim, wash, tokens and text are in `fh6-kit` | fh6-core, tiny-skia |
 | `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), and the two Phase 5 samples (`kit/`) | fh6-core, fh6-kit |
 | `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, physically based optical glass (`optics`, `OpticalGlass`; `docs/specs/optics.md`), MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, the OEM scrim and ambient wash, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu, bytemuck, png, image, ktx2, ruzstd, resvg, gltf, ttf-parser, rustybuzz, fdsm |
-| `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
+| `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-clusters, fh6-kit |
 | `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD keyboard or remapper has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
 | `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC), the render thread's scheduling class (`system::raise_frame_thread`: MMCSS "Games", no power throttling, performance cores on a hybrid CPU) | fh6-core, `windows`, raw-window-handle |
 | `crates/fh6-gpu` | wgpu 30 DX12 device and the premultiplied overlay surface, which presents what the kit records (`render_with`; ADR 0001). Offscreen targets for tests and tools are the kit's (`fh6_kit::testing`) | wgpu |
@@ -37,7 +36,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 
 Rules for the layers:
 - Every crate may also use serde, serde_json, thiserror and tracing; the map does not repeat them.
-- Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
+- Render code (`fh6-kit`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
 - Runtime data lives in `data/`: `config.json`, `car_profiles.json`, `fh6_car_ordinals.json`, `forza_ordinals_masterlist.json`, `design_tokens.json`, `CameraPhysics.xml`, `CameraSettings.ini`.
 - Textures live in `assets/`. Reference photos live in `assets/reference/`. Specs live in `docs/specs/`.
 

@@ -31,7 +31,7 @@
 | `accessibility` | 3 | reduced flash, minimum text, colour independence, blur gate, flash audit | QA, OSD |
 | `clusters` | 1 | **legacy** per-cluster v1 layouts and palettes | nothing (v1 reference); each cluster's rebuild replaces its entry |
 
-The v1 loader (`fh6-render::tokens::DesignTokens`) read only optional `colors` and `grid` keys and ignored the rest; no live code has used it since Rust fix phase E. v3 deliberately does **not** use those two key names.
+The v1 loader (`fh6-render::tokens::DesignTokens`) read only optional `colors` and `grid` keys and ignored the rest; it went with `fh6-render` in Rust fix phase E. v3 deliberately does **not** use those two key names.
 
 ## Colour
 
