@@ -317,9 +317,9 @@ pub struct FrameStats {
     pub cpu: Duration,
     /// Shape instances drawn.
     pub instances: u32,
-    /// Draw calls issued (shapes + meshes + post passes).
+    /// Draw calls issued (shapes + meshes + post passes), counting each bloom dispatch as one.
     pub draw_calls: u32,
-    /// Render passes recorded.
+    /// Render and compute passes recorded (bloom is one compute pass).
     pub passes: u32,
     /// Work rectangle area in pixels.
     pub work_pixels: u64,
