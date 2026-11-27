@@ -19,6 +19,7 @@ members = [
     "tools/stand-in-game",
     "tools/wgc-bench",
     "tools/asset-forge",
+    "tools/visual-review",
 ]
 
 [workspace.package]

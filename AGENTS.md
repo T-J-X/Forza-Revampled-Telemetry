@@ -25,6 +25,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `crates/fh6-gpu` | wgpu 30 DX12 device, premultiplied overlay surface, offscreen target, `render_with` presentation for the kit, Phase 4 quad pipeline and test cluster (ADR 0001) | wgpu, bytemuck |
 | `crates/fh6-app` | Binaries `FH6_WheelDash` and `FH6_SteamLauncher`: thread wiring, render loop, latency stats and `--bench-seconds` report, args, launcher plan, OSD wiring (the remapper moved to fh6-osd), OLED care (the orbit moves the layout, the idle dim turns down the dash's light), the render-thread panic guard (panic log, quit with exit code 3), status server (no `unsafe`) | all crates |
 | `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--legacy` adds the v1 clusters; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, render, osd |
+| `tools/visual-review` | CPU-only review images for a thread's self-review (no GPU lock), from `preview-export`'s renders, the goldens and design exports → `mockups/<Name>/review/`: 1:1 tiles and zooms, the tokens' blur gate with contrast per zone, golden-harness diffs with heat maps and crop pairs, comparison sheets, the WCAG 2.3.1 flash audit, the motion profile, colour-vision views, near-black stretch, static parts, a blind glance read, dial unwraps and annotated screenshots. Used through the `fh6-visual-review` skill | fh6-kit, image, resvg (fh6-clusters in its tests only) |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause` and `parked` (idle at 800 rpm, for the OLED idle dim), `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
 | `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
 | `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-core, fh6-gpu, fh6-kit, fh6-clusters |
@@ -51,6 +52,8 @@ cargo run -p parity-dump -- tests/golden/packets
 cargo run -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 10
 cargo run --release -p preview-export
 cargo run --release -p preview-export -- --cluster LiquidGlass
+cargo run --release -p visual-review -- --help
+cargo run --release -p visual-review -- flash mockups/LiquidGlass/sequence --frames 30-41
 cargo run -p fh6-app --bin FH6_WheelDash
 cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster LiquidGlass --stats
 cargo run --release -p bench-render -- --frames 600
@@ -97,10 +100,10 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
     - Blender's bpy snippets live as Rust string constants inside `tools/asset-forge`.
     - Web logic is Rust compiled to WASM; generated JS is never committed.
     - Prefer pure-Rust crates.
-12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers, then TJX's sign-off. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. Direction checks and sign-offs come from TJX only; no session answers for TJX.
-13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like). It closes only after a line-by-line review against this file and `SKILLS.md`, and TJX's sign-off. No thread is ever archived.
+12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. TJX is hands-off (16:00 UTC that day): each thread runs its own direction check and closing review with the installed review skills and agents (`design:design-critique`, `design:accessibility-review`, `rust-review` with `rust-skills`, and the fixed checklist), reviews every render, board and motion sequence with the `fh6-visual-review` skill and its `visual-review` tool, posts the results and renders in its thread, and does not wait for TJX. Where TJX does answer, TJX's own words win and are quoted in the handover; no session answers for TJX.
+13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like), and posts a short update with a render or screenshot at each milestone, at least every 20 to 30 minutes. It closes only after a line-by-line review against this file and `SKILLS.md` (rule 12). No thread is ever archived.
 14. **Order for every dash (TJX, 2026-11-27).** R&D on the web → Penpot → ComfyUI → final 3D in Blender. All assets are 4K. The 4K masters go to the one Google Drive folder (`SKILLS.md` section 2); git keeps the compressed runtime assets.
-15. **Two GPU lanes, one job each (TJX, 2026-11-27).** The local card and the rented cloud pod each run one GPU job at a time across all threads, each under its own lock file (`SKILLS.md` section 5). The cloud lane is Runpod, started only through `asset-forge`, inside the $50 budget TJX set (`docs/cloud-gpu.md`). Another provider, or a higher budget, needs TJX first.
+15. **Two GPU lanes, cloud first (TJX, 2026-11-27).** Every asset-forge ComfyUI and Blender job runs on the rented cloud pod, which takes two jobs at once; the local card runs one job at a time and keeps the kit's work (`preview-export`, the goldens, the live bench). Each job holds a lock file (`SKILLS.md` section 5). The cloud lane is Runpod, started only through `asset-forge`, inside the $50 budget of GPU time TJX set (`docs/cloud-gpu.md`). Another provider, or a higher budget, needs TJX first.
 16. **Merging (TJX, 2026-11-27).** When a job is finished and its checks pass, the coordinator merges it into `main` and pushes. Threads that share a checkout commit with explicit paths and never switch its branch.
 
 ---
@@ -158,13 +161,13 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 
 ### 3A: Optical Glassmorphism & Apple CarPlay Ultra Director (`LiquidGlass`, OLED OSD)
 - Ex-Apple Human Interface and Leica optics.
-- **Mandate:** an authentic iOS 26 / CarPlay Ultra / visionOS Liquid Glass cluster:
-  - an 18–24% ultra-translucent frosted sapphire lens that the 3D cockpit refracts through
-  - the optional cached caustic overlay `assets/liquid_glass_caustic_lens.png`, composited with procedural 1 px multi-stop specular bevel rims (`#FFFFFF -> #38BDF8`)
-  - an arched upper crown sheen and floating light-weight typography in the OFL motorsport default, Saira Condensed (Bahnschrift is not OFL, so it is not shipped)
-  - a sculpted crystal hero-gear prism
-  - a luminous fluid light-ribbon tach with a glowing radial meniscus orb
-- Optical maths is in `docs/specs/optics.md`, which replaces card P8-1 of `docs/specs/phase-8-materials-and-shaders.md`. Where the bullets above differ from that document or from the clear-glass rule in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`, those two win until the pilot thread rewrites this mandate.
+- **Mandate:** an authentic iOS 26 / CarPlay Ultra / visionOS Liquid Glass cluster, as the rebuilt pilot (2026-11-27) and the family spec `docs/design/families/liquid-glass.md` define it:
+  - separate drops of clear synthetic sapphire (n_d 1.768, no frost) float over OLED black, one per instrument, each a real optical object (`fh6_kit::OpticalGlass`: exact Fresnel, Snell refraction and Beer-Lambert absorption, lit by one studio)
+  - the light lives under the glass: the shift lights, the rev ribbon and the numerals are drawn first and the glass bends them; a dome over a numeral magnifies it (the pilot's gear about 1.15 times)
+  - thin rims from one studio (a Blender environment with a ComfyUI panorama on its cyclorama, and the kit's analytic studio as the fallback) whose light swings with lateral G and leans to the palette's primary colour
+  - liquid behaviour by smooth union: the shift-light cabochons fuse into one bar on the limiter, the side pieces reach for the gear lens under braking, and an upshift ripple runs out through the gear lens's rim while the numeral stays still
+  - a graduated light-ribbon rod with a ray-traced liquid-light caustic and a meniscus bead, and OFL type: Saira Condensed for the gear, Saira for the figures, Titillium Web for the labels (Bahnschrift is not OFL, so it is not shipped)
+- Optical maths is in `docs/specs/optics.md`, which replaces card P8-1 of `docs/specs/phase-8-materials-and-shaders.md`. Never a frosted or tinted panel, a painted rim, sheen or fresnel band, or a texture inside the glass.
 
 ### 3B: Overhead AR Road-Map & GT7 Telemetry Director (`WindshieldHud`, `Gt7HoodPro`, `BoschDdu`, `PorscheAnalog`)
 - **`WindshieldHud`:**
@@ -210,7 +213,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 - **Gate every change:**
   - `cargo check`, `cargo test`, `cargo clippy -D warnings` and `cargo fmt --check` across the workspace. Report the real output, and compare against the known reds above.
   - **Golden telemetry:** the `golden_telemetry` test, plus `parity-dump` on `tests/golden/packets`, must cover all 20 packets. Never edit a golden `.json` to make a test pass.
-  - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Use them for visual review.
+  - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Review them with the `fh6-visual-review` skill: its fixed checklist and the `visual-review` tool (CPU only), never judging detail by eye on a downscaled 4K frame.
 - **Deploy:** only on TJX's GO, and with a SHA256 parity check after copying. There are two targets:
   1. `E:\SteamLibrary\steamapps\common\ForzaHorizon6\`, in `mediapc\Camera\` (camera files) and `WheelDash\` (binaries, `config.json`, assets)
   2. `%USERPROFILE%\Downloads\FH6 Ultimate Camera\` (distribution mirror)

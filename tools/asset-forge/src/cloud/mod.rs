@@ -71,6 +71,9 @@ const MIN_POD_SECS: u64 = 10 * 60;
 /// A pod this close to its lifetime cap is replaced before a job starts on it (or within a
 /// quarter of the cap, when the budget made the cap short).
 const RECYCLE_MARGIN_SECS: u64 = 30 * 60;
+/// A pod that another run is using is kept, not replaced, while at least this much of its
+/// life is left.
+const MIN_SHARED_LEFT_SECS: u64 = 5 * 60;
 /// How long a new pod may take to come up (image pull included) before it is given up on.
 const START_TIMEOUT_SECS: u64 = 15 * 60;
 /// How long the pod's services may take to report ready.
@@ -110,6 +113,9 @@ pub struct Config {
     pub budget_usd: f64,
     /// From this total on, every cloud job says how much of the budget is spent.
     pub budget_warn_usd: f64,
+    /// Whether the volume's storage counts towards the budget. TJX chose GPU time only on
+    /// 2026-11-27, after growing the volume to 400 GB: storage is shown, not counted.
+    pub budget_counts_storage: bool,
 }
 
 impl Default for Config {
@@ -129,6 +135,7 @@ impl Default for Config {
             tunnel_port: 8189,
             budget_usd: DEFAULT_BUDGET_USD,
             budget_warn_usd: DEFAULT_BUDGET_WARN_USD,
+            budget_counts_storage: false,
         }
     }
 }
@@ -212,6 +219,16 @@ impl Spent {
     #[must_use]
     pub fn total(&self) -> f64 {
         self.pods + self.storage
+    }
+
+    /// What counts towards the budget: pod time, plus storage when the settings say so.
+    #[must_use]
+    pub fn counted(&self, config: &Config) -> f64 {
+        if config.budget_counts_storage {
+            self.total()
+        } else {
+            self.pods
+        }
     }
 }
 
@@ -332,7 +349,14 @@ impl Home {
             context: path.display().to_string(),
             source,
         })?;
-        std::fs::write(path, text + "\n").map_err(|e| io_err(path, e))
+        // Written to a file of this process's own and then renamed over the old one, so a run
+        // that reads the file while another run writes it never sees half of it.
+        let part = path.with_extension(format!("{}.part", std::process::id()));
+        std::fs::write(&part, text + "\n").map_err(|e| io_err(&part, e))?;
+        std::fs::rename(&part, path).map_err(|e| {
+            let _ = std::fs::remove_file(&part);
+            io_err(path, e)
+        })
     }
 
     /// The settings, or an error that says to run `cloud setup`.
@@ -440,9 +464,12 @@ pub struct Session {
     pub ssh: Ssh,
     /// The pod's ComfyUI as seen from this PC.
     pub comfy_url: String,
+    /// A name for this run, unique among the runs that share the pod. This run's job folders
+    /// and uploads on the pod carry it, so two runs never touch each other's files.
+    pub tag: String,
     home: Home,
     _tunnel: Tunnel,
-    _run: RunLock,
+    _user: UserLock,
 }
 
 impl Session {
@@ -478,9 +505,9 @@ pub fn with_session<T>(paths: &Paths, job: impl FnOnce(&Session) -> Result<T>) -
     result
 }
 
-/// The pod's ComfyUI address on this PC, starting the pod when needed.
-pub fn comfy_url(paths: &Paths) -> Result<String> {
-    with_session(paths, |session| Ok(session.comfy_url.clone()))
+/// The pod's ComfyUI address on this PC and this run's tag, starting the pod when needed.
+pub fn comfy_endpoint(paths: &Paths) -> Result<(String, String)> {
+    with_session(paths, |session| Ok((session.comfy_url.clone(), session.tag.clone())))
 }
 
 /// Ends this process's session: the forward closes and the pod's idle clock starts. The pod
@@ -492,52 +519,149 @@ pub fn close() {
     }
 }
 
+/// This run's tag: a name unique among the runs that share the pod, made from the process id.
+#[must_use]
+pub fn run_tag() -> String {
+    format!("run{}", std::process::id())
+}
+
 /// Windows' `ERROR_SHARING_VIOLATION`: another process has the file open and shares nothing.
 const SHARING_VIOLATION: i32 = 32;
 
-/// Held by a run from the moment it opens the pod until it closes it, so two runs on this PC
-/// can never start two pods or overwrite each other's record. Windows lets go of it by itself
-/// when the process ends, so a run that crashed leaves nothing to clear. (Other systems open
-/// the file without this guard; the tool runs on Windows.)
+/// Opens `path` so that no other handle can open it while this one lives. Windows closes the
+/// handle by itself when the process ends, so a run that crashed leaves nothing held. (Other
+/// systems open the file without this guard; the tool runs on Windows.)
+fn open_exclusive(path: &Path) -> std::io::Result<std::fs::File> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        // Share nothing: every other open of the file fails while this handle lives.
+        options.share_mode(0);
+    }
+    options.open(path)
+}
+
+/// True when an open failed because another handle holds the file.
+fn held_elsewhere(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(SHARING_VIOLATION)
+}
+
+/// The longest a run waits for another run to finish starting the pod: a first install on an
+/// empty volume took 21 minutes.
+const START_WAIT_SECS: u64 = 30 * 60;
+
+/// Held by the one run that is starting, checking or installing the pod. Other runs wait for
+/// it, so two runs never start two pods, run the installer at the same time or overwrite each
+/// other's record. It is let go as soon as the pod is ready, and the runs then share the pod.
 #[derive(Debug)]
-struct RunLock {
+struct StartLock {
     _file: std::fs::File,
 }
 
-impl RunLock {
+impl StartLock {
     fn path(home: &Home) -> PathBuf {
-        home.dir.join("run.lock")
+        home.dir.join("start.lock")
     }
 
-    fn open(home: &Home) -> std::io::Result<std::fs::File> {
-        std::fs::create_dir_all(&home.dir)?;
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt as _;
-            // Share nothing: every other open of the file fails while this handle lives.
-            options.share_mode(0);
-        }
-        options.open(Self::path(home))
-    }
-
-    /// Takes the lock, or says that another run has it.
-    fn take(home: &Home) -> Result<Self> {
-        match Self::open(home) {
-            Ok(file) => Ok(Self { _file: file }),
-            Err(e) if e.raw_os_error() == Some(SHARING_VIOLATION) => Err(tool_err(
-                "cloud",
-                "another asset-forge run on this PC is using the pod. Let it finish first (one job per lane, SKILLS.md section 5)",
-            )),
+    /// Takes the lock now, or `None` while another run holds it.
+    fn try_take(home: &Home) -> Result<Option<Self>> {
+        match open_exclusive(&Self::path(home)) {
+            Ok(file) => Ok(Some(Self { _file: file })),
+            Err(e) if held_elsewhere(&e) => Ok(None),
             Err(e) => Err(io_err(&Self::path(home), e)),
         }
     }
 
-    /// True when another run on this PC holds the lock right now.
-    fn busy(home: &Home) -> bool {
-        matches!(Self::open(home), Err(e) if e.raw_os_error() == Some(SHARING_VIOLATION))
+    /// Takes the lock, waiting while another run starts the pod.
+    fn take(home: &Home) -> Result<Self> {
+        let deadline = clock::now() + START_WAIT_SECS;
+        let mut told = false;
+        loop {
+            if let Some(lock) = Self::try_take(home)? {
+                return Ok(lock);
+            }
+            if clock::now() > deadline {
+                return Err(tool_err(
+                    "cloud",
+                    "another asset-forge run has been starting the pod for 30 minutes; `asset-forge cloud status` shows the pod",
+                ));
+            }
+            if !told {
+                say("waiting for another run to finish starting the pod");
+                told = true;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
     }
+}
+
+/// Held by each run for as long as it uses the pod, one file per run in `runs\`, so a command
+/// can tell whether other runs still use the pod before it deletes or replaces it.
+#[derive(Debug)]
+struct UserLock {
+    file: Option<std::fs::File>,
+    path: PathBuf,
+}
+
+impl UserLock {
+    fn folder(home: &Home) -> PathBuf {
+        home.dir.join("runs")
+    }
+
+    /// Marks this process as a run that uses the pod.
+    fn take(home: &Home) -> Result<Self> {
+        let path = Self::folder(home).join(format!("{}.lock", std::process::id()));
+        let file = open_exclusive(&path).map_err(|e| io_err(&path, e))?;
+        Ok(Self { file: Some(file), path })
+    }
+
+    /// How many runs other than `own` use the pod now. Files left by runs that ended are
+    /// removed on the way.
+    fn others(home: &Home, own: Option<&Self>) -> usize {
+        let Ok(entries) = std::fs::read_dir(Self::folder(home)) else {
+            return 0;
+        };
+        let mut count = 0;
+        for path in entries.filter_map(|e| e.ok().map(|e| e.path())) {
+            if own.is_some_and(|own| own.path == path) {
+                continue;
+            }
+            match open_exclusive(&path) {
+                Ok(file) => {
+                    drop(file);
+                    let _ = std::fs::remove_file(&path);
+                }
+                Err(e) if held_elsewhere(&e) => count += 1,
+                Err(_) => {}
+            }
+        }
+        count
+    }
+}
+
+impl Drop for UserLock {
+    fn drop(&mut self) {
+        // The handle first: Windows refuses to delete a file that is still open this way.
+        drop(self.file.take());
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// The port on this PC for the forward: `preferred` when it is free, else any free one, so a
+/// second run that shares the pod gets a forward of its own.
+fn free_port(preferred: u16) -> Result<u16> {
+    if std::net::TcpListener::bind(("127.0.0.1", preferred)).is_ok() {
+        return Ok(preferred);
+    }
+    std::net::TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|listener| listener.local_addr())
+        .map(|address| address.port())
+        .map_err(|e| tool_err("cloud", format!("no free port on this PC for the forward: {e}")))
 }
 
 fn say(text: &str) {
@@ -666,13 +790,22 @@ fn spent(api: &dyn Api, home: &Home, live: Option<&State>, now: u64) -> Spent {
 
 /// The budget in one line, for status reports, warnings and refusals.
 fn budget_line(config: &Config, spent: &Spent) -> String {
-    format!(
-        "${:.2} of the ${:.2} budget is spent (pods ${:.2}, volume storage ${:.2})",
-        spent.total(),
-        config.budget_usd,
-        spent.pods,
-        spent.storage
-    )
+    if config.budget_counts_storage {
+        format!(
+            "${:.2} of the ${:.2} budget is spent (pods ${:.2}, volume storage ${:.2})",
+            spent.counted(config),
+            config.budget_usd,
+            spent.pods,
+            spent.storage
+        )
+    } else {
+        format!(
+            "${:.2} of the ${:.2} budget is spent on GPU time (volume storage so far ${:.2}, shown, not counted)",
+            spent.counted(config),
+            config.budget_usd,
+            spent.storage
+        )
+    }
 }
 
 /// Prints the budget line of `cloud status` and `cloud spend`.
@@ -683,7 +816,7 @@ fn print_budget(config: &Config, spent: &Spent) {
             spent.damaged
         )
     } else {
-        match config.budget(spent.total()) {
+        match config.budget(spent.counted(config)) {
             Budget::Fine => String::new(),
             Budget::Warn => format!("; that is over the ${:.2} warning line", config.budget_warn_usd),
             Budget::Spent => "; it is used up, and no pod starts until TJX raises `budget_usd` in lane.json".to_owned(),
@@ -694,8 +827,15 @@ fn print_budget(config: &Config, spent: &Spent) {
 
 /// Stops the lane when its budget is used up or cannot be counted, and says so when it is
 /// close. When the budget is used up, the pod that is up (`live`) is deleted and booked up to
-/// now.
-fn hold_to_budget(api: &dyn Api, home: &Home, config: &Config, spent: &Spent, live: Option<&State>) -> Result<()> {
+/// now, unless `others` runs still use it: its deadline already keeps it within the budget.
+fn hold_to_budget(
+    api: &dyn Api,
+    home: &Home,
+    config: &Config,
+    spent: &Spent,
+    live: Option<&State>,
+    others: usize,
+) -> Result<()> {
     if spent.damaged > 0 {
         return Err(tool_err(
             "cloud",
@@ -706,14 +846,14 @@ fn hold_to_budget(api: &dyn Api, home: &Home, config: &Config, spent: &Spent, li
             ),
         ));
     }
-    match config.budget(spent.total()) {
+    match config.budget(spent.counted(config)) {
         Budget::Fine => Ok(()),
         Budget::Warn => {
             say(&format!("warning: {}", budget_line(config, spent)));
             Ok(())
         }
         Budget::Spent => {
-            if let Some(state) = live {
+            if let Some(state) = live.filter(|_| others == 0) {
                 // If the delete fails, the pod's own lifetime cap still ends it.
                 let _ = retire(api, home, state, "deleted: the budget is used up");
             }
@@ -765,7 +905,7 @@ fn state_for(pod: &Pod, lock: &Lock, started: u64, max_secs: u64, usd_per_hour: 
 /// lifetime cap is what the rest of the budget pays for, when that is less than `max_hours`,
 /// and its deadline is set in its environment, so its own watchdog enforces both.
 fn create_pod(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, spent: &Spent) -> Result<(State, Pod)> {
-    let Some(life) = config.pod_life_secs(spent.total()) else {
+    let Some(life) = config.pod_life_secs(spent.counted(config)) else {
         return Err(tool_err(
             "cloud",
             format!(
@@ -906,10 +1046,31 @@ fn ensure_pod(
     lock: &Lock,
     spent: &Spent,
     live: Option<(State, Pod)>,
+    others: usize,
 ) -> Result<(State, Pod)> {
     let mut retired = None;
     if let Some((state, pod)) = live {
-        if worth_keeping(clock::now().saturating_sub(state.started), state.cap(config)) {
+        let age = clock::now().saturating_sub(state.started);
+        let cap = state.cap(config);
+        if worth_keeping(age, cap) {
+            return Ok((state, pod));
+        }
+        if others > 0 {
+            // Another run is using it, so it is not replaced under that run.
+            let left = cap.saturating_sub(age);
+            if left < MIN_SHARED_LEFT_SECS {
+                return Err(tool_err(
+                    "cloud",
+                    format!(
+                        "the pod ends in {} and another run is using it; run the job again once it has ended",
+                        clock::span(left)
+                    ),
+                ));
+            }
+            say(&format!(
+                "the pod ends in {}; another run is using it, so it is kept",
+                clock::span(left)
+            ));
             return Ok((state, pod));
         }
         say("the pod is close to its lifetime cap; replacing it before the job starts");
@@ -924,11 +1085,11 @@ fn ensure_pod(
 
 /// Everything before the pod is reached: books a pod on record that has ended, holds the lane
 /// to its budget, and returns the pod to use, starting one when needed.
-fn prepare(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, now: u64) -> Result<(State, Pod)> {
+fn prepare(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, now: u64, others: usize) -> Result<(State, Pod)> {
     let live = settle(api, home, config)?;
     let spent = spent(api, home, live.as_ref().map(|(state, _)| state), now);
-    hold_to_budget(api, home, config, &spent, live.as_ref().map(|(state, _)| state))?;
-    ensure_pod(api, home, config, lock, &spent, live)
+    hold_to_budget(api, home, config, &spent, live.as_ref().map(|(state, _)| state), others)?;
+    ensure_pod(api, home, config, lock, &spent, live, others)
 }
 
 /// Waits until the pod runs and its sshd takes the key.
@@ -1016,15 +1177,10 @@ fn start_services(ssh: &Ssh) -> Result<()> {
 }
 
 /// Opens the forward to the pod's ComfyUI and waits until it answers through it.
-fn open_tunnel(ssh: &Ssh, port: u16) -> Result<(Tunnel, String)> {
-    // A forward left over from an earlier run would answer in the pod's place: refuse to start
-    // while the port is taken.
-    if std::net::TcpListener::bind(("127.0.0.1", port)).is_err() {
-        return Err(tool_err(
-            "cloud",
-            format!("port {port} on this PC is in use, probably by an ssh.exe from an earlier run. End that process and run the command again"),
-        ));
-    }
+fn open_tunnel(ssh: &Ssh, preferred: u16) -> Result<(Tunnel, String)> {
+    // A port nothing listens on, so no forward of another run, or of an earlier one, can answer
+    // in the pod's place.
+    let port = free_port(preferred)?;
     let url = format!("http://127.0.0.1:{port}");
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
@@ -1051,12 +1207,16 @@ fn open(paths: &Paths) -> Result<Session> {
     let home = Home::of(paths);
     let config = home.config()?;
     let lock = Lock::require(&paths.tools, Lane::Cloud)?;
-    let run = RunLock::take(&home)?;
+    let user = UserLock::take(&home)?;
     let api = Runpod::new(&home.api_key()?);
     let began = clock::now();
-    let (state, pod) = prepare(&api, &home, &config, &lock, began)?;
+    let start = StartLock::take(&home)?;
+    let others = UserLock::others(&home, Some(&user));
+    let (state, pod) = prepare(&api, &home, &config, &lock, began, others)?;
     let ssh = wait_for_ssh(&api, &home, &state, pod)?;
     make_ready(&ssh)?;
+    // The pod is ready: other runs may start using it from here.
+    drop(start);
     let (tunnel, comfy_url) = open_tunnel(&ssh, config.tunnel_port)?;
     // Say how long the wait was, and whether it included starting a pod, so the start-up time
     // in the guide can be checked against a real run.
@@ -1066,13 +1226,19 @@ fn open(paths: &Paths) -> Result<Session> {
     } else {
         "the pod that was already up"
     };
-    say(&format!("pod {} is ready after {waited} ({how})", state.pod_id));
+    let shared = if others > 0 {
+        format!(", shared with {others} other run(s)")
+    } else {
+        String::new()
+    };
+    say(&format!("pod {} is ready after {waited} ({how}{shared})", state.pod_id));
     Ok(Session {
         ssh,
         comfy_url,
+        tag: run_tag(),
         home,
         _tunnel: tunnel,
-        _run: run,
+        _user: user,
     })
 }
 
@@ -1281,7 +1447,14 @@ fn setup(paths: &Paths, home: &Home, args: &[String]) -> Result<()> {
     Lock::require(&paths.tools, Lane::Cloud)?;
     let live = settle(&api, home, &config)?;
     let spent_now = spent(&api, home, live.as_ref().map(|(state, _)| state), clock::now());
-    hold_to_budget(&api, home, &config, &spent_now, live.as_ref().map(|(state, _)| state))?;
+    hold_to_budget(
+        &api,
+        home,
+        &config,
+        &spent_now,
+        live.as_ref().map(|(state, _)| state),
+        UserLock::others(home, None),
+    )?;
     ssh::ensure_key(&home.ssh_key())?;
     if create_volume {
         let volume = api.create_volume(pod::VOLUME_NAME, config.volume_gb, &config.data_center)?;
@@ -1301,12 +1474,9 @@ fn setup(paths: &Paths, home: &Home, args: &[String]) -> Result<()> {
 
 fn down(home: &Home) -> Result<()> {
     close();
-    if RunLock::busy(home) {
-        say("warning: another asset-forge run on this PC is using the pod; its jobs will fail");
-    }
     let config = home.config().unwrap_or_default();
     let api = Runpod::new(&home.api_key()?);
-    down_with(&api, home, &config)
+    down_with(&api, home, &config, UserLock::others(home, None))
 }
 
 fn print_retired(session: &spend::Session) {
@@ -1320,8 +1490,16 @@ fn print_retired(session: &spend::Session) {
 }
 
 /// Deletes the pod on record and every other pod of ours that is up, and books each one. A pod
-/// on record that has already ended is booked up to its estimated end, not up to now.
-fn down_with(api: &dyn Api, home: &Home, config: &Config) -> Result<()> {
+/// on record that has already ended is booked up to its estimated end, not up to now. While
+/// `others` runs still use the pod, nothing is deleted: the last run's idle clock ends it.
+fn down_with(api: &dyn Api, home: &Home, config: &Config, others: usize) -> Result<()> {
+    if others > 0 {
+        println!(
+            "cloud: {others} other run(s) still use the pod, so it stays up; it deletes itself {} minutes after the last run ends",
+            config.idle_minutes
+        );
+        return Ok(());
+    }
     let mut deleted = 0;
     let mut skip = None;
     if let Some((state, _)) = settle(api, home, config)? {
@@ -1391,6 +1569,7 @@ fn status_with(api: &dyn Api, home: &Home, config: &Config) -> Result<()> {
                 state.usd_per_hour
             );
             println!("     started for: {} / {}", state.thread, state.job);
+            println!("     runs using it from this PC: {}", UserLock::others(home, None));
         }
     }
     let ours = live.as_ref().map(|(state, _)| state.pod_id.as_str());
@@ -2220,7 +2399,7 @@ mod tests {
         let now = clock::now();
         let started = now - 3 * 24 * 3600;
         home.save_state(Some(&record("gone1", started, started + 600))).unwrap();
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         let log = logged(&home);
         assert_eq!(log.len(), 1);
         assert_eq!(log[0].pod_id, "gone1");
@@ -2241,7 +2420,7 @@ mod tests {
         let live = settle(&fake, &home, &test_config()).unwrap();
         let counted = spent(&fake, &home, live.as_ref().map(|(s, _)| s), now);
         assert!((counted.total() - 0.89).abs() < 0.001, "{}", counted.total());
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         assert_eq!(state.pod_id, "up1");
         assert!(fake.created.borrow().is_empty());
         assert!(logged(&home).is_empty());
@@ -2255,7 +2434,7 @@ mod tests {
         let fake = Fake::with(vec![fake_pod("up2", "RUNNING", 0.89, now - 3600)]);
         booked(&home, "old", 49.5);
         home.save_state(Some(&record("up2", now - 3600, now - 60))).unwrap();
-        let err = prepare(&fake, &home, &test_config(), &test_lock(), now)
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), now, 0)
             .unwrap_err()
             .to_string();
         assert!(err.contains("the cloud lane is closed"), "{err}");
@@ -2272,7 +2451,7 @@ mod tests {
         let fake = Fake::with(Vec::new());
         booked(&home, "old", 48.0);
         let now = clock::now();
-        prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         // $2 left at the $0.90 price cap.
         assert_eq!(fake.env_of(0, "FORGE_MAX_SECS").as_deref(), Some("8000"));
         let deadline: u64 = fake.env_of(0, "FORGE_DEADLINE").unwrap().parse().unwrap();
@@ -2286,7 +2465,7 @@ mod tests {
         let home = test_home("over_cap");
         let fake = Fake::with(Vec::new());
         fake.price.set(1.25);
-        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now())
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now(), 0)
             .unwrap_err()
             .to_string();
         assert!(err.contains("over the $0.90 limit"), "{err}");
@@ -2303,7 +2482,7 @@ mod tests {
         let home = test_home("no_price");
         let fake = Fake::with(Vec::new());
         fake.price.set(0.0);
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), clock::now()).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), clock::now(), 0).unwrap();
         assert!((state.usd_per_hour - 0.90).abs() < 1e-9);
         cleanup(&home);
     }
@@ -2317,7 +2496,7 @@ mod tests {
             fake_pod("s2", "RUNNING", 0.89, now - 300),
             fake_pod("s3", "EXITED", 0.89, now - 900),
         ]);
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         assert_eq!(state.pod_id, "s1");
         assert_eq!(home.state().unwrap().pod_id, "s1");
         assert_eq!(*fake.terminated.borrow(), ["s2", "s3"]);
@@ -2334,7 +2513,7 @@ mod tests {
         let home = test_home("stray_over_cap");
         let now = clock::now();
         let fake = Fake::with(vec![fake_pod("s4", "RUNNING", 1.50, now - 300)]);
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         assert_eq!(state.pod_id, "new1");
         assert_eq!(*fake.terminated.borrow(), ["s4"]);
         cleanup(&home);
@@ -2347,7 +2526,7 @@ mod tests {
         let fake = Fake::with(vec![fake_pod("old", "RUNNING", 0.89, now - 14_000)]);
         fake.lagging.set(true);
         home.save_state(Some(&record("old", now - 14_000, now - 100))).unwrap();
-        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 0).unwrap();
         assert_eq!(state.pod_id, "new1");
         assert_eq!(*fake.terminated.borrow(), ["old"]);
         let log = logged(&home);
@@ -2364,9 +2543,9 @@ mod tests {
         fake.refuse_terminate.set(true);
         booked(&home, "old", 49.5);
         home.save_state(Some(&record("up3", now - 3600, now - 60))).unwrap();
-        assert!(prepare(&fake, &home, &test_config(), &test_lock(), now).is_err());
+        assert!(prepare(&fake, &home, &test_config(), &test_lock(), now, 0).is_err());
         assert_eq!(home.state().unwrap().pod_id, "up3");
-        assert!(down_with(&fake, &home, &test_config()).is_err());
+        assert!(down_with(&fake, &home, &test_config(), 0).is_err());
         assert_eq!(home.state().unwrap().pod_id, "up3");
         assert_eq!(logged(&home).len(), 1, "nothing is booked for a pod that is still up");
         cleanup(&home);
@@ -2379,7 +2558,7 @@ mod tests {
         let started = now - 3 * 24 * 3600;
         let fake = Fake::with(vec![fake_pod("s5", "RUNNING", 0.89, now - 900)]);
         home.save_state(Some(&record("gone2", started, started + 600))).unwrap();
-        down_with(&fake, &home, &test_config()).unwrap();
+        down_with(&fake, &home, &test_config(), 0).unwrap();
         let log = logged(&home);
         assert_eq!(log.len(), 2);
         assert_eq!((log[0].pod_id.as_str(), log[0].seconds), ("gone2", 1230));
@@ -2396,7 +2575,7 @@ mod tests {
         // A folder where the record should go makes writing it fail.
         std::fs::create_dir_all(home.dir.join("state.json")).unwrap();
         let fake = Fake::with(Vec::new());
-        assert!(prepare(&fake, &home, &test_config(), &test_lock(), clock::now()).is_err());
+        assert!(prepare(&fake, &home, &test_config(), &test_lock(), clock::now(), 0).is_err());
         assert_eq!(*fake.terminated.borrow(), ["new1"]);
         cleanup(&home);
     }
@@ -2406,7 +2585,7 @@ mod tests {
         let home = test_home("damaged");
         std::fs::write(home.spend_log(), "not a session\n").unwrap();
         let fake = Fake::with(Vec::new());
-        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now())
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now(), 0)
             .unwrap_err()
             .to_string();
         assert!(err.contains("cannot be counted"), "{err}");
@@ -2442,15 +2621,113 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn only_one_run_on_this_pc_holds_the_pod() {
-        let home = test_home("run_lock");
-        let first = RunLock::take(&home).unwrap();
-        assert!(RunLock::busy(&home));
-        let err = RunLock::take(&home).unwrap_err().to_string();
-        assert!(err.contains("another asset-forge run"), "{err}");
+    fn only_one_run_at_a_time_starts_the_pod() {
+        let home = test_home("start_lock");
+        let first = StartLock::try_take(&home).unwrap();
+        assert!(first.is_some());
+        assert!(StartLock::try_take(&home).unwrap().is_none(), "a second run waits");
         drop(first);
-        assert!(!RunLock::busy(&home));
-        assert!(RunLock::take(&home).is_ok());
+        assert!(StartLock::try_take(&home).unwrap().is_some());
         cleanup(&home);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_runs_that_use_the_pod_are_counted_and_ended_ones_cleared() {
+        let home = test_home("users");
+        let own = UserLock::take(&home).unwrap();
+        assert_eq!(UserLock::others(&home, Some(&own)), 0);
+        assert_eq!(UserLock::others(&home, None), 1);
+        // Another run: a lock file held by a handle of its own.
+        let other_path = UserLock::folder(&home).join("999999.lock");
+        let other = open_exclusive(&other_path).unwrap();
+        assert_eq!(UserLock::others(&home, Some(&own)), 1);
+        // That run ends: its file is no longer held, and the next count removes it.
+        drop(other);
+        assert_eq!(UserLock::others(&home, Some(&own)), 0);
+        assert!(!other_path.exists());
+        // A run's own file goes when it ends.
+        let own_path = own.path.clone();
+        drop(own);
+        assert!(!own_path.exists());
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_shared_pod_is_not_deleted_at_the_budget_while_another_run_uses_it() {
+        let home = test_home("shared_budget");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("up4", "RUNNING", 0.89, now - 3600)]);
+        booked(&home, "old", 49.5);
+        home.save_state(Some(&record("up4", now - 3600, now - 60))).unwrap();
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), now, 1)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("the cloud lane is closed"), "{err}");
+        assert!(fake.terminated.borrow().is_empty(), "the other run's pod stays up");
+        assert_eq!(home.state().unwrap().pod_id, "up4");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_shared_pod_near_its_cap_is_kept_and_one_about_to_end_is_refused() {
+        let now = clock::now();
+        // 400 s left: kept for the second run, not replaced under the first.
+        let home = test_home("shared_near_cap");
+        let fake = Fake::with(vec![fake_pod("old2", "RUNNING", 0.89, now - 14_000)]);
+        home.save_state(Some(&record("old2", now - 14_000, now - 100))).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now, 1).unwrap();
+        assert_eq!(state.pod_id, "old2");
+        assert!(fake.terminated.borrow().is_empty());
+        assert!(fake.created.borrow().is_empty());
+        cleanup(&home);
+        // 100 s left: the job is refused instead.
+        let home = test_home("shared_ending");
+        let fake = Fake::with(vec![fake_pod("old3", "RUNNING", 0.89, now - 14_300)]);
+        home.save_state(Some(&record("old3", now - 14_300, now - 100))).unwrap();
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), now, 1)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("another run is using it"), "{err}");
+        assert!(fake.terminated.borrow().is_empty());
+        cleanup(&home);
+    }
+
+    #[test]
+    fn cloud_down_leaves_the_pod_up_while_another_run_uses_it() {
+        let home = test_home("shared_down");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("up5", "RUNNING", 0.89, now - 600)]);
+        home.save_state(Some(&record("up5", now - 600, now - 60))).unwrap();
+        down_with(&fake, &home, &test_config(), 1).unwrap();
+        assert!(fake.terminated.borrow().is_empty());
+        assert_eq!(home.state().unwrap().pod_id, "up5");
+        assert!(logged(&home).is_empty());
+        cleanup(&home);
+    }
+
+    #[test]
+    fn the_budget_counts_gpu_time_and_shows_storage_apart_unless_told_otherwise() {
+        let spent = Spent::from_parts(3.0, 0.0, 0.0, 5.0);
+        let gpu_only = Config::default();
+        assert!(!gpu_only.budget_counts_storage);
+        assert!((spent.counted(&gpu_only) - 3.0).abs() < 1e-9);
+        assert!(budget_line(&gpu_only, &spent).contains("$3.00 of the $50.00 budget is spent on GPU time"));
+        assert!(budget_line(&gpu_only, &spent).contains("volume storage so far $5.00, shown, not counted"));
+        let both = Config {
+            budget_counts_storage: true,
+            ..Config::default()
+        };
+        assert!((spent.counted(&both) - 8.0).abs() < 1e-9);
+        assert!(budget_line(&both, &spent).starts_with("$8.00 of the $50.00 budget is spent"));
+    }
+
+    #[test]
+    fn a_free_port_is_found_when_the_preferred_one_is_taken() {
+        let taken = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let busy = taken.local_addr().unwrap().port();
+        let port = free_port(busy).unwrap();
+        assert_ne!(port, busy);
+        assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
     }
 }

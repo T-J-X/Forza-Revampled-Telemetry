@@ -1,0 +1,24 @@
+[package]
+name = "visual-review"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "CPU-only review images for dash renders: 1:1 tiles, the blur-gate glance view with contrast per zone, OKLab diffs, comparison sheets, a WCAG 2.3.1 flash audit and annotated screenshots"
+
+[[bin]]
+name = "visual-review"
+path = "src/main.rs"
+
+[dependencies]
+fh6-kit = { path = "../../crates/fh6-kit" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+resvg = { version = "0.50", default-features = false, features = ["text"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+# Only the tests read the cluster crate (to prove the blind-read answer key matches the review
+# telemetry), so a dash module that is mid-edit in a shared checkout never stops the tool building.
+[dev-dependencies]
+fh6-clusters = { path = "../../crates/fh6-clusters" }

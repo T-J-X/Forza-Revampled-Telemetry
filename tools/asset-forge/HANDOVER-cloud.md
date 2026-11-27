@@ -35,7 +35,7 @@ The criteria are the goals the coordinator set when it started the thread, plus 
 - Changed: `main.rs` (the `--lane` and `--masters` flags, the `cloud` and `selftest` commands), `paths.rs` (the tools folder, the lane, the masters folder), `comfy.rs` (connects to the lane's ComfyUI; copies master-sized images), `blender.rs` (runs on the lane; copies the output folder).
 - Docs: `docs/cloud-gpu.md` (new), `SKILLS.md` section 5 and the lines that point at it (see "Shared places touched"), this tool's `README.md`, and `docs/PROGRESS.md`.
 - No dependency was added: `tools/asset-forge/Cargo.toml` and `Cargo.lock` are unchanged.
-- On Runpod (TJX's account): the network volume `asset-forge` (30 GB, EU-RO-1) and the template `asset-forge-gpu`. No pod is left running.
+- On Runpod (TJX's account): the network volume `asset-forge` (EU-RO-1; created at 30 GB, grown to 100 GB at TJX's request) and the template `asset-forge-gpu`. No pod is left running.
 - On this PC, outside the repo: `%USERPROFILE%\Documents\Dash_Tools\cloud\` (the key, the SSH key pair, `lane.json`, `spend.jsonl`, `run.lock`).
 
 ## Verification output
@@ -170,7 +170,7 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 ## Known issues / debt
 
 1. **A pod start takes about 3 minutes,** most of it ComfyUI importing its Python packages from the network volume. Keeping the environment as one archive and unpacking it to the pod's own disk at start would likely cut that and free about 5 GB of the volume. It needs a paid test run of about $0.30, so it is left for TJX to ask for.
-2. **The volume is 26.7 GB full of 30.** It now grows only with uploaded inputs, which are cleared after 14 days. `cloud doctor` warns under 3 GB free. A bigger volume costs $0.07 a month for each GB (question 9 in `docs/PROGRESS.md`).
+2. ~~**The volume is 26.7 GB full of 30.**~~ TJX answered on 2026-11-27 ("100"): the volume was grown to 100 GB through Runpod's API (`PATCH /v2/network-volumes/{id}` with the new size) and now costs $7 a month. Runpod cannot shrink it again. `cloud doctor` still warns under 3 GB free.
 3. **The API key may expire on 2026-12-27.** Runpod's key dialog showed that date, and its API does not report it. A `status 401` then says how to save a new key.
 4. **The budget is counted from this PC's spend log** (rate times seconds). Runpod's own billing history runs behind, so it only raises the figure later. A pod started from Runpod's console is not in the log until Runpod bills it.
 5. **The two fallback GPU types have never been used.** They are Blackwell cards; the CUDA 13.0 torch build should run on them, but no pod has proved it.
@@ -205,6 +205,28 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 - A recipe needs no change to run on the pod, as long as every file it reads is named in its parameters by an absolute path and everything it writes goes into `out`.
 - The first job after a pod starts loads each model from the network volume, so it is slower than the ones after it. Send a batch, not single jobs.
 - Changing a pin or the installer in `cloud/pod.rs` changes the volume's stamp; the next cloud job then runs the installer again before it starts, which takes seconds when nothing has to be downloaded.
+
+## Later the same evening: cloud first, two runs on one pod
+
+TJX asked for more from the 4090 ("cant we do more ona 4090", then "we have 400gb and £50 in the cloud on a 4090"), grew the volume to 400 GB in Runpod's console and topped the balance up to $48.90. The coordinator passed on TJX's choice to count GPU time only against the $50. What changed:
+
+- **Cloud first.** Every asset-forge ComfyUI and Blender job runs on the pod (`--lane cloud`); the local card keeps `preview-export`, the goldens and the live bench. `SKILLS.md` section 5, `AGENTS.md` directive 15, `ONBOARDING.md`, the dash prompt, the phase 7 skill list and the two asset skills say so.
+- **Two runs on one pod.** The cloud lane has two lock files (`gpu-cloud.lock`, `gpu-cloud-2.lock`), and the second run joins the pod the first one started:
+  - one run at a time starts, installs or replaces the pod (`start.lock`), and the others wait for it;
+  - each run marks itself in `runs\` while it uses the pod, so `cloud down`, the budget stop and the lifetime replacement never end a pod under another run;
+  - each run has its own job folders (`/root/forge-jobs/run<process id>/`), its tag on the images it uploads, and its own forward port;
+  - ComfyUI leaves 6 GB of the card free (`--reserve-vram 6`) and keeps its models between jobs on the cloud lane; a Blender job waits, for up to 10 minutes, until 6 GB is free; ComfyUI's files stay on the pod's own disk.
+- **The budget counts GPU time.** Storage (the 400 GB volume, $28 a month) is shown beside it (`budget_counts_storage: false` in `lane.json`).
+- One shared pod rather than a second pod: a second pod would add its own start and idle tail to every batch, and one 24 GB card has room for a ComfyUI job and a Blender render side by side.
+
+Checked:
+
+- `cargo test -p asset-forge`: 154 passed, 9 of them new for the shared pod (the two lock files, the start lock, the run count, the budget switch, a shared pod kept at the budget stop and near its cap, `cloud down` leaving a shared pod up, separate job folders, tagged uploads, a free port). `cargo clippy --all-targets -D warnings` and `cargo fmt --check` pass.
+- On a real pod: a run with this code joined the pod the Liquid Glass thread had started, while that thread's 4K studio render ran on it, and passed all three test jobs (the second 4096² texture in 13.6 s, base and refiner with ControlNet in 27.1 s, the 4K glass render 13.3 s to the save). It used its own forward port, since the other run held 8189.
+- Two `cloud doctor` runs started a second apart: the second printed `waiting for another run to finish starting the pod`, then `ready ... (the pod that was already up, shared with 1 other run(s))`.
+- Both doctor runs were then cut off at 18:38:51, when the Liquid Glass thread's `cloud down` deleted the pod. That thread ran the code from before this change, which cannot see the new runs. With this code, `cloud down` leaves a pod up while another run uses it (tested with the fake provider); every thread runs this code from its next `cargo run`.
+
+Spend for this part: $0 of my own; the shared runs used the pods other threads had started.
 
 ## Code review
 
