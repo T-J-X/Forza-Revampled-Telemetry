@@ -27,8 +27,10 @@ const LIT: f32 = 0.002;
 const STATIC_CAP: f32 = 0.20;
 /// Gaps closed when static pixels are grouped into areas.
 const AREA_GAP: u32 = 8;
-/// Static areas smaller than this are left out of the list (stray edge pixels).
+/// Static areas under the cap and smaller than this are left out (stray edge pixels).
 const AREA_MIN_PX: u64 = 24;
+/// Static areas under the cap listed (and boxed) after every area over it.
+const AREAS_UNDER_CAP_LISTED: usize = 10;
 
 /// What `static` measured.
 #[derive(Debug, Clone, PartialEq)]
@@ -169,9 +171,10 @@ impl Tracker {
                 ys.push(self.peak.get(i).copied().unwrap_or(0.0));
             }
         }
+        // Small areas are kept only when they are over the cap; those come first, then the
+        // largest of the rest.
         let mut areas: Vec<Area> = gathered
             .into_iter()
-            .filter(|(_, ys)| ys.len() as u64 >= AREA_MIN_PX)
             .filter_map(|(b, ys)| {
                 let px = ys.len() as u64;
                 Some(Area {
@@ -180,8 +183,9 @@ impl Tracker {
                     luma: p95_max(ys)?,
                 })
             })
+            .filter(|a| a.px >= AREA_MIN_PX || a.luma.0 > STATIC_CAP)
             .collect();
-        areas.sort_by_key(|a| std::cmp::Reverse(a.px));
+        areas.sort_by_key(|a| (a.luma.0 <= STATIC_CAP, std::cmp::Reverse(a.px)));
         Report {
             static_px: st.len() as u64,
             live_px: live.len() as u64,
@@ -314,10 +318,16 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             .ok_or_else(|| usage(format!("{}: the region misses the picture", p.display())))?;
         Ok((c, r))
     };
+    // Places print in 4K pixels when the pictures' place in the frame is known, else in their
+    // own pixels; either way from the clamped region's corner.
+    let head_origin = ctx.origin(&head);
     let (base, base_rect) = cut(head, first_path)?;
-    let origin = match area {
-        Some(r) => (r.x, r.y),
-        None => (base_rect.x, base_rect.y),
+    let (ox, oy) = head_origin.unwrap_or((0, 0));
+    let shift = (base_rect.x + ox, base_rect.y + oy);
+    let unit = if head_origin.is_some() {
+        " (4K)"
+    } else {
+        " (the pictures' own pixels)"
     };
     let mut tracker = Tracker::new(&base);
     for p in paths.iter().skip(1) {
@@ -328,20 +338,13 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         })?;
     }
     let rep = tracker.report();
-    let place = |r: Rect| {
-        if area.is_some() {
-            r.offset(origin.0, origin.1)
-        } else {
-            r
-        }
-    };
+    let place = |r: Rect| r.offset(shift.0, shift.1);
     out!(
-        "static over {} pictures ({} .. {}), region {}{}",
+        "static over {} pictures ({} .. {}), region {}{unit}",
         paths.len(),
         file_name(first_path),
         paths.last().map(|p| file_name(p)).unwrap_or_default(),
-        place(Rect::new(0, 0, i64::from(base.width), i64::from(base.height))),
-        if area.is_some() { " (4K)" } else { "" }
+        place(Rect::new(0, 0, i64::from(base.width), i64::from(base.height)))
     );
     if paths.len() <= 8 {
         out!(
@@ -360,7 +363,10 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         fmt(rep.static_luma),
         fmt(rep.live_luma)
     );
-    for (i, a) in rep.areas.iter().take(10).enumerate() {
+    // Every area over the cap, then the largest of the rest.
+    let over = rep.areas.iter().filter(|a| a.luma.0 > STATIC_CAP).count();
+    let shown = over + AREAS_UNDER_CAP_LISTED.min(rep.areas.len() - over);
+    for (i, a) in rep.areas.iter().take(shown).enumerate() {
         out!(
             "  static area {}: {} px within {}, p95 {:.3}, max {:.3}{}",
             i + 1,
@@ -375,8 +381,11 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             }
         );
     }
-    if rep.areas.len() > 10 {
-        out!("  ({} smaller areas not listed)", rep.areas.len() - 10);
+    if rep.areas.len() > shown {
+        out!("  ({} smaller areas under the cap not listed)", rep.areas.len() - shown);
+    }
+    if shown > 0 {
+        out!("  (every listed area is boxed on the map with its number)");
     }
     match (rep.static_luma, rep.live_luma) {
         (None, _) => out!("static structure: NOT ASSESSED (no lit pixel is the same in every picture)"),
@@ -402,13 +411,15 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             px.copy_from_slice(&CYAN);
         }
     }
+    // Box k is static area k in the text; every listed area is boxed.
     let mut marks: Vec<Mark> = rep
         .areas
         .iter()
-        .take(6)
-        .map(|a| Mark::Box {
+        .take(shown)
+        .enumerate()
+        .map(|(i, a)| Mark::Box {
             rect: a.rect.grow(4),
-            label: format!("static {} px, p95 {:.3}", a.px, a.luma.0),
+            label: format!("static area {}: {} px, p95 {:.3}", i + 1, a.px, a.luma.0),
             color: if a.luma.0 > STATIC_CAP { YELLOW } else { CYAN },
         })
         .collect();

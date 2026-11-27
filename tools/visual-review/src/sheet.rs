@@ -150,7 +150,7 @@ pub fn layout(
                 x: f64::from(x),
                 y: f64::from(y) + LABEL_PX + 2.0,
                 size: LABEL_PX,
-                text: format!("{label}{scale}"),
+                text: fit_label(label, &scale, cell_w),
                 color: WHITE,
             });
             i += 1;
@@ -159,6 +159,19 @@ pub fn layout(
     }
     painter.draw(&mut sheet, &marks, Map::IDENTITY)?;
     Ok((sheet, drawn.into_iter().map(|(_, k)| k).collect()))
+}
+
+/// `label` and `scale` shortened to fit a column `cell_w` px wide: the scale is kept and the
+/// label's end is cut, marked with an ellipsis.
+fn fit_label(label: &str, scale: &str, cell_w: u32) -> String {
+    let max = (f64::from(cell_w) / (LABEL_PX * 0.52)).floor().max(4.0) as usize;
+    let (n, s) = (label.chars().count(), scale.chars().count());
+    if n + s <= max {
+        return format!("{label}{scale}");
+    }
+    let keep = max.saturating_sub(s + 1);
+    let cut: String = label.chars().take(keep).collect();
+    format!("{cut}\u{2026}{scale}")
 }
 
 /// What follows the last `@` of a picture argument.
@@ -376,6 +389,14 @@ mod tests {
         }];
         let (sheet, _) = compose(&cells, 1, 324, None, &painter()).expect("composes");
         assert_eq!(sheet.height, GAP + LABEL_H + 600 + GAP);
+    }
+
+    #[test]
+    fn long_labels_are_cut_to_their_column_and_keep_the_scale() {
+        assert_eq!(fit_label("idle", "  (0.50x)", 300), "idle  (0.50x)");
+        let cut = fit_label("A golden_head/LiquidGlass_02_mid_cruise", "  (2.00x)", 192);
+        assert!(cut.ends_with("\u{2026}  (2.00x)"), "{cut}");
+        assert!(cut.chars().count() <= (192.0 / (LABEL_PX * 0.52)) as usize);
     }
 
     #[test]

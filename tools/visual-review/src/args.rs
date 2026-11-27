@@ -27,6 +27,9 @@ impl Args {
                 args.pos.push(arg);
             } else if arg == "--" {
                 flags_done = true;
+            } else if arg == "-h" {
+                // The short form of help, only before a bare `--`.
+                args.switches.push("--help".to_string());
             } else if arg.starts_with("--") && arg.len() > 2 {
                 if switches.contains(&arg.as_str()) {
                     args.switches.push(arg);

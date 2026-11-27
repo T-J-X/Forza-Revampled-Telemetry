@@ -65,9 +65,9 @@ usage: cargo run --release -p visual-review -- <command> ... [--straight]
   sheet    IMAGE[@X,Y,W,H|@view] ... [--labels \"A|B|C\"] [--cols N] [--width PX] [--blur S] [--title T]
            [--view V | --region X,Y,W,H] [--anchor V] [--out FILE.png|DIR]
            pictures side by side under labels
-  flash    SEQUENCE_DIR [--frames 30-41] [--eye-m 0.6] [--scale 1.0] [--fps 60] [--out DIR]
+  flash    SEQUENCE_DIR [--frames 30-41] [--eye-m 0.6] [--scale 1.0] [--fps 60] [--out FILE.png|DIR]
            WCAG 2.3.1 general and red flash audit over a frame sequence (30-41: the limiter hold)
-  motion   SEQUENCE_DIR [--frames A-B] [--out DIR]
+  motion   SEQUENCE_DIR [--frames A-B] [--out FILE.png|DIR]
            change per frame: stalls, spikes and whether the idle is still
   cvd      IMAGE [--view V | --region X,Y,W,H] [--anchor V] [--out DIR]
            protanopia, deuteranopia, tritanopia and luminance-only views
@@ -105,17 +105,12 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let help_at = argv.iter().position(|a| a == "--");
-    let wants_help = argv
-        .iter()
-        .take(help_at.unwrap_or(argv.len()))
-        .any(|a| matches!(a.as_str(), "-h" | "--help" | "help"));
     let mut it = argv.into_iter();
     let Some(cmd) = it.next() else {
         warn!("{USAGE}");
         return ExitCode::from(2);
     };
-    if wants_help {
+    if matches!(cmd.as_str(), "-h" | "--help" | "help") {
         out!("{USAGE}");
         return ExitCode::SUCCESS;
     }
@@ -133,7 +128,13 @@ fn main() -> ExitCode {
 }
 
 fn run(cmd: &str, rest: impl Iterator<Item = String>) -> Result<()> {
-    let args = Args::parse(rest, &["--fit", "--mirror", "--straight"])?;
+    let args = Args::parse(rest, &["--fit", "--mirror", "--straight", "--help"])?;
+    // Help is asked for as a switch (`--help` or `-h` before any `--`), never found inside a
+    // flag's value.
+    if args.has("--help") {
+        out!("{USAGE}");
+        return Ok(());
+    }
     let ctx = cli::Ctx::new(args.has("--straight"))?;
     match cmd {
         "tiles" => tiles::tiles(&args, &ctx),

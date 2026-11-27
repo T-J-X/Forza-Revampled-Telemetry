@@ -84,12 +84,29 @@ fn segment(i: u32) -> &'static str {
     }
 }
 
-/// One line of the key: gear, speed, rpm and its share of the limiter.
+/// The rpm zones the blind reader names, by share of the limiter: below 50% low, below 80% mid,
+/// below 97% high, else the limiter.
+const ZONES: [(f32, &str); 3] = [(0.50, "low"), (0.80, "mid"), (0.97, "high")];
+
+/// The rpm zone of `rpm`.
+fn zone(rpm: f32) -> &'static str {
+    let share = rpm / LIMITER_RPM;
+    ZONES
+        .iter()
+        .find(|(limit, _)| share < *limit)
+        .map_or("limiter", |z| z.1)
+}
+
+/// The question the blind reader answers for each frame.
+const READER_QUESTION: &str = "for each frame, after one look and without looking again: the gear, the speed, the shift lights (dark, partly lit or all lit) and the rpm zone (low below 50% of the limiter, mid below 80%, high below 97%, limiter above)";
+
+/// One line of the key: gear, speed, rpm, its share of the limiter and its zone.
 fn key_line(what: &str, gear: u8, mph: f32, rpm: f32) -> String {
     format!(
-        "{what}: gear {}, {mph:.1} mph, {rpm:.0} rpm ({:.0}% of the {LIMITER_RPM:.0} rpm limiter)",
+        "{what}: gear {}, {mph:.1} mph, {rpm:.0} rpm ({:.0}% of the {LIMITER_RPM:.0} rpm limiter, zone {})",
         gear_name(gear),
-        rpm / LIMITER_RPM * 100.0
+        rpm / LIMITER_RPM * 100.0,
+        zone(rpm)
     )
 }
 
@@ -221,7 +238,15 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             dir.display()
         )));
     }
-    // Read and prepare every drawn frame before anything is cleared or written.
+    // Threads share mockups/: a folder that already holds anything may be another thread's
+    // packet, or this one's from an earlier draw, so it is never reused.
+    if std::fs::read_dir(&out).is_ok_and(|mut entries| entries.next().is_some()) {
+        return Err(usage(format!(
+            "{} already holds files (another packet, or an earlier draw): pick a seed whose folder does not exist yet",
+            out.display()
+        )));
+    }
+    // Read and prepare every drawn frame before anything is written.
     let masks = cli::masks(args, ctx, (0, 0))?;
     let mut prepared = Vec::with_capacity(count);
     for (k, idx) in draw(items.len(), count, seed).into_iter().enumerate() {
@@ -243,15 +268,6 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         let file = format!("glance_{:02}.png", k + 1);
         prepared.push((file, full.resize(BLIND_SIZE.0, BLIND_SIZE.1), item));
     }
-    // Frames left by an earlier draw would mix into this one.
-    if let Ok(entries) = std::fs::read_dir(&out) {
-        for e in entries.flatten() {
-            let n = e.file_name().to_string_lossy().into_owned();
-            if n.starts_with("glance_") && n.ends_with(".png") {
-                std::fs::remove_file(e.path()).map_err(|err| file_err(&e.path(), err))?;
-            }
-        }
-    }
     let mut key = format!(
         "blind glance read of {name}: seed {seed}, {count} frames, shown at {}x{}\n",
         BLIND_SIZE.0, BLIND_SIZE.1
@@ -272,7 +288,7 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         out!("  {}", p.display());
     }
     out!("answer key (never show it to the reader): {}", key_path.display());
-    out!("ask, for each frame, after one look and without looking again: the gear, the speed, the shift-light state (off, filling, full or strobing) and the rpm zone");
+    out!("ask {READER_QUESTION}");
     Ok(())
 }
 
@@ -326,7 +342,11 @@ mod tests {
         assert_eq!(sequence_key(35), (3, 92.5, 8640.0));
         assert_eq!(
             key_line("x", 3, 92.5, 8700.0),
-            "x: gear 3, 92.5 mph, 8700 rpm (100% of the 8700 rpm limiter)"
+            "x: gear 3, 92.5 mph, 8700 rpm (100% of the 8700 rpm limiter, zone limiter)"
+        );
+        assert_eq!(
+            (zone(900.0), zone(5200.0), zone(7100.0), zone(8640.0)),
+            ("low", "mid", "high", "limiter")
         );
         // The blind size stays inside the 1:1 view.
         assert!(u64::from(BLIND_SIZE.0) * u64::from(BLIND_SIZE.1) <= cli::VIEW_MAX_PIXELS);

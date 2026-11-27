@@ -213,7 +213,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 - **Gate every change:**
   - `cargo check`, `cargo test`, `cargo clippy -D warnings` and `cargo fmt --check` across the workspace. Report the real output, and compare against the known reds above.
   - **Golden telemetry:** the `golden_telemetry` test, plus `parity-dump` on `tests/golden/packets`, must cover all 20 packets. Never edit a golden `.json` to make a test pass.
-  - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Review them with the `fh6-visual-review` skill: its fixed checklist and the `visual-review` tool (CPU only), never by eye on a downscaled 4K frame.
+  - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Review them with the `fh6-visual-review` skill: its fixed checklist and the `visual-review` tool (CPU only), never judging detail by eye on a downscaled 4K frame.
 - **Deploy:** only on TJX's GO, and with a SHA256 parity check after copying. There are two targets:
   1. `E:\SteamLibrary\steamapps\common\ForzaHorizon6\`, in `mediapc\Camera\` (camera files) and `WheelDash\` (binaries, `config.json`, assets)
   2. `%USERPROFILE%\Downloads\FH6 Ultimate Camera\` (distribution mirror)

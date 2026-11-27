@@ -209,6 +209,29 @@ pub fn backdrop(args: &Args, ctx: &Ctx, w: u32, h: u32) -> Result<Option<Frame>>
     Ok(Some(f.resize(w, h)))
 }
 
+/// The largest picture `crop` and `annotate` draw, in pixels (an annotation's caption and
+/// legend strips come on top of it).
+pub const MAX_OUTPUT_PIXELS: u64 = 16_000_000;
+
+/// Refuses a picture of `w` x `h` source pixels enlarged `zoom` times when it would be larger
+/// than [`MAX_OUTPUT_PIXELS`].
+///
+/// # Errors
+/// A usage error naming the size.
+pub fn check_size(w: i64, h: i64, zoom: u32) -> Result<()> {
+    let z = i64::from(zoom.max(1));
+    let px = w.saturating_mul(z).saturating_mul(h.saturating_mul(z));
+    if px > MAX_OUTPUT_PIXELS as i64 {
+        return Err(usage(format!(
+            "the output would be {}x{} ({:.0} MP, more than 16): give a smaller --region or a lower --zoom",
+            w.saturating_mul(z),
+            h.saturating_mul(z),
+            px as f64 / 1e6
+        )));
+    }
+    Ok(())
+}
+
 /// `--zoom`, 1 to 8 (default 1).
 ///
 /// # Errors
@@ -301,15 +324,19 @@ pub fn out_dir(args: &Args, ctx: &Ctx, input: &Path) -> PathBuf {
     }
 }
 
-/// The file a single-output command writes: `--out` (a `.png` name, or a folder to write the
-/// default name into), else `<out dir>/<stem>_<suffix>.png`.
-pub fn out_file(args: &Args, ctx: &Ctx, input: &Path, suffix: &str) -> PathBuf {
-    let name = format!("{}_{suffix}.png", stem(input));
+/// The file a single-output command writes: `--out` as a file name ending in `.png`, or as a
+/// folder to write `name` into, else `<out dir>/<name>`.
+pub fn out_named(args: &Args, ctx: &Ctx, input: &Path, name: &str) -> PathBuf {
     match args.one("--out") {
-        Some(f) if Path::new(f).is_dir() || f.ends_with(['/', '\\']) => PathBuf::from(f).join(name),
-        Some(f) => PathBuf::from(f),
+        Some(f) if f.to_ascii_lowercase().ends_with(".png") => PathBuf::from(f),
+        Some(f) => PathBuf::from(f).join(name),
         None => out_dir(&Args::default(), ctx, input).join(name),
     }
+}
+
+/// [`out_named`] with the name `<stem>_<suffix>.png`.
+pub fn out_file(args: &Args, ctx: &Ctx, input: &Path, suffix: &str) -> PathBuf {
+    out_named(args, ctx, input, &format!("{}_{suffix}.png", stem(input)))
 }
 
 /// A note when an output is too big for Claude to see 1:1.

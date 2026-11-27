@@ -313,15 +313,20 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         "50% blend of A and B (an overlay for alignment): {}",
         blend_png.display()
     );
+    if let Some(note) = cli::view_note(mix.width, mix.height) {
+        out!("{note}");
+    }
     let heat_png = dir.join(format!("{name}_heat.png"));
     h.save(&heat_png)?;
     out!("heat map: {}", heat_png.display());
-    if cli::view_note(h.width, h.height).is_some() {
-        let k = f64::from(cli::VIEW_MAX_SIDE - 32) / f64::from(h.width.max(h.height));
-        let small = h.resize(
-            (f64::from(h.width) * k).round() as u32,
-            (f64::from(h.height) * k).round() as u32,
-        );
+    if let Some(note) = cli::view_note(h.width, h.height) {
+        out!("{note}");
+        // An overview that fits both limits of the 1:1 view.
+        let (w, hh) = (f64::from(h.width), f64::from(h.height));
+        let k = (f64::from(cli::VIEW_MAX_SIDE - 32) / w.max(hh))
+            .min((cli::VIEW_MAX_PIXELS as f64 / (w * hh)).sqrt())
+            .min(1.0);
+        let small = h.resize(((w * k).floor() as u32).max(1), ((hh * k).floor() as u32).max(1));
         let p = dir.join(format!("{name}_heat_overview.png"));
         small.save(&p)?;
         out!("heat overview ({}x{}): {}", small.width, small.height, p.display());
@@ -339,7 +344,7 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         let cells = [
             Cell {
                 frame: ca.zoom(z),
-                label: format!("{} at {}", label(0), shift(g)),
+                label: label(0),
             },
             Cell {
                 frame: cb.zoom(z),
@@ -347,14 +352,19 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             },
             Cell {
                 frame: ch.zoom(z),
-                label: format!("{:.0}% over", share * 100.0),
+                label: format!("dE over {delta}"),
             },
         ];
-        let width = (u32::try_from(g.w).unwrap_or(1) * z * 3 + 48).min(1560);
-        let (pair, _) = compose(&cells, 3, width, None, &painter)?;
+        // The place and the share go in the title, so every label fits its column.
+        let width = (u32::try_from(g.w).unwrap_or(1) * z * 3 + 48).clamp(640, 1560);
+        let title = format!("{} ({:.0}% over)", shift(g), share * 100.0);
+        let (pair, _) = compose(&cells, 3, width, Some(&title), &painter)?;
         let p = dir.join(format!("{name}_pair{}.png", k + 1));
         pair.save(&p)?;
         out!("crop pair {} ({}x): {}", k + 1, z, p.display());
+        if let Some(note) = cli::view_note(pair.width, pair.height) {
+            out!("{note}");
+        }
     }
     if a.width <= 2400 {
         let cells = [
@@ -375,6 +385,9 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         let p = dir.join(format!("{name}_side.png"));
         side.save(&p)?;
         out!("side by side: {}", p.display());
+        if let Some(note) = cli::view_note(side.width, side.height) {
+            out!("{note}");
+        }
     }
     Ok(())
 }

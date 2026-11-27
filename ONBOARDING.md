@@ -1,6 +1,6 @@
 # ONBOARDING: read this first in every chat
 
-You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work runs as threads: one thread per phase, and one per dash. A coordinator starts each one, and merges its work into `main` when the job is finished and its checks pass. TJX signs each thread off. This page is everything a new chat needs before touching the repo.
+You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work runs as threads: one thread per phase, and one per dash. A coordinator starts each one, and merges its work into `main` when the job is finished and its checks pass. Each thread reviews and signs off its own work (AGENTS.md rule 12); TJX's own words win when TJX answers. This page is everything a new chat needs before touching the repo.
 
 ## 1. What we are building
 **The overlay:**

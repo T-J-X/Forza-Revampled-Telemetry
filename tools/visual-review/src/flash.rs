@@ -29,7 +29,7 @@ use crate::components::{label, Bounds};
 use crate::error::{file_err, usage, Result};
 use crate::frame::{linear_lut, luminance, Frame};
 use crate::geom::{angle_px, Rect};
-use crate::overlay::{Map, Mark, Painter, CYAN, MAGENTA, YELLOW};
+use crate::overlay::{Map, Mark, Painter, CYAN, MAGENTA, WHITE, YELLOW};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
@@ -55,6 +55,8 @@ const FIELD_SHARE: f64 = 0.25;
 const GAP_CLOSE: u32 = 6;
 /// The most frames per second accepted.
 const MAX_FPS: u16 = 1000;
+/// Flashing areas boxed on the map (the text lists every area).
+const AREAS_BOXED: usize = 8;
 
 /// Which threshold a tracker follows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,9 +93,47 @@ struct Tracker {
     n: u32,
     min_period: u16,
     burst: bool,
-    /// The last bright and dark phase lengths, in frames (0 until seen).
-    on: u16,
-    off: u16,
+    /// Every complete bright and dark phase it showed, as ranges.
+    phases: Phases,
+}
+
+/// The bright and dark phase lengths a pixel showed, each as (shortest, longest) in frames; a
+/// longest of 0 means that phase was never seen complete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Phases {
+    /// Bright phases.
+    pub on: (u16, u16),
+    /// Dark phases.
+    pub off: (u16, u16),
+}
+
+impl Phases {
+    /// Both phases were seen complete at least once.
+    fn seen(self) -> bool {
+        self.on.1 > 0 && self.off.1 > 0
+    }
+
+    /// Takes in one complete phase of `len` frames.
+    fn add(range: &mut (u16, u16), len: u16) {
+        *range = if range.1 == 0 {
+            (len, len)
+        } else {
+            (range.0.min(len), range.1.max(len))
+        };
+    }
+}
+
+impl std::fmt::Display for Phases {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let part = |(a, b): (u16, u16)| {
+            if a == b {
+                a.to_string()
+            } else {
+                format!("{a}-{b}")
+            }
+        };
+        write!(f, "{} on / {} off", part(self.on), part(self.off))
+    }
 }
 
 impl Tracker {
@@ -107,8 +147,7 @@ impl Tracker {
             n: 0,
             min_period: u16::MAX,
             burst: false,
-            on: 0,
-            off: 0,
+            phases: Phases::default(),
         }
     }
 
@@ -116,12 +155,12 @@ impl Tracker {
     fn mark(&mut self, f: u16, dir: i8, s: Sample, fps: u16) {
         let slot = |i: u32| (i % BURST) as usize;
         if self.n >= 1 {
-            // Transitions alternate, so the one before went the other way.
+            // Transitions alternate, so the one before went the other way: this ends a phase.
             let len = f.saturating_sub(self.times[slot(self.n - 1)]);
             if dir < 0 {
-                self.on = len;
+                Phases::add(&mut self.phases.on, len);
             } else {
-                self.off = len;
+                Phases::add(&mut self.phases.off, len);
             }
         }
         if self.n >= 2 {
@@ -302,20 +341,23 @@ impl Audit {
             .map(|(g, r)| g.burst || r.burst)
             .collect();
         let count_px = count_mask.iter().filter(|m| **m).count() as u64;
-        let mut phases: Vec<((u16, u16), u64)> = Vec::new();
-        for ((g, r), _) in self.general.iter().zip(&self.red).zip(&union_mask).filter(|(_, m)| **m) {
-            let t = if fast(&g.hz(self.fps)) { g } else { r };
-            if t.on == 0 || t.off == 0 {
-                continue;
-            }
-            match phases.iter_mut().find(|(p, _)| *p == (t.on, t.off)) {
-                Some((_, n)) => *n += 1,
-                None => phases.push(((t.on, t.off), 1)),
-            }
-        }
-        phases.sort_by_key(|p| std::cmp::Reverse(p.1));
+        // Each flashing pixel's range of bright and dark phase lengths (unseen when not flashing).
+        let pixel_phase: Vec<Phases> = self
+            .general
+            .iter()
+            .zip(&self.red)
+            .zip(&union_mask)
+            .map(|((g, r), m)| {
+                if !m {
+                    return Phases::default();
+                }
+                let t = if fast(&g.hz(self.fps)) { g } else { r };
+                t.phases
+            })
+            .collect();
+        let phases = phase_counts(pixel_phase.iter().copied());
         let hz_values: Vec<f64> = either.iter().map(|h| h.unwrap_or(0.0)).collect();
-        let regions = regions(&union_mask, w, h, &hz_values);
+        let regions = regions(&union_mask, w, h, &hz_values, &pixel_phase);
         let measured = u32::from(self.frames).saturating_sub(2).max(1);
         Report {
             frames: self.frames,
@@ -428,6 +470,8 @@ pub struct Region {
     pub hz: f64,
     /// The rate most of them flash at, Hz.
     pub common_hz: f64,
+    /// The ranges of bright and dark phase lengths most of them show, in frames.
+    pub phase: Option<Phases>,
 }
 
 /// What [`regions`] gathers for one area.
@@ -436,10 +480,26 @@ struct Gather {
     bounds: Bounds,
     px: u64,
     rates: Vec<(f64, u64)>,
+    phases: Vec<Phases>,
 }
 
-/// The flashing areas of `mask`, with gaps of up to 6 px closed, largest first.
-pub fn regions(mask: &[bool], w: u32, h: u32, hz: &[f64]) -> Vec<Region> {
+/// How many pixels show each set of phase ranges, most common first; pixels that never
+/// showed both phases complete are left out.
+fn phase_counts(phases: impl Iterator<Item = Phases>) -> Vec<(Phases, u64)> {
+    let mut out: Vec<(Phases, u64)> = Vec::new();
+    for p in phases.filter(|p| p.seen()) {
+        match out.iter_mut().find(|(q, _)| *q == p) {
+            Some((_, n)) => *n += 1,
+            None => out.push((p, 1)),
+        }
+    }
+    out.sort_by_key(|p| std::cmp::Reverse(p.1));
+    out
+}
+
+/// The flashing areas of `mask`, with gaps of up to 6 px closed, largest first. `hz` and
+/// `phase` give each pixel's rate and phase lengths.
+pub fn regions(mask: &[bool], w: u32, h: u32, hz: &[f64], phase: &[Phases]) -> Vec<Region> {
     let (ids, count) = label(mask, w, h, GAP_CLOSE);
     let wu = w as usize;
     let mut found = vec![Gather::default(); count];
@@ -454,6 +514,7 @@ pub fn regions(mask: &[bool], w: u32, h: u32, hz: &[f64]) -> Vec<Region> {
             Some((_, n)) => *n += 1,
             None => r.rates.push((v, 1)),
         }
+        r.phases.push(phase.get(i).copied().unwrap_or_default());
     }
     let mut out: Vec<Region> = found
         .into_iter()
@@ -467,6 +528,7 @@ pub fn regions(mask: &[bool], w: u32, h: u32, hz: &[f64]) -> Vec<Region> {
                 .iter()
                 .max_by(|a, b| a.1.cmp(&b.1).then(b.0.total_cmp(&a.0)))
                 .map_or(0.0, |r| r.0),
+            phase: phase_counts(g.phases.into_iter()).first().map(|p| p.0),
         })
         .collect();
     out.sort_by_key(|r| std::cmp::Reverse(r.px));
@@ -541,8 +603,9 @@ pub struct Report {
     pub count: Layer,
     /// The slowest rate the sustained test can see: `fps / (frames - 2)`.
     pub floor_hz: f64,
-    /// Bright and dark phase lengths of the flashing pixels in frames, most common first.
-    pub phases: Vec<((u16, u16), u64)>,
+    /// The ranges of bright and dark phase lengths of the flashing pixels in frames, most
+    /// common first, with how many pixels show each.
+    pub phases: Vec<(Phases, u64)>,
     /// The flashing areas, largest first.
     pub regions: Vec<Region>,
 }
@@ -713,9 +776,13 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         audit.feed(&Frame::load(p, ctx.straight)?)?;
     }
     let rep = audit.report(eye_m, scale);
-    let (ox, oy) = ctx.origin(&first).unwrap_or((0, 0));
-    let place = |r: Rect| r.offset(ox, oy);
-    if ctx.origin(&first).is_none() {
+    // Positions print in 4K frame pixels when the frames' place in the frame is known.
+    let origin = ctx.origin(&first);
+    let place = |r: Rect| match origin {
+        Some((ox, oy)) => format!("4K {}", r.offset(ox, oy)),
+        None => format!("{r} (the frames' own pixels)"),
+    };
+    if origin.is_none() {
         out!(
             "note: {}x{} is neither a full frame nor a preview-export crop, so positions are in the frames' own pixels",
             first.width,
@@ -749,26 +816,37 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         .phases
         .iter()
         .take(3)
-        .map(|((on, off), n)| {
+        .map(|(p, n)| {
             let ms = |f: u16| f64::from(f) * 1000.0 / f64::from(rep.fps);
-            format!("{on} on / {off} off ({:.0} ms / {:.0} ms) in {n} px", ms(*on), ms(*off))
+            if p.on.0 == p.on.1 && p.off.0 == p.off.1 {
+                format!("{p} ({:.0} ms / {:.0} ms) in {n} px", ms(p.on.0), ms(p.off.0))
+            } else {
+                format!("{p} (uneven) in {n} px")
+            }
         })
         .collect();
     if !phases.is_empty() {
-        out!("phases of the flashing pixels, in frames: {}", phases.join("; "));
-    }
-    for (i, r) in rep.regions.iter().take(8).enumerate() {
         out!(
-            "  area {}: {} px within {}, most at {:.1} Hz, fastest {:.1} Hz",
-            i + 1,
+            "phases of the flashing pixels, in frames (a range means the phases were uneven): {}",
+            phases.join("; ")
+        );
+    }
+    let area_text = |r: &Region| {
+        format!(
+            "{} px within {}, most at {:.1} Hz{}, fastest {:.1} Hz",
             r.px,
             place(r.rect),
             r.common_hz,
+            r.phase.map(|p| format!(" ({p})")).unwrap_or_default(),
             r.hz
-        );
+        )
+    };
+    // Every area is listed; the largest are boxed on the map with the same numbers.
+    for (i, r) in rep.regions.iter().enumerate() {
+        out!("  area {}: {}", i + 1, area_text(r));
     }
-    if rep.regions.len() > 8 {
-        out!("  ({} smaller areas not listed)", rep.regions.len() - 8);
+    if rep.regions.len() > AREAS_BOXED {
+        out!("  (areas 1 to {AREAS_BOXED} are boxed on the map; the rest are listed only)");
     }
     let area_ok = (rep.union.worst.0 as f64) <= rep.limit_px2;
     out!(
@@ -806,10 +884,11 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         );
     } else {
         out!(
-            "more than three flashes inside one second (WCAG count): NOT ASSESSED ({} frames is under one second at {} fps; {} px already flash that often)",
+            "more than three flashes inside one second (WCAG count): NOT ASSESSED ({} frames is under one second at {} fps; {} px already flash more than three times within these {} frames)",
             rep.frames,
             rep.fps,
-            rep.count.px
+            rep.count.px,
+            rep.frames
         );
     }
     let pass = area_ok && strip_ok && (!count_assessed || count_ok);
@@ -832,7 +911,18 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             px.copy_from_slice(&YELLOW);
         }
     }
-    let mut marks = Vec::new();
+    // The listed areas first, so mark k on the map is area k in the text; the ring last.
+    let mut marks: Vec<Mark> = rep
+        .regions
+        .iter()
+        .take(AREAS_BOXED)
+        .enumerate()
+        .map(|(i, r)| Mark::Box {
+            rect: r.rect.grow(4),
+            label: format!("area {}: {}", i + 1, area_text(r)),
+            color: CYAN,
+        })
+        .collect();
     if rep.union.px > 0 {
         marks.push(Mark::Ring {
             cx: rep.union.worst.1 as f64,
@@ -842,14 +932,7 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
                 "worst 10-degree field: {} of {:.0} px2 allowed",
                 rep.union.worst.0, rep.limit_px2
             ),
-            color: CYAN,
-        });
-    }
-    for r in rep.regions.iter().take(4) {
-        marks.push(Mark::Box {
-            rect: r.rect.grow(4),
-            label: format!("{} px, most at {:.1} Hz, fastest {:.1} Hz", r.px, r.common_hz, r.hz),
-            color: CYAN,
+            color: WHITE,
         });
     }
     marks.push(Mark::Caption(if marks.is_empty() {
@@ -858,11 +941,11 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         format!("flashing faster than 3 Hz: yellow general, magenta red; eye {eye_m:.2} m, scale {scale:.2}")
     }));
     let map = Painter::new(&ctx.root).annotated(&map, &marks, Map::IDENTITY)?;
-    let dir = cli::out_dir(args, ctx, first_path);
-    let dest = dir.join(match range {
+    let name = match range {
         Some(r) => format!("flash_map_{}.png", r.replace(' ', "")),
         None => "flash_map.png".to_string(),
-    });
+    };
+    let dest = cli::out_named(args, ctx, first_path, &name);
     map.save(&dest)?;
     out!("flash map: {}", dest.display());
     if let Some(note) = cli::view_note(map.width, map.height) {
@@ -929,9 +1012,33 @@ mod tests {
         // White is not red.
         assert_eq!(rep.red.px, 0);
         // 3 frames on, 3 off, in one area.
-        assert_eq!(rep.phases.first().map(|p| p.0), Some((3, 3)));
+        let even = Phases {
+            on: (3, 3),
+            off: (3, 3),
+        };
+        assert_eq!(rep.phases.first().map(|p| p.0), Some(even));
         assert_eq!(rep.regions.len(), 1);
         assert_eq!(rep.regions[0].rect, Rect::new(50, 40, 500, 40));
+        assert_eq!(rep.regions[0].phase, Some(even));
+        assert!((rep.regions[0].common_hz - 10.0).abs() < 1e-9);
+        assert_eq!(even.to_string(), "3 on / 3 off");
+    }
+
+    #[test]
+    fn an_uneven_strobe_shows_its_phase_ranges() {
+        // On 30-32, off 33-35, on 36-37, off 38-41, on 42-44: phases of 3, 2 and 3 on, 3 and 4 off.
+        let lit = |f: u16| (30..33).contains(&f) || (36..38).contains(&f) || (42..45).contains(&f);
+        let frames = sequence(8, 8, |f, _, _| if lit(f) { [255; 3] } else { [0; 3] });
+        let rep = audit(&frames).report(0.6, 1.0);
+        let p = rep.regions.first().and_then(|r| r.phase).expect("a flashing area");
+        assert_eq!(
+            p,
+            Phases {
+                on: (2, 3),
+                off: (3, 4)
+            }
+        );
+        assert_eq!(p.to_string(), "2-3 on / 3-4 off");
     }
 
     #[test]

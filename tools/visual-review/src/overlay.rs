@@ -172,16 +172,16 @@ impl Painter {
         if marks.is_empty() || frame.width == 0 || frame.height == 0 {
             return Ok(());
         }
-        let svg = svg(frame.width, frame.height, frame.height, marks, map, &[]);
+        let svg = svg(frame.width, 0.0, frame.height, frame.height, marks, map, &[]);
         self.render(frame, &svg)
     }
 
-    /// `frame` with `marks` drawn on it and a legend strip of their numbered labels underneath.
+    /// `frame` with `marks` drawn on it, a caption strip above it (for a [`Mark::Caption`]) and
+    /// a legend strip of their numbered labels underneath, so no text covers the picture.
     ///
     /// # Errors
     /// [`Error::Overlay`] when the generated SVG fails to parse.
     pub fn annotated(&self, frame: &Frame, marks: &[Mark], map: Map) -> Result<Frame> {
-        let font = font_px(frame.width, frame.height);
         // A legend or caption needs room to be read, however narrow the picture is.
         let has_text = marks
             .iter()
@@ -191,6 +191,8 @@ impl Painter {
         } else {
             frame.width
         };
+        let font = font_px(width, frame.height);
+        let band = caption_band(marks, width, font).ceil() as u32;
         let max_chars = ((f64::from(width) - font * 3.0) / (font * 0.52)).max(8.0) as usize;
         let mut lines = Vec::new();
         let mut n = 0;
@@ -209,12 +211,17 @@ impl Painter {
         } else {
             (lines.len() as f64 * font * 1.4 + font * 0.9).ceil() as u32
         };
-        let mut out = Frame::filled(width, frame.height + legend_h, LEGEND_BG);
-        out.blit(frame, 0, 0);
+        let mut out = Frame::filled(width, band + frame.height + legend_h, LEGEND_BG);
+        out.blit(frame, 0, band);
         if marks.is_empty() || out.width == 0 || out.height == 0 {
             return Ok(out);
         }
-        let svg = svg(width, frame.height, out.height, marks, map, &lines);
+        // The picture sits under the caption strip, so every mark moves down with it.
+        let below = Map {
+            oy: map.oy - f64::from(band) / map.k,
+            ..map
+        };
+        let svg = svg(width, f64::from(band), frame.height, out.height, marks, below, &lines);
         self.render(&mut out, &svg)?;
         Ok(out)
     }
@@ -309,15 +316,25 @@ fn disc(s: &mut String, n: usize, cx: f64, cy: f64, color: [u8; 3], font: f64) {
 }
 
 /// The number disc at a mark's top-left corner `at`: just outside it when there is room above
-/// (below the caption band, which ends at `top`), else just inside it.
-fn tag(s: &mut String, n: usize, at: (f64, f64), color: [u8; 3], font: f64, top: f64) {
+/// (below the caption band, which ends at `top`), else just inside it; moved right past any
+/// disc already `placed`, so close marks keep readable numbers.
+fn tag(s: &mut String, n: usize, at: (f64, f64), color: [u8; 3], font: f64, top: f64, placed: &mut Vec<(f64, f64)>) {
     let r = font * 0.62;
     let cy = if at.1 - 2.0 * r - 4.0 >= top {
         at.1 - r - 4.0
     } else {
         at.1 + r + 4.0
     };
-    disc(s, n, at.0 + r, cy, color, font);
+    let mut cx = at.0 + r;
+    for _ in 0..=placed.len() {
+        let clash = placed.iter().any(|&(px, py)| (px - cx).hypot(py - cy) < 2.0 * r + 1.0);
+        if !clash {
+            break;
+        }
+        cx += 2.0 * r + 2.0;
+    }
+    placed.push((cx, cy));
+    disc(s, n, cx, cy, color, font);
 }
 
 /// Stroke drawn twice: dark underneath, colour on top.
@@ -334,9 +351,32 @@ fn outlined(s: &mut String, shape: &str, color: [u8; 3], line: f64) {
     );
 }
 
-/// The overlay as an SVG document: marks over the image (`w` x `image_h`) and the legend
-/// `lines` in the strip below it (down to `total_h`).
-fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Line]) -> String {
+/// The rows of a caption at `font` px across `w` px.
+fn caption_rows(body: &str, w: u32, font: f64) -> Vec<String> {
+    let max_chars = ((f64::from(w) - font * 1.2) / (font * 0.52)).max(8.0) as usize;
+    wrap(body, max_chars)
+}
+
+/// The height of a caption band of `rows` rows.
+fn band_of(rows: usize, font: f64) -> f64 {
+    font * (0.6 + 1.3 * rows.max(1) as f64)
+}
+
+/// The height of the caption band `marks` ask for across `w` px (0 without a caption).
+fn caption_band(marks: &[Mark], w: u32, font: f64) -> f64 {
+    marks
+        .iter()
+        .find_map(|m| match m {
+            Mark::Caption(body) => Some(band_of(caption_rows(body, w, font).len(), font)),
+            _ => None,
+        })
+        .unwrap_or(0.0)
+}
+
+/// The overlay as an SVG document: the caption band across the top, marks over the image
+/// (`w` x `image_h`, starting `image_top` px down) and the legend `lines` in the strip below it
+/// (down to `total_h`).
+fn svg(w: u32, image_top: f64, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Line]) -> String {
     let font = font_px(w, image_h);
     let line = (font / 9.0).max(2.0);
     let mut s = String::new();
@@ -344,19 +384,9 @@ fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Li
         s,
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{total_h}" viewBox="0 0 {w} {total_h}">"#
     );
-    // The caption band across the top, which number discs keep clear of.
-    let caption_rows = |body: &str| {
-        let max_chars = ((f64::from(w) - font * 1.2) / (font * 0.52)).max(8.0) as usize;
-        wrap(body, max_chars)
-    };
-    let band_of = |rows: usize| font * (0.6 + 1.3 * rows.max(1) as f64);
-    let top = marks
-        .iter()
-        .find_map(|m| match m {
-            Mark::Caption(body) => Some(band_of(caption_rows(body).len())),
-            _ => None,
-        })
-        .unwrap_or(0.0);
+    // Number discs keep clear of the caption band and of each other.
+    let top = caption_band(marks, w, font);
+    let mut placed = Vec::new();
     let mut n = 0;
     for m in marks {
         match m {
@@ -370,7 +400,7 @@ fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Li
                     *color,
                     line,
                 );
-                tag(&mut s, n, (x, y), *color, font, top);
+                tag(&mut s, n, (x, y), *color, font, top, &mut placed);
             }
             Mark::Ring { cx, cy, r, color, .. } => {
                 n += 1;
@@ -382,7 +412,7 @@ fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Li
                     line,
                 );
                 let d = rr * std::f64::consts::FRAC_1_SQRT_2;
-                tag(&mut s, n, (x - d, y - d), *color, font, top);
+                tag(&mut s, n, (x - d, y - d), *color, font, top, &mut placed);
             }
             Mark::Arrow { from, to, color, .. } => {
                 n += 1;
@@ -412,8 +442,8 @@ fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Li
                 color,
             } => text(&mut s, *x, *y, *size, *color, body),
             Mark::Caption(body) => {
-                let rows = caption_rows(body);
-                let band = band_of(rows.len());
+                let rows = caption_rows(body, w, font);
+                let band = band_of(rows.len(), font);
                 let _ = write!(
                     s,
                     r##"<rect x="0" y="0" width="{w}" height="{band:.1}" fill="#000000" fill-opacity="0.72"/>"##
@@ -462,7 +492,7 @@ fn svg(w: u32, image_h: u32, total_h: u32, marks: &[Mark], map: Map, lines: &[Li
     }
     let step = font * 1.4;
     for (i, l) in lines.iter().enumerate() {
-        let base = f64::from(image_h) + font * 0.45 + step * (i as f64 + 1.0) - font * 0.35;
+        let base = image_top + f64::from(image_h) + font * 0.45 + step * (i as f64 + 1.0) - font * 0.35;
         if let Some(num) = l.n {
             disc(&mut s, num, font * 1.0, base - font * 0.33, l.color, font);
         }
@@ -535,6 +565,12 @@ pub fn annotate(args: &Args, ctx: &Ctx) -> Result<()> {
     };
     let path = Path::new(input);
     let frame = ctx.load(path)?;
+    if args.one("--anchor").is_some() && ctx.origin(&frame).is_none() {
+        return Err(usage(format!(
+            "{input} is {}x{}: --anchor needs a full 3840x2160 frame or a preview-export crop; give the marks in the picture's own pixels",
+            frame.width, frame.height
+        )));
+    }
     let color = args
         .one("--color")
         .map(|c| parse_color(c, "--color"))
@@ -598,6 +634,7 @@ pub fn annotate(args: &Args, ctx: &Ctx) -> Result<()> {
     } else {
         whole
     };
+    cli::check_size(area.w, area.h, zoom)?;
     let base = frame
         .crop(area)
         .ok_or_else(|| usage(format!("region {area} is outside the image")))?;
@@ -672,9 +709,14 @@ mod tests {
         // Widened to the narrowest width a legend can be read at.
         assert_eq!(out.width, MIN_TEXT_WIDTH);
         assert!(out.height > 200, "a legend strip was added below the image");
-        // The box's yellow stroke runs along its top edge.
-        let edge = out.pixel(100, 60);
+        // The caption has its own strip above the picture, so the picture and every mark move
+        // down by the strip's height: the box's yellow stroke runs along its top edge there.
+        let band = caption_band(&marks, MIN_TEXT_WIDTH, font_px(MIN_TEXT_WIDTH, 200)).ceil() as u32;
+        assert!(band > 0);
+        let edge = out.pixel(100, 60 + band);
         assert!(edge[0] > 200 && edge[1] > 150 && edge[2] < 80, "box edge is {edge:?}");
+        // The picture's top-left pixel is under the strip, not covered by it.
+        assert_eq!(out.pixel(0, band), [0, 0, 0]);
         // The caption and the legend light text pixels.
         let bright = |y0: u32, y1: u32| {
             (0..400)

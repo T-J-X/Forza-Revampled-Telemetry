@@ -78,6 +78,9 @@ pub fn tiles(args: &Args, ctx: &Ctx) -> Result<()> {
             tile.width,
             tile.height
         );
+        if let Some(note) = cli::view_note(tile.width, tile.height) {
+            out!("  {note} (lower --max)");
+        }
     }
     Ok(())
 }
@@ -104,6 +107,7 @@ pub fn crop(args: &Args, ctx: &Ctx) -> Result<()> {
         frame.fill(m, [0, 0, 0]);
     }
     let region = cli::work_region(args, ctx, &frame, path)?;
+    cli::check_size(region.w, region.h, zoom)?;
     let mut out = frame
         .crop(region)
         .ok_or_else(|| usage(format!("region {region} is outside the image")))?

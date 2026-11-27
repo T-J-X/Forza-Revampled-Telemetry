@@ -128,11 +128,9 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
     let r = cli::work_region(args, ctx, &f, path)?;
     let p = probe(&f, r).ok_or_else(|| usage(format!("region {r} is outside the {}x{} image", f.width, f.height)))?;
     let pct = |n: u64| n as f64 / p.px.max(1) as f64 * 100.0;
-    let (ox, oy) = ctx.origin(&f).unwrap_or((0, 0));
     out!(
-        "probe {input} region {} (4K {}): {} px{}",
-        r,
-        r.offset(ox, oy),
+        "probe {input} region {r}{}: {} px{}",
+        cli::in_4k(ctx, &f, r),
         p.px,
         if f.straight {
             " (straight alpha, multiplied over black)"

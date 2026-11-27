@@ -153,9 +153,12 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             .filter(|(j, _)| lo + j != k)
             .map(|(_, s)| s.changed)
             .collect();
+        // Without neighbours (a two-frame range) nothing can stand out from them.
+        let has_neighbours = !around.is_empty();
         let med = median(around);
         let mut note = String::new();
-        let spike = med > 0.0 && s.changed > med * POP && s.changed > 0.002;
+        // A frame that changes while its neighbours are still is the plainest glitch of all.
+        let spike = has_neighbours && s.changed > 0.002 && (med == 0.0 || s.changed > med * POP);
         if seg.starts_with("pull") && s.changed == 0.0 {
             note = "  <- stall: nothing moved while the data changed".to_string();
             flags.push((i, "stall"));
@@ -164,10 +167,12 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         } else if spike && seg == "upshift" {
             note = "  (gear change)".to_string();
         } else if spike {
-            note = format!(
-                "  <- spike: {:.1}x its neighbours; check it is an intended event (a shift stage) and not a glitch",
-                s.changed / med
-            );
+            let size = if med == 0.0 {
+                "changes while its neighbours are still".to_string()
+            } else {
+                format!("{:.1}x its neighbours", s.changed / med)
+            };
+            note = format!("  <- spike: {size}; check it is an intended event (a shift stage) and not a glitch");
             flags.push((i, "spike"));
         }
         out!(
@@ -193,7 +198,12 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
             }
         );
     } else if review {
-        out!("idle stillness: NOT ASSESSED (the range does not start at frame 0)");
+        let why = if first != 0 {
+            "the range does not start at frame 0"
+        } else {
+            "the range ends before frame 9"
+        };
+        out!("idle stillness: NOT ASSESSED ({why})");
     }
     out!(
         "stalls: {}, spikes to check: {}",
@@ -241,11 +251,11 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         }
     }
     Painter::new(&ctx.root).draw(&mut chart, &marks, Map::IDENTITY)?;
-    let dir = cli::out_dir(args, ctx, first_path);
-    let p = dir.join(match range {
+    let name = match range {
         Some(r) => format!("motion_profile_{}.png", r.replace(' ', "")),
         None => "motion_profile.png".to_string(),
-    });
+    };
+    let p = cli::out_named(args, ctx, first_path, &name);
     chart.save(&p)?;
     out!("profile: {} (magenta: flagged; yellow: limiter hold)", p.display());
     Ok(())

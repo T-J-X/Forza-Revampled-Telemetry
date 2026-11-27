@@ -55,8 +55,14 @@ impl Zone {
                 .trim()
                 .parse::<f32>()
                 .ok()
-                .filter(|v| *v >= 1.0)
-                .ok_or_else(|| usage(format!("--zone {s:?}: MIN must be a ratio of at least 1")))?,
+                // One decimal at most, so the printed ratio (rounded down to one decimal) and the
+                // printed minimum always agree with the verdict.
+                .filter(|v| *v >= 1.0 && ((*v * 10.0).round() - *v * 10.0).abs() < 1e-3)
+                .ok_or_else(|| {
+                    usage(format!(
+                        "--zone {s:?}: MIN must be a ratio of at least 1, with at most one decimal"
+                    ))
+                })?,
             None if name.eq_ignore_ascii_case("gear") => t.gear_min,
             None if name.eq_ignore_ascii_case("speed") => t.speed_min,
             None => TEXT_MIN,
@@ -230,13 +236,14 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         };
         let pass = m.ratio >= z.min;
         let verdict = if pass { "yes" } else { "no" };
+        // Rounded down, so a zone just short of its minimum never prints the minimum.
+        let shown = (m.ratio * 10.0).floor() / 10.0;
         out!(
-            "zone {} at {} (glance {small_rect}): bright {:.3}, dark {:.4}, contrast {:.1}:1, needs {:.1}:1: {verdict}",
+            "zone {} at {} (glance {small_rect}): bright {:.3}, dark {:.4}, contrast {shown:.1}:1, needs {:.1}:1: {verdict}",
             z.name,
             z.rect,
             m.bright,
             m.dark,
-            m.ratio,
             z.min
         );
         if m.share < SHARE_LOW || m.share > SHARE_HIGH {
@@ -247,7 +254,7 @@ pub fn run(args: &Args, ctx: &Ctx) -> Result<()> {
         }
         marks.push(Mark::Box {
             rect: small_rect,
-            label: format!("{} {:.1}:1 {verdict}", z.name, m.ratio),
+            label: format!("{} {shown:.1}:1 {verdict}", z.name),
             color: if pass { YELLOW } else { MAGENTA },
         });
     }
