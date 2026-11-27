@@ -57,6 +57,13 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
         s.packets,
         s.packets as f64 / secs
     );
+    let per_frame = |n: u64| n as f64 / (s.frames.max(1)) as f64;
+    let _ = writeln!(
+        out,
+        "| Kit work per frame (mean) | {:.1} render passes, {:.1} draw calls |",
+        per_frame(s.passes),
+        per_frame(s.draw_calls)
+    );
     let _ = writeln!(
         out,
         "| `--stats` overlay drawn | {} |\n",
@@ -211,6 +218,8 @@ mod tests {
             kit: p,
             submit: p,
             present: p,
+            passes: 13_200,
+            draw_calls: 30_000,
             vsync_hits: 1000,
             vsync_checked: 1190,
             refresh: Duration::from_micros(16_667),
@@ -223,6 +232,7 @@ mod tests {
         assert!(md.contains("84.0%"));
         assert!(md.contains("Indicative only"));
         assert!(md.contains("draw (scrim"));
+        assert!(md.contains("11.0 render passes, 25.0 draw calls"));
         assert!(md.contains("`Queue::submit`"));
         assert!(
             !md.contains("idle-dimmed frames only"),

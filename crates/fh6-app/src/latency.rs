@@ -112,6 +112,10 @@ pub struct FrameStats {
     pub submit: SampleRing,
     /// The `present` call.
     pub present: SampleRing,
+    /// Render passes the kit recorded, summed over the presented frames.
+    pub passes: u64,
+    /// Draw calls the kit recorded, summed over the presented frames.
+    pub draw_calls: u64,
     /// New packets presented before the first vblank after they arrived.
     pub vsync_hits: u64,
     /// New packets checked for a vsync hit (DWM timing available).
@@ -133,6 +137,8 @@ impl FrameStats {
         self.kit.clear();
         self.submit.clear();
         self.present.clear();
+        self.passes = 0;
+        self.draw_calls = 0;
         self.vsync_hits = 0;
         self.vsync_checked = 0;
     }

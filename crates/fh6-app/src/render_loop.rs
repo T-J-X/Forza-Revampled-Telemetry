@@ -15,8 +15,8 @@ use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, Kit, Layout, Logo, Painter, Palette, Rect,
-    Shape, SignalSmoother, TextStyle, VAlign, View,
+    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
+    Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
@@ -201,6 +201,10 @@ pub struct RenderSummary {
     pub submit: Percentiles,
     /// The `present` call.
     pub present: Percentiles,
+    /// Render passes the kit recorded, over every presented frame.
+    pub passes: u64,
+    /// Draw calls the kit recorded, over every presented frame.
+    pub draw_calls: u64,
     /// New packets shown at the first vblank after arrival.
     pub vsync_hits: u64,
     /// New packets checked for that.
@@ -742,7 +746,7 @@ impl Loop {
         stats_on: bool,
         scrim: Option<(ScrimFit, Wash)>,
         osd: Option<&OsdFrame<'_>>,
-    ) -> Option<(FrameOutcome, Duration, Duration)> {
+    ) -> Option<(FrameOutcome, Duration, KitFrameStats)> {
         let draw_start = Instant::now();
         let gpu = self.gpu.as_mut()?;
         let Gpu { ctx, surface, kit } = gpu;
@@ -766,7 +770,9 @@ impl Loop {
                     multiview_mask: None,
                 }));
             });
-            return result.ok().map(|outcome| (outcome, Duration::ZERO, Duration::ZERO));
+            return result
+                .ok()
+                .map(|outcome| (outcome, Duration::ZERO, KitFrameStats::default()));
         };
         // The OSD dims the game through the kit's underlay (free in the resolve); a hide frame
         // and the normal dash have none.
@@ -813,15 +819,16 @@ impl Loop {
             }
         }
         let drawn = draw_start.elapsed();
-        let mut kit_cpu = Duration::ZERO;
+        let mut kit_stats = KitFrameStats::default();
         let result = surface.render_with(ctx, |ctx, encoder, view, format, size| {
-            kit_cpu = kit
-                .render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity)
-                .cpu;
+            kit_stats = kit.render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity);
         });
+        // `render_with` has submitted the frame (or dropped it): the kit may map its upload
+        // staging buffer again.
+        kit.frame_submitted();
         let failed = ctx.has_failed();
         match result {
-            Ok(outcome) if !failed => Some((outcome, drawn, kit_cpu)),
+            Ok(outcome) if !failed => Some((outcome, drawn, kit_stats)),
             Ok(_) => {
                 self.lose_gpu("wgpu reported an error");
                 None
@@ -1219,7 +1226,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             },
             blocker: osd.host.blocker_focused(&rows_cfg),
         });
-        if let Some((FrameOutcome::Presented { timings, at }, drawn, kit_cpu)) =
+        if let Some((FrameOutcome::Presented { timings, at }, drawn, kit_stats)) =
             lp.render(fade, &layout, true, stats_on, scrim, osd_draw.as_ref())
         {
             lp.frames += 1;
@@ -1235,7 +1242,9 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             lp.stats.draw.record(drawn);
             lp.stats.encode_submit.record(timings.encode_submit);
             lp.stats.record.record(timings.record);
-            lp.stats.kit.record(kit_cpu);
+            lp.stats.kit.record(kit_stats.cpu);
+            lp.stats.passes += u64::from(kit_stats.passes);
+            lp.stats.draw_calls += u64::from(kit_stats.draw_calls);
             lp.stats.submit.record(timings.submit);
             lp.stats.present.record(timings.present);
             if new_packet {
@@ -1280,6 +1289,8 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         kit: lp.stats.kit.percentiles(&mut lp.scratch),
         submit: lp.stats.submit.percentiles(&mut lp.scratch),
         present: lp.stats.present.percentiles(&mut lp.scratch),
+        passes: lp.stats.passes,
+        draw_calls: lp.stats.draw_calls,
         vsync_hits: lp.stats.vsync_hits,
         vsync_checked: lp.stats.vsync_checked,
         refresh,

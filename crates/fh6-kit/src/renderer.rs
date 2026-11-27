@@ -19,6 +19,8 @@ use crate::text::{Fonts, ATLAS_WIDTH};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Format of the linear scene, emissive and layer targets.
@@ -102,6 +104,52 @@ const CLIPS_CAP: u64 = (size_of::<GpuClip>() * MAX_CLIPS) as u64;
 const POINTS_CAP: u64 = (8 * MAX_POINTS) as u64;
 /// Upload buffer size: every region at capacity, aligned (the worst-case offsets plus sizes).
 const UPLOAD_SIZE: u64 = GLOBALS_CAP + POST_CAP + INSTANCES_CAP + PAINTS_CAP + CLIPS_CAP + POINTS_CAP + 8 * SLOT;
+
+/// Host-visible staging buffers for the frame upload, reused frame after frame. `Queue::write_buffer`
+/// creates (and later frees) a staging buffer on every call and submits it in a command list of its
+/// own; a ring slot is mapped once, written, unmapped, copied into the upload buffer at the start of
+/// the frame's own command buffer, and mapped again after the frame is submitted.
+const STAGING_SLOTS: usize = 3;
+
+/// A slot is mapped and free to write.
+const SLOT_READY: u8 = 0;
+/// A slot was written and unmapped for this frame; it waits for [`Renderer::frame_submitted`].
+const SLOT_WRITTEN: u8 = 1;
+/// A slot's `map_async` is pending (its frame is on the GPU).
+const SLOT_MAPPING: u8 = 2;
+/// A slot's map failed (device lost); it is never used again.
+const SLOT_LOST: u8 = 3;
+
+#[derive(Debug)]
+struct StagingSlot {
+    buffer: wgpu::Buffer,
+    /// One of the `SLOT_*` states. The map callback sets it from the thread that polls the device.
+    state: Arc<AtomicU8>,
+}
+
+impl StagingSlot {
+    fn new(device: &wgpu::Device) -> Self {
+        Self {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("fh6-kit upload staging"),
+                size: UPLOAD_SIZE,
+                usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: true,
+            }),
+            state: Arc::new(AtomicU8::new(SLOT_READY)),
+        }
+    }
+
+    fn state(&self) -> u8 {
+        self.state.load(Ordering::Acquire)
+    }
+}
+
+/// The bytes a frame copies from its staging slot: everything before the post parameters, and the
+/// post parameters at capacity (they are pushed while passes are recorded, after the copy).
+fn staged_len(post_offset: u64) -> u64 {
+    (post_offset + POST_CAP).min(UPLOAD_SIZE)
+}
 
 /// A texture with views of each mip and of the whole chain.
 #[derive(Debug)]
@@ -290,6 +338,8 @@ pub(crate) struct Renderer {
     resolve: Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
     upload: wgpu::Buffer,
     staging: Vec<u8>,
+    /// Reused staging buffers for `upload` (see [`STAGING_SLOTS`]).
+    staging_ring: [StagingSlot; STAGING_SLOTS],
     sampler: wgpu::Sampler,
     sampler_rep: wgpu::Sampler,
     sampler_aniso: wgpu::Sampler,
@@ -633,6 +683,7 @@ impl Renderer {
             resolve: Vec::with_capacity(2),
             upload,
             staging: Vec::with_capacity(UPLOAD_SIZE as usize),
+            staging_ring: std::array::from_fn(|_| StagingSlot::new(device)),
             sampler,
             sampler_rep,
             sampler_aniso,
@@ -675,6 +726,25 @@ impl Renderer {
     pub(crate) fn set_world(&mut self, world: Option<(wgpu::TextureView, Rect)>) {
         self.world = world.map(|(view, rect)| World { view, rect });
         self.shape_group = None;
+    }
+
+    /// Tells the renderer that the command buffer of its last [`Renderer::render`] was submitted
+    /// (or dropped), so the staging slot it used can be mapped again. Mapping a buffer that a
+    /// recorded but unsubmitted command buffer reads would fail that submit, so slots are only
+    /// recycled through this call; without it the renderer falls back to `Queue::write_buffer`
+    /// once every slot has been used.
+    pub(crate) fn frame_submitted(&mut self) {
+        for slot in &self.staging_ring {
+            if slot.state() != SLOT_WRITTEN {
+                continue;
+            }
+            slot.state.store(SLOT_MAPPING, Ordering::Release);
+            let state = Arc::clone(&slot.state);
+            slot.buffer.slice(..).map_async(wgpu::MapMode::Write, move |result| {
+                let next = if result.is_ok() { SLOT_READY } else { SLOT_LOST };
+                state.store(next, Ordering::Release);
+            });
+        }
     }
 
     pub(crate) fn has_world(&self) -> bool {
@@ -1177,6 +1247,13 @@ impl Renderer {
                 .prepare(queue, &scene.meshes, [wx as f32, wy as f32], [ww as f32, wh as f32]);
         }
 
+        // The upload's copy goes first in the command buffer, before any pass reads it; the bytes
+        // land in the mapped slot at the end of the frame, before the buffer is submitted.
+        let staged = self.staging_ring.iter().position(|slot| slot.state() == SLOT_READY);
+        if let Some(i) = staged {
+            encoder.copy_buffer_to_buffer(&self.staging_ring[i].buffer, 0, &self.upload, 0, staged_len(offs.post));
+        }
+
         // ----- record -----------------------------------------------------------------------
         let mut scene_cleared = false;
         let mut first_pass = true;
@@ -1427,7 +1504,32 @@ impl Renderer {
             self.staging.extend_from_slice(bytemuck::bytes_of(p));
             self.staging.resize(at + SLOT as usize, 0);
         }
-        queue.write_buffer(&self.upload, 0, &self.staging);
+        match staged.and_then(|i| self.staging_ring.get(i)) {
+            Some(slot) => {
+                // The post parameters are capped at MAX_POST, so the bytes always fit the copy.
+                let len = self.staging.len().min(staged_len(offs.post) as usize);
+                let written = match slot.buffer.slice(..).get_mapped_range_mut() {
+                    Ok(mut mapped) => {
+                        mapped.slice(..len).copy_from_slice(&self.staging[..len]);
+                        true
+                    }
+                    Err(err) => {
+                        // A ready slot is mapped, so this does not happen. The copy is already
+                        // recorded and the buffer is not mapped, so the submit stays valid; this
+                        // one frame shows the slot's previous bytes, and the slot is retired.
+                        tracing::warn!(error = %err, "fh6-kit upload staging slot was not mapped; slot retired");
+                        false
+                    }
+                };
+                if written {
+                    slot.buffer.unmap();
+                    slot.state.store(SLOT_WRITTEN, Ordering::Release);
+                } else {
+                    slot.state.store(SLOT_LOST, Ordering::Release);
+                }
+            }
+            None => queue.write_buffer(&self.upload, 0, &self.staging),
+        }
         stats.cpu = t0.elapsed();
         stats
     }
@@ -1595,6 +1697,18 @@ mod tests {
         assert_eq!(blur_level(8.0), 2);
         assert_eq!(blur_level(30.0), 4);
         assert_eq!(blur_level(1000.0), PYRAMID_LEVELS);
+    }
+
+    #[test]
+    fn a_staged_copy_covers_every_post_slot_and_stays_inside_the_upload() {
+        // The copy is recorded before the post parameters are known, so it covers all of them.
+        let post = align(GLOBALS_CAP + INSTANCES_CAP);
+        assert_eq!(staged_len(post), post + POST_CAP);
+        assert!(post + POST_CAP <= UPLOAD_SIZE);
+        // Never past the end, and a multiple of the 4-byte copy alignment.
+        assert_eq!(staged_len(UPLOAD_SIZE), UPLOAD_SIZE);
+        assert_eq!(staged_len(post) % wgpu::COPY_BUFFER_ALIGNMENT, 0);
+        assert_eq!(UPLOAD_SIZE % wgpu::COPY_BUFFER_ALIGNMENT, 0);
     }
 
     #[test]
