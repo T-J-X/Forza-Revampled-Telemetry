@@ -2,7 +2,7 @@
 
 `data/design_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)). `fh6-kit::tokens` reads it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
 
-- **Version:** 3.1.0 (schema v3, 2026-11-20). The v1 keys (`typography`, `sharedSemantics`, `clusters`) stay as reference; no code has read them since the v1 clusters were removed (Rust fix phase E, 2026-11-27).
+- **Version:** 3.2.0 (schema v3, 2026-11-21). The v1 keys (`typography`, `sharedSemantics`, `clusters`) stay as reference; no code has read them since the v1 clusters were removed (Rust fix phase E, 2026-11-27).
 - **Units:** every size is in **4K pixels at cluster scale 1.0**. Multiply by the user scale (0.70–1.40). The one exception: specular rims are always exactly 1 px, snapped to the pixel grid.
 - **Alpha:** 0–255, unless a key ends in `Pct`, `Opacity` or is written as a 0–1 fraction in a gradient stop.
 - **Colour space:** hex values are sRGB. `fh6-kit` converts them to linear premultiplied RGBA before blending (SKILLS.md law 1).

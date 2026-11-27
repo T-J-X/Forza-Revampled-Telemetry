@@ -2,7 +2,8 @@
 use std::fmt;
 
 /// A string of at most `N` bytes on the stack. Write into it with `write!`; a write that would
-/// not fit fails with [`fmt::Error`] and leaves the text written so far.
+/// not fit fails with [`fmt::Error`] and keeps every piece written before the one that did not
+/// fit, so a `write!` with several arguments can stop part-way.
 #[derive(Clone, Copy)]
 pub struct StackStr<const N: usize> {
     buf: [u8; N],
@@ -17,11 +18,13 @@ impl<const N: usize> Default for StackStr<N> {
 
 impl<const N: usize> StackStr<N> {
     /// An empty string.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// The text written so far (always valid UTF-8, since only whole `&str`s are copied in).
+    #[must_use]
     pub fn as_str(&self) -> &str {
         std::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
     }
@@ -65,11 +68,16 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_write_keeps_the_text_before_it_and_clear_empties() {
+    fn a_failed_write_keeps_the_pieces_that_fit_and_clear_empties() {
         let mut s = StackStr::<4>::new();
         write!(s, "ab").expect("fits");
         assert!(write!(s, "cde").is_err(), "5 bytes do not fit in 4");
         assert_eq!(s.as_str(), "ab");
+        s.clear();
+        // Variables, not literals: rustc folds literal arguments into the format string.
+        let (first, second) = (12, 345);
+        assert!(write!(s, "{first} {second}").is_err(), "6 bytes do not fit in 4");
+        assert_eq!(s.as_str(), "12 ", "the pieces before the one that did not fit stay");
         s.clear();
         assert_eq!(s.as_str(), "");
         write!(s, "wxyz").expect("exactly fits");

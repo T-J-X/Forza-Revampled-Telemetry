@@ -327,7 +327,7 @@ impl Ledger {
 /// Folders under `assets/` that asset-forge owns completely (swept of unknown files on save).
 const FORGE_DIRS: [&str; 7] = ["glass", "fluid", "scifi", "classic", "adas", "fonts", "logos"];
 
-/// Origin and licence of a file asset-forge did not make.
+/// Origin and licence of a file that has no record in this ledger.
 fn other_origin(rel: &str) -> (&'static str, &'static str) {
     if rel.starts_with("assets/reference/") {
         (
@@ -336,6 +336,11 @@ fn other_origin(rel: &str) -> (&'static str, &'static str) {
         )
     } else if rel.starts_with("assets/car_brands/") {
         ("Project data (brand palettes and car list)", "MIT (repo)")
+    } else if rel.starts_with("assets/clusters/") && rel.ends_with("/ASSETS.md") {
+        (
+            "The per-cluster ledger: generator, seed and licence of each file in its folder",
+            "MIT (repo)",
+        )
     } else if rel.starts_with("assets/clusters/") {
         (
             "Per-cluster set built by that cluster's asset-forge recipe; generator and seed in the folder's `ASSETS.md`",
@@ -409,6 +414,9 @@ mod tests {
         let (origin, licence) = other_origin("assets/clusters/porsche_analog/tach_0.png");
         assert!(!origin.contains("v1"), "{origin}");
         assert!(origin.contains("ASSETS.md") && licence.contains("ASSETS.md"));
+        let (origin, licence) = other_origin("assets/clusters/porsche_analog/ASSETS.md");
+        assert!(origin.starts_with("The per-cluster ledger"), "{origin}");
+        assert_eq!(licence, "MIT (repo)", "a ledger's own row does not point at itself");
         let (origin, _) = other_origin("assets/porsche_tach_dial.png");
         assert!(origin.starts_with("v1 project texture"), "{origin}");
         let (origin, _) = other_origin("assets/reference/cockpit_with_wheel.jpg");
@@ -420,6 +428,7 @@ mod tests {
     #[test]
     fn files_with_a_record_are_not_listed_again_as_other_files() {
         let dir = std::env::temp_dir().join(format!("forge_ledger_other_files_{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
         let set = dir.join("clusters").join("tesla_adas");
         std::fs::create_dir_all(&set).expect("create the test folder");
         for name in ["asphalt.png", "ASSETS.md"] {

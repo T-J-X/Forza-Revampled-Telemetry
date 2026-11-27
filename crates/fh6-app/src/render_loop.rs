@@ -13,10 +13,9 @@ use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
 use fh6_kit::scrim::{self, Wash};
-use fh6_kit::StackStr;
 use fh6_kit::{
     vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
-    Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,
+    Painter, Palette, Rect, Shape, SignalSmoother, StackStr, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
