@@ -9,10 +9,14 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+use windows::Win32::System::SystemInformation::{
+    CpuSetInformation, GetSystemCpuSetInformation, SYSTEM_CPU_SET_INFORMATION,
+};
 use windows::Win32::System::Threading::{
     AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateMutexW, GetCurrentThread,
-    SetThreadInformation, SetThreadPriority, ThreadPowerThrottling, THREAD_POWER_THROTTLING_CURRENT_VERSION,
-    THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE, THREAD_PRIORITY_ABOVE_NORMAL,
+    SetThreadInformation, SetThreadPriority, SetThreadSelectedCpuSets, ThreadPowerThrottling,
+    THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
+    THREAD_PRIORITY_ABOVE_NORMAL,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
@@ -182,6 +186,7 @@ pub struct FrameThreadGuard {
     mmcss: Option<HANDLE>,
     class: FrameThreadClass,
     full_speed: bool,
+    performance_cores: usize,
     /// The MMCSS handle is per thread: the guard must be dropped where it was made.
     _not_send: std::marker::PhantomData<*const ()>,
 }
@@ -199,10 +204,25 @@ impl FrameThreadGuard {
     pub fn full_speed(&self) -> bool {
         self.full_speed
     }
+
+    /// How many logical processors the thread is kept on: the performance cores of a hybrid CPU
+    /// (such as a 12th-gen Intel's P-cores). 0 when every core is alike, and the thread may run
+    /// anywhere.
+    #[must_use]
+    pub fn performance_cores(&self) -> usize {
+        self.performance_cores
+    }
 }
 
 impl Drop for FrameThreadGuard {
     fn drop(&mut self) {
+        if self.performance_cores > 0 {
+            // SAFETY: the pseudo-handle names this thread (the guard is not `Send`); an empty list
+            // clears its CPU-set selection.
+            if !unsafe { SetThreadSelectedCpuSets(GetCurrentThread(), &[]) }.as_bool() {
+                tracing::debug!("clearing the frame thread's CPU sets failed");
+            }
+        }
         if let Some(handle) = self.mmcss.take() {
             // SAFETY: `handle` came from `AvSetMmThreadCharacteristicsW` on this thread (the guard
             // is not `Send`), and it is reverted once (`take`).
@@ -217,7 +237,9 @@ impl Drop for FrameThreadGuard {
 /// - an MMCSS "Games" task (the class Windows gives game render threads), or above-normal
 ///   priority when MMCSS is unavailable;
 /// - out of power throttling. The overlay never has the focus (the game does), so Windows treats
-///   it as background work and may run it on an efficiency core at a low clock (EcoQoS).
+///   it as background work and may run it on an efficiency core at a low clock (EcoQoS);
+/// - on a hybrid CPU, onto the performance cores only, where the same frame takes about half the
+///   time it takes on an efficiency core.
 ///
 /// The frame thread works for well under 1 ms per refresh and then waits, so it takes no time
 /// from the game; it only stops the frame from being parked or slowed between its wake and its
@@ -225,6 +247,7 @@ impl Drop for FrameThreadGuard {
 #[must_use = "dropping the guard reverts the thread's class at once"]
 pub fn raise_frame_thread() -> FrameThreadGuard {
     let full_speed = opt_out_of_power_throttling();
+    let performance_cores = keep_on_performance_cores();
     let mut index = 0u32;
     // SAFETY: the task name is a static wide string; `index` is a valid out-param (0 asks for a new
     // task). The handle is reverted by the guard on this thread.
@@ -234,6 +257,7 @@ pub fn raise_frame_thread() -> FrameThreadGuard {
                 mmcss: Some(handle),
                 class: FrameThreadClass::Mmcss,
                 full_speed,
+                performance_cores,
                 _not_send: std::marker::PhantomData,
             }
         }
@@ -249,7 +273,89 @@ pub fn raise_frame_thread() -> FrameThreadGuard {
         mmcss: None,
         class,
         full_speed,
+        performance_cores,
         _not_send: std::marker::PhantomData,
+    }
+}
+
+/// The CPU-set ids of the fastest cores, when the CPU has cores of more than one efficiency class.
+/// Empty on a CPU whose cores are all alike, or when Windows does not report its CPU sets.
+fn performance_cpu_sets() -> Vec<u32> {
+    let mut needed = 0u32;
+    // SAFETY: a null buffer of length 0 only asks for the size needed (the call then fails with
+    // ERROR_INSUFFICIENT_BUFFER, which is expected); `needed` is a valid out-param.
+    let _ = unsafe { GetSystemCpuSetInformation(None, 0, &mut needed, None, None) };
+    let Ok(bytes) = usize::try_from(needed) else {
+        return Vec::new();
+    };
+    if bytes == 0 {
+        return Vec::new();
+    }
+    // u64 words keep the entries 8-byte aligned, as the API lays them out.
+    let mut buffer = vec![0u64; bytes.div_ceil(8)];
+    let mut written = 0u32;
+    // SAFETY: `buffer` holds at least `needed` bytes and outlives the call; `written` is a valid
+    // out-param.
+    let ok = unsafe {
+        GetSystemCpuSetInformation(
+            Some(buffer.as_mut_ptr().cast::<SYSTEM_CPU_SET_INFORMATION>()),
+            needed,
+            &mut written,
+            None,
+            None,
+        )
+    };
+    if !ok.as_bool() {
+        return Vec::new();
+    }
+    let len = usize::try_from(written).unwrap_or(0).min(bytes);
+    let base = buffer.as_ptr().cast::<u8>();
+    let mut sets: Vec<(u32, u8)> = Vec::new();
+    let mut offset = 0usize;
+    let header = std::mem::size_of::<SYSTEM_CPU_SET_INFORMATION>();
+    while offset + header <= len {
+        // SAFETY: `offset + header <= len <= bytes`, so the read stays inside `buffer`; the entry
+        // is plain data, read unaligned in case an entry size is not a multiple of 8.
+        let entry = unsafe { std::ptr::read_unaligned(base.add(offset).cast::<SYSTEM_CPU_SET_INFORMATION>()) };
+        let size = entry.Size as usize;
+        if size == 0 {
+            break;
+        }
+        if entry.Type == CpuSetInformation {
+            // SAFETY: `Type` is `CpuSetInformation`, so `CpuSet` is the union's active member.
+            let cpu = unsafe { entry.Anonymous.CpuSet };
+            sets.push((cpu.Id, cpu.EfficiencyClass));
+        }
+        offset += size;
+    }
+    let (Some(fastest), Some(slowest)) = (
+        sets.iter().map(|&(_, class)| class).max(),
+        sets.iter().map(|&(_, class)| class).min(),
+    ) else {
+        return Vec::new();
+    };
+    if fastest == slowest {
+        return Vec::new();
+    }
+    sets.into_iter()
+        .filter(|&(_, class)| class == fastest)
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// Keeps the calling thread on the performance cores of a hybrid CPU. Returns how many logical
+/// processors it may run on (0: no change, every core is alike or the call failed).
+fn keep_on_performance_cores() -> usize {
+    let ids = performance_cpu_sets();
+    if ids.is_empty() {
+        return 0;
+    }
+    // SAFETY: the pseudo-handle names the calling thread; `ids` are CPU-set ids Windows reported.
+    if unsafe { SetThreadSelectedCpuSets(GetCurrentThread(), &ids) }.as_bool() {
+        ids.len()
+    } else {
+        tracing::debug!("selecting the performance cores failed");
+        0
     }
 }
 
@@ -305,6 +411,18 @@ mod tests {
         assert_ne!(class.0, FrameThreadClass::Normal);
         // Windows 10 1709 and later accept the throttling opt-out.
         assert!(class.1, "the frame thread is not throttled");
+    }
+
+    #[test]
+    fn performance_cores_are_a_strict_subset_of_the_machine() {
+        let ids = performance_cpu_sets();
+        let logical = std::thread::available_parallelism().map_or(usize::MAX, std::num::NonZero::get);
+        // Empty on a CPU whose cores are all alike; on a hybrid CPU, some but not all of them.
+        assert!(ids.len() < logical, "{} of {logical} logical processors", ids.len());
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len(), "each CPU set once");
     }
 
     #[test]

@@ -904,6 +904,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
     tracing::info!(
         class = ?priority.class(),
         full_speed = priority.full_speed(),
+        performance_cores = priority.performance_cores(),
         "render thread scheduling class"
     );
     let refresh = fh6_win::system::composition_timing()
