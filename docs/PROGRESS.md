@@ -38,6 +38,19 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after the host CPU phase, 2026-11-27)
+| Check | Result |
+|---|---|
+| `cargo test --workspace --no-fail-fast` | ✅ exit 0 (`golden_images` 49/49) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
+
+What the host CPU phase changed (known defects 10 and 17; `program/phases/fix-host-cpu/HANDOVER.md`):
+- **The app meets 1 ms CPU per frame.** Live bench p99 0.78–0.88 ms and p50 0.62–0.68 ms on three dashes (was 1.11–1.19 ms p99 with less of the frame counted). The render thread runs in MMCSS "Games", without power throttling and on the performance cores; release builds use thin LTO; the kit uploads through mapped staging buffers; bloom is one compute pass.
+- **The bench counts the whole frame.** "CPU per frame" is the render thread's whole iteration less the latency wait, broken into its parts, with passes and draws per frame and an idle-dimmed row; `mock-udp --scenario parked` drives the idle dim.
+
 ## State of the code (after fix phase B, 2026-11-27)
 | Check | Result |
 |---|---|
@@ -169,7 +182,7 @@ What exists:
 4. ~~50 compiler warnings~~ Fixed in Phase 4.
 8. Nine `TODO(phase-7)` comments in `fh6-clusters` mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
 9. ~~The OSD is not drawn yet~~ Fixed in Phase 9 (`docs/design/OSD.md`). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
-10. Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).
+10. ~~Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).~~ Fixed in the host CPU phase (2026-11-27): p99 0.78–0.88 ms and p50 0.62–0.68 ms with the whole frame counted (`docs/perf/engine.md`, `program/phases/fix-host-cpu/HANDOVER.md`).
 11. `fh6-gpu`'s `QuadRenderer` and `test_cluster` no longer draw anything in the app, but `OverlaySurface` (`surface.rs`) and the offscreen target still build a `QuadRenderer`; remove them when nothing needs a quad baseline (optional fix phase E of the 2026-11-27 Rust assessment).
 12. `Camera25` has no pitch; the Phase 3 ADAS chase eye (0, 3.4, −6.0) m with 8° pitch needs a pitch term before TeslaAdas is rebuilt (the eye itself is a public field).
 5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.

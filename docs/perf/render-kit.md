@@ -13,7 +13,7 @@ All numbers on the development machine: RTX 3070 Ti Laptop GPU (DX12), 3840x2160
 | GPU, fluid on (256x128 solver + analog sample) | 0.259 ms frame + 0.281 ms solver (submit-to-idle upper bound) | < 0.5 ms per cluster: met for the frame; solver adds about 0.3 ms |
 | Kit CPU (cluster update + draw + `Kit::render`) | 0.045 ms p50, 0.16 ms p99 (Liquid Glass) | |
 | wgpu finish + submit | 0.07 ms + about 10 µs per render pass (0.23 ms p50 at 18 passes) | |
-| Live overlay CPU per frame | 0.49–0.58 ms p50, 1.11–1.19 ms p99 | < 1 ms: **p50 met, p99 not met** (Phase 4 debt, see below) |
+| Live overlay CPU per frame | 0.62–0.68 ms p50, 0.78–0.88 ms p99 (host CPU phase, the whole frame counted; was 0.49–0.58 / 1.11–1.19 ms with only part of it counted) | < 1 ms: **met** |
 | Live packet receive -> present | 0.57–0.66 ms p50, 1.8–2.0 ms p99 | < 1 frame (8.33 ms at 120 Hz): **met** |
 | WGC refraction capture (optional, off by default) | 0.44 ms p50 / 0.62 ms p99 CPU per delivered frame (620x280, pipelined) | reported only |
 
@@ -39,6 +39,20 @@ Fluid solver step alone (256x128, 20 Jacobi iterations, vorticity), its own subm
 Reproduce: `cargo run --release -p bench-render -- --frames 600 --out <file>`.
 
 ## Live overlay
+
+### After the host CPU phase (2026-11-27)
+
+The same bench on the test PC (1920 x 1080 at 300 Hz, `mock-udp --scenario bmw_m4_cs`, stand-in game focused), with "CPU per frame" now the render thread's whole iteration less the frame-latency wait (known defect 17). Times in ms, p50 / p99.
+
+| Cluster | Passes / draws per frame | CPU per frame | of which view + encoder + kit + `finish` | `Queue::submit` | `present` | Receive -> present |
+|---|---|---|---|---|---|---|
+| Bosch DDU | 2.9 / 13.5 | 0.656 / 0.873 | 0.248 / 0.359 | 0.140 / 0.203 | 0.218 / 0.333 | 0.662 / 1.366 |
+| Liquid Glass | 4.0 / 14.9 | 0.684 / 0.883 | 0.283 / 0.407 | 0.139 / 0.199 | 0.216 / 0.308 | 0.688 / 1.537 |
+| Aperture Nine | 3.0 / 11.0 | 0.623 / 0.783 | 0.235 / 0.318 | 0.132 / 0.184 | 0.211 / 0.300 | 0.626 / 1.288 |
+
+What moved it: the render thread runs in MMCSS "Games" without power throttling and, on a hybrid CPU, on the performance cores (the tail fell by 0.2–0.3 ms); thin LTO; the kit's upload goes through a ring of mapped staging buffers instead of `Queue::write_buffer` (kit render 0.13 to 0.03 ms); bloom is one compute pass instead of nine render passes (about 0.045 ms). The dash's own work (build and draw) is about 0.03 ms. What is left is wgpu and the driver: about 0.25 ms to record and `finish`, 0.14 ms to submit and 0.22 ms to present. The compute bloom costs about 0.02 ms more GPU on bloom-heavy frames (Bosch DDU sequence p50 0.239 against 0.217 ms). Full report: [`engine.md`](engine.md).
+
+### Phase 5 (before the host CPU phase)
 
 `FH6_WheelDash --game-process fh6-stand-in.exe --config <cfg> --bench-seconds 25` with `mock-udp --scenario bmw_m4_cs` (60 Hz) and the stand-in game focused; no `--stats` overlay. Clusters that are still animating (springs, strobes) render every refresh, so the frame rate is about 106 fps at 120 Hz rather than the packet rate.
 

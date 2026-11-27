@@ -88,7 +88,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 7. **Frame budget ("0 ms" feel).**
    - No packet queue: telemetry reaches the screen on the next vsync, within 1 display frame.
    - Under 1 ms CPU per frame, and under 0.5 ms GPU per cluster at 3840x2160.
-   - A dash's own share of the CPU is under 0.3 ms per frame: the "CPU per frame" p50 of the live bench (`--bench-seconds`) with the dash, minus the same number for a scaffold dash. TJX agreed to a hard limit on 2026-11-27, and the coordinator set the number. The app's host code still misses the 1 ms total (known defect 10 in `docs/PROGRESS.md`); a separate phase fixes it.
+   - A dash's own share of the CPU is under 0.3 ms per frame: the "CPU per frame" p50 of the live bench (`--bench-seconds`) with the dash, minus the same number for a scaffold dash. TJX agreed to a hard limit on 2026-11-27, and the coordinator set the number. Since the host CPU phase (2026-11-27, known defect 10 fixed) the app total with the dashes benched (Bosch DDU, Liquid Glass, Aperture Nine) is 0.62–0.68 ms p50 and 0.78–0.88 ms p99 on the test PC (`docs/perf/engine.md`), so a dash's 0.3 ms fits inside the 1 ms.
    - The packet-to-present time is measured.
 8. **Deploy guard.** Never copy anything into the game folder or a mirror without TJX's explicit GO in chat.
 9. **Visibility.** The dash is never visible in menus or when paused. Hide within 1 frame when `IsRaceOn == 0`, when the telemetry stream goes stale, or when Forza isn't the foreground window. The OSD live view is the only exception.
