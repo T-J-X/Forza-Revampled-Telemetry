@@ -1,7 +1,8 @@
-//! GPU lanes. A lane is one GPU that runs one job at a time, with its own lock file next to the
-//! tools (`SKILLS.md`, section 5). `local` is this PC's card; `cloud` is the rented pod driven by
-//! [`crate::cloud`]. This module also finds the Google Drive masters folder and copies a job's
-//! 4K outputs into it when a run asks for that with `--masters`.
+//! GPU lanes, each with its lock files next to the tools (`SKILLS.md`, section 5). `local` is
+//! this PC's card and runs one job at a time (`gpu.lock`). `cloud` is the rented pod driven by
+//! [`crate::cloud`] and runs up to two at a time, one for each of its lock files
+//! (`gpu-cloud.lock`, `gpu-cloud-2.lock`). This module also finds the Google Drive masters folder
+//! and copies a job's 4K outputs into it when a run asks for that with `--masters`.
 use crate::error::{io_err, tool_err, ForgeError, Result};
 use std::path::{Path, PathBuf};
 
@@ -42,19 +43,14 @@ impl Lane {
         }
     }
 
-    /// The lane's lock file name inside the tools folder.
+    /// The lane's lock file names inside the tools folder, one for each job the lane can run at
+    /// the same time.
     #[must_use]
-    pub fn lock_name(self) -> &'static str {
+    pub fn lock_names(self) -> &'static [&'static str] {
         match self {
-            Self::Local => "gpu.lock",
-            Self::Cloud => "gpu-cloud.lock",
+            Self::Local => &["gpu.lock"],
+            Self::Cloud => &["gpu-cloud.lock", "gpu-cloud-2.lock"],
         }
-    }
-
-    /// The lane's lock file.
-    #[must_use]
-    pub fn lock_path(self, tools: &Path) -> PathBuf {
-        tools.join(self.lock_name())
     }
 }
 
@@ -89,23 +85,44 @@ impl Lock {
         lock
     }
 
-    /// The lane's lock, or `None` when nobody holds it.
+    /// The lane's lock, or `None` when nobody holds it. When two threads hold the cloud lane's
+    /// two lock files, their names are joined with ` + `.
     #[must_use]
     pub fn read(tools: &Path, lane: Lane) -> Option<Self> {
-        std::fs::read_to_string(lane.lock_path(tools))
-            .ok()
-            .map(|t| Self::parse(&t))
+        let held: Vec<Self> = lane
+            .lock_names()
+            .iter()
+            .filter_map(|name| std::fs::read_to_string(tools.join(name)).ok())
+            .map(|text| Self::parse(&text))
+            .collect();
+        let join = |field: fn(&Self) -> &str| {
+            held.iter()
+                .map(field)
+                .filter(|v| !v.is_empty())
+                .collect::<Vec<_>>()
+                .join(" + ")
+        };
+        (!held.is_empty()).then(|| Self {
+            thread: join(|l| l.thread.as_str()),
+            started: join(|l| l.started.as_str()),
+            job: join(|l| l.job.as_str()),
+        })
     }
 
     /// The lane's lock, or an error that says how to take it.
     pub fn require(tools: &Path, lane: Lane) -> Result<Self> {
         Self::read(tools, lane).ok_or_else(|| {
+            let files: Vec<String> = lane
+                .lock_names()
+                .iter()
+                .map(|name| tools.join(name).display().to_string())
+                .collect();
             tool_err(
                 lane.name(),
                 format!(
                     "the {} lane is not locked. Take {} first (SKILLS.md, section 5), and release it when the job ends",
                     lane.name(),
-                    lane.lock_path(tools).display()
+                    files.join(" or ")
                 ),
             )
         })
@@ -238,13 +255,35 @@ mod tests {
     }
 
     #[test]
-    fn each_lane_has_its_own_lock_file() {
-        assert_eq!(Lane::Local.lock_name(), "gpu.lock");
-        assert_eq!(Lane::Cloud.lock_name(), "gpu-cloud.lock");
-        assert_ne!(
-            Lane::Local.lock_path(Path::new("t")),
-            Lane::Cloud.lock_path(Path::new("t"))
-        );
+    fn each_lane_has_its_own_lock_files() {
+        assert_eq!(Lane::Local.lock_names(), ["gpu.lock"]);
+        assert_eq!(Lane::Cloud.lock_names(), ["gpu-cloud.lock", "gpu-cloud-2.lock"]);
+    }
+
+    #[test]
+    fn either_cloud_lock_file_unlocks_the_lane_and_both_holders_are_named() {
+        let dir = std::env::temp_dir().join(format!("forge_lane_two_slots_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(Lock::read(&dir, Lane::Cloud).is_none());
+        std::fs::write(
+            dir.join("gpu-cloud-2.lock"),
+            "thread: PorscheAnalog\nstarted: t2\njob: plates\n",
+        )
+        .unwrap();
+        let one = Lock::require(&dir, Lane::Cloud).unwrap();
+        assert_eq!((one.thread.as_str(), one.job.as_str()), ("PorscheAnalog", "plates"));
+        std::fs::write(
+            dir.join("gpu-cloud.lock"),
+            "thread: LiquidGlass\nstarted: t1\njob: studio\n",
+        )
+        .unwrap();
+        let both = Lock::require(&dir, Lane::Cloud).unwrap();
+        assert_eq!(both.thread, "LiquidGlass + PorscheAnalog");
+        assert_eq!(both.job, "studio + plates");
+        // The local lane still has one file only.
+        assert!(Lock::read(&dir, Lane::Local).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -257,12 +296,14 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_lock_is_an_error_that_names_the_file() {
-        let dir = std::env::temp_dir().join("forge_lane_no_lock");
+    fn a_missing_lock_is_an_error_that_names_the_files() {
+        let dir = std::env::temp_dir().join(format!("forge_lane_no_lock_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
-        let _ = std::fs::remove_file(Lane::Cloud.lock_path(&dir));
         let err = Lock::require(&dir, Lane::Cloud).map(|_| ()).unwrap_err().to_string();
-        assert!(err.contains("gpu-cloud.lock"), "{err}");
+        assert!(err.contains("gpu-cloud.lock or "), "{err}");
+        assert!(err.contains("gpu-cloud-2.lock"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

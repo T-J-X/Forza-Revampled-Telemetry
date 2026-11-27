@@ -25,6 +25,9 @@ pub const VOLUME_NAME: &str = "asset-forge";
 pub const DEFAULT_IMAGE: &str = "runpod/base:2.1.1-ubuntu2404";
 /// ComfyUI's port on the pod. It listens on loopback only and is reached through SSH.
 pub const COMFY_PORT: u16 = 8188;
+/// GB of the pod's card that ComfyUI leaves free, so a Blender job of a run that shares the pod
+/// fits next to it (`--reserve-vram`).
+pub const COMFY_RESERVE_GB: u32 = 6;
 /// Where job folders go: the pod's own disk, which is fast, free and new on every pod. The
 /// results are copied back to this PC, so nothing in them has to outlive the pod.
 pub const JOBS: &str = "/root/forge-jobs";
@@ -308,7 +311,10 @@ if ! comfy_pid >/dev/null; then
   log "starting ComfyUI"
   cd /workspace/ComfyUI || fail "ComfyUI is not installed"
   # 9>&- : ComfyUI must not inherit the lock, or it would hold it for as long as it runs.
-  setsid nohup /workspace/venv/bin/python main.py --listen 127.0.0.1 --port __COMFY_PORT__ > /workspace/forge/comfyui.log 2>&1 < /dev/null 9>&- &
+  # It leaves part of the card free for Blender jobs of a run that shares the pod, and the
+  # files it writes stay on this pod's own disk.
+  mkdir -p /root/comfy/output /root/comfy/input
+  setsid nohup /workspace/venv/bin/python main.py --listen 127.0.0.1 --port __COMFY_PORT__ --reserve-vram __RESERVE_GB__ --output-directory /root/comfy/output --input-directory /root/comfy/input --temp-directory /root/comfy > /workspace/forge/comfyui.log 2>&1 < /dev/null 9>&- &
 fi
 n=0
 until curl -fsS -m 3 http://127.0.0.1:__COMFY_PORT__/system_stats >/dev/null 2>&1; do
@@ -485,6 +491,7 @@ echo "tunnels=$(for p in /proc/[0-9]*; do tr '\0' ' ' < "$p/cmdline" 2>/dev/null
 
 fn fill(text: &str) -> String {
     text.replace("__COMFY_PORT__", &COMFY_PORT.to_string())
+        .replace("__RESERVE_GB__", &COMFY_RESERVE_GB.to_string())
         .replace("__BLENDER_VERSION__", BLENDER_VERSION)
         .replace("__BLENDER_URL__", BLENDER_URL)
         .replace("__BLENDER_SHA256__", BLENDER_SHA256)
@@ -803,7 +810,7 @@ mod tests {
         let lock = s.find("exec 9> /run/forge/services.lock\nflock 9\n").unwrap();
         assert!(lock < s.find("rm -f /run/forge/ready /run/forge/failed").unwrap());
         assert!(
-            s.contains("main.py --listen 127.0.0.1 --port 8188 > /workspace/forge/comfyui.log 2>&1 < /dev/null 9>&- &")
+            s.contains("main.py --listen 127.0.0.1 --port 8188 --reserve-vram 6 --output-directory /root/comfy/output --input-directory /root/comfy/input --temp-directory /root/comfy > /workspace/forge/comfyui.log 2>&1 < /dev/null 9>&- &")
         );
         // A ComfyUI that is already starting is waited for, not started a second time.
         assert!(s.contains("if ! comfy_pid >/dev/null; then\n  log \"starting ComfyUI\""));

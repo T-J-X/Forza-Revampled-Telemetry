@@ -14,6 +14,9 @@ pub struct Comfy {
     agent: ureq::Agent,
     /// Where master-sized outputs are also written (`--masters`).
     masters: Option<std::path::PathBuf>,
+    /// On the cloud lane, this run's tag: the pod's ComfyUI is shared by up to two runs, so the
+    /// images this run uploads carry it in their names. `None` on the local lane.
+    tag: Option<String>,
 }
 
 impl Comfy {
@@ -23,14 +26,24 @@ impl Comfy {
     pub fn connect(paths: &Paths) -> Result<Self> {
         let masters = paths.masters.clone();
         if paths.lane == crate::lane::Lane::Cloud {
-            let base = crate::cloud::comfy_url(paths)?;
+            let (base, tag) = crate::cloud::comfy_endpoint(paths)?;
             // A 4K image coming back from the pod over a home line can take minutes.
             let agent = loopback_agent(600);
-            return Ok(Self { base, agent, masters });
+            return Ok(Self {
+                base,
+                agent,
+                masters,
+                tag: Some(tag),
+            });
         }
         let agent = loopback_agent(120);
         let base = paths.comfy_url.trim_end_matches('/').to_owned();
-        let me = Self { base, agent, masters };
+        let me = Self {
+            base,
+            agent,
+            masters,
+            tag: None,
+        };
         if me.alive() {
             return Ok(me);
         }
@@ -147,6 +160,8 @@ impl Comfy {
     /// Uploads PNG bytes to ComfyUI's `input/` folder (multipart `/upload/image`, overwrite) and
     /// returns the name to give `LoadImage`.
     pub fn upload_image(&self, name: &str, png: &[u8]) -> Result<String> {
+        let tagged = upload_name(self.tag.as_deref(), name);
+        let name = tagged.as_str();
         let url = format!("{}/upload/image", self.base);
         let boundary = "forge-boundary-7c1e0b3a";
         let mut body = Vec::with_capacity(png.len() + 512);
@@ -177,9 +192,18 @@ impl Comfy {
             .ok_or_else(|| tool_err("comfyui", format!("upload {name}: no name in {v}")))
     }
 
-    /// Asks ComfyUI to unload models and free VRAM (before handing the GPU back to Blender or
-    /// after an out-of-memory error).
+    /// Asks ComfyUI to unload models and free VRAM before the GPU goes back to Blender. On the
+    /// cloud lane this does nothing: the pod's ComfyUI keeps 6 GB of its 24 free for Blender by
+    /// itself, and the other run sharing it would have to load its models again.
     pub fn free(&self) {
+        if self.tag.is_none() {
+            self.free_now();
+        }
+    }
+
+    /// Asks ComfyUI to unload models and free VRAM now, on either lane (after an out-of-memory
+    /// error).
+    fn free_now(&self) {
         let url = format!("{}/free", self.base);
         let _ = self
             .agent
@@ -204,12 +228,21 @@ impl Comfy {
         match self.run(workflow, timeout) {
             Err(e) if e.to_string().to_ascii_lowercase().contains("memory") => {
                 eprintln!("  comfyui out of memory; freeing VRAM and retrying once");
-                self.free();
+                self.free_now();
                 std::thread::sleep(Duration::from_secs(15));
                 self.run(workflow, timeout)
             }
             other => other,
         }
+    }
+}
+
+/// The name an image is uploaded under: as given on the local lane, and with this run's tag in
+/// front on the cloud lane, where two runs share the pod's ComfyUI.
+fn upload_name(tag: Option<&str>, name: &str) -> String {
+    match tag {
+        Some(tag) => format!("{tag}_{name}"),
+        None => name.to_owned(),
     }
 }
 
@@ -269,5 +302,14 @@ mod tests {
         let v = super::patch(wf, &p).unwrap_or_default();
         assert_eq!(v["3"]["inputs"]["seed"], serde_json::json!(42));
         assert_eq!(v["3"]["inputs"]["text"], serde_json::json!("a plasma plate"));
+    }
+
+    #[test]
+    fn uploads_carry_the_runs_tag_only_on_the_shared_pod() {
+        assert_eq!(super::upload_name(None, "plate_rolled.png"), "plate_rolled.png");
+        assert_eq!(
+            super::upload_name(Some("run4242"), "plate_rolled.png"),
+            "run4242_plate_rolled.png"
+        );
     }
 }

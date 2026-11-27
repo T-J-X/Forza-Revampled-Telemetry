@@ -46,22 +46,27 @@ pub struct Plan {
     pub uploads: Vec<Upload>,
     /// The local output folder the results come back to.
     pub out: Option<PathBuf>,
-    /// The job's folder on the pod.
+    /// The job's folder on the pod, inside the folder of the run that sends it.
     pub dir: String,
+    /// The run's tag (see [`super::run_tag`]); a temporary upload carries it too.
+    pub tag: String,
     /// Parameters that name a file or folder on this PC that is not there. The job is refused
     /// rather than sent with a path of this PC in it.
     pub missing: Vec<PathBuf>,
 }
 
 impl Plan {
-    /// Rewrites `params` for a job called `name`. `look` says what a path is on this PC.
-    pub fn new(name: &str, params: &Value, look: &mut dyn FnMut(&Path) -> Local) -> Self {
-        let dir = format!("{JOBS}/{}", safe_name(name));
+    /// Rewrites `params` for a job called `name`, sent by the run `tag`. Two runs can share
+    /// the pod, so each run's jobs go in a folder of the run's own. `look` says what a path is
+    /// on this PC.
+    pub fn new(name: &str, params: &Value, tag: &str, look: &mut dyn FnMut(&Path) -> Local) -> Self {
+        let dir = format!("{JOBS}/{}/{}", safe_name(tag), safe_name(name));
         let mut plan = Self {
             params: params.clone(),
             uploads: Vec::new(),
             out: None,
             dir,
+            tag: safe_name(tag),
             missing: Vec::new(),
         };
         let mut rewritten = params.clone();
@@ -155,10 +160,27 @@ impl Plan {
     #[must_use]
     pub fn run_script(&self) -> String {
         format!(
-            "cd {dir} || exit 97\n{WORKSPACE}/blender/blender -b --factory-startup --python-exit-code 3 -P job.py -- job.json > log.txt 2>&1\nrc=$?\ncat log.txt\nexit $rc",
-            dir = self.dir
+            "cd {dir} || exit 97\n{wait}{WORKSPACE}/blender/blender -b --factory-startup --python-exit-code 3 -P job.py -- job.json > log.txt 2>&1\nrc=$?\ncat log.txt\nexit $rc",
+            dir = self.dir,
+            wait = vram_wait(BLENDER_VRAM_MIB)
         )
     }
+}
+
+/// The free GPU memory, in MiB, a Blender job waits for before it starts. Two runs share the
+/// pod's 24 GB card: ComfyUI keeps 6 GB free for Blender, and a 3840x2160 glass render used
+/// 4.1 GB on this PC's card.
+pub const BLENDER_VRAM_MIB: u32 = 6000;
+
+/// How long a Blender job waits for that memory before it starts anyway, in seconds.
+const VRAM_WAIT_SECS: u32 = 600;
+
+/// Bash that waits, every 5 seconds, until the card has `need` MiB free. It goes on without
+/// waiting when the card cannot be read, and starts anyway after [`VRAM_WAIT_SECS`].
+fn vram_wait(need: u32) -> String {
+    format!(
+        "waited=0\nwhile :; do\n  free=$(timeout -k 5 20 nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -dc 0-9)\n  [ -z \"$free\" ] && break\n  [ \"$free\" -ge {need} ] && break\n  if [ \"$waited\" -ge {VRAM_WAIT_SECS} ]; then echo \"[forge] GPU memory still short after $waited s; starting anyway\"; break; fi\n  if [ \"$waited\" -eq 0 ]; then echo \"[forge] waiting for {need} MiB of free GPU memory (another job is using the card)\"; fi\n  sleep 5\n  waited=$((waited + 5))\ndone\n"
+    )
 }
 
 /// Looks at a path on this PC. A file's key is a fingerprint of its bytes plus its length.
@@ -193,8 +215,9 @@ fn send(ssh: &Ssh, plan: &Plan, stage: &Path) -> Result<()> {
             if !missing.lines().any(|l| l.trim() == upload.remote) {
                 continue;
             }
-            // Land under a temporary name, so a broken transfer is never taken for the file.
-            let part = format!("{}.part", upload.remote);
+            // Land under a temporary name of this run's own, so a broken transfer is never
+            // taken for the file, and two runs sending the same file never write one part.
+            let part = format!("{}.part.{}", upload.remote, plan.tag);
             ssh.upload(&upload.local, &part)?;
             ssh.check(&format!("mv {part} {}", upload.remote))?;
         } else {
@@ -207,7 +230,7 @@ fn send(ssh: &Ssh, plan: &Plan, stage: &Path) -> Result<()> {
 /// Runs a Blender recipe on the pod. `source` is the whole script (prelude and recipe).
 /// Returns Blender's log, as the local run returns its standard output.
 pub fn run_blender(paths: &Paths, name: &str, source: &str, params: &Value) -> Result<String> {
-    let plan = Plan::new(name, params, &mut look_on_disk);
+    let plan = Plan::new(name, params, &super::run_tag(), &mut look_on_disk);
     if !plan.missing.is_empty() {
         let list: Vec<String> = plan.missing.iter().map(|p| p.display().to_string()).collect();
         return Err(tool_err(
@@ -274,14 +297,14 @@ mod tests {
     }
 
     fn plan(params: &Value) -> Plan {
-        Plan::new("hero bezel", params, &mut fake)
+        Plan::new("hero bezel", params, "run42", &mut fake)
     }
 
     #[test]
     fn out_becomes_the_jobs_folder_on_the_pod() {
         let p = plan(&json!({ "out": r"C:\repo\target\asset-forge\hero", "seed": 7 }));
-        assert_eq!(p.dir, "/root/forge-jobs/hero_bezel");
-        assert_eq!(p.params["out"], json!("/root/forge-jobs/hero_bezel/out"));
+        assert_eq!(p.dir, "/root/forge-jobs/run42/hero_bezel");
+        assert_eq!(p.params["out"], json!("/root/forge-jobs/run42/hero_bezel/out"));
         assert_eq!(p.params["seed"], json!(7));
         assert_eq!(p.out.as_deref(), Some(Path::new(r"C:\repo\target\asset-forge\hero")));
         assert!(p.uploads.is_empty());
@@ -315,7 +338,7 @@ mod tests {
             "missing": r"C:\in\not-there.png",
             "relative": "weave.png",
         }));
-        assert_eq!(p.params["maps"], json!("/root/forge-jobs/hero_bezel/in/0_maps"));
+        assert_eq!(p.params["maps"], json!("/root/forge-jobs/run42/hero_bezel/in/0_maps"));
         assert_eq!(p.params["prefix"], json!("housing"));
         assert_eq!(p.params["relative"], json!("weave.png"));
         assert_eq!(p.uploads.len(), 1);
@@ -329,7 +352,7 @@ mod tests {
     fn a_nested_out_key_is_an_ordinary_value() {
         let p = plan(&json!({ "out": r"C:\out", "part": { "out": r"C:\in\weave.png" } }));
         assert_eq!(p.params["part"]["out"], json!("/workspace/cache/aaaa_10_weave.png"));
-        assert_eq!(p.params["out"], json!("/root/forge-jobs/hero_bezel/out"));
+        assert_eq!(p.params["out"], json!("/root/forge-jobs/run42/hero_bezel/out"));
     }
 
     #[test]
@@ -337,15 +360,29 @@ mod tests {
         let p = plan(&json!({ "out": r"C:\out", "weave": r"C:\in\weave.png" }));
         assert_eq!(
             p.prepare_script(),
-            "rm -rf /root/forge-jobs/hero_bezel/out /root/forge-jobs/hero_bezel/in && mkdir -p /root/forge-jobs/hero_bezel/out /root/forge-jobs/hero_bezel/in /workspace/cache"
+            "rm -rf /root/forge-jobs/run42/hero_bezel/out /root/forge-jobs/run42/hero_bezel/in && mkdir -p /root/forge-jobs/run42/hero_bezel/out /root/forge-jobs/run42/hero_bezel/in /workspace/cache"
         );
         assert!(p.missing_script().contains("/workspace/cache/aaaa_10_weave.png"));
         let run = p.run_script();
-        assert!(run.starts_with("cd /root/forge-jobs/hero_bezel || exit 97\n"));
+        assert!(run.starts_with("cd /root/forge-jobs/run42/hero_bezel || exit 97\n"));
         assert!(
             run.contains("/workspace/blender/blender -b --factory-startup --python-exit-code 3 -P job.py -- job.json")
         );
         assert!(run.ends_with("exit $rc"));
+        // Blender waits for free GPU memory first, since another run may be using the card.
+        let wait = run.find("[ \"$free\" -ge 6000 ] && break").unwrap();
+        assert!(wait < run.find("/workspace/blender/blender").unwrap());
+        assert!(run.contains("timeout -k 5 20 nvidia-smi --query-gpu=memory.free"));
+    }
+
+    #[test]
+    fn two_runs_never_share_a_job_folder_or_an_upload_part() {
+        let mut look = fake;
+        let a = Plan::new("hero bezel", &json!({ "out": r"C:\out" }), "run1", &mut look);
+        let b = Plan::new("hero bezel", &json!({ "out": r"C:\out" }), "run2", &mut look);
+        assert_ne!(a.dir, b.dir);
+        assert_eq!(a.dir, "/root/forge-jobs/run1/hero_bezel");
+        assert_eq!((a.tag.as_str(), b.tag.as_str()), ("run1", "run2"));
     }
 
     #[test]

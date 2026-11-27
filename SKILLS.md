@@ -82,28 +82,28 @@ Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens
 
 Each phase of the v2 program has its own skill list, with the load order and timing: `program/phases/<phase>/SKILLS.md`. Use it instead of the general table above. Interactive chats with TJX outside the program start with `brainstorming` for any new feature.
 
-## 5. Two GPU lanes, one job each
+## 5. Two GPU lanes: the PC's card and the cloud pod
 
-There are two GPUs. Each runs one job at a time across all threads, and each has its own lock file in `%USERPROFILE%\Documents\Dash_Tools\` (TJX, 2026-11-27).
+There are two GPUs (TJX, 2026-11-27). The PC's card runs one job at a time. The rented cloud pod runs up to two at once, one for each of its lock files, and it is where every ComfyUI and Blender job goes. The lock files are in `%USERPROFILE%\Documents\Dash_Tools\`.
 
-| Lane | GPU | What runs on it | Lock file |
+| Lane | GPU | What runs on it | Lock files |
 |---|---|---|---|
-| **local** | the RTX 3070 Ti (8 GB) in this PC | every GPU job | `gpu.lock` |
-| **cloud** | a rented 24 GB pod (Runpod, an RTX 4090 when one is free) | `asset-forge` jobs sent with `--lane cloud` (their ComfyUI and Blender work), and nothing else | `gpu-cloud.lock` |
+| **cloud** (the default for asset-forge) | a rented RTX 4090 (24 GB) on Runpod, shared by up to two runs | every `asset-forge` job: its ComfyUI and Blender work, with `--lane cloud` | `gpu-cloud.lock`, `gpu-cloud-2.lock` |
+| **local** | the RTX 3070 Ti (8 GB) in this PC | everything that draws with the kit: `preview-export`, the golden tests and every `cargo test` that renders, `bench-render`, the live demo and bench; asset-forge only when the pod cannot start or the budget is closed | `gpu.lock` |
 
-1. GPU jobs are: ComfyUI, Blender (headless or through the `Blender` MCP), every `asset-forge` `build`, `hero-*` and `selftest` command, `preview-export`, `bench-render`, the live demo or bench, and every `cargo test` that renders (the goldens in `fh6-clusters` and the GPU tests in `fh6-kit`, `fh6-gpu` and `fh6-app` (`idle_dim_gpu`), so `cargo test --workspace` too). Only the `asset-forge` commands can go to the cloud lane; everything that draws with the kit needs the local card.
-2. Before a GPU job, take the lock of the lane it runs on. Take it with this one command in the Bash tool, which creates the file only if it does not exist, so two threads cannot both get it. For the cloud lane, write `gpu-cloud.lock` in both places:
+1. GPU jobs are: ComfyUI, Blender (headless or through the `Blender` MCP), every `asset-forge` `build`, `hero-*` and `selftest` command, `preview-export`, `bench-render`, the live demo or bench, and every `cargo test` that renders (the goldens in `fh6-clusters` and the GPU tests in `fh6-kit`, `fh6-gpu` and `fh6-app` (`idle_dim_gpu`), so `cargo test --workspace` too). Only the `asset-forge` commands can go to the cloud lane, and they go there by default; everything that draws with the kit needs the local card.
+2. Before a GPU job, take a lock file of the lane it runs on. Take it with this one command in the Bash tool, which creates the file only if it does not exist, so two threads cannot both get it. For the cloud lane, write `gpu-cloud.lock` in both places, or `gpu-cloud-2.lock` when the first is taken:
    `( set -o noclobber; printf 'thread: %s\nstarted: %s\njob: %s\n' "<thread name>" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<job>" > "$USERPROFILE/Documents/Dash_Tools/gpu.lock" ) 2>/dev/null && echo LOCKED || cat "$USERPROFILE/Documents/Dash_Tools/gpu.lock"`
-3. If it prints `LOCKED`, run the job. If it prints another thread's lock instead, use the other lane when the job can run there, or work on a step that needs no GPU.
-4. Release the lock as soon as the job ends, also when the job fails: `rm -f "$USERPROFILE/Documents/Dash_Tools/gpu.lock"` (or `gpu-cloud.lock`). Only the thread named in the file releases it.
+3. If it prints `LOCKED`, run the job. If it prints another thread's lock instead, try the lane's other lock file (the cloud lane has two), or work on a step that needs no GPU. Run an asset-forge job on the local card only when the pod cannot start.
+4. Release the lock as soon as the job ends, also when the job fails: `rm -f "$USERPROFILE/Documents/Dash_Tools/gpu.lock"` (or the cloud lock file you took). Only the thread named in the file releases it.
 5. If a lock is older than 30 minutes, ask its owner through the coordinator before removing it.
 
 The cloud lane costs money while a pod is up (about $0.89 an hour, billed per second), so it has five more rules. The guide is [docs/cloud-gpu.md](docs/cloud-gpu.md).
 
-- **The whole lane has a budget of $50** (TJX, 2026-11-27, after turning on auto-pay: "all clusters should cost under $50"). asset-forge counts every session, warns from $40 and starts no pod at $50. Only TJX raises it: never edit `budget_usd` in `lane.json`, and tell TJX as soon as a job prints the warning.
-- **Start pods only through asset-forge:** put `--lane cloud` before the command (the pod starts by itself), or run `asset-forge cloud up`. Never start one from Runpod's console, its CLI or its MCP tools: those skip the price cap, the idle shut-off, the budget and the spend log. The Runpod plugin on TJX's account (enabled 2026-11-27) brings that CLI and those MCP tools: use them to look things up, never to start, stop or change a pod, a template or the volume. asset-forge refuses a cloud job when `gpu-cloud.lock` is missing.
-- **Delete the pod when your batch is done:** `cargo run --release -p asset-forge -- cloud down`, then release the lock. A pod that is left up deletes itself after 10 idle minutes, and after 4 hours whatever it is doing.
-- **Choose the lane by the job.** Cloud for 4K Blender renders, for batches of textures, and for anything that does not fit in 8 GB. Local for one small job (a pod takes about 3 minutes to start), for anything that needs the kit, and whenever the pod cannot start (no stock, or the budget is used up).
+- **The whole lane has a budget of $50 of GPU time** (TJX, 2026-11-27, after turning on auto-pay: "all clusters should cost under $50"). asset-forge counts every pod session, warns from $40 and starts no pod at $50. The storage of the 400 GB volume ($28 a month) is shown beside it, not counted (TJX's choice that evening). Only TJX raises the budget: never edit `budget_usd` in `lane.json`, and tell TJX as soon as a job prints the warning.
+- **Start pods only through asset-forge:** put `--lane cloud` before the command (the pod starts by itself), or run `asset-forge cloud up`. Never start one from Runpod's console, its CLI or its MCP tools: those skip the price cap, the idle shut-off, the budget and the spend log. The Runpod plugin on TJX's account (enabled 2026-11-27) brings that CLI and those MCP tools: use them to look things up, never to start, stop or change a pod, a template or the volume. asset-forge refuses a cloud job when neither cloud lock file is held.
+- **Run `cloud down` when your batch is done:** `cargo run --release -p asset-forge -- cloud down`, then release your lock. It leaves the pod up while another run uses it; the pod then deletes itself 10 minutes after the last run ends, and after 4 hours whatever it is doing.
+- **Cloud first** (TJX, 2026-11-27: "we have 400gb and £50 in the cloud on a 4090"). Every asset-forge ComfyUI and Blender job runs with `--lane cloud`. The local card keeps the kit's work. Run an asset-forge job locally only when the pod cannot start (no stock) or the budget is closed. Two runs share one pod, so send work in batches: a new pod takes about 3 minutes to start.
 - **Report what you spent.** `cargo run --release -p asset-forge -- cloud spend` lists the sessions by thread. Put your thread's total in its handover. The credit balance refills by itself (auto-pay), so the budget is the figure to watch.
 
 The Runpod API key and the SSH key are in `%USERPROFILE%\Documents\Dash_Tools\cloud\`. Never copy either into the repo, a message or a log.

@@ -206,6 +206,28 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 - The first job after a pod starts loads each model from the network volume, so it is slower than the ones after it. Send a batch, not single jobs.
 - Changing a pin or the installer in `cloud/pod.rs` changes the volume's stamp; the next cloud job then runs the installer again before it starts, which takes seconds when nothing has to be downloaded.
 
+## Later the same evening: cloud first, two runs on one pod
+
+TJX asked for more from the 4090 ("cant we do more ona 4090", then "we have 400gb and £50 in the cloud on a 4090"), grew the volume to 400 GB in Runpod's console and topped the balance up to $48.90. The coordinator passed on TJX's choice to count GPU time only against the $50. What changed:
+
+- **Cloud first.** Every asset-forge ComfyUI and Blender job runs on the pod (`--lane cloud`); the local card keeps `preview-export`, the goldens and the live bench. `SKILLS.md` section 5, `AGENTS.md` directive 15, `ONBOARDING.md`, the dash prompt, the phase 7 skill list and the two asset skills say so.
+- **Two runs on one pod.** The cloud lane has two lock files (`gpu-cloud.lock`, `gpu-cloud-2.lock`), and the second run joins the pod the first one started:
+  - one run at a time starts, installs or replaces the pod (`start.lock`), and the others wait for it;
+  - each run marks itself in `runs\` while it uses the pod, so `cloud down`, the budget stop and the lifetime replacement never end a pod under another run;
+  - each run has its own job folders (`/root/forge-jobs/run<process id>/`), its tag on the images it uploads, and its own forward port;
+  - ComfyUI leaves 6 GB of the card free (`--reserve-vram 6`) and keeps its models between jobs on the cloud lane; a Blender job waits, for up to 10 minutes, until 6 GB is free; ComfyUI's files stay on the pod's own disk.
+- **The budget counts GPU time.** Storage (the 400 GB volume, $28 a month) is shown beside it (`budget_counts_storage: false` in `lane.json`).
+- One shared pod rather than a second pod: a second pod would add its own start and idle tail to every batch, and one 24 GB card has room for a ComfyUI job and a Blender render side by side.
+
+Checked:
+
+- `cargo test -p asset-forge`: 154 passed, 9 of them new for the shared pod (the two lock files, the start lock, the run count, the budget switch, a shared pod kept at the budget stop and near its cap, `cloud down` leaving a shared pod up, separate job folders, tagged uploads, a free port). `cargo clippy --all-targets -D warnings` and `cargo fmt --check` pass.
+- On a real pod: a run with this code joined the pod the Liquid Glass thread had started, while that thread's 4K studio render ran on it, and passed all three test jobs (the second 4096² texture in 13.6 s, base and refiner with ControlNet in 27.1 s, the 4K glass render 13.3 s to the save). It used its own forward port, since the other run held 8189.
+- Two `cloud doctor` runs started a second apart: the second printed `waiting for another run to finish starting the pod`, then `ready ... (the pod that was already up, shared with 1 other run(s))`.
+- Both doctor runs were then cut off at 18:38:51, when the Liquid Glass thread's `cloud down` deleted the pod. That thread ran the code from before this change, which cannot see the new runs. With this code, `cloud down` leaves a pod up while another run uses it (tested with the fake provider); every thread runs this code from its next `cargo run`.
+
+Spend for this part: $0 of my own; the shared runs used the pods other threads had started.
+
 ## Code review
 
 A second agent reviewed the change against the requirements (the `requesting-code-review` skill; findings only, no score). It was still running when the lane was first committed (`d24ab34`, 16:40 UTC), because the pilot thread was waiting for the shared rule files. Its verdict was "with fixes". Every finding and what was done with it:
