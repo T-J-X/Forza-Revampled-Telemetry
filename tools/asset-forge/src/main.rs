@@ -8,8 +8,19 @@
 //! ```
 //! `build` is idempotent: a job is skipped when its fingerprint (recipe source, parameters,
 //! seed) matches `assets/forge.lock.json` and its files exist.
+//!
+//! GPU jobs run on one of two lanes. `--lane cloud` (or `FH6_GPU_LANE=cloud`) before any command
+//! sends its ComfyUI and Blender work to the rented pod; `cloud` manages that pod. `--masters
+//! <snake_name>` also copies the 4K outputs to the dash's Google Drive masters folder.
+//!
+//! ```text
+//! cargo run --release -p asset-forge -- cloud setup|up|down|status|spend|doctor
+//! cargo run --release -p asset-forge -- --lane cloud --masters <snake_name> build --set <name>
+//! cargo run --release -p asset-forge -- [--lane cloud] selftest
+//! ```
 
 mod blender;
+mod cloud;
 mod comfy;
 mod ctx;
 mod error;
@@ -19,11 +30,13 @@ mod error;
 mod hero;
 mod img;
 mod ktx2w;
+mod lane;
 mod ledger;
 mod net;
 mod paths;
 mod procedural;
 mod recipes;
+mod selftest;
 mod sets;
 mod sheet;
 mod svg;
@@ -58,10 +71,45 @@ fn main() -> ExitCode {
     }
 }
 
+/// Takes `--lane <local|cloud>` and `--masters <snake_name>` out of the arguments (they may
+/// stand anywhere) and applies them, or `FH6_GPU_LANE` and `FH6_MASTERS` when they are absent.
+fn globals(paths: &mut paths::Paths, args: &[String]) -> Result<Vec<String>> {
+    let mut lane = std::env::var("FH6_GPU_LANE").ok();
+    let mut masters = std::env::var("FH6_MASTERS").ok().filter(|m| !m.trim().is_empty());
+    let mut rest = Vec::with_capacity(args.len());
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--lane" => lane = Some(it.next().cloned().unwrap_or_default()),
+            "--masters" => masters = Some(it.next().cloned().unwrap_or_default()),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    if let Some(lane) = lane {
+        paths.lane = lane::Lane::parse(&lane)?;
+    }
+    if let Some(name) = masters {
+        paths.masters = Some(lane::masters_dir(name.trim())?);
+    }
+    Ok(rest)
+}
+
 fn run(args: &[String]) -> Result<()> {
-    let paths = paths::Paths::discover();
+    let mut paths = paths::Paths::discover();
+    let args = globals(&mut paths, args)?;
+    let result = dispatch(&paths, &args);
+    // Closes the forward to the pod, if this run opened one. The pod's idle clock starts here.
+    cloud::close();
+    result
+}
+
+fn dispatch(paths: &paths::Paths, args: &[String]) -> Result<()> {
+    let paths = paths.clone();
     match args.first().map(String::as_str) {
+        Some("doctor") if paths.lane == lane::Lane::Cloud => cloud::cli(&paths, &["doctor".to_owned()]),
         Some("doctor") => doctor(&paths),
+        Some("cloud") => cloud::cli(&paths, &args[1..]),
+        Some("selftest") => selftest::run(&paths),
         Some("build") => {
             let mut set: Option<String> = None;
             let mut force = false;
@@ -142,7 +190,7 @@ fn run(args: &[String]) -> Result<()> {
             sheet::write(&paths, &ledger)
         }
         _ => Err(ForgeError::Usage(
-            "asset-forge doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|<cluster set>] [--force] [--only <job>] | sheet | hero-demo [--preview] | hero-versus <board.png> <after.png> [out.png]".into(),
+            "asset-forge [--lane local|cloud] [--masters <snake_name>] doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|<cluster set>] [--force] [--only <job>] | sheet | selftest | hero-demo [--preview] | hero-versus <board.png> <after.png> [out.png] | cloud setup|up|down|status|spend|doctor".into(),
         )),
     }
 }
@@ -210,5 +258,35 @@ fn doctor(paths: &paths::Paths) -> Result<()> {
         Ok(())
     } else {
         Err(error::tool_err("doctor", "one or more checks failed"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|a| (*a).to_owned()).collect()
+    }
+
+    #[test]
+    fn the_lane_flag_is_taken_out_wherever_it_stands() {
+        let mut paths = paths::Paths::discover();
+        let rest = globals(&mut paths, &args(&["build", "--lane", "cloud", "--set", "glass"])).unwrap();
+        assert_eq!(rest, args(&["build", "--set", "glass"]));
+        assert_eq!(paths.lane, lane::Lane::Cloud);
+
+        let mut paths = paths::Paths::discover();
+        let rest = globals(&mut paths, &args(&["--lane", "local", "doctor"])).unwrap();
+        assert_eq!(rest, args(&["doctor"]));
+        assert_eq!(paths.lane, lane::Lane::Local);
+    }
+
+    #[test]
+    fn a_wrong_lane_or_masters_name_is_refused() {
+        let mut paths = paths::Paths::discover();
+        assert!(globals(&mut paths, &args(&["--lane", "moon", "doctor"])).is_err());
+        assert!(globals(&mut paths, &args(&["doctor", "--lane"])).is_err() || paths.lane == lane::Lane::Local);
+        assert!(globals(&mut paths, &args(&["--masters", "Not A Dash", "doctor"])).is_err());
     }
 }

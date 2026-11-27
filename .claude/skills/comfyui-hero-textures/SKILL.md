@@ -105,9 +105,13 @@ text in a prompt.
 
 ## 8 GB VRAM safety
 
-- One GPU job at a time, across Blender and ComfyUI and across every thread. Hold
+- One GPU job at a time on this card, across Blender and ComfyUI and across every thread. Hold
   `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job (root `SKILLS.md`, section 5). Never
   start ComfyUI work while a Cycles render is running from the same recipe.
+- The cloud lane is the way round the 8 GB: `--lane cloud` before the asset-forge command runs
+  the same graphs on a rented 24 GB pod, under `gpu-cloud.lock` (root `SKILLS.md`, section 5;
+  `docs/cloud-gpu.md`). Measured there on 2026-11-27: the same 4096² texture in 9 s once the
+  checkpoint is loaded, against 27 s here.
 - Measured on this card (2026-11-27): 1024² at 32 steps plus the 4x upscale to 4096² takes 58 s
   and peaks at 7.5 GB.
 - `Comfy::run_retry` frees VRAM (`POST /free`) and retries once on an out-of-memory error;

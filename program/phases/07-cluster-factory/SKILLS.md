@@ -8,9 +8,9 @@ The steps run in this order (TJX, 2026-11-27). `CLUSTER_PROMPT.md` has the detai
 | 1. R&D on the web | web search and the built-in browser; real sources only (production displays, owner photos, press images). Output: `RESEARCH.md` in your module directory |
 | 2. Penpot | the `penpot` MCP (Penpot's hosted server; TJX keeps the Penpot file open with ⋮ → MCP server connected): `high_level_overview` once, `penpot_api_info` (what the plugin API supports, for example tokens and themes), then `execute_code` (pages, boards, shapes, styles, tokens) and `export_shape`. The hosted server cannot import images from local paths and its export is limited. |
 | Design to code | the zone table at the top of your `mod.rs` mirrors your Penpot board (same zones, sizes and positions in local 4K px) |
-| 3. ComfyUI | `comfyui-hero-textures`, through asset-forge; hold the GPU lock (`SKILLS.md` section 5) |
-| 4. Blender (final 3D) | `blender-hero-assets`, through asset-forge; hold the GPU lock. The `Blender` MCP is for looking and checking |
-| Masters | write the 4K masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`; the Google Drive desktop app syncs them |
+| 3. ComfyUI | `comfyui-hero-textures`, through asset-forge; hold the lock of the lane you run on (root `SKILLS.md` section 5: the local card, or the rented pod with `--lane cloud`) |
+| 4. Blender (final 3D) | `blender-hero-assets`, through asset-forge; hold the lock of the lane you run on. The `Blender` MCP is for looking and checking |
+| Masters | write the 4K masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`; the Google Drive desktop app syncs them. `asset-forge --masters <snake_name>` copies its own Blender and ComfyUI outputs there |
 | Rust | `rust-best-practices` (before any `.rs`), `rust-skills` (the 265-rule reference: open the rule you need), `rust-patterns`, `rust-testing` (goldens) |
 | Review | the closing review in `CLUSTER_PROMPT.md` (a fixed checklist, no scores), `rust-review`, `requesting-code-review`. The `ui-ux-designer` agent or `design:design-critique` may list findings once; never ask them for a score |
 | Optional fan-out | the Workflow tool, at most 4 agents (for example findings from 3 director viewpoints plus a perf check); findings only, no scores |

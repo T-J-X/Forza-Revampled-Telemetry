@@ -19,8 +19,8 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 | Static concept art, posters, contact sheets | `canvas-design` (user scope) | Outputs go to `mockups/`, never into the repo tree as scripts. |
 | Building a custom MCP server for this project | `mcp-builder` (user scope) | Only when a tool has no MCP and plain HTTP from Rust isn't enough. |
 | Building any dash | the order in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`: R&D on the web → Penpot → ComfyUI → final 3D in Blender | All assets are 4K. Blender is the last image step. |
-| Organic textures and environment plates (the ComfyUI step) | `comfyui-hero-textures` | asset-forge starts ComfyUI itself on `127.0.0.1:8188` when it is not running; never stop that server. Hold the GPU lock (section 5). |
-| Rendered hardware: bezels, dials, needles, crystals (the Blender step) | `blender-hero-assets` | Through `tools/asset-forge`; the `Blender` MCP is for looking and checking. Hold the GPU lock (section 5). |
+| Organic textures and environment plates (the ComfyUI step) | `comfyui-hero-textures` | asset-forge starts ComfyUI itself on `127.0.0.1:8188` when it is not running; never stop that server. Hold the lock of the lane the job runs on (section 5); `--lane cloud` sends the job to the rented pod. |
+| Rendered hardware: bezels, dials, needles, crystals (the Blender step) | `blender-hero-assets` | Through `tools/asset-forge`; the `Blender` MCP is for looking and checking. Hold the lock of the lane the job runs on (section 5); `--lane cloud` sends the render to the rented pod. |
 | Before merging or pushing a branch | `requesting-code-review`, `/code-review`, `/simplify` | |
 | Cleaning up folders and finding duplicates | `file-organizer` | Never touch the deploy targets. |
 | Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). |
@@ -30,7 +30,7 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 ### How to call them
 - **A skill:** call the Skill tool with its name, for example `rust-review`, or `design:design-critique` for a plugin skill. A person types `/<skill-name>`. Project skills live in `.claude/skills/` and are listed to every new session when it starts.
 - **An MCP tool:** when a session lists the MCP tools by name only, load them first with ToolSearch, all in one call, then call them. For example `select:mcp__penpot__high_level_overview,mcp__penpot__penpot_api_info,mcp__penpot__execute_code,mcp__penpot__export_shape` or `select:mcp__context7__resolve-library-id,mcp__context7__query-docs`. The Blender tools are named `mcp__Blender__*`. The Google Drive tools carry an account ID in their names, so find them with the ToolSearch query `drive search_files`.
-- **ComfyUI and headless Blender** have no MCP tool: run them through `cargo run --release -p asset-forge -- <command>` with the Bash tool.
+- **ComfyUI and headless Blender** have no MCP tool: run them through `cargo run --release -p asset-forge -- <command>` with the Bash tool. Put `--lane cloud` before the command to run its ComfyUI and Blender work on the rented pod (section 5).
 - **An agent** such as `ui-ux-designer`: start it with the Agent tool (named Task in some sessions), once, and ask for findings only.
 - **Web search** for the R&D step: load the web search tool with ToolSearch, and use the built-in browser for pages that need one.
 - If a skill or tool is missing from the session's list, the session started before it was registered: ask for a fresh session.
@@ -46,8 +46,8 @@ Notes (checked 2026-11-27):
 | **context7** (`.mcp.json`; it needs no API key) | Crate docs before first use of an API: `wgpu` 30, `windows` 0.62, `ttf-parser` 0.25, `rustybuzz` 0.20, `fdsm` 0.8, `resvg` 0.50, `gltf` 1.4, `image` 0.25, `png` 0.17, `ktx2` 0.5, `ureq` 3.1, `wasm-bindgen` / `web-sys`, `serde` / `serde_json`, `arc-swap`, `thiserror` 2.0, and `tiny-skia` 0.11 for the v1 clusters in `legacy/` | Design decisions |
 | **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/design_tokens.json`, PNG/SVG checks with `export_shape`, and importing committed, pushed PNGs with `penpot.uploadMediaUrl` from this repo's raw GitHub URL pinned to a commit (`docs/design/PENPOT.md`) | Importing from a local path or `localhost` (blocked; only uncommitted renders need TJX to drag them in), or putting the MCP key in any file or in `.mcp.json` |
 | **Blender** (`Blender`, user scope) | Asset checks and test renders in a running Blender 5.3 with the MCP add-on (`blender-hero-assets`); repo assets are still built headless by `tools/asset-forge`. The MCP's Blender runs headless and its Cycles device defaults to CPU, so set OptiX in your code when you render through it | Saving `.blend` or script files into the repo |
-| **ComfyUI** (HTTP at `127.0.0.1:8188`, no MCP) | Textures and environment plates driven from `tools/asset-forge` (`comfyui-hero-textures`). asset-forge starts it when it is not running, and every thread shares it, so never stop it. Installed: SDXL base and refiner, the depth and canny ControlNets, 4x-UltraSharp. A 4096×4096 texture fits the card (58 s, 7.5 GB peak, measured 2026-11-27) | Generating above 1 megapixel before the upscale, or any job without the GPU lock |
-| **Google Drive** (desktop app to write, connector to read) | The 4K masters. Copy the masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\` (or `shared\`) with the Bash tool, since no tool does it for you, and the desktop app syncs them (check the drive letter first). Use the connector to list and check what arrived | Uploading through the connector (it refuses files over about 7 MB), or creating another Drive folder |
+| **ComfyUI** (HTTP at `127.0.0.1:8188`, no MCP) | Textures and environment plates driven from `tools/asset-forge` (`comfyui-hero-textures`). asset-forge starts it when it is not running, and every thread shares it, so never stop it. Installed: SDXL base and refiner, the depth and canny ControlNets, 4x-UltraSharp. A 4096×4096 texture fits the card (58 s, 7.5 GB peak, measured 2026-11-27). The cloud lane runs the same install on a rented 24 GB pod (`docs/cloud-gpu.md`) | Generating above 1 megapixel before the upscale, or any job without the lock of its lane |
+| **Google Drive** (desktop app to write, connector to read) | The 4K masters. Copy the masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\` (or `shared\`) with the Bash tool, and the desktop app syncs them (check the drive letter first). For asset-forge outputs, `--masters <snake_name>` before the command does the copy. Use the connector to list and check what arrived | Uploading through the connector (it refuses files over about 7 MB), or creating another Drive folder |
 | **Built-in browser** | Opening `mockups/index.html` and the product pages over loopback (`http://localhost:5311/`). A `file://` page opens as a static snapshot and its images don't load, so serve the folder on `127.0.0.1` first. From the repo root in the Bash tool, ComfyUI's bundled Python does it: `"$USERPROFILE/Documents/Dash_Tools/ComfyUI_windows_portable/python_embeded/python.exe" -I -m http.server 5311 --bind 127.0.0.1 --directory mockups`. Stop that server when you are done | Anything that needs a sign-in |
 
 Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens` (the live loader; `fh6-render::tokens` serves only the v1 clusters) → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/design_tokens.json` and log it in `docs/PROGRESS.md`.
@@ -82,17 +82,31 @@ Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens
 
 Each phase of the v2 program has its own skill list, with the load order and timing: `program/phases/<phase>/SKILLS.md`. Use it instead of the general table above. Interactive chats with TJX outside the program start with `brainstorming` for any new feature.
 
-## 5. One GPU, one job
+## 5. Two GPU lanes, one job each
 
-One 8 GB card serves every thread, so GPU jobs take turns (TJX, 2026-11-27).
+There are two GPUs. Each runs one job at a time across all threads, and each has its own lock file in `%USERPROFILE%\Documents\Dash_Tools\` (TJX, 2026-11-27).
 
-1. GPU jobs are: ComfyUI, Blender (headless or through the `Blender` MCP), every `asset-forge` `build` and `hero-*` command, `preview-export`, `bench-render`, the live demo or bench, and every `cargo test` that renders (the goldens in `fh6-clusters` and the GPU tests in `fh6-kit` and `fh6-gpu`, so `cargo test --workspace` too). Before any of them, take the lock `%USERPROFILE%\Documents\Dash_Tools\gpu.lock`. Take it with this one command in the Bash tool, which creates the file only if it does not exist, so two threads cannot both get it:
+| Lane | GPU | What runs on it | Lock file |
+|---|---|---|---|
+| **local** | the RTX 3070 Ti (8 GB) in this PC | every GPU job | `gpu.lock` |
+| **cloud** | a rented 24 GB pod (Runpod, an RTX 4090 when one is free) | `asset-forge` jobs sent with `--lane cloud` (their ComfyUI and Blender work), and nothing else | `gpu-cloud.lock` |
+
+1. GPU jobs are: ComfyUI, Blender (headless or through the `Blender` MCP), every `asset-forge` `build`, `hero-*` and `selftest` command, `preview-export`, `bench-render`, the live demo or bench, and every `cargo test` that renders (the goldens in `fh6-clusters` and the GPU tests in `fh6-kit` and `fh6-gpu`, so `cargo test --workspace` too). Only the `asset-forge` commands can go to the cloud lane; everything that draws with the kit needs the local card.
+2. Before a GPU job, take the lock of the lane it runs on. Take it with this one command in the Bash tool, which creates the file only if it does not exist, so two threads cannot both get it. For the cloud lane, write `gpu-cloud.lock` in both places:
    `( set -o noclobber; printf 'thread: %s\nstarted: %s\njob: %s\n' "<thread name>" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<job>" > "$USERPROFILE/Documents/Dash_Tools/gpu.lock" ) 2>/dev/null && echo LOCKED || cat "$USERPROFILE/Documents/Dash_Tools/gpu.lock"`
-2. If it prints `LOCKED`, run the job. If it prints another thread's lock instead, wait and work on a step that needs no GPU.
-3. Release it as soon as the job ends, also when the job fails: `rm -f "$USERPROFILE/Documents/Dash_Tools/gpu.lock"`. Only the thread named in the file releases it.
-4. If a lock is older than 30 minutes, ask its owner through the coordinator before removing it.
+3. If it prints `LOCKED`, run the job. If it prints another thread's lock instead, use the other lane when the job can run there, or work on a step that needs no GPU.
+4. Release the lock as soon as the job ends, also when the job fails: `rm -f "$USERPROFILE/Documents/Dash_Tools/gpu.lock"` (or `gpu-cloud.lock`). Only the thread named in the file releases it.
+5. If a lock is older than 30 minutes, ask its owner through the coordinator before removing it.
 
-A cloud GPU is used only after TJX approves the provider and the cost.
+The cloud lane costs money while a pod is up (about $0.89 an hour, billed per second), so it has five more rules. The guide is [docs/cloud-gpu.md](docs/cloud-gpu.md).
+
+- **The whole lane has a budget of $50** (TJX, 2026-11-27, after turning on auto-pay: "all clusters should cost under $50"). asset-forge counts every session, warns from $40 and starts no pod at $50. Only TJX raises it: never edit `budget_usd` in `lane.json`, and tell TJX as soon as a job prints the warning.
+- **Start pods only through asset-forge:** put `--lane cloud` before the command (the pod starts by itself), or run `asset-forge cloud up`. Never start one from Runpod's console, its CLI or its MCP tools: those skip the price cap, the idle shut-off, the budget and the spend log. The Runpod plugin on TJX's account (enabled 2026-11-27) brings that CLI and those MCP tools: use them to look things up, never to start, stop or change a pod, a template or the volume. asset-forge refuses a cloud job when `gpu-cloud.lock` is missing.
+- **Delete the pod when your batch is done:** `cargo run --release -p asset-forge -- cloud down`, then release the lock. A pod that is left up deletes itself after 10 idle minutes, and after 4 hours whatever it is doing.
+- **Choose the lane by the job.** Cloud for 4K Blender renders, for batches of textures, and for anything that does not fit in 8 GB. Local for one small job (a pod takes about 3 minutes to start), for anything that needs the kit, and whenever the pod cannot start (no stock, or the budget is used up).
+- **Report what you spent.** `cargo run --release -p asset-forge -- cloud spend` lists the sessions by thread. Put your thread's total in its handover. The credit balance refills by itself (auto-pay), so the budget is the figure to watch.
+
+The Runpod API key and the SSH key are in `%USERPROFILE%\Documents\Dash_Tools\cloud\`. Never copy either into the repo, a message or a log.
 
 ## 6. Multi-agent workflows (ultracode)
 
@@ -102,7 +116,7 @@ A cloud GPU is used only after TJX approves the provider and the cost.
 - **When to use it** (TJX, 2026-11-27: "when needed"): work too wide for one context, such as a codebase audit, a cross-crate review where each finding is checked by a second agent, a broad research sweep, or a change across many files. A single dash's design work doesn't need it.
 - **Rules here:**
   1. Agents return findings and yes/no verdicts. No scored judge panels, and no loop that runs until a score passes.
-  2. The GPU lock still holds: workflow agents never run GPU jobs in parallel.
+  2. The GPU locks still hold: one job on each lane at a time, whichever agent runs it.
   3. Agents that write files in parallel use worktree isolation, and none switches the branch of the shared checkout.
   4. One Penpot tab: at most one agent writes to Penpot.
   5. Keep a workflow under 10 agents unless TJX asked for more.

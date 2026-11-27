@@ -32,7 +32,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `tools/wgc-bench` | Windows.Graphics.Capture cost benchmark for the glass refraction source | fh6-win |
 | `tools/screen-capture` | DPI-aware desktop or region screenshot to PNG | fh6-win |
 | `tools/stand-in-game` | Solid, focusable full-screen window (`fh6-stand-in.exe`) for focus and screenshot checks | fh6-win |
-| `tools/asset-forge` | Builds every asset from Rust: headless Blender (bpy as Rust string constants) and ComfyUI over HTTP, the hero library (`src/hero/`: light rigs, camera matching, PBR materials, parts, SDXL graphs), per-set and per-cluster recipes, and the asset ledger (`assets/ASSETS.md`). Commands: `doctor`, `build --set <name>`, `sheet`, `hero-demo`, `hero-detail`, `hero-versus` | std, serde, image, resvg, ureq |
+| `tools/asset-forge` | Builds every asset from Rust: headless Blender (bpy as Rust string constants) and ComfyUI over HTTP, the hero library (`src/hero/`: light rigs, camera matching, PBR materials, parts, SDXL graphs), per-set and per-cluster recipes, the asset ledger (`assets/ASSETS.md`), and the cloud GPU lane (`src/cloud/`: a rented Runpod pod driven through its REST API and SSH, with a spend log and a budget; `docs/cloud-gpu.md`). Commands: `doctor`, `build --set <name>`, `sheet`, `hero-demo`, `hero-detail`, `hero-versus`, `selftest`, and `cloud setup`, `up`, `down`, `status`, `spend`, `doctor`, `key`. `--lane cloud` and `--masters <snake_name>` go before a command | std, serde, image, resvg, ureq |
 
 Rules for the layers:
 - Every crate may also use serde, serde_json, thiserror and tracing; the map does not repeat them.
@@ -59,6 +59,8 @@ cargo test -p fh6-clusters liquid_glass
 cargo build -p fh6-kit --target wasm32-unknown-unknown
 cargo run --release -p asset-forge -- doctor
 cargo run --release -p asset-forge -- build --set <name>
+cargo run --release -p asset-forge -- --lane cloud build --set <name>
+cargo run --release -p asset-forge -- cloud status
 ```
 
 Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Check, test, clippy `-D warnings`, fmt and parity are all green.
@@ -98,7 +100,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers, then TJX's sign-off. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. Direction checks and sign-offs come from TJX only; no session answers for TJX.
 13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like). It closes only after a line-by-line review against this file and `SKILLS.md`, and TJX's sign-off. No thread is ever archived.
 14. **Order for every dash (TJX, 2026-11-27).** R&D on the web → Penpot → ComfyUI → final 3D in Blender. All assets are 4K. The 4K masters go to the one Google Drive folder (`SKILLS.md` section 2); git keeps the compressed runtime assets.
-15. **One GPU, one job (TJX, 2026-11-27).** One GPU job at a time across all threads, holding the lock file (`SKILLS.md` section 5). A cloud GPU only after TJX approves the provider and the cost.
+15. **Two GPU lanes, one job each (TJX, 2026-11-27).** The local card and the rented cloud pod each run one GPU job at a time across all threads, each under its own lock file (`SKILLS.md` section 5). The cloud lane is Runpod, started only through `asset-forge`, inside the $50 budget TJX set (`docs/cloud-gpu.md`). Another provider, or a higher budget, needs TJX first.
 16. **Merging (TJX, 2026-11-27).** When a job is finished and its checks pass, the coordinator merges it into `main` and pushes. Threads that share a checkout commit with explicit paths and never switch its branch.
 
 ---

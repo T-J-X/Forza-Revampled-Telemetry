@@ -1,5 +1,7 @@
 //! Where the tools and the repo live. Defaults follow ONBOARDING.md; `FH6_BLENDER`,
-//! `FH6_COMFYUI` and `FH6_COMFYUI_URL` override them.
+//! `FH6_COMFYUI` and `FH6_COMFYUI_URL` override them. The GPU lane and the masters folder come
+//! from the command line (`--lane`, `--masters`) or from `FH6_GPU_LANE` and `FH6_MASTERS`.
+use crate::lane::Lane;
 use std::path::PathBuf;
 
 /// Locations of the external tools and the repo.
@@ -7,6 +9,9 @@ use std::path::PathBuf;
 pub struct Paths {
     /// The workspace root (holds `Cargo.toml` and `assets/`).
     pub root: PathBuf,
+    /// The tools folder (`Documents\Dash_Tools`): Blender, ComfyUI, the lane locks and the cloud
+    /// lane's own folder.
+    pub tools: PathBuf,
     /// `blender.exe`.
     pub blender: PathBuf,
     /// The ComfyUI portable folder (holds `python_embeded/` and `ComfyUI/`).
@@ -15,6 +20,11 @@ pub struct Paths {
     pub comfy_url: String,
     /// Scratch space for generated bpy scripts and intermediate renders (never committed).
     pub scratch: PathBuf,
+    /// The GPU this run's ComfyUI and Blender jobs go to.
+    pub lane: Lane,
+    /// A dash's folder in the Drive masters folder; when set, every Blender output folder and
+    /// every master-sized ComfyUI image is also copied there.
+    pub masters: Option<PathBuf>,
 }
 
 /// The SDXL checkpoint file name in `models/checkpoints`.
@@ -27,7 +37,8 @@ pub const UPSCALER: &str = "4x-UltraSharp.pth";
 pub const UPSCALER_BYTES: u64 = 66_961_958;
 
 impl Paths {
-    /// Resolves every path from the environment and the current directory.
+    /// Resolves every path from the environment and the current directory. The lane starts as
+    /// local and no masters folder is set; `main` applies the flags.
     pub fn discover() -> Self {
         let root = find_root();
         let tools = std::env::var_os("USERPROFILE")
@@ -45,10 +56,13 @@ impl Paths {
         let scratch = root.join("target").join("asset-forge");
         Self {
             root,
+            tools,
             blender,
             comfy_dir,
             comfy_url,
             scratch,
+            lane: Lane::Local,
+            masters: None,
         }
     }
 

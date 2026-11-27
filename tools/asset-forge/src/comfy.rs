@@ -12,14 +12,25 @@ use std::time::{Duration, Instant};
 pub struct Comfy {
     base: String,
     agent: ureq::Agent,
+    /// Where master-sized outputs are also written (`--masters`).
+    masters: Option<std::path::PathBuf>,
 }
 
 impl Comfy {
-    /// Connects, starting the portable server when needed (waits up to 4 minutes).
+    /// Connects to the run's lane. Locally it starts the portable server when needed (waits up
+    /// to 4 minutes); on the cloud lane it starts the pod when needed and goes through the SSH
+    /// forward to the pod's ComfyUI.
     pub fn connect(paths: &Paths) -> Result<Self> {
-        let agent = local_agent();
+        let masters = paths.masters.clone();
+        if paths.lane == crate::lane::Lane::Cloud {
+            let base = crate::cloud::comfy_url(paths)?;
+            // A 4K image coming back from the pod over a home line can take minutes.
+            let agent = loopback_agent(600);
+            return Ok(Self { base, agent, masters });
+        }
+        let agent = loopback_agent(120);
         let base = paths.comfy_url.trim_end_matches('/').to_owned();
-        let me = Self { base, agent };
+        let me = Self { base, agent, masters };
         if me.alive() {
             return Ok(me);
         }
@@ -100,6 +111,7 @@ impl Comfy {
                 continue;
             };
             let mut images = Vec::new();
+            let mut names = Vec::new();
             for node in outputs.values() {
                 for img in node.get("images").and_then(Value::as_array).into_iter().flatten() {
                     let filename = img.get("filename").and_then(Value::as_str).unwrap_or_default();
@@ -113,6 +125,7 @@ impl Comfy {
                         net::encode(kind)
                     );
                     images.push(net::get_bytes(&self.agent, &url)?);
+                    names.push(filename.to_owned());
                 }
             }
             if images.is_empty() {
@@ -120,6 +133,12 @@ impl Comfy {
                     tool: "comfyui".into(),
                     message: format!("prompt {id} finished without images"),
                 });
+            }
+            if let Some(masters) = &self.masters {
+                let written = crate::lane::sink_images(masters, &names, &images)?;
+                if written > 0 {
+                    println!("  masters: {written} image(s) copied to {}", masters.display());
+                }
             }
             return Ok(images);
         }
@@ -194,9 +213,10 @@ impl Comfy {
     }
 }
 
-fn local_agent() -> ureq::Agent {
+/// The agent for a ComfyUI on loopback, with a time limit per request in seconds.
+fn loopback_agent(limit_secs: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(120)))
+        .timeout_global(Some(Duration::from_secs(limit_secs)))
         .http_status_as_error(true)
         .build()
         .into()

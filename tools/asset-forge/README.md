@@ -24,6 +24,25 @@ cargo run --release -p asset-forge -- sheet                      # rewrite ASSET
 - **Logos.** `data/logos.json` pins each brand's source: an official Wikimedia Commons SVG (URL, licence, attribution), or a remade wordmark set in an OFL face from the font pack and outlined to paths. Each brand gets an SVG, a 4096 px full-colour PNG, a 4096 px white mono PNG and a 1024 px dial PNG.
 - **Fonts.** Downloaded from github.com/google/fonts at one pinned commit, with each `OFL.txt`; `fonts.json` records weights, variable axes, roles, cap ratios and `tnum` support read from the font tables.
 
+## GPU lanes
+
+GPU work runs on one of two lanes, each with its own lock file (root `SKILLS.md`, section 5):
+
+```
+cargo run --release -p asset-forge -- build --set glass                          # local lane (the default)
+cargo run --release -p asset-forge -- --lane cloud build --set glass             # the rented pod
+cargo run --release -p asset-forge -- --lane cloud --masters liquid_glass build --set liquid_glass
+cargo run --release -p asset-forge -- cloud up                                   # also: setup, down, status, spend, doctor, key
+cargo run --release -p asset-forge -- --lane cloud selftest                      # or without --lane, on this PC
+```
+
+- **`--lane cloud`** (or `FH6_GPU_LANE=cloud`) sends the run's ComfyUI and Blender work to a rented 24 GB pod. `comfy.rs` talks to the pod's ComfyUI through an SSH forward on `127.0.0.1:8189`. `blender.rs` hands the script to `cloud/remote.rs`, which uploads the inputs the parameters name, runs the same script on the pod and copies the output folder back. Recipes need no change.
+- **`--masters <snake_name>`** (or `FH6_MASTERS`) also copies each Blender output folder and each ComfyUI image of 2048 px or more to the dash's folder in the Google Drive masters folder. It works on both lanes.
+- **`cloud ...`** manages the pod: set-up, start, delete, status, the spend log with its budget, a doctor, and saving a new API key. What runs on the pod (the idle watchdog, the installer, the services, the doctor) is Rust string constants in `src/cloud/pod.rs`, with every version pinned. The API key, the SSH key, the settings and the spend log live in `%USERPROFILE%\Documents\Dash_Tools\cloud\`, never in the repo.
+- **`selftest`** runs the same three timed jobs on either lane.
+
+The guide, with the costs, the limits that hold them down and the measurements, is `docs/cloud-gpu.md`. What the thread that built the lane checked is in `HANDOVER-cloud.md` next to this file.
+
 ## Formats (what `fh6-kit` loads)
 
 | Kind | Format | Notes |
@@ -37,7 +56,7 @@ cargo run --release -p asset-forge -- sheet                      # rewrite ASSET
 
 ## Requirements
 
-Blender 5.3 at `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe` and ComfyUI portable at `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\` with `sd_xl_base_1.0.safetensors` and `4x-UltraSharp.pth`. Override with `FH6_BLENDER`, `FH6_COMFYUI` and `FH6_COMFYUI_URL`. `doctor` checks all of it. Model files never go in git.
+Blender 5.3 at `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe` and ComfyUI portable at `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\` with `sd_xl_base_1.0.safetensors` and `4x-UltraSharp.pth`. Override with `FH6_BLENDER`, `FH6_COMFYUI` and `FH6_COMFYUI_URL`. `doctor` checks all of it. Model files never go in git. The cloud lane needs the OpenSSH client that ships with Windows (`%SystemRoot%\System32\OpenSSH\`; `FH6_OPENSSH_DIR` overrides it) and the files `cloud setup` writes.
 
 ## Adding an asset
 
