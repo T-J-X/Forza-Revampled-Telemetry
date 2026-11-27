@@ -14,7 +14,7 @@ Separate drops of clear glass float over black, and every one is a lens: 16 cabo
 | Faces | `Faces` | resolved once in `new()`; a user display font replaces the numerals |
 | State | `LiquidGlass`, `Readouts` | springs, tweens, the shared components, this frame's glass material, and the readouts' digits (rpm, power, boost) held by hysteresis |
 | `update` | `impl Cluster` | copies signals, advances the springs, aims the light rig, holds the readouts' digits; no allocation |
-| `draw` | `draw_cores`, `draw_rev`, `draw_shift`, `draw_gear`, `draw_readouts`, `draw_g`, `draw_glass`, `draw_foot` | a black core under each piece that holds numerals, then every light, then all the glass in one layer, then the foot row (the rpm readout, and the car's logo or the custom name) after the glass, so no rim bends it |
+| `draw` | `draw_cores`, `draw_rev`, `draw_shift`, `draw_gear`, `draw_readouts`, `draw_g`, `draw_glass`, `draw_foot` | a black core under each piece that holds numerals and under the G lens, then every light, then all the glass in one layer, then the foot row (the rpm readout, and the car's logo or the custom name) after the glass, so no rim bends it |
 
 Shared components it composes (`crate::common`): `ShiftLights`, `LimiterCue`, `HeroGear`, `TabularSpeed`, `VirtualLight`. Its own helpers: `Readouts` (the held digits), `static_ink` (the static cap, by light, not coverage), `Strip` (the shift strip on its own clock from the shift point, so the strobe starts lit, and its dark phase keeps a glow), `backlash` (the ribbon holds still through the limiter's bounce), `logo_zone` and `load_asset`.
 

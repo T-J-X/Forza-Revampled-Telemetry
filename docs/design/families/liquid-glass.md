@@ -10,7 +10,7 @@ Separate drops of clear glass float over black, one per instrument, and every dr
 On OLED black, clear glass shows only where its edges mirror a light; studio photographers call this dark-field lighting. So the family rests on four things:
 - **Light lives under the glass.** Shift lights, the rev ribbon and the numerals are drawn first; the glass bends them.
 - **A dome is a lens.** Pieces are domes, as drops of liquid are. A dome over a numeral really magnifies it (the pilot's gear is seen about 1.15 times larger).
-- **Thin rims from one studio.** The studio is a horizon ring and two thin strips, so every outline shows as one thin line plus a shorter one inside it. The light rig turns 25° per g of lateral G, so all the highlights travel together; the key light also leans 6° per g of acceleration, while the environment stays level so its dark cone stays on the viewer.
+- **Thin rims from one studio.** The studio is a horizon ring and two thin strips, so every outline shows as one thin line plus a shorter one inside it. The light rig swings with lateral G, up to 25° at 1.5 g, so all the highlights travel together; the key light also leans 6° per g of acceleration, while the environment stays level so its dark cone stays on the viewer.
 - **Liquid behaviour.** Pieces merge and split by smooth union (optics.md §2): they fuse on events and materialise in place on show, and a surface can ripple.
 
 **Is not:** a slab with blobs on it, a frosted or tinted panel, a painted rim, sheen or fresnel band, a texture inside the glass, a caustic wallpaper, or colour splitting that the glass's thickness cannot produce.
