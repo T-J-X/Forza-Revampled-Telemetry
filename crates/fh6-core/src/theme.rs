@@ -1,4 +1,7 @@
 //! ClusterTheme enum. Keep the existing numeric values stable; add new themes at the end.
+use std::fmt;
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -119,8 +122,8 @@ impl ClusterTheme {
     }
 }
 
-impl std::fmt::Display for ClusterTheme {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ClusterTheme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
     }
 }
@@ -236,7 +239,7 @@ impl ClusterTheme {
 
 impl ClusterTheme {
     /// The theme whose config name is `name` (case-insensitive, surrounding spaces ignored).
-    /// Unlike the config dispatch, an unknown name is `None`, so command-line tools can reject it.
+    /// Only the theme's own name matches; [`str::parse`] also accepts the short aliases.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         let name = name.trim();
@@ -247,9 +250,75 @@ impl ClusterTheme {
     }
 }
 
+/// Short and legacy style names accepted besides each theme's own name. No alias equals a
+/// theme's own name, so the order of the two lookups never matters (a test checks this).
+const ALIASES: &[(&str, ClusterTheme)] = &[
+    ("bosch", ClusterTheme::BoschDdu),
+    ("drift", ClusterTheme::DriftGlass),
+    ("porsche", ClusterTheme::PorscheAnalog),
+    ("analog", ClusterTheme::PorscheAnalog),
+    ("windshield", ClusterTheme::WindshieldHud),
+    ("tesla", ClusterTheme::TeslaAdas),
+    ("retro", ClusterTheme::RetroCyber),
+    ("gt7hood", ClusterTheme::Gt7HoodPro),
+    ("hood", ClusterTheme::Gt7HoodPro),
+    ("amg", ClusterTheme::AmgMbuxSuperscreen),
+    ("mbux", ClusterTheme::AmgMbuxSuperscreen),
+    ("lfa", ClusterTheme::LfaV10Nurburgring),
+    ("pagani horologerie", ClusterTheme::PaganiHorologerie),
+    ("pagani", ClusterTheme::PaganiHorologerie),
+    ("f35helmet hmd", ClusterTheme::F35HelmetHmd),
+    ("f35", ClusterTheme::F35HelmetHmd),
+    ("helmet", ClusterTheme::F35HelmetHmd),
+    ("bugatti", ClusterTheme::BugattiTourbillon),
+    ("eva", ClusterTheme::EvaBioSync),
+    ("koenigsegg", ClusterTheme::KoenigseggGyro),
+    ("valkyrie", ClusterTheme::ValkyrieLmp1),
+    ("synthwave", ClusterTheme::SynthwaveOutrun),
+    ("outrun", ClusterTheme::SynthwaveOutrun),
+    ("chrono", ClusterTheme::ChronoMultiverse),
+];
+
+/// The error [`ClusterTheme`]'s [`FromStr`] returns for a style name that is neither a theme's
+/// own name nor one of the short aliases. It holds no copy of the input, so a failed parse never
+/// allocates; callers that log the failure log the input themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct ParseClusterThemeError(());
+
+impl fmt::Display for ParseClusterThemeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("unknown cluster style name")
+    }
+}
+
+impl std::error::Error for ParseClusterThemeError {}
+
+impl FromStr for ClusterTheme {
+    type Err = ParseClusterThemeError;
+
+    /// Parses a config style name: any theme's own name or a short alias (`"bosch"`, `"hood"`,
+    /// `"mbux"`), case-insensitive with surrounding spaces ignored. Allocation-free.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseClusterThemeError`] when `s` names no theme.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let name = s.trim();
+        Self::from_name(name)
+            .or_else(|| {
+                ALIASES
+                    .iter()
+                    .find(|(alias, _)| alias.eq_ignore_ascii_case(name))
+                    .map(|&(_, theme)| theme)
+            })
+            .ok_or(ParseClusterThemeError(()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ClusterTheme;
+    use super::{ClusterTheme, ParseClusterThemeError, ALIASES};
 
     #[test]
     fn numbering_is_dense_and_stable() {
@@ -276,5 +345,52 @@ mod tests {
     fn serde_uses_the_variant_name() {
         let json = serde_json::to_string(&ClusterTheme::VernierLoupe).unwrap_or_default();
         assert_eq!(json, "\"VernierLoupe\"");
+    }
+
+    #[test]
+    fn parse_accepts_every_own_name_in_any_case() {
+        for t in ClusterTheme::all() {
+            assert_eq!(t.name().parse::<ClusterTheme>(), Ok(*t));
+            let shouty = format!("  {}  ", t.name().to_uppercase());
+            assert_eq!(shouty.parse::<ClusterTheme>(), Ok(*t), "{shouty:?}");
+        }
+    }
+
+    #[test]
+    fn parse_accepts_the_short_aliases() {
+        let cases = [
+            ("bosch", ClusterTheme::BoschDdu),
+            ("Hood", ClusterTheme::Gt7HoodPro),
+            (" mbux ", ClusterTheme::AmgMbuxSuperscreen),
+            ("Pagani Horologerie", ClusterTheme::PaganiHorologerie),
+            ("F35Helmet HMD", ClusterTheme::F35HelmetHmd),
+            ("analog", ClusterTheme::PorscheAnalog),
+            ("CHRONO", ClusterTheme::ChronoMultiverse),
+        ];
+        for (s, want) in cases {
+            assert_eq!(s.parse::<ClusterTheme>(), Ok(want), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn parse_rejects_unknown_names() {
+        for s in ["", "   ", "nope", "Bosch Ddu", "LiquidGlass2"] {
+            assert_eq!(s.parse::<ClusterTheme>(), Err(ParseClusterThemeError(())), "{s:?}");
+        }
+        assert_eq!(ParseClusterThemeError(()).to_string(), "unknown cluster style name");
+    }
+
+    #[test]
+    fn aliases_are_distinct_and_never_shadow_a_name() {
+        for (i, (alias, _)) in ALIASES.iter().enumerate() {
+            assert_eq!(ClusterTheme::from_name(alias), None, "{alias} is a theme's own name");
+            assert_eq!(
+                *alias,
+                alias.trim().to_ascii_lowercase(),
+                "{alias} is not trimmed lowercase"
+            );
+            let later = &ALIASES[i + 1..];
+            assert!(later.iter().all(|(other, _)| other != alias), "{alias} is listed twice");
+        }
     }
 }

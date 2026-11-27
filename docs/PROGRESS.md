@@ -38,6 +38,20 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after fix phase E, 2026-11-27)
+| Check | Result |
+|---|---|
+| `cargo test --workspace --no-fail-fast` | ✅ 911 passed, 0 failed (1 ignored; `golden_images` 49/49) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK |
+| `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
+
+What fix phase E removed (findings 8, 9, 11 and 19, and `rev_limiter.rs` from finding 10, of the 2026-11-27 Rust assessment; `program/phases/fix-e-remove-v1/HANDOVER.md`):
+- **The v1 code is gone, about 10,700 lines.** The 29 tiny-skia clusters, `draw_ext`, the `fh6-render` crate, `fh6-gpu`'s Phase 4 quad pipeline and test cluster, `rev_limiter.rs` and `preview-export --legacy`. `StackStr` lives on as `fh6_kit::StackStr`. The v1 source can still be read at commit `21e8a06`.
+- **Nothing that runs changed.** Every test that went was in a deleted file, the goldens pass, and a live bench on the Bosch DDU measured p50 0.674 ms and p99 0.901 ms CPU per frame.
+- **The asset ledger stops calling per-cluster sets "v1".** It labels them as built by each cluster's recipe and lists a file with a record only once; the committed `assets/ASSETS.md` shows this after the next `asset-forge sheet` or `build`.
+
 ## State of the code (after the host CPU phase, 2026-11-27)
 | Check | Result |
 |---|---|
@@ -178,16 +192,16 @@ What exists:
 ## Known defects
 1. ~~`crates/fh6-app/tests/steam_launcher_tests.rs` doesn't compile~~ Fixed in Phase 4.
 2. ~~Clippy `collapsible_if` in `fh6-core` blocks `clippy -D warnings`~~ Fixed in Phase 4; the whole workspace is clippy-clean.
-3. `FH6TelemetryData` has no `torque` field, so `GlyphDotMatrix` derives torque from power and RPM. Decide whether to add the field (check the packet layout first) or drop torque from the design.
+3. `FH6TelemetryData` has no `torque` field, so the v1 `GlyphDotMatrix` derived torque from power and RPM (its rebuild's spec needs torque too). Decide whether to add the field (check the packet layout first) or drop torque from the design.
 4. ~~50 compiler warnings~~ Fixed in Phase 4.
-8. Nine `TODO(phase-7)` comments in `fh6-clusters` mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.
+8. ~~Nine `TODO(phase-7)` comments in `fh6-clusters` mark values that are computed but never drive the visual. Examples: `_speed` in chrono_event_horizon, `_rpm_ratio` in f35_helmet_hmd, `_level` in kinetic_liquid_metal. The Phase 4 lint pass found them; they are for the cluster rebuilds to resolve.~~ Gone with the v1 clusters in Rust fix phase E (2026-11-27).
 9. ~~The OSD is not drawn yet~~ Fixed in Phase 9 (`docs/design/OSD.md`). The tray's "Open configurator" opens `config.json`, whose changes hot-reload, until the Phase 10 web configurator exists.
 10. ~~Live CPU per frame p99 is 1.11–1.19 ms with the kit (target 1 ms; p50 0.49–0.58 ms). The kit's own work is under 0.05 ms; the tail is wgpu submit (about 10 µs per render pass, 11–18 passes) and `present`. See `docs/perf/render-kit.md` for levers (bloom-off preset, fewer backdrop passes).~~ Fixed in the host CPU phase (2026-11-27): p99 0.78–0.88 ms and p50 0.62–0.68 ms with the whole frame counted (`docs/perf/engine.md`, `program/phases/fix-host-cpu/HANDOVER.md`).
-11. `fh6-gpu`'s `QuadRenderer` and `test_cluster` no longer draw anything in the app, but `OverlaySurface` (`surface.rs`) and the offscreen target still build a `QuadRenderer`; remove them when nothing needs a quad baseline (optional fix phase E of the 2026-11-27 Rust assessment).
+11. ~~`fh6-gpu`'s `QuadRenderer` and `test_cluster` no longer draw anything in the app, but `OverlaySurface` (`surface.rs`) and the offscreen target still build a `QuadRenderer`; remove them when nothing needs a quad baseline (optional fix phase E of the 2026-11-27 Rust assessment).~~ Fixed in Rust fix phase E (2026-11-27): the quad pipeline, the test cluster and `fh6-gpu`'s offscreen target are gone; tests, benches and tools render offscreen with `fh6_kit::testing`.
 12. `Camera25` has no pitch; the Phase 3 ADAS chase eye (0, 3.4, −6.0) m with 8° pitch needs a pitch term before TeslaAdas is rebuilt (the eye itself is a public field).
-5. `fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.
-6. `fh6-render::pool::PaintPool` is a cache stub with no real paint objects.
-7. `assets/*.png` duplicates `assets/textures/4k/`. Pick one location when `AssetCache` is wired up.
+5. ~~`fh6-render::oem_scrim::mount` (mount, visor lip, hub cap) is still a no-op.~~ Gone with `fh6-render` in Rust fix phase E (2026-11-27); the live scrim is the kit's.
+6. ~~`fh6-render::pool::PaintPool` is a cache stub with no real paint objects.~~ Gone with `fh6-render` in Rust fix phase E (2026-11-27).
+7. `assets/*.png` duplicates `assets/textures/4k/` byte for byte, and no code loads either copy (the v1 clusters only named some of them; Rust fix phase E removed those). `data/design_tokens.json` (`glass.caustic.asset` and the legacy `clusters.*.assetBindings`) and `docs/specs/phase-8-materials-and-shaders.md` still name them. Delete both copies and those keys in an asset pass that rebuilds the ledger; the Gt7HoodPro handover also asks to retire `assets/gt7_hood_pro_plate.png`.
 13. OSD-open CPU per frame p99 is 2.24 ms (p50 0.99 ms; dash only 0.76 / 1.48 ms), measured before the merge. The OSD shows only while the game is paused, so racing frames are not affected; it shares the Phase 4/5 p99 levers (`docs/perf/osd.md`).
 14. Phase 9 review items not yet verified (found by the branch review, not reproduced): clearing the custom name may come back after a reload (the config migration restores the default name); a seat height set in the OSD may be reverted on reload when the file still has a legacy `CockpitOffsetY`; a face is marked preloaded even when the glyph atlas is full (its text then falls back to Noto Sans); the open-edge ESC judges "racing" from a packet up to 250 ms old. See `program/phases/09-osd/HANDOVER.md`.
 15. The pack fonts have no CJK glyphs; a custom name or font family in CJK draws as missing glyphs. The on-screen keyboard only types Latin, so only hand-edited configs hit it.
@@ -204,7 +218,7 @@ What exists:
 - A per-cluster scaler (0.70× to 1.40×) with optical centre lock, plus typography presets.
 
 **P5: mockups and contact sheet**
-- Keep `preview-export` working: the 48 catalog clusters × 4 states (`--legacy` adds the 29 v1 clusters), the 0/50/100% scrim, the OSD and the `index.html` gallery.
+- Keep `preview-export` working: the 48 catalog clusters × 4 states, the 0/50/100% scrim, the OSD and the `index.html` gallery.
 - Add the in-cockpit compositor (Phase 8 spec P8-4), using `assets/reference/cockpit_with_wheel.jpg`.
 
 **P6: gates, benchmark, deploy**
@@ -223,14 +237,14 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 - no full-canvas fills
 - every gauge reacts to live telemetry
 - the OSD dyno renders the selected cluster
-- `AssetCache` blitting
+- image blitting (the kit's `Images`; the v1 `AssetCache` is gone)
 - Liquid Glass optics (P8-1)
 - reactive sci-fi kinematics (P8-2)
 - motorsport rebuilds (P8-3)
 
 **Gates G1 to G5**
 - G1: a scan for forbidden patterns.
-- G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output.
+- G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output. The v1 test (`telemetry_sensitivity.rs`) went with the v1 clusters in Rust fix phase E; the kit clusters have their four golden states and their own unit tests of their telemetry mappings, but no per-input sensitivity test.
 - G3: matrix integrity.
 - G4: OSD dispatch. The v1 test (`g4_dispatch.rs`) went with the v1 OSD renderer in Phase 9; the OSD now draws the cluster through `fh6_clusters::registry`, covered by `fh6-osd` unit tests (`host`, `model`) and `preview-export`'s OSD states.
 - G5: robustness against NaN, Inf and zero-size inputs.
@@ -366,3 +380,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-27 | The render thread joins MMCSS "Games" (fallback `THREAD_PRIORITY_ABOVE_NORMAL`), opts out of power throttling and, on a hybrid CPU, is held on the performance cores (`fh6_win::system::raise_frame_thread`; the guard undoes all three) | Its work is short and latency-bound; on the test PC the p99 fell by 0.2–0.3 ms. MMCSS can take a performance core from the game for the length of a frame (well under 1 ms) |
 | 2026-11-27 | The kit's bloom pyramid is one compute pass (9 dispatches, `shaders/bloom.wgsl`, tap for tap the old fragment shaders) instead of 9 render passes | Each render pass costs about 15–20 µs of host CPU in wgpu (live: about 0.045 ms less CPU per frame, 3 to 4 passes instead of 10 to 12). Each dispatch also zeroes a 2-texel margin past its viewport, as the passes' clear did, so stale texels never bleed in (without it 16 hood-view goldens changed); all 49 goldens pass. It costs about 0.02 ms more GPU on bloom-heavy frames (Bosch DDU sequence p50 0.239 against 0.217 ms), well inside the 0.5 ms budget |
 | 2026-11-27 | Liquid Glass, third build and close (thread 1): brightness follows the rank (the gear brightest, the rev ribbon at half strength with a full-strength head), bigger shift lights and labels (at least 22 px), the upshift ripple moved to the gear lens's rim, a softened studio plate, and the rpm, power and boost digits held by hysteresis on the limiter, as the speed's are; `preview-export` reports the median GPU time of 5 frames per shot and writes the product page; the kit's `Images::load_file` hands back the texture it already has for an unchanged file, because the app builds a cluster again on every view or theme change and each build re-uploaded its 4K textures. At the close: a cluster built mid-race shows the gear and the ribbon at rest and only the glass grows in on show; the upshift ripple waits for the new gear to settle; the studio loses its kicker card, clears a 44° cone round the viewer and stays level while only the key light leans (re-rendered at 4096 px faces on the cloud lane, $0.09); labels, the rpm digits and the bead's light are dimmed by light, not alpha, because the overlay blends coverage in encoded space (a label at 22% alpha showed at 3%); the shift strobe runs on its own clock from the shift point, so it starts lit, and its dark phase keeps a fifth of the light; the rev ribbon follows the rpm through a 60 rpm backlash, so the bead holds still through the limiter's bounce, and the bead's light is screened onto the ribbon so it never hides the ribbon's head; the rpm readout and the name badge draw after the glass, and the rpm readout has a 34 px floor. Reviews become self-reviews: `AGENTS.md` rules 12 and 13, `CLUSTER_PROMPT.md` (steps 5 and 10, checklist lines 35 and 37, the exit criteria), the phase 7 `AGENTS.md` and `SKILLS.md`, root `SKILLS.md`, `ONBOARDING.md`, the handover template and the phase 10 and 11 prompts say that each thread runs its own direction check and closing review with the installed review skills and agents, posts the results with renders, and does not wait for TJX. Agent 3A and the catalog brief describe the rebuilt pilot. No new dependency | TJX on 2026-11-27: "exactly we want 2027 future not anything less" (15:18 UTC); at 16:00 TJX asked to be hands-off, with the threads reviewing their own work through the installed skills, and at 16:14 for visible progress with screenshots. A visual review found the rpm and power digits flickering every frame on the limiter. The first use of a 4K texture spiked single frames to 0.9 to 2.9 ms of GPU time, so one frame was not a fair number. The closing review measured the labels outside the glass at 3% luminance and saw the strip go dark for 50 ms at the shift point (frame 27 of the review sequence); the rpm readout measured 4.4:1 at the glance gate in one hood state; the cold reviewer read the speed capsule's rim, which bent the rpm digits, as a smear; a pre-commit check found the bead jittering with the engine's bounce (623 px flashing at 30 Hz) and its light hiding the ribbon's head |
+| 2026-11-27 | Rust fix phase E removes the v1 code: the 29 tiny-skia clusters (`fh6-clusters/src/legacy/`), the `fh6-render` crate (its last caller moved to `ClusterTheme`'s `FromStr` in fix phase D), `draw_ext`, the v1 half of `fh6-clusters/src/lib.rs` (`LegacyClusterRenderer` and the v1 wash), `fh6_core::rev_limiter`, `fh6-gpu`'s Phase 4 quad pipeline, test cluster and offscreen target, `preview-export --legacy`, their tests, and the dependencies only they used. A rebuild reads its v1 cluster with `git show 21e8a06:crates/fh6-clusters/src/legacy/<snake_name>.rs` | Nothing live used any of it once the kit took over (assessment findings 8, 9, 11 and 19, and `rev_limiter` from 10); about 10,700 fewer lines to build, lint and read. The app, the goldens and every remaining test behave as before (`program/phases/fix-e-remove-v1/HANDOVER.md`) |
+| 2026-11-27 | `StackStr` moves from `fh6-gpu::seven_seg` to `fh6_kit::StackStr` | It formats numbers on a frame path without allocating; the app's stats text is its only user, and `fh6-gpu` now holds only the device and the overlay surface |
+| 2026-11-27 | `tools/web-preview` takes `fh6-kit` and `fh6-clusters` only on wasm32 | Only the browser page (`src/web.rs`) uses them; the assessment's finding 19 had read them as unused |
+| 2026-11-27 | asset-forge's ledger labels files under `assets/clusters/` as per-cluster sets (licence as in that folder's `ASSETS.md`) and no longer lists a file it has a record for in the "without a record" table | They were labelled "v1 project texture from the initial import" with an MIT licence, which is wrong for SDXL outputs, and TeslaAdas's recorded files were listed twice. The committed `assets/ASSETS.md` shows the new labels after the next `asset-forge sheet` or `build` |

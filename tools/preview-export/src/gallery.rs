@@ -112,7 +112,6 @@ pub fn write_index(
     renders: &[Render],
     osd: &[crate::osd::OsdRender],
     adapter: &str,
-    legacy: bool,
 ) -> std::io::Result<()> {
     let mut h = String::new();
     let _ = write!(
@@ -208,14 +207,11 @@ over a game capture when exported with <code>--backdrop</code>.</div><div class=
     }
     h.push_str("</div>\n");
     h.push_str(
-        "<h2>OEM scrim (v1 renderer until Phase 8)</h2><div class=\"grid\">\
+        "<h2>OEM scrim</h2><div class=\"grid\">\
 <div class=\"card\"><a href=\"Scrim/OemScrim_0pct.png\"><img src=\"Scrim/OemScrim_0pct.png\" alt=\"scrim 0%\"></a><div class=\"cap\">Scrim 0%</div></div>\
 <div class=\"card\"><a href=\"Scrim/OemScrim_50pct.png\"><img src=\"Scrim/OemScrim_50pct.png\" alt=\"scrim 50%\"></a><div class=\"cap\">Scrim 50%</div></div>\
 <div class=\"card\"><a href=\"Scrim/OemScrim_100pct.png\"><img src=\"Scrim/OemScrim_100pct.png\" alt=\"scrim 100%\"></a><div class=\"cap\">Scrim 100%</div></div></div>\n",
     );
-    if legacy {
-        h.push_str("<h2>v1 clusters</h2><div class=\"meta\">Rendered into ModernClusters/ (tiny-skia references for Phase 7).</div>\n");
-    }
     h.push_str("</body></html>\n");
     std::fs::write(out.join("index.html"), h)
 }

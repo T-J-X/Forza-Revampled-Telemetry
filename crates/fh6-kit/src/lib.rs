@@ -8,7 +8,8 @@
 //!   material; blend modes normal, add, screen, multiply. Linear premultiplied end to end.
 //! - **Light:** per-layer bloom (dual-filter Kawase), Gaussian layer blur, glass backdrop with
 //!   frost, fresnel rim, crown sheen and optional world refraction.
-//! - **Text:** MTSDF atlas with kerning, tracking and tabular figures ([`Fonts`]).
+//! - **Text:** MTSDF atlas with kerning, tracking and tabular figures ([`Fonts`]); [`StackStr`]
+//!   formats numbers on a frame path without allocating.
 //! - **Motion:** closed-form springs, smoothing and easing ([`anim`]).
 //! - **Effects:** GPU fluid ([`fluid`]), particles, noise, the 2.5D road camera
 //!   ([`perspective`]) and a glTF mesh pass ([`mesh`]).
@@ -39,6 +40,7 @@ mod renderer;
 mod scene;
 pub mod scrim;
 pub mod shape;
+mod stack_str;
 pub mod testing;
 pub mod text;
 pub mod tokens;
@@ -63,6 +65,7 @@ pub use shape::{
     Axis, Cap, Dome, Glow, Outline, Piece, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit,
     TickRing,
 };
+pub use stack_str::StackStr;
 pub use text::{Align, Figures, FontId, FontRole, Fonts, TextStyle, VAlign};
 pub use tokens::Tokens;
 pub use wgpu;

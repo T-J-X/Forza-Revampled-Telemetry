@@ -86,7 +86,8 @@ impl Family {
 /// Whether the catalog row rebuilds a v1 theme or is a new concept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
-    /// One of the 29 v1 themes (its tiny-skia original is in [`crate::legacy`]).
+    /// One of the 29 v1 themes, which Phase 7 rebuilds on the kit (the v1 source is at commit
+    /// `21e8a06`).
     Rebuild,
     /// A next-gen concept new in Phase 7.
     New,

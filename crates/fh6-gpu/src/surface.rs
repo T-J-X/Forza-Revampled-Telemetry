@@ -1,6 +1,5 @@
 //! The overlay window's swapchain.
 use crate::context::{new_instance, GpuContext};
-use crate::quad::{Globals, QuadBatch, QuadRenderer};
 use crate::GpuError;
 use std::time::{Duration, Instant};
 
@@ -47,7 +46,6 @@ pub enum FrameOutcome {
 pub struct OverlaySurface {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-    renderer: QuadRenderer,
 }
 
 impl OverlaySurface {
@@ -100,16 +98,8 @@ impl OverlaySurface {
         if ctx.has_failed() {
             return Err(GpuError::DeviceFailed);
         }
-        let renderer = QuadRenderer::new(&ctx.device, format);
         tracing::info!(?format, ?present_mode, width, height, "overlay surface configured");
-        Ok((
-            ctx,
-            Self {
-                surface,
-                config,
-                renderer,
-            },
-        ))
+        Ok((ctx, Self { surface, config }))
     }
 
     /// Current swapchain size.
@@ -182,61 +172,6 @@ impl OverlaySurface {
             self.config.format,
             (self.config.width, self.config.height),
         );
-        let commands = encoder.finish();
-        let recorded = Instant::now();
-        ctx.queue.submit(Some(commands));
-        let t2 = Instant::now();
-        ctx.queue.present(frame);
-        let t3 = Instant::now();
-        if suboptimal {
-            self.surface.configure(&ctx.device, &self.config);
-        }
-        Ok(FrameOutcome::Presented {
-            timings: FrameTimings {
-                acquire_wait: t1 - t0,
-                encode_submit: t2 - t1,
-                record: recorded - t1,
-                submit: t2 - recorded,
-                present: t3 - t2,
-            },
-            at: t3,
-        })
-    }
-
-    /// Draws `batch` at `opacity` and presents it.
-    ///
-    /// # Errors
-    /// [`GpuError::SurfaceLost`] when the surface must be recreated,
-    /// [`GpuError::SurfaceValidation`] on a validation error, and [`GpuError::DeviceFailed`]
-    /// without touching the swapchain once the context has failed (for example when a
-    /// configure in `resize` or a reconfigure below did not succeed).
-    pub fn render(&mut self, ctx: &GpuContext, opacity: f32, batch: &QuadBatch) -> Result<FrameOutcome, GpuError> {
-        if ctx.has_failed() {
-            return Err(GpuError::DeviceFailed);
-        }
-        let t0 = Instant::now();
-        let acquired = self.surface.get_current_texture();
-        let t1 = Instant::now();
-        let (frame, suboptimal) = match acquired {
-            wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
-            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(FrameOutcome::Skipped)
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&ctx.device, &self.config);
-                return Ok(FrameOutcome::Skipped);
-            }
-            wgpu::CurrentSurfaceTexture::Lost => return Err(GpuError::SurfaceLost),
-            wgpu::CurrentSurfaceTexture::Validation => return Err(GpuError::SurfaceValidation),
-        };
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let globals = Globals::new(self.config.width, self.config.height, opacity);
-        self.renderer.prepare(&ctx.queue, &globals, batch);
-        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("fh6 overlay frame"),
-        });
-        self.renderer.record(&mut encoder, &view);
         let commands = encoder.finish();
         let recorded = Instant::now();
         ctx.queue.submit(Some(commands));
