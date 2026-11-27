@@ -426,7 +426,6 @@ dependencies = [
  "fh6-input",
  "fh6-kit",
  "fh6-osd",
- "fh6-render",
  "fh6-win",
  "serde_json",
  "thiserror",
@@ -441,8 +440,6 @@ dependencies = [
  "fh6-core",
  "fh6-gpu",
  "fh6-kit",
- "fh6-render",
- "tiny-skia 0.11.4",
  "tracing",
 ]
 
@@ -461,7 +458,6 @@ dependencies = [
 name = "fh6-gpu"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "thiserror",
  "tracing",
  "wgpu",
@@ -1606,9 +1602,7 @@ dependencies = [
  "fh6-gpu",
  "fh6-kit",
  "fh6-osd",
- "fh6-render",
  "image",
- "tiny-skia 0.11.4",
  "tracing",
  "tracing-subscriber",
 ]

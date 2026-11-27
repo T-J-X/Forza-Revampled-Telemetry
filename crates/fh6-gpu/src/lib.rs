@@ -3,25 +3,18 @@
 //! - [`GpuContext`]: wgpu instance, adapter, device and queue on DX12, with the DirectComposition
 //!   swapchain mode that gives premultiplied per-pixel alpha.
 //! - [`OverlaySurface`]: the overlay window's swapchain (premultiplied, Mailbox or Fifo, frame
-//!   latency 1), resize-safe.
-//! - [`OffscreenTarget`]: the same rendering into a texture, read back for tests, benches and
-//!   `preview-export`.
-//! - [`QuadRenderer`] and [`QuadBatch`]: the minimal instanced pipeline (rounded rects and
-//!   seven-segment glyphs) used by the Phase 4 [`test_cluster`].
+//!   latency 1), resize-safe; [`OverlaySurface::render_with`] presents what the render kit
+//!   records.
 //!
-//! `wgpu` is re-exported so dependants name the exact version this crate uses.
+//! Offscreen targets and readback for tests, benches and `preview-export` are the kit's
+//! (`fh6_kit::testing`). `wgpu` is re-exported so dependants name the exact version this crate
+//! uses.
 
 mod block_on;
 mod context;
-mod offscreen;
-mod quad;
-pub mod seven_seg;
 mod surface;
-pub mod test_cluster;
 
 pub use context::{AdapterSummary, GpuContext};
-pub use offscreen::{OffscreenTarget, RgbaImage};
-pub use quad::{Globals, QuadBatch, QuadInstance, QuadKind, QuadRenderer, MAX_QUADS};
 pub use surface::{FrameOutcome, FrameTimings, OverlaySurface};
 pub use wgpu;
 
@@ -53,7 +46,4 @@ pub enum GpuError {
     /// device. Drop the context and its surfaces and create new ones.
     #[error("the GPU reported an error or lost the device")]
     DeviceFailed,
-    /// Reading back an offscreen frame failed.
-    #[error("reading back the offscreen frame: {0}")]
-    Readback(String),
 }

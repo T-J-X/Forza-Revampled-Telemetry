@@ -16,7 +16,6 @@
 //! `--cluster <Name>` renders only one catalog cluster's review set into `mockups/<Theme>/`
 //! (4 states per view at 4K, crops, in-cockpit composites, the 60-frame sequence; `cluster.rs`).
 //!
-//! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
 mod cluster;
 mod fit;
@@ -25,7 +24,7 @@ mod osd;
 mod states;
 
 use fh6_clusters::registry::REGISTRY;
-use fh6_core::{AppConfig, ClusterTheme};
+use fh6_core::AppConfig;
 use fh6_gpu::GpuContext;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
@@ -46,7 +45,6 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Debug)]
 struct Args {
-    legacy: bool,
     fit: bool,
     frames: u32,
     out: Option<PathBuf>,
@@ -56,7 +54,6 @@ struct Args {
 
 fn parse_args() -> Result<Args> {
     let mut args = Args {
-        legacy: false,
         fit: false,
         frames: 30,
         out: None,
@@ -66,16 +63,13 @@ fn parse_args() -> Result<Args> {
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--legacy" => args.legacy = true,
             "--fit" => args.fit = true,
             "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
             "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
             "-h" | "--help" => {
-                println!(
-                    "preview-export [--legacy] [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
-                );
+                println!("preview-export [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]");
                 std::process::exit(0);
             }
             other => return Err(format!("unknown argument {other:?}").into()),
@@ -259,16 +253,7 @@ fn run() -> Result<()> {
     };
     let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref())?;
     fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
-    if args.legacy {
-        legacy::clusters(&out)?;
-    }
-    gallery::write_index(
-        &out,
-        &renders,
-        &osd_renders,
-        ctx.adapter_summary().to_string().as_str(),
-        args.legacy,
-    )?;
+    gallery::write_index(&out, &renders, &osd_renders, ctx.adapter_summary().to_string().as_str())?;
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())
@@ -308,48 +293,4 @@ fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> 
         }
     }
     Ok(())
-}
-
-/// The v1 tiny-skia renders kept until their kit rebuilds (clusters: Phase 7).
-mod legacy {
-    use super::{AppConfig, ClusterTheme, Result, H, W};
-    use fh6_clusters::render_cluster;
-    use std::fs;
-    use std::path::Path;
-
-    fn pixmap() -> Result<tiny_skia::Pixmap> {
-        tiny_skia::Pixmap::new(W, H).ok_or_else(|| "pixmap allocation failed".into())
-    }
-
-    fn save(pix: &tiny_skia::Pixmap, path: &Path) -> Result<()> {
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        fs::write(path, pix.encode_png()?)?;
-        Ok(())
-    }
-
-    pub fn clusters(out: &Path) -> Result<()> {
-        // The 19 concepts new in Phase 7 never had a v1 renderer.
-        for &theme in ClusterTheme::all()
-            .iter()
-            .filter(|t| fh6_clusters::create_cluster(**t).is_some())
-        {
-            let cfg = AppConfig {
-                current_camera_index: 3,
-                cockpit_hud_style_typed: theme,
-                ..Default::default()
-            };
-            for (i, state) in super::STATES.iter().enumerate() {
-                let mut pix = pixmap()?;
-                let data = state.telemetry();
-                render_cluster(&mut pix.as_mut(), theme, &data, &cfg);
-                save(
-                    &pix,
-                    &out.join(format!("ModernClusters/{theme}/{:02}_{}.png", i + 1, &state.name[3..])),
-                )?;
-            }
-        }
-        Ok(())
-    }
 }

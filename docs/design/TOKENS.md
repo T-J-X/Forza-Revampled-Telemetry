@@ -1,8 +1,8 @@
 # TOKENS: the FH6 WheelDash v2 design tokens
 
-`data/design_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)). `fh6-render::tokens` / `fh6-kit` read it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
+`data/design_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)). `fh6-kit::tokens` reads it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
 
-- **Version:** 3.1.0 (schema v3, 2026-11-20). v1 keys are kept for the current tiny-skia code.
+- **Version:** 3.1.0 (schema v3, 2026-11-20). The v1 keys (`typography`, `sharedSemantics`, `clusters`) stay as reference; no code has read them since the v1 clusters were removed (Rust fix phase E, 2026-11-27).
 - **Units:** every size is in **4K pixels at cluster scale 1.0**. Multiply by the user scale (0.70–1.40). The one exception: specular rims are always exactly 1 px, snapped to the pixel grid.
 - **Alpha:** 0–255, unless a key ends in `Pct`, `Opacity` or is written as a 0–1 fraction in a gradient stop.
 - **Colour space:** hex values are sRGB. `fh6-kit` converts them to linear premultiplied RGBA before blending (SKILLS.md law 1).
@@ -13,8 +13,8 @@
 | Key | v | What it holds | Read by |
 |---|---|---|---|
 | `$schema`, `meta` | 1→3 | version, display, units, research basis; `penpotFileId` names the Penpot master file (see PENPOT.md) | tooling |
-| `typography` | 1 | **legacy** tier sizes in pt; font stacks updated to OFL faces | current tiny-skia code only |
-| `sharedSemantics` | 1 | **legacy** rev-stage and input colours | current code only |
+| `typography` | 1 | **legacy** tier sizes in pt; font stacks updated to OFL faces | nothing (v1 reference) |
+| `sharedSemantics` | 1 | **legacy** rev-stage and input colours | nothing (v1 reference) |
 | `colorRoles` | 3 | the roles every cluster colours itself with, plus rev stages, inputs, thermal, proximity, assists, lume, ADAS colours and the colour budget | kit, clusters, OSD |
 | `paletteModes` | 3 | factory / custom / random palette rules and the 7 family default palettes | OSD, configurator, clusters |
 | `type` | 3 | OFL font roles, cap-height type scale, ratios, tabular rules, user-font rules | kit text, clusters |
@@ -29,9 +29,9 @@
 | `components` | 3 | shared component parameters (anatomy in [COMPONENTS.md](COMPONENTS.md)) | `fh6-clusters/src/common/` |
 | `families` | 3 | the 7 families, their spec file, pattern-setter and hero folder | Phase 7 |
 | `accessibility` | 3 | reduced flash, minimum text, colour independence, blur gate, flash audit | QA, OSD |
-| `clusters` | 1 | **legacy** per-cluster v1 layouts and palettes | current code; Phase 7 replaces each entry |
+| `clusters` | 1 | **legacy** per-cluster v1 layouts and palettes | nothing (v1 reference); each cluster's rebuild replaces its entry |
 
-The current Rust loader (`fh6-render::tokens::DesignTokens`) reads only optional `colors` and `grid` keys and ignores the rest, so the extension is backward compatible. v3 deliberately does **not** use those two key names.
+The v1 loader (`fh6-render::tokens::DesignTokens`) read only optional `colors` and `grid` keys and ignored the rest; no live code has used it since Rust fix phase E. v3 deliberately does **not** use those two key names.
 
 ## Colour
 

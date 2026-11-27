@@ -20,7 +20,7 @@
     "units": "All sizes are 4K pixels (3840x2160) at cluster scale 1.0 unless a key says otherwise. Multiply by the user cluster scale (0.70..1.40). Alpha values are 0..255 unless the key ends in Pct or Opacity (0..1).",
     "colourSpace": "Hex values are sRGB. fh6-kit converts to linear premultiplied RGBA before blending (SKILLS.md law 1).",
     "designNote": "The Penpot master file mirrors this file as token sets (docs/design/PENPOT.md). The Phase 3 HTML boards are described in docs/design/BOARDS.md.",
-    "legacyKeys": "typography.tiers, sharedSemantics and clusters.* are v1 values kept for the current tiny-skia code. New work reads the v3 sections (colorRoles .. accessibility). Phase 7 replaces clusters.* per cluster.",
+    "legacyKeys": "typography.tiers, sharedSemantics and clusters.* are v1 values kept as reference; no code reads them since the v1 clusters were removed (Rust fix phase E, 2026-11-27). New work reads the v3 sections (colorRoles .. accessibility). Phase 7 replaces clusters.* per cluster.",
     "updated": "2026-11-20",
     "researchBasis": "docs/design/RESEARCH.md §8 principles 1–10",
     "critiqueRound": "docs/design/CRITIQUE.md round 1 fixes applied 2026-11-21"

@@ -216,12 +216,16 @@ impl Ledger {
         format!("assets/{}", parts.join("/"))
     }
 
-    /// Files in `assets/` that asset-forge did not make (the v1 import, reference photos, brand
-    /// data), so the ledger still names a licence for every file.
+    /// Files in `assets/` that have no record here (the v1 import, reference photos, brand data,
+    /// per-cluster sets with their own ledger), so the ledger still names a licence for every file.
     fn other_files(&self) -> Vec<(String, u64)> {
+        let recorded: std::collections::HashSet<&str> = self.records.values().map(|r| r.path.as_str()).collect();
         let mut out = Vec::new();
         for file in walk(&self.assets_dir) {
             let rel = self.repo_rel(&file);
+            if recorded.contains(rel.as_str()) {
+                continue;
+            }
             let top = rel
                 .trim_start_matches("assets/")
                 .split('/')
@@ -306,7 +310,7 @@ impl Ledger {
         let others = self.other_files();
         if !others.is_empty() {
             s.push_str(&format!(
-                "## Files not made by asset-forge ({} files)\n\n",
+                "## Files without a record in this ledger ({} files)\n\n",
                 others.len()
             ));
             s.push_str("| Path | Size | Origin | Licence |\n|---|---|---|---|\n");
@@ -332,6 +336,11 @@ fn other_origin(rel: &str) -> (&'static str, &'static str) {
         )
     } else if rel.starts_with("assets/car_brands/") {
         ("Project data (brand palettes and car list)", "MIT (repo)")
+    } else if rel.starts_with("assets/clusters/") {
+        (
+            "Per-cluster set built by that cluster's asset-forge recipe; generator and seed in the folder's `ASSETS.md`",
+            "As listed in the folder's `ASSETS.md`",
+        )
     } else {
         (
             "v1 project texture from the initial import, superseded by the asset-forge sets",
@@ -393,5 +402,53 @@ mod tests {
         let b = fingerprint(&[b"recipe", b"seed=2"]);
         assert_ne!(a, b);
         assert_eq!(a, fingerprint(&[b"recipe", b"seed=1"]));
+    }
+
+    #[test]
+    fn per_cluster_sets_are_not_labelled_as_the_v1_import() {
+        let (origin, licence) = other_origin("assets/clusters/porsche_analog/tach_0.png");
+        assert!(!origin.contains("v1"), "{origin}");
+        assert!(origin.contains("ASSETS.md") && licence.contains("ASSETS.md"));
+        let (origin, _) = other_origin("assets/porsche_tach_dial.png");
+        assert!(origin.starts_with("v1 project texture"), "{origin}");
+        let (origin, _) = other_origin("assets/reference/cockpit_with_wheel.jpg");
+        assert!(origin.starts_with("Reference photo"), "{origin}");
+        let (_, licence) = other_origin("assets/car_brands/car_brands.json");
+        assert_eq!(licence, "MIT (repo)");
+    }
+
+    #[test]
+    fn files_with_a_record_are_not_listed_again_as_other_files() {
+        let dir = std::env::temp_dir().join(format!("forge_ledger_other_files_{}", std::process::id()));
+        let set = dir.join("clusters").join("tesla_adas");
+        std::fs::create_dir_all(&set).expect("create the test folder");
+        for name in ["asphalt.png", "ASSETS.md"] {
+            std::fs::write(set.join(name), b"x").expect("write a test file");
+        }
+        std::fs::write(dir.join("assets.json"), b"{}").expect("write a generated file");
+        let mut ledger = Ledger {
+            assets_dir: dir.clone(),
+            ..Ledger::default()
+        };
+        ledger.put(AssetRecord {
+            id: "tesla_adas/asphalt".to_owned(),
+            path: "assets/clusters/tesla_adas/asphalt.png".to_owned(),
+            set: "tesla_adas".to_owned(),
+            kind: "mask".to_owned(),
+            colorspace: "linear".to_owned(),
+            alpha: "straight".to_owned(),
+            tileable: false,
+            flipbook: None,
+            dims: "1536x512".to_owned(),
+            bytes: 1,
+            generator: "test".to_owned(),
+            licence: "MIT (asset-forge)".to_owned(),
+            clusters: "TeslaAdas".to_owned(),
+            qa: String::new(),
+            thumb: String::new(),
+        });
+        let others: Vec<String> = ledger.other_files().into_iter().map(|(rel, _)| rel).collect();
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(others, ["assets/clusters/tesla_adas/ASSETS.md"]);
     }
 }

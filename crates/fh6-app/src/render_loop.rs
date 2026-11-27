@@ -9,11 +9,11 @@ use fh6_core::{
     AppConfig, CarProfilesFile, ClusterTheme, ConfigHandle, FH6TelemetryData, ProfilesHandle, ScrimFit,
     TelemetryReader, VisibilityController, VisibilityInputs,
 };
-use fh6_gpu::seven_seg::StackStr;
 use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
 use fh6_kit::scrim::{self, Wash};
+use fh6_kit::StackStr;
 use fh6_kit::{
     vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
     Painter, Palette, Rect, Shape, SignalSmoother, TextStyle, VAlign, View,

@@ -8,7 +8,6 @@ pub mod config_watch;
 pub mod fit;
 pub mod oled_care;
 pub mod profiles;
-pub mod rev_limiter;
 pub mod shift_guard;
 pub mod telemetry;
 pub mod theme;
