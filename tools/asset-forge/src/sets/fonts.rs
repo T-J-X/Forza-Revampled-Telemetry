@@ -160,7 +160,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         }
         let doc = serde_json::json!({
             "version": 1,
-            "doc": "Font pack for FH6 WheelDash (asset-forge). Paths are relative to assets/. Roles match data/figma_tokens.json type.fonts. Digits are always drawn with a fixed advance by fh6-kit; tnum tells whether the face can do it natively. Users may add their own fonts.",
+            "doc": "Font pack for FH6 WheelDash (asset-forge). Paths are relative to assets/. Roles match data/design_tokens.json type.fonts. Digits are always drawn with a fixed advance by fh6-kit; tnum tells whether the face can do it natively. Users may add their own fonts.",
             "source_commit": format!("google/fonts@{sha}"),
             "defaults": { "display": "saira-condensed", "text": "titillium-web", "race": "saira-condensed", "light": "saira", "dial": "barlow-semi-condensed", "wide": "michroma", "tech": "chakra-petch", "fluid": "exo-2", "aviation": "b612-mono", "fallback": "noto-sans" },
             "families": families,
@@ -174,7 +174,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
 }
 
 fn font_spec(family: &str, source: &str, kind: &'static str) -> Spec {
-    let clusters: &'static str = "all clusters (type roles in data/figma_tokens.json), OSD, configurator";
+    let clusters: &'static str = "all clusters (type roles in data/design_tokens.json), OSD, configurator";
     Spec::new("fonts", kind, format!("{family}: {source}"), clusters)
         .space("n/a")
         .licence("OFL-1.1")

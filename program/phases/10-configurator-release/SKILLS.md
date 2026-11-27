@@ -10,4 +10,4 @@
 | Release | `engineering:deploy-checklist`, `engineering:documentation` (README, RELEASE.md, user guide), `requesting-code-review`, `/code-review` |
 | Optional | `anthropic-skills:pptx` (a one-page release showcase deck) |
 
-MCP: Penpot (`penpot`; Figma is the read-only legacy master), context7 (`wasm-bindgen`, `web-sys` WebGPU, `wgpu` web backend, `rust-embed`, `tiny_http` or `axum`, choosing the lightest).
+MCP: Penpot (`penpot`), context7 (`wasm-bindgen`, `web-sys` WebGPU, `wgpu` web backend, `rust-embed`, `tiny_http` or `axum`, choosing the lightest).

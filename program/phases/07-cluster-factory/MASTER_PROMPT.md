@@ -15,7 +15,7 @@ You lead the setup chat for the cluster factory, running in your own chat and wo
    - `cargo run -p preview-export -- --cluster <Name>` renders the 4 states at 4K plus thumbnails and a short animated sequence (PNG frames, 60 frames: idle → redline strobe → gear change) to `mockups/<Name>/`.
    - `cargo test -p fh6-clusters <name>` runs its golden-image test.
    - `cargo run -p fh6-app --bin FH6_WheelDash -- --demo --cluster <Name>` shows it live with the dyno.
-4. **Penpot pages** (switched from Figma on 2026-11-23; Penpot is on an unlimited plan): in the Penpot master file, create one page per cluster named `07 · <Name>`, holding a 3840x2160 board with the binnacle guide. Record the page and board IDs in `CATALOG.md` and the file ID in `docs/design/PENPOT.md`.
+4. **Penpot pages** (Penpot is on an unlimited plan): in the Penpot master file, create one page per cluster named `07 · <Name>`, holding a 3840x2160 board with the binnacle guide. Record the page and board IDs in `CATALOG.md` and the file ID in `docs/design/PENPOT.md`.
 5. **Order the catalog:**
    1. one pattern-setter per family (Phase 3 marks them)
    2. the remaining 29 rebuilds

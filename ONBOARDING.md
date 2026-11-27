@@ -29,7 +29,7 @@ crates/fh6-app       binaries FH6_WheelDash and FH6_SteamLauncher
 tools/               preview-export (4K mockups -> mockups/), mock-udp, parity-dump, bench-render
 tests/golden/packets 20 telemetry captures with expected JSON. Never edit them to make a test pass.
 assets/              textures, car_brands/, reference/ photos; logos/ and fonts/ arrive in Phase 6
-data/                config.json, car profiles, ordinals, figma_tokens.json, game camera files
+data/                config.json, car profiles, ordinals, design_tokens.json, game camera files
 docs/                PROGRESS.md (status), specs/, design/ (from Phase 3)
 program/             this build program: roadmap, per-phase MASTER_PROMPT / AGENTS / SKILLS, handovers
 ```
@@ -58,7 +58,6 @@ program/             this build program: roadmap, per-phase MASTER_PROMPT / AGEN
 - **Blender 5.3:** `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe`. Run headless with `blender.exe -b -P script.py`.
 - **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. It has no models until Phase 6 installs them.
 - **Penpot** (the design tool since 2026-11-23): Penpot's hosted MCP is registered at user scope as the `penpot` server (`execute_code`, `high_level_overview`, `penpot_api_info`, `export_shape`). It only reaches the design file while that file is **open in a browser tab and connected** (main menu ⋮ → MCP server → Connect; a green ● MCP badge shows in the toolbar), so the tab must stay open. Call `high_level_overview` once before the first `execute_code`. Setup, limits and the master file are in `docs/design/PENPOT.md`. Never ask for the MCP key or write it into a file. HTML boards are the fallback.
-- **Figma** is the read-only legacy master (`docs/design/FIGMA.md`): read it for history, never write to it. Its Starter plan and View seat block writes.
 - **context7 MCP** for crate docs; the **built-in browser** for viewing `mockups/index.html` and HTML boards.
 
 ## 5. How a chat works

@@ -5,7 +5,7 @@ use fh6_kit::Tokens;
 use std::path::{Path, PathBuf};
 
 /// Tokens file name (in `data/` in the repo, beside `config.json` when deployed).
-const TOKENS_FILE: &str = "figma_tokens.json";
+const TOKENS_FILE: &str = "design_tokens.json";
 /// Marker file that identifies an `assets/` folder.
 const BRANDS_FILE: &str = "car_brands/car_brands.json";
 
@@ -49,7 +49,7 @@ impl KitResources {
                 Tokens::default()
             }
             None => {
-                tracing::warn!("figma_tokens.json not found; using built-in defaults");
+                tracing::warn!("design_tokens.json not found; using built-in defaults");
                 Tokens::default()
             }
         };

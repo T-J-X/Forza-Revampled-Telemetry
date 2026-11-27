@@ -1,6 +1,6 @@
 # COMPONENTS: the shared cluster parts
 
-Every cluster is built from these parts. Phase 7 builds each one **once** in `crates/fh6-clusters/src/common/` on the `fh6-kit` primitives; cluster chats compose them and never fork them. Parameters live in `data/figma_tokens.json → components` (and the token groups named below). The Figma library on page `01 · System` mirrors them (node IDs in [FIGMA.md](FIGMA.md)); the hero frames in `docs/design/heroes/` show them in use.
+Every cluster is built from these parts. Phase 7 builds each one **once** in `crates/fh6-clusters/src/common/` on the `fh6-kit` primitives; cluster chats compose them and never fork them. Parameters live in `data/design_tokens.json → components` (and the token groups named below). The Penpot library on page `02 · Components` mirrors them (IDs in [PENPOT.md](PENPOT.md)); the hero frames in `docs/design/heroes/` show them in use.
 
 Conventions for every component:
 - **Coordinates** are 4K px at scale 1.0, relative to the cluster anchor.
@@ -15,7 +15,7 @@ Conventions for every component:
 - **States:** `1..10` in `ink`; `N` in `ink` at 72%; `R` in `warning`. Never hidden.
 - **Motion:** `motion.gearChange` (out 50 ms to 0.92; in from 1.12 with a 24 px slide on the `fast` spring; 1-frame 60% rim flash) plus one family flourish. 2 Hz pulse allowed after 0.5 s on the limiter.
 - **Emissive:** yes (rank 1), soft glow only while the limiter is active.
-- **Families:** all. **Figma:** `HeroGear` set (size × value).
+- **Families:** all. **Penpot:** `HeroGear` set (size × value).
 
 ## 2. TabularSpeed (rank 2)
 - **Anatomy:** 3 fixed digit cells (`type.tabular.advanceEm` 0.60), ghost `8` in unused leading cells only (`inkGhost`), unit label (`type.scale.unit`, uppercase, `inkMuted`).

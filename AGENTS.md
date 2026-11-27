@@ -35,7 +35,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 
 Rules for the layers:
 - Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
-- Runtime data lives in `data/`: `config.json`, `car_profiles.json`, `fh6_car_ordinals.json`, `forza_ordinals_masterlist.json`, `figma_tokens.json`, `CameraPhysics.xml`, `CameraSettings.ini`.
+- Runtime data lives in `data/`: `config.json`, `car_profiles.json`, `fh6_car_ordinals.json`, `forza_ordinals_masterlist.json`, `design_tokens.json`, `CameraPhysics.xml`, `CameraSettings.ini`.
 - Textures live in `assets/`. Reference photos live in `assets/reference/`. Specs live in `docs/specs/`.
 
 ## Commands
@@ -98,7 +98,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 **Background:** 20 years in automotive competitive intelligence. Benchmarks production clusters from Apple CarPlay Ultra (iOS 26 Liquid Glass), Tesla FSD v14/v15 ("Mind of Car" 3D ADAS view), Polyphony Digital's *Gran Turismo 7* hood/bumper HUD, Bosch Motorsport DDU 10/11, the Porsche 992 GT3 Chrono, and CD Projekt Red's *Cyberpunk 2077* Quadra Turbo-R V-Tech VFD.
 
 **Responsibilities:**
-- Before any cluster style is coded or redesigned, run a reference pass. Use web search, the Penpot MCP (`docs/design/PENPOT.md`; Figma is the read-only legacy master), `docs/specs/`, and a critique of the current `mockups/` output. The pass explains why a style looks "semi-okay" rather than bespoke OEM studio grade.
+- Before any cluster style is coded or redesigned, run a reference pass. Use web search, the Penpot MCP (`docs/design/PENPOT.md`), `docs/specs/`, and a critique of the current `mockups/` output. The pass explains why a style looks "semi-okay" rather than bespoke OEM studio grade.
 - Write concrete optical, typographic and proportional upgrade specs for the Systems lead and the Design Council, so no gauge reads as a flat rectangle.
 
 ## Agent 1: Principal Automotive HMI & Sim-Racing UI/UX Architect (`@HMI_UX_Lead`)
@@ -142,7 +142,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 
 ## Agent 3: Council of 4 Graphic Design & Optical Shader Directors (`@Design_Council`)
 
-All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, OLED black, and tokens from `data/figma_tokens.json`.
+All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, OLED black, and tokens from `data/design_tokens.json`.
 
 ### 3A: Optical Glassmorphism & Apple CarPlay Ultra Director (`LiquidGlass`, OLED OSD)
 - Ex-Apple Human Interface and Leica optics.

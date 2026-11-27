@@ -6,7 +6,7 @@ You lead Phase 9 of FH6 WheelDash v2, running in your own chat and worktree. The
 `ONBOARDING.md`, root `AGENTS.md` / `SKILLS.md`, this folder's `AGENTS.md` / `SKILLS.md`, the handovers of Phases 3, 4 and 5 (and 8 if it is merged), `docs/design/*` (the OSD direction frame), `docs/kit/README.md`, and `crates/fh6-osd/*`. The menu model in `model.rs` is worth keeping; the renderer is not.
 
 ## Required work
-1. **Design in Figma first,** on page `09 · OSD` of the master file, extending the Phase 3 direction.
+1. **Design in Penpot first,** on page `09 · OSD` of the master file, extending the Phase 3 direction.
    - **Layout:** full screen at 4K. A live dash view takes about 60% (the real selected cluster, animated), with a Liquid Glass control column. Tabs are switched with LB/RB.
    - Large, glanceable type in the motorsport default font.
    - **Focus states** that read from the couch on a 55" OLED.
@@ -44,7 +44,7 @@ You lead Phase 9 of FH6 WheelDash v2, running in your own chat and worktree. The
 
 ## Exit criteria
 - Workspace check, test and clippy are green.
-- The Figma page is done.
+- The Penpot page is done.
 - 4K OSD renders (each tab, plus focus and slider states) are in `mockups/osd/`, with the critique passed.
 - The live view works in `--demo`, and the perf numbers are in `docs/perf/osd.md`.
 - A manual run with screenshots shows the controller toggle, navigation and live-applied changes.

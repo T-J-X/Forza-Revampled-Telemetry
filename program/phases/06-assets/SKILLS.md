@@ -5,7 +5,8 @@
 | Start | `aesthetic`, `fh6-hmi-design-rules`, `design:design-system` (map assets onto tokens and families) |
 | Sourcing logos and fonts, licence checks | `anthropic-skills:deep-research` (licence and source verification), web search, the built-in browser |
 | Fan-out | the Workflow tool, at most 6 agents (one per set: glass, fluid, sci-fi, classic, ADAS, logos); each returns files and ledger rows |
-| Figma exports | `figma:figma-use` (export hero frames as references for texture matching) |
+| Penpot exports | the `penpot` MCP: `export_shape` (export hero boards as references for texture matching) |
+| Blender and ComfyUI work | `blender-hero-assets`, `comfyui-hero-textures` |
 | Organising the asset tree | `file-organizer` |
 | Review | `design:design-critique`, the `ui-ux-designer` agent |
 | Docs | `engineering:documentation` (`ASSETS.md`, pipeline README) |

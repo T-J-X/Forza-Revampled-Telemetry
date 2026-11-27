@@ -1,11 +1,10 @@
 # PENPOT: the design tool (since 2026-11-23)
 
-New design work goes to **Penpot**, through Penpot's official hosted MCP: Phase 7 cluster pages, the Phase 10 configurator, the Phase 11 showcase and any redesign. **Figma is the read-only legacy master** ([FIGMA.md](FIGMA.md)): read it for history, never write to it. The HTML boards in `docs/design/boards/` stay the source of the Phase 3 and 9 pixels; the [master file](#master-file) holds their renders, the token mirror and the component library.
+All design work goes to **Penpot**, through Penpot's official hosted MCP: the design system, Phase 7 cluster pages, the OSD, the Phase 10 configurator, the Phase 11 showcase and any redesign. Penpot is the only design tool. The HTML boards in `docs/design/boards/` ([BOARDS.md](BOARDS.md)) stay the source of the Phase 3 and 9 pixels; the [master file](#master-file) holds their renders, the token mirror and the component library.
 
-## Why we moved
-- The Figma account has a **View seat on a Starter team**. The remote Figma MCP stops at the Starter tool-call cap, and the desktop Dev Mode MCP (`figma-desktop`, `127.0.0.1:3845`) needs a Dev or Full seat, so it always fails ([FIGMA.md](FIGMA.md), "Blocked").
-- A third-party Figma "MCP Bridge" plugin was looked at and dropped.
-- TJX has an **unlimited Penpot plan**, and Penpot's hosted MCP writes to the open file through the Penpot plugin API (`execute_code`). None of the Figma Starter workarounds carry over: no 3-page limit, no one-Section-per-cluster layout, no single variable mode, no MCP call cap.
+## Why Penpot
+- TJX has an **unlimited Penpot plan**, and Penpot's hosted MCP writes to the open file through the Penpot plugin API (`execute_code`).
+- There is no page limit, no limit on token themes and no MCP call cap, so every cluster gets its own page and every family its own theme.
 
 ## Setup (TJX, once per machine)
 1. In Penpot, open **Your account → Integrations → MCP Server** and create a key.
@@ -99,7 +98,7 @@ Each component's main lives inside its `§` section board; the components sit un
 | DataTile | 5 | 1 | `6fe75c5e-bb22-8084-8008-fd8f5fafde24` | `6fe75c5e-bb22-8084-8008-fd8f5708b9e0` |
 | LiquidSurface | 4 | 1 | `6fe75c5e-bb22-8084-8008-fd8f6144c288` | `6fe75c5e-bb22-8084-8008-fd8f5708b9e0` |
 
-Where the sources disagree, the library follows `data/figma_tokens.json` and the difference is open for the owner of COMPONENTS.md:
+Where the sources disagree, the library follows `data/design_tokens.json` and the difference is open for the owner of COMPONENTS.md:
 - HeroGear `N` uses `role.inkMuted` (`components.heroGear.neutral`); COMPONENTS.md says ink at 72%.
 - ShiftLights uses the COMPONENTS.md variant names; `components.shiftLights.variants` in the JSON still lists the older `linear16`, `outsideIn15`, `converging5Pairs`, `arcJewels`, `ribbonPills16`.
 - The AdasRoad camera uses the JSON's raised chase eye (0, 3.4, −6) m, pitch 8°, FOV 33°; COMPONENTS.md still quotes (0, 1.85, −3.4), 15°, 35°.
@@ -159,11 +158,11 @@ Where the sources disagree, the library follows `data/figma_tokens.json` and the
 | Configurator direction (Phase 3, CONFIGURATOR_DIRECTION.md) | `6fe75c5e-bb22-8084-8008-fd8b17357b40` |
 
 ## Tokens
-`data/figma_tokens.json` stays the single source of truth ([TOKENS.md](TOKENS.md)). The file name and the `FigmaTokens` loader name are historical and stay unchanged. Never edit a token in Penpot first.
+`data/design_tokens.json` stays the single source of truth ([TOKENS.md](TOKENS.md)). Never edit a token in Penpot first.
 
 Penpot has native design tokens (`penpot.library.local.tokens`, a `TokenCatalog`; checked with `penpot_api_info` on 2026-11-23):
 - **Token sets** hold the tokens; only active sets affect shapes.
-- **Token themes** activate a list of sets. Themes sit in groups, and only one theme per group is active at a time. So the per-family palettes become one set per family, switched by the `Family` theme group, instead of the separate Figma variables the 1-mode Starter limit forced.
+- **Token themes** activate a list of sets. Themes sit in groups, and only one theme per group is active at a time. So the per-family palettes become one set per family, switched by the `Family` theme group.
 
 Mirror the JSON into these sets and themes with `execute_code` after every token change.
 
@@ -181,7 +180,7 @@ Mirror the JSON into these sets and themes with `execute_code` after every token
 | `family/<key>` × 7 | 9 each | `palette.primary / secondary / accent / shift`, `palette.glassTint` (= mix(primary, #0A1220, 0.72)) and the shadow tokens `glow.soft / medium / hot / phosphor` in the family's primary (blur = 2σ, alpha = intensity) |
 | `glass/regular` · `glass/tinted` | 1 each | `glass.tint.opacity` 0.17 (44/255) or 0.25 (64/255) |
 
-Each token's description names its `figma_tokens.json` path. Strings with no Penpot token type (easing curves, rules, docs) are on the `01 · Tokens` boards instead.
+Each token's description names its `design_tokens.json` path. Strings with no Penpot token type (easing curves, rules, docs) are on the `01 · Tokens` boards instead.
 
 | Theme group | Theme | ID | Activates |
 |---|---|---|---|
@@ -197,10 +196,10 @@ Each token's description names its `figma_tokens.json` path. Strings with no Pen
 
 The local library also holds **95 colours** (`FH6/<group>/…` for the literal core colours, `FH6/Families/<family>/…` for the palettes) and **17 typographies** (`FH6/<step>`, the same set as the `type.*` tokens) for the Assets panel.
 
-**After a token change:** edit `data/figma_tokens.json` first, then in Penpot update the token of the same name (`penpotUtils.findTokenByName(name)`, then set its value) or add it to the set named above, following these rules: font size = cap / capRatio, tracking in px = trackingEm × font size, alpha 0–255 → `#RRGGBBAA`, glow lobes → shadow layers with blur 2σ. Re-check the `01 · Tokens` boards with `export_shape`.
+**After a token change:** edit `data/design_tokens.json` first, then in Penpot update the token of the same name (`penpotUtils.findTokenByName(name)`, then set its value) or add it to the set named above, following these rules: font size = cap / capRatio, tracking in px = trackingEm × font size, alpha 0–255 → `#RRGGBBAA`, glow lobes → shadow layers with blur 2σ. Re-check the `01 · Tokens` boards with `export_shape`.
 
-## Carried over from Figma: done
-The to-do list that Figma's cap blocked ([FIGMA.md](FIGMA.md), "Blocked") was finished in the master file on 2026-11-23:
+## Master build: done
+The Phase 3 design-system build was finished in the master file on 2026-11-23:
 1. Tokens **v3.2** mirrored into 22 token sets and 2 theme groups (above). The v3.2 critique colours (shift `#978DFC`, Classic primary `#FF7A1A`, Race Dash shift `#B27CFF`) are in.
 2. The component library from [COMPONENTS.md](COMPONENTS.md), bound to those tokens, on `02 · Components`.
 3. The 28 hero renders and the 7 template renders placed automatically (`uploadMediaUrl`, see the limits table), on `04 · Heroes` and `03 · Family templates`.

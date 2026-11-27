@@ -9,10 +9,6 @@
       "env": {
         "CONTEXT7_API_KEY": "<your-context7-api-key>"
       }
-    },
-    "figma-desktop": {
-      "type": "http",
-      "url": "http://127.0.0.1:3845/mcp"
     }
   }
 }

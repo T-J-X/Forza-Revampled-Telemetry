@@ -13,9 +13,15 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 | Reviewing a crate, module or diff | `rust-review` | Gives a prioritised report with fixes. |
 | Porting a reference algorithm (shader maths, kinematics) from another language | `rust-port` | |
 | Any drawing: clusters, OSD, scrim, mockups | `fh6-hmi-design-rules` (project skill), then `aesthetic` | The project skill wins on anchors, OLED black and the rank order. |
+| Web UI: the configurator page, the showcase site, HTML boards | `frontend-design` (project skill), with `aesthetic` | Page logic stays Rust → WASM (AGENTS.md rule 11). |
+| Design direction, design-system upkeep, design review | `design-superpowers:design`, `design-superpowers:ds-make`, `design-superpowers:design-review` (plugin; TJX enables it in the Claude app) | Skip it when the plugin is not enabled; `design:design-critique` still works. |
+| Static concept art, posters, contact sheets | `canvas-design` (user scope) | Outputs go to `mockups/`, never into the repo tree as scripts. |
+| Building a custom MCP server for this project | `mcp-builder` (user scope) | Only when a tool has no MCP and plain HTTP from Rust isn't enough. |
+| Rendered hardware: bezels, dials, needles, crystals | `blender-hero-assets` | Through `tools/asset-forge`; the `Blender` MCP is for looking and checking. |
+| Organic textures and detail passes | `comfyui-hero-textures` | ComfyUI must be running on `127.0.0.1:8188`. |
 | Before merging or pushing a branch | `requesting-code-review`, `/code-review`, `/simplify` | |
 | Cleaning up folders and finding duplicates | `file-organizer` | Never touch the deploy targets. |
-| Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). The `figma:*` skills only read the legacy Figma master. |
+| Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). |
 | Critiquing mockups in `mockups/` | the `ui-ux-designer` agent, or `design:design-critique` | |
 
 If a skill doesn't load on its own, type `/<skill-name>`.
@@ -25,11 +31,13 @@ If a skill doesn't load on its own, type `/<skill-name>`.
 | MCP | Use for | Don't use for |
 |---|---|---|
 | **context7** (`.mcp.json`) | Crate docs before first use of an API: `windows` 0.58, `tiny-skia` 0.11, `ab_glyph`, `ttf-parser`, `serde`/`serde_json`, `arc-swap`, `png`, `thiserror` | Design decisions |
-| **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/figma_tokens.json`, PNG/SVG checks with `export_shape`, and importing committed, pushed PNGs with `penpot.uploadMediaUrl` from this repo's raw GitHub URL pinned to a commit (`docs/design/PENPOT.md`) | Importing from a local path or `localhost` (blocked; only uncommitted renders need TJX to drag them in), or putting the MCP key in any file or in `.mcp.json` |
-| **Figma** (legacy) | Reading the legacy master `0zOEwnJ8dEj1kQ7QwPGEH0` (`docs/design/FIGMA.md`) | Any write: the Starter plan's MCP cap and the View seat block it |
+| **Penpot** (`penpot`, user scope) | All design work: boards, components, token sets mirrored from `data/design_tokens.json`, PNG/SVG checks with `export_shape`, and importing committed, pushed PNGs with `penpot.uploadMediaUrl` from this repo's raw GitHub URL pinned to a commit (`docs/design/PENPOT.md`) | Importing from a local path or `localhost` (blocked; only uncommitted renders need TJX to drag them in), or putting the MCP key in any file or in `.mcp.json` |
+| **Blender** (`Blender`, user scope) | Hero renders and asset checks in a running Blender 5.3 with the MCP add-on (`blender-hero-assets`); repo assets are still built headless by `tools/asset-forge` | Saving `.blend` or script files into the repo |
+| **ComfyUI** (HTTP at `127.0.0.1:8188`, no MCP) | Textures and detail passes driven from `tools/asset-forge` (`comfyui-hero-textures`); it must be running | Jobs that exceed 8 GB VRAM |
+| **Picsart** (hosted connector, TJX signs in) | Generating, background removal, enhancing and vectorising images when Blender and ComfyUI don't fit; it spends Picsart credits and shows the cost first | Anything without TJX's go-ahead on the cost |
 | **Built-in browser** | Opening `mockups/index.html` to inspect the 4K exports | Anything that needs a sign-in |
 
-Token flow: `data/figma_tokens.json` (the source of truth; the file name is historical) → `fh6-render::tokens` / `fh6-kit` → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/figma_tokens.json` and log it in `docs/PROGRESS.md`.
+Token flow: `data/design_tokens.json` (the source of truth) → `fh6-render::tokens` / `fh6-kit` → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/design_tokens.json` and log it in `docs/PROGRESS.md`.
 
 ## 3. Rust rendering and input laws (v2 GPU renderer)
 

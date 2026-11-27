@@ -11,7 +11,7 @@
     "text": "titillium-web",
     "wide": "michroma"
   },
-  "doc": "Font pack for FH6 WheelDash (asset-forge). Paths are relative to assets/. Roles match data/figma_tokens.json type.fonts. Digits are always drawn with a fixed advance by fh6-kit; tnum tells whether the face can do it natively. Users may add their own fonts.",
+  "doc": "Font pack for FH6 WheelDash (asset-forge). Paths are relative to assets/. Roles match data/design_tokens.json type.fonts. Digits are always drawn with a fixed advance by fh6-kit; tnum tells whether the face can do it natively. Users may add their own fonts.",
   "families": [
     {
       "cap_ratio": 0.6880000233650208,

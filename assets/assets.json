@@ -1918,7 +1918,7 @@
       "bytes": 139456,
       "generator": "B612 Mono: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/b612mono",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/b612-mono/B612Mono-Regular",
@@ -1932,7 +1932,7 @@
       "bytes": 140292,
       "generator": "B612 Mono: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/b612mono",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__b612-mono__B612Mono-Regular.png"
     },
     {
@@ -1947,7 +1947,7 @@
       "bytes": 4470,
       "generator": "B612 Mono: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/b612mono",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Black",
@@ -1961,7 +1961,7 @@
       "bytes": 110828,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Bold",
@@ -1975,7 +1975,7 @@
       "bytes": 109912,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-ExtraBold",
@@ -1989,7 +1989,7 @@
       "bytes": 110296,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-ExtraLight",
@@ -2003,7 +2003,7 @@
       "bytes": 101172,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Light",
@@ -2017,7 +2017,7 @@
       "bytes": 101996,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Medium",
@@ -2031,7 +2031,7 @@
       "bytes": 103360,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Regular",
@@ -2045,7 +2045,7 @@
       "bytes": 102480,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__barlow-condensed__BarlowCondensed-Regular.png"
     },
     {
@@ -2060,7 +2060,7 @@
       "bytes": 109428,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/BarlowCondensed-Thin",
@@ -2074,7 +2074,7 @@
       "bytes": 100364,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-condensed/licence",
@@ -2088,7 +2088,7 @@
       "bytes": 4377,
       "generator": "Barlow Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowcondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Black",
@@ -2102,7 +2102,7 @@
       "bytes": 113212,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Bold",
@@ -2116,7 +2116,7 @@
       "bytes": 111772,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-ExtraBold",
@@ -2130,7 +2130,7 @@
       "bytes": 112096,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-ExtraLight",
@@ -2144,7 +2144,7 @@
       "bytes": 103908,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Light",
@@ -2158,7 +2158,7 @@
       "bytes": 104704,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Medium",
@@ -2172,7 +2172,7 @@
       "bytes": 105560,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Regular",
@@ -2186,7 +2186,7 @@
       "bytes": 105776,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__barlow-semi-condensed__BarlowSemiCondensed-Regular.png"
     },
     {
@@ -2201,7 +2201,7 @@
       "bytes": 109772,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/BarlowSemiCondensed-Thin",
@@ -2215,7 +2215,7 @@
       "bytes": 103072,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/barlow-semi-condensed/licence",
@@ -2229,7 +2229,7 @@
       "bytes": 4377,
       "generator": "Barlow Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/barlowsemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/ChakraPetch-Bold",
@@ -2243,7 +2243,7 @@
       "bytes": 78384,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/ChakraPetch-ExtraLight",
@@ -2257,7 +2257,7 @@
       "bytes": 79000,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/ChakraPetch-Light",
@@ -2271,7 +2271,7 @@
       "bytes": 78936,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/ChakraPetch-Medium",
@@ -2285,7 +2285,7 @@
       "bytes": 78600,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/ChakraPetch-Regular",
@@ -2299,7 +2299,7 @@
       "bytes": 78488,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__chakra-petch__ChakraPetch-Regular.png"
     },
     {
@@ -2314,7 +2314,7 @@
       "bytes": 78604,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/chakra-petch/licence",
@@ -2328,7 +2328,7 @@
       "bytes": 4396,
       "generator": "Chakra Petch: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/chakrapetch",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/exo-2/Exo2[wght]",
@@ -2342,7 +2342,7 @@
       "bytes": 303940,
       "generator": "Exo 2: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/exo2",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__exo-2__Exo2[wght].png"
     },
     {
@@ -2357,7 +2357,7 @@
       "bytes": 4386,
       "generator": "Exo 2: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/exo2",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/fonts_json",
@@ -2371,7 +2371,7 @@
       "bytes": 21360,
       "generator": "all: asset-forge",
       "licence": "MIT (asset-forge)",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/michroma/Michroma-Regular",
@@ -2385,7 +2385,7 @@
       "bytes": 64344,
       "generator": "Michroma: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/michroma",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__michroma__Michroma-Regular.png"
     },
     {
@@ -2400,7 +2400,7 @@
       "bytes": 4395,
       "generator": "Michroma: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/michroma",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/noto-sans/NotoSans[wdth,wght]",
@@ -2414,7 +2414,7 @@
       "bytes": 2049096,
       "generator": "Noto Sans: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/notosans",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__noto-sans__NotoSans[wdth,wght].png"
     },
     {
@@ -2429,7 +2429,7 @@
       "bytes": 4396,
       "generator": "Noto Sans: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/notosans",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/orbitron/Orbitron[wght]",
@@ -2443,7 +2443,7 @@
       "bytes": 38576,
       "generator": "Orbitron: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/orbitron",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__orbitron__Orbitron[wght].png"
     },
     {
@@ -2458,7 +2458,7 @@
       "bytes": 4426,
       "generator": "Orbitron: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/orbitron",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/oxanium/Oxanium[wght]",
@@ -2472,7 +2472,7 @@
       "bytes": 43536,
       "generator": "Oxanium: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/oxanium",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__oxanium__Oxanium[wght].png"
     },
     {
@@ -2487,7 +2487,7 @@
       "bytes": 4384,
       "generator": "Oxanium: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/oxanium",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/rajdhani/Rajdhani-Bold",
@@ -2501,7 +2501,7 @@
       "bytes": 400680,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/rajdhani/Rajdhani-Light",
@@ -2515,7 +2515,7 @@
       "bytes": 383928,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/rajdhani/Rajdhani-Medium",
@@ -2529,7 +2529,7 @@
       "bytes": 384348,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/rajdhani/Rajdhani-Regular",
@@ -2543,7 +2543,7 @@
       "bytes": 377860,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__rajdhani__Rajdhani-Regular.png"
     },
     {
@@ -2558,7 +2558,7 @@
       "bytes": 390340,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/rajdhani/licence",
@@ -2572,7 +2572,7 @@
       "bytes": 4373,
       "generator": "Rajdhani: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/rajdhani",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/russo-one/RussoOne-Regular",
@@ -2586,7 +2586,7 @@
       "bytes": 39124,
       "generator": "Russo One: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/russoone",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__russo-one__RussoOne-Regular.png"
     },
     {
@@ -2601,7 +2601,7 @@
       "bytes": 4390,
       "generator": "Russo One: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/russoone",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Black",
@@ -2615,7 +2615,7 @@
       "bytes": 96880,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Bold",
@@ -2629,7 +2629,7 @@
       "bytes": 96428,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-ExtraBold",
@@ -2643,7 +2643,7 @@
       "bytes": 96580,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-ExtraLight",
@@ -2657,7 +2657,7 @@
       "bytes": 92824,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Light",
@@ -2671,7 +2671,7 @@
       "bytes": 95044,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Medium",
@@ -2685,7 +2685,7 @@
       "bytes": 96240,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Regular",
@@ -2699,7 +2699,7 @@
       "bytes": 95068,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__saira-condensed__SairaCondensed-Regular.png"
     },
     {
@@ -2714,7 +2714,7 @@
       "bytes": 96028,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/SairaCondensed-Thin",
@@ -2728,7 +2728,7 @@
       "bytes": 92424,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-condensed/licence",
@@ -2742,7 +2742,7 @@
       "bytes": 4403,
       "generator": "Saira Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairacondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Black",
@@ -2756,7 +2756,7 @@
       "bytes": 97020,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Bold",
@@ -2770,7 +2770,7 @@
       "bytes": 96500,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-ExtraBold",
@@ -2784,7 +2784,7 @@
       "bytes": 97340,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-ExtraLight",
@@ -2798,7 +2798,7 @@
       "bytes": 93336,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Light",
@@ -2812,7 +2812,7 @@
       "bytes": 95612,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Medium",
@@ -2826,7 +2826,7 @@
       "bytes": 95548,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Regular",
@@ -2840,7 +2840,7 @@
       "bytes": 95184,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__saira-semi-condensed__SairaSemiCondensed-Regular.png"
     },
     {
@@ -2855,7 +2855,7 @@
       "bytes": 96160,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/SairaSemiCondensed-Thin",
@@ -2869,7 +2869,7 @@
       "bytes": 92828,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira-semi-condensed/licence",
@@ -2883,7 +2883,7 @@
       "bytes": 4403,
       "generator": "Saira Semi Condensed: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sairasemicondensed",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/saira/Saira[wdth,wght]",
@@ -2897,7 +2897,7 @@
       "bytes": 483700,
       "generator": "Saira: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/saira",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__saira__Saira[wdth,wght].png"
     },
     {
@@ -2912,7 +2912,7 @@
       "bytes": 4386,
       "generator": "Saira: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/saira",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/share-tech-mono/ShareTechMono-Regular",
@@ -2926,7 +2926,7 @@
       "bytes": 43272,
       "generator": "Share Tech Mono: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sharetechmono",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__share-tech-mono__ShareTechMono-Regular.png"
     },
     {
@@ -2941,7 +2941,7 @@
       "bytes": 4429,
       "generator": "Share Tech Mono: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/sharetechmono",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/teko/Teko[wght]",
@@ -2955,7 +2955,7 @@
       "bytes": 292108,
       "generator": "Teko: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/teko",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__teko__Teko[wght].png"
     },
     {
@@ -2970,7 +2970,7 @@
       "bytes": 4385,
       "generator": "Teko: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/teko",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/TitilliumWeb-Black",
@@ -2984,7 +2984,7 @@
       "bytes": 49328,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/TitilliumWeb-Bold",
@@ -2998,7 +2998,7 @@
       "bytes": 59884,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/TitilliumWeb-ExtraLight",
@@ -3012,7 +3012,7 @@
       "bytes": 63172,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/TitilliumWeb-Light",
@@ -3026,7 +3026,7 @@
       "bytes": 64004,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/TitilliumWeb-Regular",
@@ -3040,7 +3040,7 @@
       "bytes": 63660,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator",
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator",
       "thumb": "assets/_thumbs/fonts__pack__titillium-web__TitilliumWeb-Regular.png"
     },
     {
@@ -3055,7 +3055,7 @@
       "bytes": 63008,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "fonts/pack/titillium-web/licence",
@@ -3069,7 +3069,7 @@
       "bytes": 4523,
       "generator": "Titillium Web: https://github.com/google/fonts/tree/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/titilliumweb",
       "licence": "OFL-1.1",
-      "clusters": "all clusters (type roles in data/figma_tokens.json), OSD, configurator"
+      "clusters": "all clusters (type roles in data/design_tokens.json), OSD, configurator"
     },
     {
       "id": "glass/caustic_lens/caustic_lens_circle",

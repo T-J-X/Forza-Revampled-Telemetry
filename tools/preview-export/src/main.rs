@@ -113,7 +113,7 @@ fn run() -> Result<()> {
     let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));
     fs::create_dir_all(&out)?;
 
-    let tokens = Tokens::load(&root.join("data/figma_tokens.json")).unwrap_or_else(|e| {
+    let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_else(|e| {
         eprintln!("tokens: {e}; using built-in defaults");
         Tokens::default()
     });

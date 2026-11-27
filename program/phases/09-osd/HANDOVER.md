@@ -1,6 +1,6 @@
 # HANDOVER: Phase 9 · Controller-first Liquid Glass OSD
 
-**Chat / branch:** `claude/phase-9-osd-1fcc97`  **Date:** 2026-11-23  **Result:** ✅ complete (Figma page blocked by the plan; HTML board used as the reference, as in Phase 3)
+**Chat / branch:** `claude/phase-9-osd-1fcc97`  **Date:** 2026-11-23  **Result:** ✅ complete (HTML board used as the reference, as in Phase 3; the Penpot page `09 · OSD` was built on 2026-11-23)
 
 Main (6ccf761, Phases 6 and 8) is merged into the branch (63b1682) and every gate below ran on the merged tree.
 
@@ -8,7 +8,7 @@ Main (6ccf761, Phases 6 and 8) is merged into the branch (63b1682) and every gat
 | Criterion (copied from the MASTER_PROMPT) | Met? | Evidence (command output, file, screenshot) |
 |---|---|---|
 | Workspace check, test and clippy are green. | ✅ | Verification output below: check clean, test 366 passed, 0 failed, 1 ignored, clippy `-D warnings` clean, fmt clean, parity 20/20, wasm build |
-| The Figma page is done. | ◐ fallback | The remote Figma MCP returned the Starter-plan tool-call cap on the first `use_figma` write (`docs/design/FIGMA.md`). Reference instead: `docs/design/boards/osd/index.html` (every state, real renders) and `docs/design/OSD.md` |
+| The design page is done. | ◐ fallback | The design tool in use at the time blocked writes; the page was built later in Penpot (`09 · OSD`, `docs/design/PENPOT.md`). Reference used in this phase: `docs/design/boards/osd/index.html` (every state, real renders) and `docs/design/OSD.md` |
 | 4K OSD renders (each tab, plus focus and slider states) are in `mockups/osd/`, with the critique passed. | ✅ | 11 states from `cargo run --release -p preview-export` in `mockups/osd/` (gitignored), 960×540 copies in `docs/design/osd/`. Critique round 1 fail (6 must-fixes, all fixed), round 2 **pass** (`docs/design/OSD.md` § Critique) |
 | The live view works in `--demo`, and the perf numbers are in `docs/perf/osd.md`. | ✅ | `FH6_WheelDash --demo --open-osd` shows the live dyno ("Game paused · live dyno"). GPU 1.26–1.32 ms median for the whole OSD at 4K (target < 1.5). CPU p50 0.99 ms, p99 2.24 ms (defect 13) |
 | A manual run with screenshots shows the controller toggle, navigation and live-applied changes. | ✅ | `docs/handover-shots/phase9-01…07` (scripted pad `phase9-osd-tour.pad` through the real tracker: hold View to open, LB/RB tabs, D-pad carousel, custom hue, cluster height held to +120 px live, Controls, closed with the new settings); `phase9-08-merged-fit-tab.png` from the merged release build (pack fonts, Camera patch row, per-view cluster height). Earlier run log: "OSD opened mid-race: ESC sent to pause the game" |
@@ -53,7 +53,7 @@ Post-merge scripted run (release build, `--demo`, copy of `config.json`): log "O
 - `docs/handover-shots/phase9-01-before-open.png` … `phase9-07-closed-new-settings.png`, `phase9-08-merged-fit-tab.png`.
 
 ## My calls
-- **Figma fallback to the HTML board:** the plan's MCP cap blocks writes; same call as Phase 3.
+- **Fallback to the HTML board:** the design tool in use at the time blocked writes; same call as Phase 3.
 - **Dim harder (62%) instead of blurring the game:** the overlay never captures the game, so it cannot blur it; feathered pools behind the echo and the live cluster keep text legible.
 - **Rows edit the global config; the live view shows the car's profile on top** and an overridden row says so. Per-car editing needs a save target per row and is Phase 10's configurator work.
 - **Camera rows follow the patch switch:** "Applies on next launch" when on, "saved in config only" when off, "camera files not found" when the patcher has no install. The Cockpit FOV row shows the wheel-less FOV, which is the value the patcher writes.

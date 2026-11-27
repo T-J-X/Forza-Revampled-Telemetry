@@ -1,4 +1,4 @@
-//! Design tokens from `data/figma_tokens.json`, bound for the kit.
+//! Design tokens from `data/design_tokens.json`, bound for the kit.
 //!
 //! The loader reads schema v3 keys (`colorRoles`, `paletteModes`, `motion`, `glow`, `glass`,
 //! `type`, `layout`) when present and falls back, key by key, to the v3 values for anything
@@ -787,8 +787,8 @@ mod tests {
 
     #[test]
     fn repo_tokens_file_loads() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/figma_tokens.json");
-        let t = Tokens::load(&path).expect("data/figma_tokens.json loads");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/design_tokens.json");
+        let t = Tokens::load(&path).expect("data/design_tokens.json loads");
         assert!(!t.version.is_empty());
         assert!(t.family_defaults.len() >= 7);
         // Phase 3 v3.2 bindings.

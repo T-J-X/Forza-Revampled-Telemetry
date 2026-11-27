@@ -1,6 +1,6 @@
 # TOKENS: the FH6 WheelDash v2 design tokens
 
-`data/figma_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)); the read-only legacy Figma master holds a v3.1 copy as variables and styles ([FIGMA.md](FIGMA.md)). `fh6-render::tokens` / `fh6-kit` read it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
+`data/design_tokens.json` is the single source of truth for colour, type, geometry, light, glass and motion. Penpot mirrors it as token sets (see [PENPOT.md](PENPOT.md)). `fh6-render::tokens` / `fh6-kit` read it at startup. No cluster hardcodes a hex value, a size or a timing that has a token.
 
 - **Version:** 3.1.0 (schema v3, 2026-11-20). v1 keys are kept for the current tiny-skia code.
 - **Units:** every size is in **4K pixels at cluster scale 1.0**. Multiply by the user scale (0.70–1.40). The one exception: specular rims are always exactly 1 px, snapped to the pixel grid.
@@ -12,7 +12,7 @@
 
 | Key | v | What it holds | Read by |
 |---|---|---|---|
-| `$schema`, `meta` | 1→3 | version, display, units, research basis; `figmaFileKey` is `null` here on purpose (see FIGMA.md) | tooling |
+| `$schema`, `meta` | 1→3 | version, display, units, research basis; `penpotFileId` names the Penpot master file (see PENPOT.md) | tooling |
 | `typography` | 1 | **legacy** tier sizes in pt; font stacks updated to OFL faces | current tiny-skia code only |
 | `sharedSemantics` | 1 | **legacy** rev-stage and input colours | current code only |
 | `colorRoles` | 3 | the roles every cluster colours itself with, plus rev stages, inputs, thermal, proximity, assists, lume, ADAS colours and the colour budget | kit, clusters, OSD |
@@ -31,7 +31,7 @@
 | `accessibility` | 3 | reduced flash, minimum text, colour independence, blur gate, flash audit | QA, OSD |
 | `clusters` | 1 | **legacy** per-cluster v1 layouts and palettes | current code; Phase 7 replaces each entry |
 
-The current Rust loader (`fh6-render::tokens::FigmaTokens`) reads only optional `colors` and `grid` keys and ignores the rest, so the extension is backward compatible. v3 deliberately does **not** use those two key names.
+The current Rust loader (`fh6-render::tokens::DesignTokens`) reads only optional `colors` and `grid` keys and ignores the rest, so the extension is backward compatible. v3 deliberately does **not** use those two key names.
 
 ## Colour
 
@@ -166,6 +166,6 @@ G-ball convention: the ball shows the force the driver feels (a ball in a bowl),
 Reduced flash (nothing above 3 Hz), text floor 12 px cap, colour independence (every stage change is also a count or position change), a **blur gate** in CI (at 960×540 and σ 1.5 the gear keeps ≥ 7:1 and the speed ≥ 4.5:1), an automated WCAG 2.3.1 flash-area audit over `preview-export` frames, and a Tinted glass toggle.
 
 ## Changing tokens
-1. Edit `data/figma_tokens.json` (UTF-8, no BOM, valid JSON; `node -e` or `cargo test` must parse it).
-2. Mirror the change into the Penpot token sets with `execute_code` (PENPOT.md, "Tokens"). The legacy Figma variables are not updated.
+1. Edit `data/design_tokens.json` (UTF-8, no BOM, valid JSON; `node -e` or `cargo test` must parse it).
+2. Mirror the change into the Penpot token sets with `execute_code` (PENPOT.md, "Tokens").
 3. Log the change in `docs/PROGRESS.md` and, if it changes a rule, here.

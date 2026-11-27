@@ -10,7 +10,7 @@ The scrim is the domed, OLED-black shape that hides the game's own instrument bi
 | [`scrim/scrim-fit-stock-cockpit.png`](scrim/scrim-fit-stock-cockpit.png) | The final look: scrim at 100% and the Liquid Glass hero (mid cruise) at the default anchor |
 | [`scrim/scrim-fit-low-seat.png`](scrim/scrim-fit-low-seat.png) | The same scrim and cluster over `target_wide_cockpit_fov.jpg` (low seat, wide FOV) with a −170 px user height offset |
 
-Sources: `docs/design/boards/scrim/*.html` (pure SVG over the reference photo; render command in [FIGMA.md](FIGMA.md)). The reference photos are 1024×576, upscaled ×3.75 to 4K, so measurements are good to about ±8 px.
+Sources: `docs/design/boards/scrim/*.html` (pure SVG over the reference photo; render command in [BOARDS.md](BOARDS.md)). The reference photos are 1024×576, upscaled ×3.75 to 4K, so measurements are good to about ±8 px.
 
 ## 1. What the reference shows (4K coordinates)
 Measured on `cockpit_with_wheel.jpg` with a 50 px grid:

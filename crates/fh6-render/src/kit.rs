@@ -1,6 +1,6 @@
-pub struct FigmaKit;
+pub struct DesignKit;
 
-impl FigmaKit {
+impl DesignKit {
     pub const GRID_UNIT: f32 = 8.0;
     pub const CAP_HEIGHT_RATIO: f32 = 0.72;
     pub const TABULAR_PITCH_FACTOR: f32 = 0.62;
@@ -31,7 +31,7 @@ mod tests {
     use super::*;
     #[test]
     fn snap8_grid() {
-        let v = FigmaKit::snap8(13.0, 1.0);
+        let v = DesignKit::snap8(13.0, 1.0);
         assert_eq!(v, 16.0);
     }
 }

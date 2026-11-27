@@ -10,7 +10,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 /// The design tokens, embedded so the page needs no extra fetch.
-const TOKENS: &str = include_str!("../../../data/figma_tokens.json");
+const TOKENS: &str = include_str!("../../../data/design_tokens.json");
 
 fn log(msg: &str) {
     web_sys::console::log_1(&msg.into());

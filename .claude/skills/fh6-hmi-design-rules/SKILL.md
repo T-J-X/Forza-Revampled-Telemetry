@@ -55,7 +55,7 @@ A domed binnacle shape, not a rectangle. The inner core is 100% `#000000` at alp
 The full list of 29 themes is in `crates/fh6-core/src/theme.rs`.
 
 ## Hybrid rendering
-Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/figma_tokens.json`, not hardcoded hex values.
+Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/design_tokens.json`, not hardcoded hex values.
 
 ## Reference images
 - `assets/reference/cockpit_with_wheel.jpg`: stock in-car cockpit, the background for the in-cockpit compositor

@@ -47,7 +47,7 @@ pub fn gpu() -> MutexGuard<'static, Gpu> {
     let cell = GPU.get_or_init(|| {
         let ctx = GpuContext::headless().expect("a DX12 adapter or WARP");
         // The goldens bind to the repo tokens, so a token edit shows up as a visual diff.
-        let tokens = Tokens::load(&repo_root().join("data/figma_tokens.json")).expect("data/figma_tokens.json");
+        let tokens = Tokens::load(&repo_root().join("data/design_tokens.json")).expect("data/design_tokens.json");
         let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone()).expect("kit");
         let assets = repo_root().join("assets");
         let fonts = assets.join("fonts");

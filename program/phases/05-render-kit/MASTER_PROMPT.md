@@ -5,7 +5,7 @@ You lead Phase 5 of FH6 WheelDash v2, running in your own chat and worktree. Pha
 ## Read first
 - `ONBOARDING.md`, root `AGENTS.md` / `SKILLS.md`, and this folder's `AGENTS.md` / `SKILLS.md`.
 - `program/phases/04-engine/HANDOVER.md` and `docs/adr/0001-gpu-overlay.md`.
-- If they are merged: `docs/design/TOKENS.md`, `data/figma_tokens.json` and `docs/design/families/*.md` from Phase 3. If Phase 3 isn't merged yet, build to the needs listed below and leave token binding generic.
+- If they are merged: `docs/design/TOKENS.md`, `data/design_tokens.json` and `docs/design/families/*.md` from Phase 3. If Phase 3 isn't merged yet, build to the needs listed below and leave token binding generic.
 - `docs/specs/phase-8-materials-and-shaders.md`: the glass and kinematics maths to implement.
 - What to keep: `crates/fh6-render/src/oem_scrim/ambient_wash.rs`, the road projection in `crates/fh6-clusters/src/clusters/tesla_adas.rs` (lines 25–204) and `crates/fh6-osd/src/text.rs`. Bring them across where useful.
 

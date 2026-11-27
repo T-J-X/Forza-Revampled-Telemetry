@@ -116,7 +116,7 @@ fn main() -> Result<()> {
         }
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let tokens = Tokens::load(&root.join("data/figma_tokens.json")).unwrap_or_default();
+    let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_default();
     let ctx = GpuContext::headless()?;
     let adapter = ctx.adapter_summary().to_string();
     println!("GPU: {adapter}");

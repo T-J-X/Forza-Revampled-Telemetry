@@ -28,7 +28,7 @@ crates/   fh6-core  fh6-render  fh6-clusters  fh6-osd  fh6-input  fh6-win  fh6-a
 tools/    preview-export  mock-udp  parity-dump  bench-render
 tests/golden/packets/   324-byte telemetry captures + expected JSON
 assets/   textures, car brand colours, reference photos
-data/     config.json, car profiles, ordinals, Figma tokens, camera files
+data/     config.json, car profiles, ordinals, design tokens, camera files
 docs/     PROGRESS.md (status and backlog), specs/
 ```
 

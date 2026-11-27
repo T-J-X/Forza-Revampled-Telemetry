@@ -276,7 +276,7 @@ ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDa
 
 - `Palette` (in `p.palette()` and `FrameInput::palette`): `primary`, `secondary`, `accent`, `shift`, their text-safe versions `primary_text` / `accent_text` (lifted to at least 7:1 on black, for digits and thin lines), `glass_tint`, the fixed `roles` (`warning`, `caution`, `go`, `ink`, `ink_muted`, `ink_label`, `ink_ghost`, `hairline`, `rim_specular`, `oled_black`) and `rev_stage(fraction)`.
 - The host picks the palette from config: factory (the car's brand from `car_brands.json` by ordinal, then `DEFAULT`, then your family), custom (`ColorMode: "Custom"` + hex values), random (`"Random"`, seeded by `PaletteSeed`; harmonious, never within 25° of the warning hue, OLED-safe), or `Palette::family(tokens, "<family>")`.
-- `Tokens` (`p.tokens()`): springs, easings, durations, glow lobes, bloom chain, glass, type scale, rev stages, layout anchors and envelopes, family palettes, font roles. Bound from `data/figma_tokens.json` (v3.2); missing keys fall back to the v3 values.
+- `Tokens` (`p.tokens()`): springs, easings, durations, glow lobes, bloom chain, glass, type scale, rev stages, layout anchors and envelopes, family palettes, font roles. Bound from `data/design_tokens.json` (v3.2); missing keys fall back to the v3 values.
 - Logo zone: `fh6_kit::logo::draw(p, zone, &logo, &LogoStyle::new(fonts.wide))` fits the brand image with brand-safe padding and optical centring, else sets the brand name, else the custom name, in the wide face (14 characters at most, cut at a word).
 
 ## 10. Check your work

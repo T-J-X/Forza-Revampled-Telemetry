@@ -2,12 +2,12 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
-pub struct FigmaTokens {
+pub struct DesignTokens {
     pub colors: Option<HashMap<String, String>>,
     pub grid: Option<f32>,
 }
 
-impl Default for FigmaTokens {
+impl Default for DesignTokens {
     fn default() -> Self {
         Self {
             colors: None,
@@ -16,13 +16,13 @@ impl Default for FigmaTokens {
     }
 }
 
-pub fn load_tokens(path: &str) -> FigmaTokens {
+pub fn load_tokens(path: &str) -> DesignTokens {
     if let Ok(s) = std::fs::read_to_string(path) {
-        if let Ok(t) = serde_json::from_str::<FigmaTokens>(&s) {
+        if let Ok(t) = serde_json::from_str::<DesignTokens>(&s) {
             return t;
         }
     }
-    FigmaTokens::default()
+    DesignTokens::default()
 }
 
 #[cfg(test)]

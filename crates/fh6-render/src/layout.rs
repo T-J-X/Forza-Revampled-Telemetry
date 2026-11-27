@@ -6,9 +6,9 @@ pub struct RectF {
     pub h: f32,
 }
 
-pub struct FigmaLayout;
+pub struct DesignLayout;
 
-impl FigmaLayout {
+impl DesignLayout {
     pub const OPTICAL_CAP_RATIO: f32 = 0.72;
     pub const TOP_LEADING_RATIO: f32 = 0.14;
 
@@ -54,10 +54,10 @@ mod tests {
     #[test]
     fn tabular_digits_same_advance() {
         let line = 20.0;
-        let w1 = FigmaLayout::tabular_digit_cell_width(line);
-        let w8 = FigmaLayout::tabular_digit_cell_width(line);
+        let w1 = DesignLayout::tabular_digit_cell_width(line);
+        let w8 = DesignLayout::tabular_digit_cell_width(line);
         assert_eq!(w1, w8);
-        let total = FigmaLayout::total_tabular_width("123", line);
+        let total = DesignLayout::total_tabular_width("123", line);
         assert_eq!(total, w1 * 3.0);
     }
 
@@ -65,7 +65,7 @@ mod tests {
     fn optical_centered_top_y() {
         let box_h = 100.0;
         let line = 30.0;
-        let y = FigmaLayout::optical_centered_top_y(box_h, line);
+        let y = DesignLayout::optical_centered_top_y(box_h, line);
         let cap = line * 0.72;
         let expected = (box_h - cap) * 0.5 - line * 0.14;
         assert!((y - expected).abs() < 1e-6);
