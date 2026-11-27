@@ -41,47 +41,11 @@ A comprehensive scan of `rust\crates\fh6-clusters\src\clusters\*.rs` and `fh6-os
 
 ---
 
-## 🔬 CARD P8-1: APPLE visionOS / iOS 26 LIQUID GLASS OPTICAL SHADER MATH
+## 🔬 CARD P8-1: withdrawn, replaced by `optics.md`
 
-### 1. Physical Fresnel Reflectance Bevel Rim
-Glass index of refraction $n = 1.52$. Normal incidence reflectance:
-$$R_0 = \left(\frac{n - 1}{n + 1}\right)^2 = \left(\frac{1.52 - 1}{1.52 + 1}\right)^2 \approx 0.0426$$
-Fresnel reflectance at incidence angle $\theta$:
-$$R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$$
-At grazing edge angles ($\theta \to \frac{\pi}{2}$), $R(\theta) \to 1.0$ (100% pure specular white reflection).
+This card is replaced by [optics.md](optics.md) (2026-11-27). Its glass optics were not physical: an index of 1.52 was called sapphire (sapphire is 1.768), the Fresnel term was quoted and then painted as fixed gradient stops, and the sheen, rim and orb were gradients with no link to a light or a surface. Every glass, reflective and spectral effect now uses the equations in `optics.md`, which the kit implements (`fh6_kit::optics`, `fh6_kit::OpticalGlass`) and tests. The card's stroke colours, gradient stops and sizes are withdrawn with it.
 
-**Tiny-Skia Implementation**:
-Construct an outer stroked rounded rectangle ($W = 560 \cdot \text{scale}, H = 320 \cdot \text{scale}, R = 48 \cdot \text{scale}$, stroke width $1.5 \cdot \text{scale}$) with `LinearGradient` from $(cx, y_{\text{top}})$ to $(cx, y_{\text{bottom}})$:
-- Stop 0.00 (12 o'clock light zenith): `Color::from_rgba8(255, 255, 255, 240)` (specular highlight)
-- Stop 0.40: `Color::from_rgba8(56, 189, 248, 160)` (electric azure refraction)
-- Stop 0.80: `Color::from_rgba8(2, 132, 199, 80)` (deep sapphire)
-- Stop 1.00 (6 o'clock bottom bevel): `Color::from_rgba8(14, 165, 233, 140)` (subtle ground bounce)
-
-### 2. Arched Upper Lens Sheen (Quadratic Bézier + Gaussian Falloff)
-Upper crystal dome crest curve:
-$$y_{\text{crest}}(x) = y_{\text{apex}} + \frac{(x - cx)^2}{(W / 2)^2} \cdot H_{\text{sag}}$$
-Where $H_{\text{sag}} = 22.0 \cdot \text{scale}$. Shaded downward with `LinearGradient` across vertical distance $H_{\text{sheen}} = 40.0 \cdot \text{scale}$:
-- Stop 0.00: `Color::from_rgba8(255, 255, 255, 75)`
-- Stop 0.50: `Color::from_rgba8(255, 255, 255, 25)`
-- Stop 1.00: `Color::from_rgba8(255, 255, 255, 0)`
-
-### 3. Volumetric Frosted Sapphire Substrate
-- Base glass capsule filled with `Color::from_rgba8(14, 22, 38, 52)` (20% translucency).
-- Blit `assets/liquid_glass_caustic_lens.png` with `PixmapPaint { opacity: 0.55, blend_mode: BlendMode::Screen, .. }`.
-
-### 4. Sculpted Crystal Hero Gear Prism
-- Surrounding the gear number, construct an optical refractive octagon ($R = 44 \cdot \text{scale}$).
-- Inner facet stroke in `Color::from_rgba8(56, 189, 248, 130)`.
-- Upper-left 45° chamfer highlight stroke in pure `Color::from_rgba8(255, 255, 255, 210)`.
-
-### 5. Fluid Tachometer Arc & Radial Meniscus Orb
-- Sweep arc: $135^\circ \to 135^\circ + 270^\circ \cdot \text{norm\_rpm}$.
-- Leading edge terminates in a dynamic radial particle meniscus orb:
-  `RadialGradient` centered at $(x_{\text{tip}}, y_{\text{tip}})$:
-  - Radius $R = 26 \cdot \text{scale}$
-  - Stop 0.0: `Color::from_rgba8(255, 255, 255, 255)`
-  - Stop 0.4: `Color::from_rgba8(56, 189, 248, 200)`
-  - Stop 1.0: `Color::from_rgba8(2, 132, 199, 0)`
+The optics of card P8-2 below are corrected in `optics.md` §10 (prism dispersion, for item 8) and §12 (relativistic Doppler beaming, for item 2, and Chladni figures, for item 6). Where this file and `optics.md` disagree, `optics.md` is right.
 
 ---
 

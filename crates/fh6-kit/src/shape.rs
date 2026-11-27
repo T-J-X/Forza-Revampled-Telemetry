@@ -190,6 +190,278 @@ impl Dome {
     }
 }
 
+/// The outline of one [`Piece`] of a [`Shape::Blob`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Outline {
+    /// A disc.
+    Circle {
+        /// Centre.
+        center: Vec2,
+        /// Radius.
+        radius: f32,
+    },
+    /// A rounded rectangle (a pill when `radius` is half its shorter side).
+    RoundRect {
+        /// Bounds.
+        rect: Rect,
+        /// Corner radius.
+        radius: f32,
+    },
+    /// A round-ended segment whose radius may change along it (a capsule, a teardrop).
+    Capsule {
+        /// Start.
+        a: Vec2,
+        /// End.
+        b: Vec2,
+        /// Radius at `a`.
+        radius_a: f32,
+        /// Radius at `b`.
+        radius_b: f32,
+    },
+    /// A round-ended band along a circular arc (a curved rod).
+    Arc {
+        /// Centre of the arc.
+        center: Vec2,
+        /// Radius of the band's centre line.
+        radius: f32,
+        /// Half the band's width.
+        half_width: f32,
+        /// Start angle (radians, clockwise from 3 o'clock).
+        start: f32,
+        /// Sweep (radians; negative sweeps run anticlockwise).
+        sweep: f32,
+    },
+}
+
+impl Outline {
+    /// Signed distance from `p` to the outline (negative inside). Mirrors `shape.wgsl`.
+    #[must_use]
+    pub fn distance(&self, p: Vec2) -> f32 {
+        match *self {
+            Outline::Circle { center, radius } => (p - center).length() - radius,
+            Outline::RoundRect { rect, radius } => {
+                let half = rect.size() * 0.5;
+                let r = radius.clamp(0.0, half.x.min(half.y).max(0.0));
+                let q = p - rect.center();
+                let q = vec2(q.x.abs() - half.x + r, q.y.abs() - half.y + r);
+                q.max(Vec2::ZERO).length() + q.x.max(q.y).min(0.0) - r
+            }
+            Outline::Capsule {
+                a,
+                b,
+                radius_a,
+                radius_b,
+            } => sd_uneven_capsule(p, a, b, radius_a, radius_b),
+            Outline::Arc {
+                center,
+                radius,
+                half_width,
+                start,
+                sweep,
+            } => {
+                let (start, sweep) = if sweep < 0.0 {
+                    (start + sweep, -sweep)
+                } else {
+                    (start, sweep)
+                };
+                let q = p - center;
+                let ring = (q.length() - radius).abs() - half_width;
+                if sweep >= TAU - 1e-4 {
+                    return ring;
+                }
+                let rel = (q.y.atan2(q.x) - start).rem_euclid(TAU);
+                if rel <= sweep {
+                    return ring;
+                }
+                let e0 = Vec2::polar(center, radius, start);
+                let e1 = Vec2::polar(center, radius, start + sweep);
+                (p - e0).length().min((p - e1).length()) - half_width
+            }
+        }
+    }
+
+    /// The largest distance from the outline to its inside (the radius of the biggest disc
+    /// that fits). A bevel this wide curves the whole top surface.
+    #[must_use]
+    pub fn inradius(&self) -> f32 {
+        match *self {
+            Outline::Circle { radius, .. } => radius,
+            Outline::RoundRect { rect, .. } => rect.width().min(rect.height()) * 0.5,
+            Outline::Capsule { radius_a, radius_b, .. } => radius_a.max(radius_b),
+            Outline::Arc { half_width, .. } => half_width,
+        }
+    }
+
+    /// Local-space bounds.
+    #[must_use]
+    pub fn bounds(&self) -> Rect {
+        match *self {
+            Outline::Circle { center, radius } => Rect::from_center_size(center, Vec2::splat(radius * 2.0)),
+            Outline::RoundRect { rect, .. } => rect,
+            Outline::Capsule {
+                a,
+                b,
+                radius_a,
+                radius_b,
+            } => Rect::from_points(a, b).expand(radius_a.max(radius_b)),
+            Outline::Arc {
+                center,
+                radius,
+                half_width,
+                ..
+            } => Rect::from_center_size(center, Vec2::splat((radius + half_width) * 2.0)),
+        }
+    }
+}
+
+/// Round-capped tapered segment (mirrors `sd_uneven_capsule` in `shape.wgsl`).
+fn sd_uneven_capsule(p: Vec2, pa: Vec2, pb: Vec2, ra: f32, rb: f32) -> f32 {
+    let ba = pb - pa;
+    let l2 = ba.dot(ba).max(1e-12);
+    let rr = ra - rb;
+    let a2 = l2 - rr * rr;
+    let il2 = 1.0 / l2;
+    let pp = p - pa;
+    let y = pp.dot(ba);
+    let z = y - l2;
+    let xv = pp * l2 - ba * y;
+    let x2 = xv.dot(xv);
+    let y2 = y * y * l2;
+    let z2 = z * z * l2;
+    let sign = |v: f32| {
+        if v > 0.0 {
+            1.0
+        } else if v < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    };
+    let k = sign(rr) * rr * rr * x2;
+    if sign(z) * a2 * z2 > k {
+        return (x2 + z2).sqrt() * il2 - rb;
+    }
+    if sign(y) * a2 * y2 < k {
+        return (x2 + y2).sqrt() * il2 - ra;
+    }
+    ((x2 * a2 * il2).sqrt() + y * rr) * il2 - ra
+}
+
+/// One piece of a liquid group: an outline and its glass cross-section
+/// (`docs/specs/optics.md` §2). The cross-section only matters to the optical glass paint.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Piece {
+    /// The outline.
+    pub outline: Outline,
+    /// Rise of the top surface above the rim.
+    pub thickness: f32,
+    /// Width of the rounded edge, measured inwards from the outline.
+    pub bevel: f32,
+    /// Glass below the rim level, down to the plane the piece sits on.
+    pub base: f32,
+}
+
+impl Piece {
+    /// A piece with a flat cross-section (give it one with [`Piece::section`] or
+    /// [`Piece::dome`]).
+    #[must_use]
+    pub fn new(outline: Outline) -> Self {
+        Self {
+            outline,
+            thickness: 0.0,
+            bevel: 1.0,
+            base: 0.0,
+        }
+    }
+
+    /// A disc.
+    #[must_use]
+    pub fn circle(center: Vec2, radius: f32) -> Self {
+        Self::new(Outline::Circle { center, radius })
+    }
+
+    /// A rounded rectangle.
+    #[must_use]
+    pub fn round_rect(rect: Rect, radius: f32) -> Self {
+        Self::new(Outline::RoundRect { rect, radius })
+    }
+
+    /// A pill: a rounded rectangle whose ends are half circles.
+    #[must_use]
+    pub fn pill(rect: Rect) -> Self {
+        Self::round_rect(rect, rect.width().min(rect.height()) * 0.5)
+    }
+
+    /// A round-ended segment of constant radius.
+    #[must_use]
+    pub fn capsule(a: Vec2, b: Vec2, radius: f32) -> Self {
+        Self::new(Outline::Capsule {
+            a,
+            b,
+            radius_a: radius,
+            radius_b: radius,
+        })
+    }
+
+    /// A round-ended band of full `width` along an arc.
+    #[must_use]
+    pub fn arc(center: Vec2, radius: f32, width: f32, start: f32, sweep: f32) -> Self {
+        Self::new(Outline::Arc {
+            center,
+            radius,
+            half_width: width * 0.5,
+            start,
+            sweep,
+        })
+    }
+
+    /// Sets the cross-section: a top surface `thickness` above the rim, reached over a rounded
+    /// edge `bevel` wide, with `base` more glass below the rim.
+    #[must_use]
+    pub fn section(mut self, thickness: f32, bevel: f32, base: f32) -> Self {
+        self.thickness = thickness;
+        self.bevel = bevel;
+        self.base = base;
+        self
+    }
+
+    /// Makes the piece a dome: the whole top surface curves, rising `height` at the middle
+    /// (the bevel is the outline's [`Outline::inradius`]). A disc with `height` equal to its
+    /// radius is a hemisphere; a band is a half rod.
+    #[must_use]
+    pub fn dome(mut self, height: f32, base: f32) -> Self {
+        self.thickness = height;
+        self.bevel = self.outline.inradius().max(1e-3);
+        self.base = base;
+        self
+    }
+}
+
+/// The smooth union of two signed distances with blend length `k`:
+/// `min(a, b) − k ln(1 + e^(−|a − b| / k))` (`docs/specs/optics.md` §2). Associative,
+/// commutative and smooth to every order; `k <= 0` is the plain union.
+#[must_use]
+pub fn smooth_union(a: f32, b: f32, k: f32) -> f32 {
+    if k > 1e-3 {
+        a.min(b) - k * (-(a - b).abs() / k).exp().ln_1p()
+    } else {
+        a.min(b)
+    }
+}
+
+/// Signed distance from `p` to the smooth union of `pieces` (what [`Shape::Blob`] draws).
+#[must_use]
+pub fn blob_distance(pieces: &[Piece], smooth: f32, p: Vec2) -> f32 {
+    pieces
+        .iter()
+        .map(|piece| piece.outline.distance(p))
+        .reduce(|acc, d| smooth_union(acc, d, smooth))
+        .unwrap_or(f32::MAX)
+}
+
+/// Most pieces one [`Shape::Blob`] can hold; more are ignored.
+pub const MAX_BLOB_PIECES: usize = 64;
+
 /// A shape to fill, stroke, glow or shadow.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shape<'a> {
@@ -277,6 +549,14 @@ pub enum Shape<'a> {
         thickness: f32,
         /// Lit segments.
         mask: u8,
+    },
+    /// Pieces merged like liquid: the smooth union of their outlines (see [`smooth_union`]).
+    /// Pieces further apart than a few `smooth` stay separate; closer, they bridge and fuse.
+    Blob {
+        /// The pieces (at most [`MAX_BLOB_PIECES`]).
+        pieces: &'a [Piece],
+        /// Blend length in local units (0 = plain union).
+        smooth: f32,
     },
 }
 
@@ -386,6 +666,15 @@ impl<'a> Shape<'a> {
             Shape::Bar(b) => b.rect,
             Shape::Dome(d) => d.bounds(),
             Shape::SevenSeg { rect, .. } => rect,
+            Shape::Blob { pieces, smooth } => {
+                let n = pieces.len().min(MAX_BLOB_PIECES);
+                // A smooth union grows the plain union by at most k ln N.
+                let grow = finite_or(smooth, 0.0).max(0.0) * (n.max(1) as f32).ln();
+                pieces[..n]
+                    .iter()
+                    .fold(Rect::EMPTY, |r, piece| r.union(&piece.outline.bounds()))
+                    .expand(grow)
+            }
         }
     }
 }
@@ -533,6 +822,68 @@ pub(crate) mod kind {
     pub const SEVENSEG: u32 = 10;
     pub const NINESLICE: u32 = 11;
     pub const DOME: u32 = 12;
+    pub const BLOB: u32 = 13;
+}
+
+/// Records per [`Piece`] in the point list: outline kind and radius, three outline vectors,
+/// then the cross-section (must match `sd_piece` and `blob_field` in `shape.wgsl`).
+pub(crate) const PIECE_RECORDS: usize = 6;
+
+/// Encodes one piece into its point-list records.
+pub(crate) fn encode_piece(piece: &Piece) -> [[f32; 2]; PIECE_RECORDS] {
+    let f = |v: f32| finite_or(v, 0.0);
+    let pos = |v: f32| finite_or(v, 0.0).max(0.0);
+    let [head, v1, v2, v3] = match piece.outline {
+        Outline::Circle { center, radius } => [[0.0, pos(radius)], [f(center.x), f(center.y)], [0.0; 2], [0.0; 2]],
+        Outline::RoundRect { rect, radius } => {
+            let c = rect.center();
+            let h = rect.size() * 0.5;
+            [
+                [1.0, pos(radius).min(pos(h.x).min(pos(h.y)))],
+                [f(c.x), f(c.y)],
+                [pos(h.x), pos(h.y)],
+                [0.0; 2],
+            ]
+        }
+        Outline::Capsule {
+            a,
+            b,
+            radius_a,
+            radius_b,
+        } => [
+            [2.0, 0.0],
+            [f(a.x), f(a.y)],
+            [f(b.x), f(b.y)],
+            [pos(radius_a), pos(radius_b)],
+        ],
+        Outline::Arc {
+            center,
+            radius,
+            half_width,
+            start,
+            sweep,
+        } => {
+            let (start, sweep) = if sweep < 0.0 {
+                (start + sweep, -sweep)
+            } else {
+                (start, sweep)
+            };
+            [
+                [3.0, 0.0],
+                [f(center.x), f(center.y)],
+                [pos(radius), pos(half_width)],
+                [f(start), f(sweep).min(TAU)],
+            ]
+        }
+    };
+    [
+        head,
+        v1,
+        v2,
+        v3,
+        [pos(piece.thickness), pos(piece.bevel).max(1e-3)],
+        [pos(piece.base), 0.0],
+    ]
 }
 
 /// Coverage modes (must match `shape.wgsl`).
@@ -694,7 +1045,7 @@ pub(crate) fn encode_simple(shape: &Shape<'_>) -> Option<Encoded> {
             ],
             ..Default::default()
         },
-        Shape::Polyline { .. } | Shape::Polygon { .. } => return None,
+        Shape::Polyline { .. } | Shape::Polygon { .. } | Shape::Blob { .. } => return None,
     };
     Some(e)
 }
@@ -756,5 +1107,95 @@ mod tests {
     fn bounds_cover_geometry() {
         let b = Shape::needle(Vec2::ZERO, 0.0, 100.0, 10.0, 14.0, 3.0).bounds();
         assert!(b.contains(vec2(100.0, 0.0)) && b.contains(vec2(-10.0, 0.0)));
+    }
+
+    #[test]
+    fn smooth_union_properties() {
+        let k = 12.0;
+        for (a, b, c) in [(-30.0_f32, 5.0_f32, 40.0_f32), (3.0, 3.0, 3.0), (-8.0, -9.0, 20.0)] {
+            let ab_c = smooth_union(smooth_union(a, b, k), c, k);
+            let a_bc = smooth_union(a, smooth_union(b, c, k), k);
+            let c_ba = smooth_union(c, smooth_union(b, a, k), k);
+            assert!(
+                (ab_c - a_bc).abs() < 1e-3 && (ab_c - c_ba).abs() < 1e-3,
+                "order independent: {ab_c} {a_bc} {c_ba}"
+            );
+            let plain = a.min(b).min(c);
+            assert!(ab_c <= plain + 1e-5, "never outside the plain union");
+            assert!(plain - ab_c <= k * 3.0_f32.ln() + 1e-3, "at most k ln N inside it");
+        }
+        assert!(
+            (smooth_union(-5.0, 400.0, k) + 5.0).abs() < 1e-4,
+            "a far piece changes nothing"
+        );
+        assert_eq!(smooth_union(2.0, 7.0, 0.0), 2.0, "k = 0 is the plain union");
+        // Two equal distances fuse by k ln 2.
+        assert!((smooth_union(0.0, 0.0, k) + k * 2.0_f32.ln()).abs() < 1e-4);
+    }
+
+    #[test]
+    fn outlines_measure_distance() {
+        let c = Outline::Circle {
+            center: vec2(10.0, 0.0),
+            radius: 5.0,
+        };
+        assert!((c.distance(vec2(10.0, 0.0)) + 5.0).abs() < 1e-5 && (c.distance(vec2(20.0, 0.0)) - 5.0).abs() < 1e-5);
+        let pill = Piece::pill(Rect::from_xywh(-20.0, -5.0, 40.0, 10.0));
+        assert!(
+            (pill.outline.distance(vec2(0.0, 0.0)) + 5.0).abs() < 1e-5,
+            "pill centre is its inradius deep"
+        );
+        assert!(
+            (pill.outline.distance(vec2(20.0, 0.0))).abs() < 1e-5,
+            "the end of the pill is on the outline"
+        );
+        assert!((pill.outline.inradius() - 5.0).abs() < 1e-6);
+        let cap = Piece::capsule(vec2(0.0, 0.0), vec2(30.0, 0.0), 4.0);
+        assert!((cap.outline.distance(vec2(15.0, 4.0))).abs() < 1e-4, "capsule side");
+        assert!((cap.outline.distance(vec2(34.0, 0.0))).abs() < 1e-4, "capsule end");
+        let arc = Piece::arc(Vec2::ZERO, 100.0, 12.0, 0.0, core::f32::consts::FRAC_PI_2);
+        assert!(
+            (arc.outline.distance(vec2(100.0, 0.0)) + 6.0).abs() < 1e-4,
+            "arc centre line"
+        );
+        assert!(
+            (arc.outline.distance(vec2(-100.0, 0.0)) - 135.4).abs() < 0.1,
+            "far side of the ring is outside"
+        );
+        // A negative sweep is the same band from the other end.
+        let back = Piece::arc(
+            Vec2::ZERO,
+            100.0,
+            12.0,
+            core::f32::consts::FRAC_PI_2,
+            -core::f32::consts::FRAC_PI_2,
+        );
+        let p = vec2(70.0, 75.0);
+        assert!((arc.outline.distance(p) - back.outline.distance(p)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_blob_bridges_close_pieces_and_bounds_them() {
+        let pieces = [
+            Piece::circle(vec2(-30.0, 0.0), 20.0),
+            Piece::circle(vec2(30.0, 0.0), 20.0),
+        ];
+        // Midway between the discs: 10 outside each. The smooth union pulls it inwards.
+        let apart = blob_distance(&pieces, 0.0, Vec2::ZERO);
+        let fused = blob_distance(&pieces, 16.0, Vec2::ZERO);
+        assert!(
+            (apart - 10.0).abs() < 1e-5 && fused < 0.0,
+            "apart {apart}, fused {fused}"
+        );
+        let shape = Shape::Blob {
+            pieces: &pieces,
+            smooth: 16.0,
+        };
+        let b = shape.bounds();
+        assert!(b.contains(vec2(-50.0, 0.0)) && b.contains(vec2(50.0, 20.0)));
+        let enc = encode_piece(&pieces[0].dome(20.0, 4.0));
+        assert_eq!(enc[0], [0.0, 20.0]);
+        assert_eq!(enc[4], [20.0, 20.0], "a dome's bevel is its inradius");
+        assert_eq!(enc[5], [4.0, 0.0]);
     }
 }

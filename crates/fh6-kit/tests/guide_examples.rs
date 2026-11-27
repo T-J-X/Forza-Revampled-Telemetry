@@ -10,8 +10,8 @@ use fh6_kit::perspective::{Camera25, RoadCurve};
 use fh6_kit::testing::{Offscreen, OFFSCREEN_FORMAT};
 use fh6_kit::{
     deg, vec2, Align, BlendMode, Cap, Cluster, Color, FrameInput, Glass, Glow, Gradient, Hysteresis, ImagePaint, Kit,
-    LayerOptions, Layout, Painter, Radii, Rect, SegmentedBar, Shadow, Shape, Smoothed, Spring, Stroke, TextStyle,
-    TickRing, Tokens, VAlign, Vec2,
+    LayerOptions, Layout, Painter, Piece, Radii, Rect, SegmentedBar, Shadow, Shape, Smoothed, Spring, Stroke,
+    TextStyle, TickRing, Tokens, VAlign, Vec2,
 };
 
 // 2. Shapes ------------------------------------------------------------------------------------
@@ -125,14 +125,34 @@ fn paints(p: &mut Painter<'_>, image: fh6_kit::ImageId) {
 // 4. Light and material ------------------------------------------------------------------------
 fn light(p: &mut Painter<'_>) {
     let pal = *p.palette();
-    let tokens_glass = p.tokens().glass(pal.glass_tint);
-    // Something behind the glass to lens.
-    p.fill(&Shape::circle(vec2(-150.0, 0.0), 200.0), pal.primary.with_alpha(0.5));
-    // Glass: draw it first in a backdrop layer.
+    // Light that lives under the glass: the pieces bend it.
+    p.fill(
+        &Shape::arc(Vec2::ZERO, 150.0, 16.0, deg(135.0), deg(200.0), Cap::Round),
+        pal.primary,
+    );
+    // Optical glass: a dome and a pill that merge like liquid. It bends the scene as it was
+    // when its layer began, so draw the layers it should bend before the layer.
+    let mut glass = p.tokens().optical_glass(&pal);
+    glass.aim(deg(-135.0), deg(40.0), Vec2::ZERO);
+    let pieces = [
+        Piece::circle(Vec2::ZERO, 190.0).dome(110.0, 12.0),
+        Piece::pill(Rect::from_xywh(150.0, -40.0, 320.0, 80.0)).section(18.0, 26.0, 8.0),
+    ];
+    p.layer(LayerOptions::glass(0.0), |p| {
+        p.fill(
+            &Shape::Blob {
+                pieces: &pieces,
+                smooth: 18.0,
+            },
+            glass,
+        );
+    });
+    // The legacy slab glass, still used by the OSD until it is rebuilt on optical glass.
+    let slab = p.tokens().glass(pal.glass_tint);
     p.layer(LayerOptions::glass(18.0), |p| {
         p.fill(
-            &Shape::round_rect(Rect::from_xywh(-400.0, -150.0, 800.0, 300.0), 64.0),
-            Glass { ..tokens_glass },
+            &Shape::round_rect(Rect::from_xywh(-400.0, 220.0, 800.0, 120.0), 48.0),
+            Glass { ..slab },
         );
     });
     // Bloom is earned: only glance ranks 1–3 go in a bloom layer.

@@ -7,13 +7,16 @@ use crate::color::Color;
 use crate::images::Images;
 use crate::math::{finite_or, vec2, Affine, Rect, Vec2};
 use crate::mesh::{MeshCmd, MeshDraw};
-use crate::paint::{BlendMode, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread};
+use crate::paint::{BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread};
 use crate::palette::Palette;
 use crate::scene::{
     pack_bloom, Bloom, DrawCmd, GpuClip, GpuPaint, Instance, LayerOptions, Scene, Segment, MAX_CLIPS, MAX_INSTANCES,
     MAX_MESHES, MAX_MISSING, MAX_PAINTS, MAX_POINTS, MAX_SEGMENTS,
 };
-use crate::shape::{encode_simple, flag, kind, mode, Encoded, Glow, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit};
+use crate::shape::{
+    encode_piece, encode_simple, flag, kind, mode, Encoded, Glow, Piece, Shadow, Shape, Stroke, StrokeAlign,
+    StrokeUnit, MAX_BLOB_PIECES, PIECE_RECORDS,
+};
 use crate::text::{Fonts, TextMetrics, TextStyle};
 use crate::tokens::Tokens;
 
@@ -28,6 +31,7 @@ mod paint_kind {
     pub const CONIC: u32 = 3;
     pub const IMAGE: u32 = 4;
     pub const GLASS: u32 = 5;
+    pub const OPTIC: u32 = 6;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -470,6 +474,7 @@ impl<'f> Painter<'f> {
         let enc = match *shape {
             Shape::Polyline { points, width, closed } => self.encode_points(points, kind::POLYLINE, width, closed),
             Shape::Polygon { points } => self.encode_points(points, kind::POLYGON, 0.0, true),
+            Shape::Blob { pieces, smooth } => self.encode_blob(pieces, smooth),
             _ => encode_simple(shape),
         };
         let Some(mut enc) = enc else { return };
@@ -496,6 +501,29 @@ impl<'f> Painter<'f> {
             flags: if closed { flag::CLOSED } else { 0 },
             p0: [first as f32, points.len() as f32, 0.0, 0.0],
             p1: [finite_or(width, 0.0).max(0.0) * 0.5, 0.0, 0.0, 0.0],
+            p2: [0.0; 4],
+        })
+    }
+
+    /// Appends the pieces of a blob to the point list ([`PIECE_RECORDS`] records each).
+    fn encode_blob(&mut self, pieces: &[Piece], smooth: f32) -> Option<Encoded> {
+        let pieces = &pieces[..pieces.len().min(MAX_BLOB_PIECES)];
+        if pieces.is_empty() {
+            return None;
+        }
+        if self.scene.points.len() + pieces.len() * PIECE_RECORDS > MAX_POINTS {
+            self.scene.dropped += 1;
+            return None;
+        }
+        let first = self.scene.points.len();
+        for piece in pieces {
+            self.scene.points.extend_from_slice(&encode_piece(piece));
+        }
+        Some(Encoded {
+            kind: kind::BLOB,
+            flags: 0,
+            p0: [first as f32, pieces.len() as f32, finite_or(smooth, 0.0).max(0.0), 0.0],
+            p1: [0.0; 4],
             p2: [0.0; 4],
         })
     }
@@ -540,7 +568,7 @@ impl<'f> Painter<'f> {
             self.scene.dropped += 1;
             return;
         };
-        let is_glass = matches!(paint, Paint::Glass(_));
+        let is_glass = paint.is_glass();
         let blend = if is_glass { BlendMode::Add } else { self.state.blend };
         let image = paint.image();
 
@@ -710,6 +738,54 @@ fn gpu_paint(paint: &Paint, images: &Images) -> GpuPaint {
             g.colors[2] = gl.rim_mid.to_array();
             g.colors[3] = gl.rim_bottom.to_array();
             g.colors[4] = gl.inner_rim.to_array();
+        }
+        Paint::OpticalGlass(gl) => {
+            let (env_kind, env_mips) = match gl.environment {
+                Environment::Studio => (0.0, 1.0),
+                Environment::Uniform => (1.0, 1.0),
+                Environment::Map(image) => (2.0, images.mip_count(image) as f32),
+            };
+            let unit = |v: f32, fallback: f32| finite_or(v, fallback);
+            g.head = [paint_kind::OPTIC, 0, 0, 0];
+            g.g0 = [
+                unit(gl.ior[0], 1.5).clamp(1.0001, 4.0),
+                unit(gl.ior[1], 1.5).clamp(1.0001, 4.0),
+                unit(gl.ior[2], 1.5).clamp(1.0001, 4.0),
+                unit(gl.frost, 0.0).clamp(0.0, 1.0),
+            ];
+            g.g1 = [
+                unit(gl.profile.thickness, 0.0).max(0.0),
+                unit(gl.profile.bevel, 1.0).max(1e-3),
+                unit(gl.profile.base, 0.0).max(0.0),
+                unit(gl.profile.exponent, 2.0).clamp(1.0, 8.0),
+            ];
+            g.g2 = [
+                unit(gl.absorption[0], 0.0).max(0.0),
+                unit(gl.absorption[1], 0.0).max(0.0),
+                unit(gl.absorption[2], 0.0).max(0.0),
+                unit(gl.roughness, 0.06).clamp(0.02, 1.0),
+            ];
+            let l = gl.light_dir.normalize_or_zero();
+            g.g3 = [unit(l.x, 0.0), unit(l.y, 0.0), unit(l.z, 1.0), env_kind];
+            g.colors[0] = [
+                unit(gl.light[0], 0.0).max(0.0),
+                unit(gl.light[1], 0.0).max(0.0),
+                unit(gl.light[2], 0.0).max(0.0),
+                match gl.refraction {
+                    Refraction::OwnLayers => 0.0,
+                    Refraction::World => 1.0,
+                },
+            ];
+            g.colors[1] = [
+                unit(gl.env_gain[0], 0.0).max(0.0),
+                unit(gl.env_gain[1], 0.0).max(0.0),
+                unit(gl.env_gain[2], 0.0).max(0.0),
+                env_mips,
+            ];
+            for (row, v) in gl.env_rotation.iter().enumerate() {
+                g.colors[2 + row] = [unit(v.x, 0.0), unit(v.y, 0.0), unit(v.z, 0.0), 0.0];
+            }
+            g.colors[5] = [unit(gl.materialize, 1.0).clamp(0.0, 1.0), 0.0, 0.0, 0.0];
         }
     }
     g

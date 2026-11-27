@@ -23,6 +23,7 @@ const K_GLYPH: u32 = 9u;
 const K_SEVENSEG: u32 = 10u;
 const K_NINESLICE: u32 = 11u;
 const K_DOME: u32 = 12u;
+const K_BLOB: u32 = 13u;
 
 // Coverage modes (shape.rs `mode`).
 const M_FILL: u32 = 0u;
@@ -44,6 +45,7 @@ const P_RADIAL: u32 = 2u;
 const P_CONIC: u32 = 3u;
 const P_IMAGE: u32 = 4u;
 const P_GLASS: u32 = 5u;
+const P_OPTIC: u32 = 6u;
 
 struct Globals {
     target_size: vec2<f32>,
@@ -435,6 +437,54 @@ fn median3(v: vec3<f32>) -> f32 {
     return max(min(v.x, v.y), min(max(v.x, v.y), v.z));
 }
 
+// ---------------------------------------------------------------- liquid groups (K_BLOB)
+//
+// A blob's pieces live in `points`, six records each (shape.rs `encode_piece`): (kind, radius),
+// three outline vectors, (thickness, bevel), (base, 0).
+
+fn sd_piece(p: vec2<f32>, i: u32) -> f32 {
+    let head = points[i];
+    let v1 = points[i + 1u];
+    let v2 = points[i + 2u];
+    let v3 = points[i + 3u];
+    let k = u32(head.x + 0.5);
+    if (k == 0u) {
+        return length(p - v1) - head.y;
+    }
+    if (k == 1u) {
+        return sd_round_box4(p - v1, v2, vec4<f32>(head.y));
+    }
+    if (k == 2u) {
+        return sd_uneven_capsule(p, v1, v2, v3.x, v3.y);
+    }
+    return sd_arc(p, v1, v2.x, v2.y, v3.x, v3.y, true);
+}
+
+// The merged field of a blob at p: (distance, thickness, bevel, base). The distance is the
+// smooth union min(a, b) - k ln(1 + exp(-|a - b| / k)) of the pieces (optics.md section 2); the
+// cross-section is blended with the same weights, so it changes smoothly where pieces bridge.
+fn blob_field(p: vec2<f32>, first: u32, count: u32, k: f32) -> vec4<f32> {
+    var acc = vec4<f32>(1e9, 0.0, 1.0, 0.0);
+    for (var j = 0u; j < count; j = j + 1u) {
+        let i = first + j * 6u;
+        let d = sd_piece(p, i);
+        let sec = vec3<f32>(points[i + 4u], points[i + 5u].x);
+        if (j == 0u) {
+            acc = vec4<f32>(d, sec);
+        } else if (k <= 1e-3) {
+            if (d < acc.x) {
+                acc = vec4<f32>(d, sec);
+            }
+        } else {
+            let e = exp(-abs(d - acc.x) / k);
+            let nearer = 1.0 / (1.0 + e);
+            let w_new = select(1.0 - nearer, nearer, d < acc.x);
+            acc = vec4<f32>(min(d, acc.x) - k * log(1.0 + e), mix(acc.yzw, sec, w_new));
+        }
+    }
+    return acc;
+}
+
 // ---------------------------------------------------------------- paint
 
 fn ramp(pa: Paint, t_in: f32) -> vec4<f32> {
@@ -557,7 +607,10 @@ fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
     if (g.backdrop_valid > 0.5) {
         let uv = backdrop_uv(sample_px);
         let sharp = textureSampleLevel(backdrop, samp, uv, 0.0);
-        let blurred = textureSampleLevel(backdrop_blur, samp, uv, g.backdrop_lod);
+        var blurred = sharp;
+        if (g.backdrop_lod >= 0.0) {
+            blurred = textureSampleLevel(backdrop_blur, samp, uv, g.backdrop_lod);
+        }
         under = mix(sharp, blurred, frost);
         here = textureSampleLevel(backdrop, samp, backdrop_uv(wp), 0.0);
     }
@@ -611,6 +664,270 @@ fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
         col = vec4<f32>(col.rgb + caus.rgb * (vec3<f32>(1.0) - min(col.rgb, vec3<f32>(1.0))), col.a);
     }
     return col - here;
+}
+
+// ---------------------------------------------------------------- optical glass
+//
+// Every step is an equation of docs/specs/optics.md; crates/fh6-kit/src/optics.rs is the CPU
+// reference with the unit tests, and tests/glass_gpu.rs compares this shader with it.
+
+// Distance of the kinds whose outline is a pure function of p (glass needs it at five points).
+fn sd_basic(in: VsOut, kind: u32, flags: u32, p: vec2<f32>) -> f32 {
+    if (kind == K_RECT) {
+        return sd_round_box4(p - in.p0.xy, in.p0.zw, in.p1);
+    }
+    if (kind == K_CIRCLE) {
+        return length(p - in.p0.xy) - in.p0.z;
+    }
+    if (kind == K_ARC) {
+        return sd_arc(p, in.p0.xy, in.p0.z, in.p0.w, in.p1.x, in.p1.y, (flags & F_ROUND_CAP) != 0u);
+    }
+    if (kind == K_LINE) {
+        if ((flags & F_ROUND_CAP) != 0u) {
+            return sd_uneven_capsule(p, in.p0.xy, in.p0.zw, in.p1.x, in.p1.y);
+        }
+        return sd_trapezoid(p, in.p0.xy, in.p0.zw, in.p1.x, in.p1.y);
+    }
+    if (kind == K_DOME) {
+        return max(sd_dome_core(p, in.p0, in.p1), -sd_dome_void(p, in.p0, in.p2));
+    }
+    if (kind == K_POLYGON) {
+        return sd_polygon(p, u32(in.p0.x), u32(in.p0.y));
+    }
+    if (kind == K_POLYLINE) {
+        return sd_polyline(p, u32(in.p0.x), u32(in.p0.y), (flags & F_CLOSED) != 0u, in.p1.x);
+    }
+    return sd_box(p - (in.bbox.xy + in.bbox.zw) * 0.5, (in.bbox.zw - in.bbox.xy) * 0.5);
+}
+
+// (distance, thickness, bevel, base) of a glass shape at p: a blob's pieces carry their own
+// cross-sections, every other shape takes the paint's.
+fn glass_field(in: VsOut, kind: u32, flags: u32, p: vec2<f32>, section: vec3<f32>) -> vec4<f32> {
+    if (kind == K_BLOB) {
+        return blob_field(p, u32(in.p0.x + 0.5), u32(in.p0.y + 0.5), in.p0.z);
+    }
+    return vec4<f32>(sd_basic(in, kind, flags, p), section);
+}
+
+// h^k of the profile h = H (1 - (1 - u)^k)^(1/k), u = clamp(-d / w, 0, 1) (section 2). h has an
+// infinite slope at the rim; h^k is smooth there, so its finite differences are accurate.
+fn height_pow(f: vec4<f32>, k: f32, grown: f32) -> f32 {
+    let u = clamp(-f.x / max(f.z, 1e-3), 0.0, 1.0);
+    return pow(max(f.y * grown, 0.0), k) * (1.0 - pow(1.0 - u, k));
+}
+
+// Exact Fresnel reflectance of a dielectric for unpolarised light, per channel (section 3).
+fn fresnel3(cos_i: f32, eta: vec3<f32>) -> vec3<f32> {
+    let ci = clamp(cos_i, 0.0, 1.0);
+    let ct = sqrt(max(vec3<f32>(1.0) - vec3<f32>(1.0 - ci * ci) / (eta * eta), vec3<f32>(0.0)));
+    let r_par = (eta * ci - ct) / (eta * ci + ct);
+    let r_perp = (vec3<f32>(ci) - eta * ct) / (vec3<f32>(ci) + eta * ct);
+    return 0.5 * (r_par * r_par + r_perp * r_perp);
+}
+
+// A soft-edged rectangular light centred on direction c, with tangent axes tx and ty. `half`
+// is its half size in tangent units (the tangents of its half angles).
+fn softbox(e: vec3<f32>, c: vec3<f32>, tx: vec3<f32>, ty: vec3<f32>, half: vec2<f32>, soft: f32) -> f32 {
+    let cz = dot(e, c);
+    if (cz <= 0.02) {
+        return 0.0;
+    }
+    let q = vec2<f32>(dot(e, tx), dot(e, ty)) / cz;
+    return 1.0 - smoothstep(-soft, soft, sd_box(q, half));
+}
+
+// The analytic studio, in the environment frame (x right, y down, z at the viewer): a key
+// softbox up and to the left (azimuth -135 deg, 40 deg above the screen, 84 x 30 deg), a long
+// thin strip opposite and lower (azimuth 45 deg, 25 deg up), and a faint sky from above.
+fn studio(e: vec3<f32>) -> vec3<f32> {
+    let key = softbox(
+        e,
+        vec3<f32>(-0.5417, -0.5417, 0.6428),
+        vec3<f32>(0.7071, -0.7071, 0.0),
+        vec3<f32>(0.4545, 0.4545, 0.7660),
+        vec2<f32>(0.90, 0.27),
+        0.05,
+    );
+    let strip = softbox(
+        e,
+        vec3<f32>(0.6409, 0.6409, 0.4226),
+        vec3<f32>(-0.7071, 0.7071, 0.0),
+        vec3<f32>(-0.2988, -0.2988, 0.9063),
+        vec2<f32>(1.30, 0.06),
+        0.02,
+    );
+    let sky = 0.10 * smoothstep(0.0, 1.0, -e.y) * smoothstep(-0.1, 0.4, e.z);
+    return vec3<f32>(9.0) * key + vec3<f32>(4.2, 4.7, 5.2) * strip + vec3<f32>(sky);
+}
+
+// Octahedral layout of the sphere: the hemisphere facing the viewer fills the inner diamond.
+fn oct_uv(d: vec3<f32>) -> vec2<f32> {
+    let n = d / max(abs(d.x) + abs(d.y) + abs(d.z), 1e-6);
+    var o = n.xy;
+    if (n.z < 0.0) {
+        let s = vec2<f32>(select(-1.0, 1.0, n.x >= 0.0), select(-1.0, 1.0, n.y >= 0.0));
+        o = (vec2<f32>(1.0) - abs(n.yx)) * s;
+    }
+    return o * 0.5 + vec2<f32>(0.5);
+}
+
+fn world_uv(world_px: vec2<f32>) -> vec2<f32> {
+    return clamp((world_px - g.world_origin) / g.world_size, vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
+fn srgb_encode(c: vec3<f32>) -> vec3<f32> {
+    let x = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    return select(1.055 * pow(x, vec3<f32>(1.0 / 2.4)) - 0.055, x * 12.92, x <= vec3<f32>(0.0031308));
+}
+
+fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
+    let x = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    return select(pow((x + 0.055) / 1.055, vec3<f32>(2.4)), x / 12.92, x <= vec3<f32>(0.04045));
+}
+
+// The linear light a scene value shows over black once resolved (mirrors fs_resolve in
+// post.wgsl: colour up to the alpha is encoded as coverage, light beyond it as emission).
+fn shown(s: vec4<f32>) -> vec3<f32> {
+    let a = clamp(s.a, 0.0, 1.0);
+    let covered = min(s.rgb, vec3<f32>(a));
+    var enc = srgb_encode(max(s.rgb - covered, vec3<f32>(0.0))) * (1.0 - a);
+    if (a > 1e-4) {
+        enc = enc + srgb_encode(covered / a) * a;
+    }
+    return srgb_decode(enc);
+}
+
+// The scene value that shows linear light `l` over black at alpha `a` (the inverse of `shown`).
+fn unshown(l: vec3<f32>, a: f32) -> vec3<f32> {
+    let t = srgb_encode(l);
+    let as_cover = srgb_decode(t / max(a, 1e-4)) * a;
+    let as_light = vec3<f32>(a) + srgb_decode((t - vec3<f32>(a)) / max(1.0 - a, 1e-4));
+    return select(as_light, as_cover, t <= vec3<f32>(a));
+}
+
+fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) -> vec4<f32> {
+    let pa = paints[in.ids.y];
+    let px = max(in.xlate.z, 1e-6);
+    let wp = frag + g.work_origin;
+    let section = pa.g1.xyz;
+    let k = clamp(pa.g1.w, 1.0, 8.0);
+    let grown = pa.colors[5].x;
+
+    // Section 2: the surface height and its normal, from the outline's distance field.
+    let one_px = 1.0 / px;
+    let ex = vec2<f32>(one_px, 0.0);
+    let ey = vec2<f32>(0.0, one_px);
+    let f0 = glass_field(in, kind, flags, p, section);
+    let hk = height_pow(f0, k, grown);
+    let gq = vec2<f32>(
+        height_pow(glass_field(in, kind, flags, p + ex, section), k, grown)
+            - height_pow(glass_field(in, kind, flags, p - ex, section), k, grown),
+        height_pow(glass_field(in, kind, flags, p + ey, section), k, grown)
+            - height_pow(glass_field(in, kind, flags, p - ey, section), k, grown),
+    ) / (2.0 * one_px);
+    let h = pow(hk, 1.0 / k);
+    // n is proportional to (-grad h, 1) = (-grad(h^k), k h^(k-1)); the second form has no
+    // division, so it reaches the horizontal rim normal without a singularity.
+    let rot = in.xform / px;
+    let slope = vec2<f32>(rot.x * gq.x + rot.z * gq.y, rot.y * gq.x + rot.w * gq.y);
+    let up = k * pow(max(h, 1e-5), k - 1.0);
+    var n = vec3<f32>(0.0, 0.0, 1.0);
+    let n_len = length(vec3<f32>(slope, up));
+    if (n_len > 1e-12) {
+        n = vec3<f32>(-slope, up) / n_len;
+    }
+
+    // Sections 3 to 6: Fresnel, Snell and Beer-Lambert, one index per channel.
+    let eta = pa.g0.xyz;
+    let ci = clamp(n.z, 0.0, 1.0);
+    let fres = fresnel3(ci, eta);
+    let ct = sqrt(max(vec3<f32>(1.0) - vec3<f32>(1.0 - ci * ci) / (eta * eta), vec3<f32>(0.0)));
+    let bend = vec3<f32>(ci) / eta - ct;
+    let wz = -vec3<f32>(1.0) / eta + bend * n.z;
+    let depth = h + f0.w * grown;
+    let path = vec3<f32>(depth) / max(-wz, vec3<f32>(1e-3));
+    let reach = bend * path * px;
+    let keep = exp(-pa.g2.xyz * path);
+
+    // What lies under the piece, seen along the refracted ray of each channel, as the linear
+    // light it shows on screen. `veil` is how much of the game the kit's own layers cover there.
+    let frost = pa.g0.w;
+    var under = vec3<f32>(0.0);
+    var veil = 0.0;
+    var here = vec4<f32>(0.0);
+    if (g.backdrop_valid > 0.5) {
+        let ur = backdrop_uv(wp + n.xy * reach.x);
+        let ug = backdrop_uv(wp + n.xy * reach.y);
+        let ub = backdrop_uv(wp + n.xy * reach.z);
+        var sr = textureSampleLevel(backdrop, samp, ur, 0.0);
+        var sg = textureSampleLevel(backdrop, samp, ug, 0.0);
+        var sb = textureSampleLevel(backdrop, samp, ub, 0.0);
+        if (frost > 0.001 && g.backdrop_lod >= 0.0) {
+            sr = mix(sr, textureSampleLevel(backdrop_blur, samp, ur, g.backdrop_lod), frost);
+            sg = mix(sg, textureSampleLevel(backdrop_blur, samp, ug, g.backdrop_lod), frost);
+            sb = mix(sb, textureSampleLevel(backdrop_blur, samp, ub, g.backdrop_lod), frost);
+        }
+        under = vec3<f32>(shown(sr).r, shown(sg).g, shown(sb).b);
+        veil = clamp(sg.a, 0.0, 1.0);
+        here = textureSampleLevel(backdrop, samp, backdrop_uv(wp), 0.0);
+    }
+    if (pa.colors[0].w > 0.5 && g.world_valid > 0.5) {
+        // The captured game frame, bent like everything else. The compositor blends in encoded
+        // space, so the layers above it pass the decoded value of their encoded transmission.
+        let lod = frost * 3.0;
+        let world = vec3<f32>(
+            textureSampleLevel(world_tex, samp, world_uv(wp + n.xy * reach.x), lod).r,
+            textureSampleLevel(world_tex, samp, world_uv(wp + n.xy * reach.y), lod).g,
+            textureSampleLevel(world_tex, samp, world_uv(wp + n.xy * reach.z), lod).b,
+        );
+        under = under + world * srgb_decode(vec3<f32>(1.0 - veil));
+        veil = 1.0;
+    }
+
+    // Section 7: the mirrored environment. Below the horizon the surface mirrors the plane it
+    // sits on, so a rim picks up the light of its neighbours.
+    let r = vec3<f32>(2.0 * n.z * n.xy, 2.0 * n.z * n.z - 1.0);
+    let e = vec3<f32>(dot(pa.colors[2].xyz, r), dot(pa.colors[3].xyz, r), dot(pa.colors[4].xyz, r));
+    let env_kind = pa.g3.w;
+    var env = pa.colors[1].xyz;
+    if (env_kind < 0.5) {
+        env = env * studio(e);
+    } else if (env_kind > 1.5) {
+        env = env * textureSampleLevel(image, samp, oct_uv(e), 0.0).rgb;
+    }
+    if (abs(env_kind - 1.0) > 0.5) {
+        let below = smoothstep(0.0, 0.2, -r.z);
+        var ground = vec3<f32>(0.0);
+        if (below > 0.0 && g.backdrop_valid > 0.5) {
+            let far = depth / max(-r.z, 0.25);
+            ground = shown(textureSampleLevel(backdrop, samp, backdrop_uv(wp + r.xy * far * px), 0.0));
+        }
+        env = mix(env, ground, below);
+    }
+
+    // Section 7: the key light's GGX lobe, D G F / (4 (n.l)(n.v)) times E (n.l).
+    let l = pa.g3.xyz;
+    let nl = dot(n, l);
+    var spec = vec3<f32>(0.0);
+    if (nl > 1e-3 && ci > 1e-3) {
+        let hv = normalize(l + vec3<f32>(0.0, 0.0, 1.0001));
+        let nh = max(dot(n, hv), 0.0);
+        let a2 = pa.g2.w * pa.g2.w;
+        let dd = nh * nh * (a2 - 1.0) + 1.0;
+        let lam_l = 0.5 * (sqrt(1.0 + a2 * (1.0 - nl * nl) / (nl * nl)) - 1.0);
+        let lam_v = 0.5 * (sqrt(1.0 + a2 * (1.0 - ci * ci) / (ci * ci)) - 1.0);
+        let dg = a2 / (PI * dd * dd) / (1.0 + lam_l + lam_v);
+        spec = fresnel3(hv.z, eta) * pa.colors[0].xyz * (dg / (4.0 * ci));
+    }
+
+    // Section 8: reflected plus transmitted, in linear light. The piece hides what it reflects
+    // or absorbs: the compositor blends in encoded space, so the game behind is attenuated by
+    // the encoded value of the glass's linear transmission.
+    let passed = (vec3<f32>(1.0) - fres) * keep;
+    let light = fres * env + spec + passed * under;
+    let through = srgb_encode(vec3<f32>((passed.x + passed.y + passed.z) / 3.0)).x;
+    let alpha = 1.0 - through * (1.0 - veil);
+    return vec4<f32>(unshown(light, alpha), alpha) - here;
 }
 
 // ---------------------------------------------------------------- main
@@ -668,6 +985,8 @@ fn fs_main(in: VsOut) -> FsOut {
         d = sd_seven(p - in.p0.xy, in.p0.zw, in.p1.x, u32(in.p1.y + 0.5));
     } else if (kind == K_DOME) {
         d = max(sd_dome_core(p, in.p0, in.p1), -sd_dome_void(p, in.p0, in.p2));
+    } else if (kind == K_BLOB) {
+        d = blob_field(p, u32(in.p0.x + 0.5), u32(in.p0.y + 0.5), in.p0.z).x;
     } else if (kind == K_GLYPH) {
         let r = in.p2;
         let t = (p - r.xy) / max(r.zw - r.xy, vec2<f32>(1e-6));
@@ -764,6 +1083,10 @@ fn fs_main(in: VsOut) -> FsOut {
     // Glass writes the change it makes to the scene (blended additively).
     if (in.ids.y != 0u && paints[in.ids.y].head.x == P_GLASS) {
         out.color = glass_delta(in, p, d, frag) * cov;
+        return out;
+    }
+    if (in.ids.y != 0u && paints[in.ids.y].head.x == P_OPTIC) {
+        out.color = optic_glass(in, p, frag, kind, flags) * cov;
         return out;
     }
 

@@ -1,8 +1,9 @@
-//! Paints: what fills a shape. Solid, linear/radial/conic gradients (up to 8 stops), images and
-//! the Liquid Glass material. Paint coordinates are in the shape's local space, so a gradient
-//! moves, scales and rotates with the shape that uses it.
+//! Paints: what fills a shape. Solid, linear/radial/conic gradients (up to 8 stops), images,
+//! optical glass and the legacy slab glass. Paint coordinates are in the shape's local space, so
+//! a gradient moves, scales and rotates with the shape that uses it.
 use crate::color::Color;
-use crate::math::{finite_or, Rect, Vec2};
+use crate::math::{finite_or, vec3, Rect, Vec2, Vec3};
+use crate::optics::{Dispersion, Profile};
 
 /// Most stops a gradient carries. Extra stops are ignored.
 pub const MAX_STOPS: usize = 8;
@@ -270,7 +271,139 @@ pub enum Refraction {
     World,
 }
 
-/// The Liquid Glass material (tokens `glass`, spec card P8-1).
+/// What optical glass reflects (`docs/specs/optics.md` §7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Environment {
+    /// The kit's analytic studio: a key softbox, a strip light opposite it and a faint sky.
+    /// Always available, so it is also the fallback when a map is missing.
+    #[default]
+    Studio,
+    /// The same radiance from every direction (the conservation test, flat ambient light).
+    Uniform,
+    /// An environment map in octahedral layout (z towards the viewer in the centre).
+    Map(ImageId),
+}
+
+/// Screen azimuth of the key light at rest: up and to the left (tokens `light.azimuthDeg`).
+pub const LIGHT_REST_AZIMUTH: f32 = -2.356_194_5;
+
+/// Physically based glass: every equation is in `docs/specs/optics.md`.
+///
+/// The surface is a height profile over the shape's outline. Per pixel the shader derives the
+/// normal from it, reflects the [`Environment`] and the key light by the exact Fresnel
+/// reflectance, refracts what is under the piece by Snell's law with one index per channel,
+/// and absorbs along the path (Beer-Lambert).
+///
+/// Draw it in a layer made with [`crate::LayerOptions::glass`]: it bends the scene as it was
+/// when that layer began. A [`crate::Shape::Blob`] takes the cross-section of each of its
+/// pieces; any other shape takes [`OpticalGlass::profile`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpticalGlass {
+    /// Refractive index for the red, green and blue channels
+    /// ([`Dispersion::primaries`]).
+    pub ior: [f32; 3],
+    /// The cross-section of shapes other than a blob. Its `exponent` applies to blobs too.
+    pub profile: Profile,
+    /// Absorption coefficient per channel, per local unit of path
+    /// ([`crate::optics::absorption_coefficient`]).
+    pub absorption: [f32; 3],
+    /// Frost of the surface for transmitted light: 0 = polished, 1 = fully frosted (uses the
+    /// layer's blurred backdrop).
+    pub frost: f32,
+    /// Unit direction towards the key light (screen x and y, z towards the viewer).
+    pub light_dir: Vec3,
+    /// Irradiance of the key light per channel (linear; above 1 is a bright source).
+    pub light: [f32; 3],
+    /// GGX roughness of the key light's highlight (0.03 polished .. 0.3 satin).
+    pub roughness: f32,
+    /// What the surface mirrors.
+    pub environment: Environment,
+    /// Scale of the environment's radiance per channel.
+    pub env_gain: [f32; 3],
+    /// Rows of the rotation that takes a screen direction into the environment's frame.
+    pub env_rotation: [Vec3; 3],
+    /// How far the piece has materialised: scales thickness and base, so lensing and
+    /// highlights grow in (never opacity).
+    pub materialize: f32,
+    /// What the glass bends.
+    pub refraction: Refraction,
+}
+
+impl OpticalGlass {
+    /// Clear, polished glass of the given material under the studio environment, lit from the
+    /// rest direction at 40° elevation, with a flat cross-section (set [`OpticalGlass::profile`]
+    /// or draw a [`crate::Shape::Blob`]).
+    #[must_use]
+    pub fn new(material: &Dispersion) -> Self {
+        let mut glass = Self {
+            ior: material.primaries(),
+            profile: Profile {
+                thickness: 0.0,
+                bevel: 1.0,
+                base: 0.0,
+                exponent: 2.0,
+            },
+            absorption: [0.0; 3],
+            frost: 0.0,
+            light_dir: vec3(0.0, 0.0, 1.0),
+            light: [1.0; 3],
+            roughness: 0.06,
+            environment: Environment::Studio,
+            env_gain: [1.0; 3],
+            env_rotation: [vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0)],
+            materialize: 1.0,
+            refraction: Refraction::OwnLayers,
+        };
+        glass.aim(LIGHT_REST_AZIMUTH, crate::math::deg(40.0), Vec2::ZERO);
+        glass
+    }
+
+    /// Sets the cross-section used by shapes other than a blob.
+    #[must_use]
+    pub fn with_profile(mut self, profile: Profile) -> Self {
+        self.profile = profile;
+        self
+    }
+
+    /// Tints the glass: `transmittance` is the linear colour that survives `depth` local units
+    /// of glass. Thicker parts are tinted more (Beer-Lambert).
+    #[must_use]
+    pub fn tinted(mut self, transmittance: [f32; 3], depth: f32) -> Self {
+        self.absorption = transmittance.map(|t| crate::optics::absorption_coefficient(t, depth));
+        self
+    }
+
+    /// Points the light rig: the key light comes from screen `azimuth` (radians, clockwise from
+    /// 3 o'clock) at `elevation` above the screen plane, and the environment turns with it.
+    /// `tilt` leans the whole rig about the screen's x and y axes (radians), which sweeps
+    /// reflections across flat faces.
+    pub fn aim(&mut self, azimuth: f32, elevation: f32, tilt: Vec2) {
+        let (sa, ca) = (azimuth - LIGHT_REST_AZIMUTH).sin_cos();
+        let (sx, cx) = tilt.x.sin_cos();
+        let (sy, cy) = tilt.y.sin_cos();
+        // world = Rz(turn) · Ry(tilt.y) · Rx(tilt.x) · env, as columns.
+        let rx = [vec3(1.0, 0.0, 0.0), vec3(0.0, cx, sx), vec3(0.0, -sx, cx)];
+        let ry = [vec3(cy, 0.0, -sy), vec3(0.0, 1.0, 0.0), vec3(sy, 0.0, cy)];
+        let rz = [vec3(ca, sa, 0.0), vec3(-sa, ca, 0.0), vec3(0.0, 0.0, 1.0)];
+        let mul = |m: &[Vec3; 3], v: Vec3| m[0] * v.x + m[1] * v.y + m[2] * v.z;
+        let col = |v: Vec3| mul(&rz, mul(&ry, mul(&rx, v)));
+        let cols = [
+            col(vec3(1.0, 0.0, 0.0)),
+            col(vec3(0.0, 1.0, 0.0)),
+            col(vec3(0.0, 0.0, 1.0)),
+        ];
+        // The inverse of a rotation is its transpose: its rows are these columns.
+        self.env_rotation = cols;
+        let (se, ce) = elevation.sin_cos();
+        let (sr, cr) = LIGHT_REST_AZIMUTH.sin_cos();
+        let rest = vec3(ce * cr, ce * sr, se);
+        self.light_dir = (cols[0] * rest.x + cols[1] * rest.y + cols[2] * rest.z).normalize_or_zero();
+    }
+}
+
+/// The legacy slab glass (tokens `glass`): a tinted panel with a painted rim, sheen and a fixed
+/// edge warp. It is not physically based and stays only until its remaining users are rebuilt
+/// on [`OpticalGlass`]; new work uses that.
 ///
 /// Draw glass **first** in a layer whose [`crate::LayerOptions::backdrop`] is set: it samples
 /// the scene as it was when that layer began.
@@ -361,8 +494,10 @@ pub enum Paint {
     Gradient(Gradient),
     /// A texture.
     Image(ImagePaint),
-    /// The Liquid Glass material.
+    /// The legacy slab glass.
     Glass(Glass),
+    /// Physically based glass.
+    OpticalGlass(OpticalGlass),
 }
 
 impl From<Color> for Paint {
@@ -389,6 +524,12 @@ impl From<Glass> for Paint {
     }
 }
 
+impl From<OpticalGlass> for Paint {
+    fn from(g: OpticalGlass) -> Self {
+        Paint::OpticalGlass(g)
+    }
+}
+
 impl Paint {
     /// The image this paint samples, if any (it decides the draw's texture binding).
     #[must_use]
@@ -396,8 +537,18 @@ impl Paint {
         match self {
             Paint::Image(i) => Some(i.image),
             Paint::Glass(g) => g.caustic,
+            Paint::OpticalGlass(g) => match g.environment {
+                Environment::Map(image) => Some(image),
+                Environment::Studio | Environment::Uniform => None,
+            },
             Paint::Solid(_) | Paint::Gradient(_) => None,
         }
+    }
+
+    /// True for the glass materials, which write the change they make to the scene.
+    #[must_use]
+    pub(crate) fn is_glass(&self) -> bool {
+        matches!(self, Paint::Glass(_) | Paint::OpticalGlass(_))
     }
 
     /// The paint with its opacity multiplied by `k`.
@@ -417,6 +568,7 @@ impl Paint {
                 Paint::Image(i)
             }
             Paint::Glass(g) => Paint::Glass(g),
+            Paint::OpticalGlass(g) => Paint::OpticalGlass(g),
         }
     }
 }

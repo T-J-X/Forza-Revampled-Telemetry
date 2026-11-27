@@ -7,7 +7,9 @@
 use crate::anim::{Easing, SpringSpec};
 use crate::color::Color;
 use crate::math::{vec2, Rect, Vec2};
-use crate::paint::Glass;
+use crate::optics::Dispersion;
+use crate::paint::{Glass, OpticalGlass};
+use crate::palette::Palette;
 use serde_json::Value;
 use std::path::Path;
 
@@ -275,6 +277,51 @@ impl Default for GlassTokens {
     }
 }
 
+/// The optical glass tokens (`glass.optics`; the equations are in `docs/specs/optics.md`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpticsTokens {
+    /// The glass material: its index, dispersion and reflectance all follow from this.
+    pub material: Dispersion,
+    /// Superellipse exponent of a piece's rounded edge (2 = circular arc).
+    pub edge_exponent: f32,
+    /// Internal transmittance of the untinted glass over `tint_depth` (1 = perfectly clear).
+    pub clarity: f32,
+    /// How far the transmitted colour leans to the palette's primary hue (0 = neutral).
+    pub tint: f32,
+    /// The depth of glass, in local units, at which `clarity` and `tint` are reached.
+    pub tint_depth: f32,
+    /// Frost of the surface for transmitted light (0 = polished).
+    pub frost: f32,
+    /// Irradiance of the key light.
+    pub key_irradiance: f32,
+    /// GGX roughness of the key light's highlight.
+    pub key_roughness: f32,
+    /// Elevation of the key light above the screen plane, radians (tokens `light.elevationDeg`).
+    pub key_elevation: f32,
+    /// Scale of the environment's radiance.
+    pub environment_gain: f32,
+    /// How far the light rig leans per g of acceleration, radians.
+    pub tilt_per_g: f32,
+}
+
+impl Default for OpticsTokens {
+    fn default() -> Self {
+        Self {
+            material: Dispersion::SAPPHIRE,
+            edge_exponent: 2.0,
+            clarity: 0.96,
+            tint: 0.18,
+            tint_depth: 80.0,
+            frost: 0.0,
+            key_irradiance: 4.0,
+            key_roughness: 0.07,
+            key_elevation: crate::math::deg(40.0),
+            environment_gain: 1.0,
+            tilt_per_g: crate::math::deg(6.0),
+        }
+    }
+}
+
 /// The type scale: cap heights in 4K px at scale 1.0 (tokens `type.scale`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TypeScale {
@@ -410,6 +457,8 @@ pub struct Tokens {
     pub glow: GlowTokens,
     /// Glass.
     pub glass: GlassTokens,
+    /// Optical glass (`glass.optics`).
+    pub optics: OpticsTokens,
     /// Type scale.
     pub type_scale: TypeScale,
     /// Layout.
@@ -441,6 +490,7 @@ impl Default for Tokens {
             durations: Durations::default(),
             glow: GlowTokens::default(),
             glass: GlassTokens::default(),
+            optics: OpticsTokens::default(),
             type_scale: TypeScale::default(),
             layout: LayoutTokens::default(),
             fonts: [
@@ -660,6 +710,40 @@ impl Tokens {
         if let Some(a) = num(v, &["glass", "crownSheen", "alphaTop"]) {
             gl.sheen_alpha = a.clamp(0.0, 255.0) as u8;
         }
+        let op = &mut t.optics;
+        if let Some(name) = get(v, &["glass", "optics", "material"]).and_then(Value::as_str) {
+            op.material = match name {
+                "crownBK7" => Dispersion::CROWN_BK7,
+                "fusedSilica" => Dispersion::FUSED_SILICA,
+                _ => Dispersion::SAPPHIRE,
+            };
+        }
+        for (key, slot, lo, hi) in [
+            ("edgeExponent", &mut op.edge_exponent, 1.0, 8.0),
+            ("clarity", &mut op.clarity, 0.01, 1.0),
+            ("tintAmount", &mut op.tint, 0.0, 1.0),
+            ("tintDepthPx", &mut op.tint_depth, 1.0, 4096.0),
+            ("frost", &mut op.frost, 0.0, 1.0),
+        ] {
+            if let Some(x) = num(v, &["glass", "optics", key]) {
+                *slot = x.clamp(lo, hi);
+            }
+        }
+        if let Some(x) = num(v, &["glass", "optics", "keyLight", "irradiance"]) {
+            op.key_irradiance = x.max(0.0);
+        }
+        if let Some(x) = num(v, &["glass", "optics", "keyLight", "roughness"]) {
+            op.key_roughness = x.clamp(0.02, 1.0);
+        }
+        if let Some(x) = num(v, &["glass", "optics", "environment", "gain"]) {
+            op.environment_gain = x.max(0.0);
+        }
+        if let Some(x) = num(v, &["glass", "optics", "tiltDegPerG"]) {
+            op.tilt_per_g = crate::math::deg(x.clamp(0.0, 45.0));
+        }
+        if let Some(x) = num(v, &["light", "elevationDeg"]) {
+            op.key_elevation = crate::math::deg(x.clamp(1.0, 89.0));
+        }
         if let Some(fonts) = get(v, &["type", "fonts"]).and_then(Value::as_object) {
             let parsed: Vec<FontToken> = fonts
                 .iter()
@@ -720,6 +804,26 @@ impl Tokens {
             }
         }
         t
+    }
+
+    /// Optical glass for `palette` (tokens `glass.optics`): the token material under the studio
+    /// environment and the key light, clear with a slight lean to the palette's primary hue.
+    /// Its cross-section is flat; set [`OpticalGlass::profile`] or draw a
+    /// [`crate::Shape::Blob`].
+    #[must_use]
+    pub fn optical_glass(&self, palette: &Palette) -> OpticalGlass {
+        let op = &self.optics;
+        let p = palette.primary;
+        let peak = p.r.max(p.g).max(p.b).max(1e-4);
+        let transmit = [p.r, p.g, p.b].map(|c| op.clarity * (1.0 - op.tint * (1.0 - c / peak)));
+        let mut glass = OpticalGlass::new(&op.material).tinted(transmit, op.tint_depth);
+        glass.profile.exponent = op.edge_exponent;
+        glass.frost = op.frost;
+        glass.light = [op.key_irradiance; 3];
+        glass.roughness = op.key_roughness;
+        glass.env_gain = [op.environment_gain; 3];
+        glass.aim(crate::paint::LIGHT_REST_AZIMUTH, op.key_elevation, Vec2::ZERO);
+        glass
     }
 
     /// The Liquid Glass material for `tint` at the default tint alpha.

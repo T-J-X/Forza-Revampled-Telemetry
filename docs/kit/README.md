@@ -113,12 +113,23 @@ p.scoped(|p| {
 
 ```rust
 let pal = *p.palette();
-let tokens_glass = p.tokens().glass(pal.glass_tint);
-// Something behind the glass to lens.
-p.fill(&Shape::circle(vec2(-150.0, 0.0), 200.0), pal.primary.with_alpha(0.5));
-// Glass: draw it first in a backdrop layer.
+// Light that lives under the glass: the pieces bend it.
+p.fill(&Shape::arc(Vec2::ZERO, 150.0, 16.0, deg(135.0), deg(200.0), Cap::Round), pal.primary);
+// Optical glass: a dome and a pill that merge like liquid. It bends the scene as it was
+// when its layer began, so draw the layers it should bend before the layer.
+let mut glass = p.tokens().optical_glass(&pal);
+glass.aim(deg(-135.0), deg(40.0), Vec2::ZERO);
+let pieces = [
+    Piece::circle(Vec2::ZERO, 190.0).dome(110.0, 12.0),
+    Piece::pill(Rect::from_xywh(150.0, -40.0, 320.0, 80.0)).section(18.0, 26.0, 8.0),
+];
+p.layer(LayerOptions::glass(0.0), |p| {
+    p.fill(&Shape::Blob { pieces: &pieces, smooth: 18.0 }, glass);
+});
+// The legacy slab glass, still used by the OSD until it is rebuilt on optical glass.
+let slab = p.tokens().glass(pal.glass_tint);
 p.layer(LayerOptions::glass(18.0), |p| {
-    p.fill(&Shape::round_rect(Rect::from_xywh(-400.0, -150.0, 800.0, 300.0), 64.0), Glass { ..tokens_glass });
+    p.fill(&Shape::round_rect(Rect::from_xywh(-400.0, 220.0, 800.0, 120.0), 48.0), Glass { ..slab });
 });
 // Bloom is earned: only glance ranks 1–3 go in a bloom layer.
 p.layer(LayerOptions::bloom(), |p| {
@@ -131,7 +142,15 @@ p.layer(LayerOptions::blurred(12.0), |p| {
 ```
 
 - **Bloom** (`LayerOptions::bloom()` or `Bloom { threshold, intensity }`): everything in the layer writes light into the emissive buffer, bloomed once per frame by a 5-level dual-filter (Kawase) pyramid. Tokens: only shift lights, gear, speed and the tach fill or needle bloom; labels, bezels, tyres and the G-ball never do. Bloom adds about 0.05–0.1 ms of GPU.
-- **Glass** (`Glass`, start from `tokens.glass(palette.glass_tint)`): tint, frost (blurred backdrop + noise), self-lensing near the edge, fresnel (IOR 1.52), the 1 px rim gradient (`glass.rim.stops`), the inner rim (2 px inset), the arched crown sheen and an optional caustic image. Set `light_angle` from the virtual light (`common::VirtualLight`) so the rim follows lateral G. Glass samples the scene **as it was when its layer began**: draw it first in a `LayerOptions::glass(frost_sigma)` layer, then draw content on top. `refraction: Refraction::World` also refracts the captured game frame when the user enables it (`"GlassRefraction": true`); otherwise it falls back to your own layers.
+- **Optical glass** (`OpticalGlass`, start from `tokens.optical_glass(&palette)`): physically based, with every equation in [`docs/specs/optics.md`](../specs/optics.md) and a CPU reference in `fh6_kit::optics`.
+  - **Shape.** The glass surface is a height profile over the shape's outline: `thickness` (rise above the rim), `bevel` (width of the rounded edge) and `base` (glass under the rim). `Piece::dome(height, base)` curves the whole top (a lens, a half rod); `Piece::section(thickness, bevel, base)` gives a flat top with a rounded edge. Any other shape takes `OpticalGlass::profile`.
+  - **Liquid groups.** `Shape::Blob { pieces, smooth }` is the smooth union of its pieces: closer than a few `smooth` they bridge and fuse, with no crease in the normals. Animate positions, sizes and `smooth` to merge and split. A blob also fills, strokes, glows and shadows like any shape.
+  - **What it does per pixel:** the normal from the profile, exact Fresnel reflection of the environment (`Environment::Studio`, `Uniform` or `Map(image)`) and of the key light (a GGX lobe), Snell refraction of what is under the piece with one index per channel (real dispersion), and Beer-Lambert absorption over the path (`tinted`). Rims also mirror the plane the piece sits on, so a piece picks up its neighbours' light.
+  - **Light.** `glass.aim(azimuth, elevation, tilt)` points the key light and turns the environment with it; drive the azimuth from `common::VirtualLight` and the tilt from G.
+  - **Order.** It bends the scene **as it was when its layer began**. Draw the light that lives under the glass, then `p.layer(LayerOptions::glass(0.0), ..)` with the glass, then numerals on top. A frost sigma of 0 skips the blurred copy (three passes cheaper); give a sigma only if `frost` is above 0. Glass cannot bend other glass in the same layer.
+  - **Materialise.** Ramp `materialize` from 0 to 1: thickness grows, so lensing and highlights grow in. Never fade opacity.
+  - `refraction: Refraction::World` also bends the captured game frame when the user enables it (`"GlassRefraction": true`).
+- **Legacy slab glass** (`Glass`, `tokens.glass(palette.glass_tint)`): a tinted panel with a painted rim and sheen. It is not physically based and is kept only for the OSD and the few components still on it; do not use it in new work.
 - **Blur** (`LayerOptions::blurred(sigma)`): the layer is Gaussian-blurred (on a downsampled pyramid level) and composited.
 - Layers nest. Opacity on a layer multiplies its draws.
 

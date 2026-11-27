@@ -747,6 +747,27 @@
   },
   "glass": {
     "doc": "Liquid Glass material for plates, pods and the OSD. Premium without background refraction; refraction is an optional layer when a captured game frame exists.",
+    "optics": {
+      "doc": "Physically based glass (fh6_kit::OpticalGlass); every equation is in docs/specs/optics.md. It replaces tintAlpha, rim, innerRim, crownSheen, fresnel, refraction, lensing and crescentAlpha below, which only the legacy slab material still reads.",
+      "material": "sapphire",
+      "materials": "sapphire (n_d 1.7682, V_d 72.3), crownBK7 (1.5168, 64.17), fusedSilica (1.4585, 67.8)",
+      "edgeExponent": 2,
+      "clarity": 0.96,
+      "tintAmount": 0.18,
+      "tintDepthPx": 80,
+      "tintNote": "Beer-Lambert: the colour that survives tintDepthPx of glass is clarity * (1 - tintAmount * (1 - primaryHue)); thicker glass is tinted more",
+      "frost": 0,
+      "keyLight": {
+        "irradiance": 4,
+        "roughness": 0.07,
+        "note": "GGX lobe; direction from light.azimuthDeg and light.elevationDeg"
+      },
+      "environment": {
+        "gain": 1,
+        "note": "the studio map when a cluster ships one, else the kit's analytic studio; turns with the key light"
+      },
+      "tiltDegPerG": 6
+    },
     "tintAlpha": {
       "min": 28,
       "default": 44,
@@ -808,13 +829,15 @@
       "ior": 1.52,
       "r0": 0.0426,
       "power": 5,
-      "edgeBandPx": 10
+      "edgeBandPx": 10,
+      "note": "legacy slab material only. 1.52 is a crown glass, not sapphire (1.768, R0 0.0770); see glass.optics"
     },
     "refraction": {
       "optional": true,
       "backdropBlurPx": 24,
       "offsetPx": 14,
-      "chromaticSplitPx": 1.5
+      "chromaticSplitPx": 1.5,
+      "note": "legacy slab material only: a fixed offset and split, not refraction. glass.optics bends by Snell's law with one index per channel"
     },
     "contactShadow": "none (OLED): separation comes from rims and inner glow, never from grey shadows",
     "lensing": {
@@ -826,7 +849,8 @@
       "selfOnly": true
     },
     "crescentAlpha": 18,
-    "arRimTint": "#7B6CFF",
+    "arRimTint": "#9E51FF",
+    "arRimTintNote": "the hue a quarter-wave MgF2 coat on sapphire reflects under white light (optics.md section 9): 0.4% red, 0.1% green, 1.2% blue. It was a guessed #7B6CFF. Liquid Glass is uncoated and does not use it",
     "dimmingPad": {
       "doc": "feathered black pad behind gear and speed; alpha = maxAlpha * (1 - scrimPct)",
       "maxAlpha": 140,

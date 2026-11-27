@@ -45,6 +45,8 @@ const PYRAMID_LEVELS: u32 = 5;
 const SLOT: u64 = 256;
 /// Most post passes per frame.
 const MAX_POST: usize = 96;
+/// Backdrop frost below this sigma (device px) skips the blurred copy: glass in that layer is clear.
+const MIN_FROST_PX: f32 = 0.25;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
@@ -1129,7 +1131,12 @@ impl Renderer {
             let mut g = base_globals;
             if let Some(s) = seg.backdrop_px {
                 g.backdrop_valid = 1.0;
-                g.backdrop_lod = (blur_level(s) - 1) as f32;
+                // A layer with no frost keeps only the sharp snapshot (lod -1 = no blurred copy).
+                g.backdrop_lod = if s >= MIN_FROST_PX {
+                    (blur_level(s) - 1) as f32
+                } else {
+                    -1.0
+                };
             }
             self.globals.push(g);
         }
@@ -1172,23 +1179,30 @@ impl Renderer {
                             },
                         );
                     }
-                    self.blur_chain(
-                        device,
-                        encoder,
-                        &mut stats,
-                        V::Backdrop,
-                        Chain::Backdrop,
-                        level,
-                        sigma,
-                        (ww, wh),
-                        uv_max,
-                        offs.post,
-                    );
+                    if sigma >= MIN_FROST_PX {
+                        self.blur_chain(
+                            device,
+                            encoder,
+                            &mut stats,
+                            V::Backdrop,
+                            Chain::Backdrop,
+                            level,
+                            sigma,
+                            (ww, wh),
+                            uv_max,
+                            offs.post,
+                        );
+                    }
                 } else if let Some(t) = self.targets.as_ref() {
                     // Nothing is drawn yet, so the backdrop is empty. Cleared with render passes:
                     // `clear_texture` needs the optional CLEAR_TEXTURE feature (absent on WebGPU),
                     // which made a cluster whose first draw is its glass fail validation.
-                    for view in std::iter::once(&t.backdrop.full).chain(t.bpyr.mips.iter()) {
+                    let frosted = if sigma >= MIN_FROST_PX {
+                        t.bpyr.mips.as_slice()
+                    } else {
+                        &[]
+                    };
+                    for view in std::iter::once(&t.backdrop.full).chain(frosted) {
                         drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("fh6-kit clear backdrop"),
                             color_attachments: &[Some(color_attachment(view, true))],

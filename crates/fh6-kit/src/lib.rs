@@ -29,6 +29,7 @@ pub mod logo;
 pub mod math;
 pub mod mesh;
 pub mod noise;
+pub mod optics;
 mod paint;
 mod painter;
 pub mod palette;
@@ -51,13 +52,17 @@ pub use images::Images;
 pub use kit::{Kit, KitError};
 pub use math::{deg, vec2, Affine, Rect, Vec2};
 pub use paint::{
-    BlendMode, Glass, Gradient, GradientKind, ImageId, ImagePaint, ImageWrap, Paint, Refraction, Spread, Stop,
+    BlendMode, Environment, Glass, Gradient, GradientKind, ImageId, ImagePaint, ImageWrap, OpticalGlass, Paint,
+    Refraction, Spread, Stop, LIGHT_REST_AZIMUTH,
 };
 pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};
 pub use renderer::FrameStats;
 pub use scene::{Backdrop, Bloom, LayerOptions, Scene};
-pub use shape::{Axis, Cap, Dome, Glow, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit, TickRing};
+pub use shape::{
+    Axis, Cap, Dome, Glow, Outline, Piece, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit,
+    TickRing,
+};
 pub use text::{Align, Figures, FontId, FontRole, Fonts, TextStyle, VAlign};
 pub use tokens::Tokens;
 pub use wgpu;

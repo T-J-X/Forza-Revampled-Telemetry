@@ -193,8 +193,9 @@ impl Images {
         Ok(self.upload_premultiplied_srgb8(device, queue, w, h, &rgba, label))
     }
 
-    /// Loads a KTX2 texture: `R8G8B8A8_SRGB` / `_UNORM` (optionally zstd-supercompressed), or
-    /// BC7 when the device supports BC compression. Stored mips are used as-is.
+    /// Loads a KTX2 texture: `R8G8B8A8_SRGB` / `_UNORM`, the HDR formats `R16G16B16A16_SFLOAT`
+    /// and `E5B9G9R9_UFLOAT_PACK32` (environment maps), or BC7 when the device supports BC
+    /// compression; each optionally zstd-supercompressed. Stored mips are used as-is.
     ///
     /// # Errors
     /// [`ImageError::Ktx2`] for malformed files and unsupported formats.
@@ -224,6 +225,11 @@ impl Images {
             (wgpu::TextureFormat::Bc7RgbaUnormSrgb, 4, 16)
         } else if fmt == ktx2::Format::BC7_UNORM_BLOCK && self.bc {
             (wgpu::TextureFormat::Bc7RgbaUnorm, 4, 16)
+        } else if fmt == ktx2::Format::R16G16B16A16_SFLOAT {
+            // Linear HDR radiance (environment maps): filterable everywhere, no feature needed.
+            (wgpu::TextureFormat::Rgba16Float, 1, 8)
+        } else if fmt == ktx2::Format::E5B9G9R9_UFLOAT_PACK32 {
+            (wgpu::TextureFormat::Rgb9e5Ufloat, 1, 4)
         } else {
             return Err(ImageError::Ktx2(format!("unsupported format {fmt:?}")));
         };
