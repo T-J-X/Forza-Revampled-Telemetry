@@ -8,6 +8,7 @@ pub mod classic;
 pub mod fluid;
 pub mod glass;
 pub mod gt7_hood_pro;
+pub mod liquid_glass;
 pub mod retro_cyber;
 pub mod scifi;
 pub mod tesla_adas;

@@ -1,33 +1,36 @@
 # Liquid Glass
 
-Catalog row 1 · `ClusterTheme::LiquidGlass` (config value `"LiquidGlass"`, the default cockpit theme) · Liquid Glass · cockpit+hood · build #1 · ★ pattern-setter.
+Catalog row 1 · `ClusterTheme::LiquidGlass` (config value `"LiquidGlass"`, the default cockpit theme) · Liquid Glass family · cockpit and hood.
 
-Status: **built** by the Phase 7 setup chat as the pilot. See [HANDOVER.md](HANDOVER.md) for renders, numbers, the critique and "my calls", and [spec.md](spec.md) for the brief.
+Status: **rebuilt on optical glass, first build** (2026-11-27). The direction check with TJX is open; polish, the handover and the sign-off follow it. The first pilot (one dark capsule with a painted rim) was rejected on 2026-11-27 and is gone; [RESEARCH.md](RESEARCH.md) §4 says why.
 
 ## What it is
-One sapphire capsule (a 1240 × 360 squircle, n 5) with no wallpaper. The gear sits under a domed lens, the speed floats on the left, a thin light pipe runs round the rim from lower-left over the crown to lower-right with a meniscus bead at the rpm, 16 glass pills on a curve under the crown are the shift lights, and a pendant glass drop under the centre holds the caustic G spot.
+Separate pieces of clear glass float over black: 16 cabochons (the shift lights), a glass rod with a bead (the rev ribbon), a puck (the gear), two pills (speed; power and boost) and a small lens (the G light). Nothing is painted to look like glass. Each piece is `fh6_kit::OpticalGlass`: a surface built from its outline, lit by one studio rig and computed per pixel from the equations in [docs/specs/optics.md](../../../../../docs/specs/optics.md). On black a piece shows as the thin lines where its rounded edge mirrors a light, and it bends whatever light sits under it.
 
-## How the module is laid out (the pattern for every cluster)
+## How the module is laid out
 | Part | Where | Notes |
 |---|---|---|
-| Zone table per view | `Geom`, `COCKPIT`, `HOOD` in `mod.rs` | every size and position in local 4K px; a unit test keeps it inside `layout.envelope` |
+| Zone table per view | the module doc, then `Geom`, `COCKPIT`, `HOOD` in `mod.rs` | every size and position in local 4K px, with each piece's glass section; unit tests keep it inside the view envelope and keep the pieces apart |
 | Faces | `Faces` | resolved once in `new()`; a user display font replaces the numerals |
-| Paths | `Paths` | the light pipe and the two light-run halves, sampled once per view |
-| State | `LiquidGlass` | only springs, smoothers and the shared components |
-| `update` | `impl Cluster` | copies signals, advances components; no allocation |
-| `draw` | `impl Cluster`, `draw_spot`, `draw_run` | glass first, then quiet structure, one bloom group for ranks 1–3, then labels |
+| State | `LiquidGlass` | springs, tweens, the shared components and this frame's glass material |
+| `update` | `impl Cluster` | copies signals, advances the springs, aims the light rig; no allocation |
+| `draw` | `draw_cores`, `draw_rev`, `draw_shift`, `draw_gear`, `draw_readouts`, `draw_g`, `draw_glass` | a black core under each flat face, then every light, then all the glass in one layer |
 
-Shared components it composes (`crate::common`): `GlassPlate` (squircle, dimming pad, hood halo), `PathRibbon` (light pipe, bead), `ShiftLights` with the pod optics, `LimiterCue`, `HeroGear`, `TabularSpeed`, `logo_zone`.
+Shared components it composes (`crate::common`): `ShiftLights`, `LimiterCue`, `HeroGear`, `TabularSpeed`, `VirtualLight`, `logo_zone`.
 
 ## Files this cluster owns
 - `crates/fh6-clusters/src/clusters/liquid_glass/`
 - `tests/golden/images/LiquidGlass_*.png` and `LiquidGlass_hood_*.png`
-- `assets/clusters/liquid_glass/` (none needed: it uses the shared `assets/glass/caustic_lens_circle.png` when present and a procedural ring otherwise)
+- `assets/clusters/liquid_glass/` and its ledger `ASSETS.md`: `studio_env.png` (the studio the glass mirrors: Blender, with a ComfyUI panorama on its cyclorama) and `liquid_light.png` (the caustic in the rev ribbon, ray traced). Without them the cluster uses the kit's analytic studio and a plain ribbon.
+- `tools/asset-forge/src/recipes/liquid_glass.rs` (builds both assets; the 4K masters go to the Drive folder `liquid_glass\`)
+- Penpot page `07 · LiquidGlass`
 
 ## Commands
 ```
 cargo run --release -p preview-export -- --cluster LiquidGlass
 cargo test -p fh6-clusters liquid_glass
 FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters liquid_glass
+cargo run --release -p asset-forge -- build --set liquid_glass
 cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster LiquidGlass --stats
 ```
+The renders, the goldens, the live demo and an asset build that finds a stale ComfyUI or Blender step are GPU jobs: hold the GPU lock (`SKILLS.md` section 5).

@@ -308,8 +308,9 @@ impl Outline {
                 center,
                 radius,
                 half_width,
-                ..
-            } => Rect::from_center_size(center, Vec2::splat((radius + half_width) * 2.0)),
+                start,
+                sweep,
+            } => arc_bounds(center, radius, half_width, start, sweep),
         }
     }
 }
@@ -647,8 +648,10 @@ impl<'a> Shape<'a> {
                 center,
                 radius,
                 thickness,
+                start,
+                sweep,
                 ..
-            } => Rect::from_center_size(center, Vec2::splat((radius + thickness * 0.5) * 2.0)),
+            } => arc_bounds(center, radius, thickness * 0.5, start, sweep),
             Shape::Line {
                 a, b, width_a, width_b, ..
             } => Rect::from_points(a, b).expand(width_a.max(width_b) * 0.5),
@@ -677,6 +680,34 @@ impl<'a> Shape<'a> {
             }
         }
     }
+}
+
+/// Tight bounds of a band of half width `half_width` along an arc: the ends of its centre line
+/// and every axis extreme the sweep passes, grown by the half width (which also covers round
+/// caps). A long, shallow arc of a large circle is far smaller than that circle.
+fn arc_bounds(center: Vec2, radius: f32, half_width: f32, start: f32, sweep: f32) -> Rect {
+    let full = Rect::from_center_size(center, Vec2::splat((radius + half_width) * 2.0));
+    if !(start.is_finite() && sweep.is_finite()) || sweep.abs() >= TAU {
+        return full;
+    }
+    let (from, to) = if sweep >= 0.0 {
+        (start, start + sweep)
+    } else {
+        (start + sweep, start)
+    };
+    let quarter = TAU * 0.25;
+    let mut r = Rect::from_points(Vec2::polar(center, radius, from), Vec2::polar(center, radius, to));
+    let mut k = (from / quarter).ceil();
+    // At most four axis extremes lie inside a sweep shorter than a turn.
+    for _ in 0..4 {
+        if k * quarter > to {
+            break;
+        }
+        let at = Vec2::polar(center, radius, k * quarter);
+        r = r.union(&Rect::from_points(at, at));
+        k += 1.0;
+    }
+    r.expand(half_width.max(0.0))
 }
 
 fn points_bounds(points: &[Vec2]) -> Rect {
@@ -1107,6 +1138,38 @@ mod tests {
     fn bounds_cover_geometry() {
         let b = Shape::needle(Vec2::ZERO, 0.0, 100.0, 10.0, 14.0, 3.0).bounds();
         assert!(b.contains(vec2(100.0, 0.0)) && b.contains(vec2(-10.0, 0.0)));
+    }
+
+    #[test]
+    fn arc_bounds_hug_the_arc() {
+        // A shallow rod of a huge circle: 1200 wide, 36 high, not 10 000 square.
+        let c = vec2(0.0, 4768.0);
+        let half = (600.0_f32 / 5018.0).asin();
+        let rod = Shape::arc(c, 5018.0, 22.0, -TAU * 0.25 - half, 2.0 * half, Cap::Round).bounds();
+        assert!(
+            (rod.min.x + 611.0).abs() < 0.5 && (rod.max.x - 611.0).abs() < 0.5,
+            "{rod:?}"
+        );
+        assert!(
+            (rod.min.y + 261.0).abs() < 0.5 && (rod.max.y + 203.0).abs() < 0.5,
+            "{rod:?}"
+        );
+        let piece = Piece::arc(c, 5018.0, 22.0, -TAU * 0.25 - half, 2.0 * half)
+            .outline
+            .bounds();
+        assert_eq!(piece, rod);
+        // Every point of the band is inside, for sweeps either way and across the axes.
+        for (start, sweep) in [(0.3_f32, 2.0_f32), (5.0, -4.5), (-1.0, 0.2), (2.0, 6.0), (1.0, -0.1)] {
+            let b = Shape::arc(vec2(10.0, -4.0), 50.0, 8.0, start, sweep, Cap::Round).bounds();
+            for i in 0..=64 {
+                let p = Vec2::polar(vec2(10.0, -4.0), 50.0, start + sweep * i as f32 / 64.0);
+                assert!(b.expand(1e-3).contains(p + vec2(4.0, 4.0)) && b.expand(1e-3).contains(p - vec2(4.0, 4.0)));
+            }
+            assert!(b.width() <= 108.0 + 1e-3 && b.height() <= 108.0 + 1e-3);
+        }
+        // A full ring keeps the whole circle.
+        let ring = Shape::ring(vec2(0.0, 0.0), 50.0, 8.0).bounds();
+        assert_eq!(ring, Rect::from_center_size(vec2(0.0, 0.0), Vec2::splat(108.0)));
     }
 
     #[test]

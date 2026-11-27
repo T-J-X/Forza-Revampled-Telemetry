@@ -137,6 +137,29 @@ $$\mathbf r = -\mathbf v + 2\,(\mathbf n \cdot \mathbf v)\,\mathbf n$$
 
 and reflects the environment radiance $E_c(\mathbf r)$ weighted by $F_c$. The environment is a studio map when present and an analytic studio otherwise. It turns about the view axis with the virtual light, so every reflection moves together.
 
+**The studio.** A surface whose normal is tilted by $\theta$ from the view axis mirrors the direction at elevation $90° - 2\theta$ above the plane of the screen. Clear glass on a dark ground shows its shape only where its edges mirror a light, which studio photographers call dark-field lighting: light lines against a dark background [S21]. The analytic studio is built for that, and the rendered studio map has the same lights:
+
+| Light | Where (azimuth clockwise from 3 o'clock, elevation above the screen) | Radiance | What it draws on a rounded edge |
+|---|---|---|---|
+| Horizon ring | all the way round, elevation 0° to 9° | 0.9, plus 5.0 $\cos^6$ towards azimuth −135° and (1.98, 2.2, 2.46) $\cos^6$ towards 45° | one thin line along the whole outline, where $\theta$ is between 40.5° and 45° |
+| Key strip | azimuth −135°, elevation 40°, 74° × 9° | 8 | a second, shorter line further in ($\theta \approx 25°$), up and to the left |
+| Far strip | azimuth 45°, elevation 25°, 105° × 7° | (4.2, 4.7, 5.2) | a thin cool line down and to the right ($\theta \approx 32°$) |
+| Sky | above, soft | up to 0.1 | a faint lift on edges that face up |
+
+Nothing lies within 22° of the view axis, so a flat face mirrors black and the numerals under it keep their contrast.
+
+**The plane under the piece.** A mirrored ray with $r_z < 0$ meets the screen itself, a distance $(h + b)\,\lVert\mathbf r_{xy}\rVert / (-r_z)$ away, and the surface mirrors what is drawn there. The studio behind the plane of the screen is never seen.
+
+**Pixel footprint.** A rounded edge turns through many degrees inside a few pixels, so a pixel mirrors a patch of the environment, not a point. Along the slope the normal's tilt is $\theta = \arctan(G/U)$ with $G = \lVert\nabla h^k\rVert$ and $U = k\,h^{k-1}$ (§2), which turns at
+
+$$\frac{d\theta}{ds} = \frac{G'\,U - G\,U'}{G^2 + U^2}, \qquad G' = -\frac{H^k\,k\,(k-1)\,(1-u)^{k-2}}{w^2}, \qquad U' = \frac{(k-1)\,G}{h}$$
+
+(for a hemisphere of radius $R$ this is $-1/(R\cos\theta)$; tested). Across the slope it turns by $\kappa \sin\theta$, where $\kappa = \nabla^2 d$ is the curvature of the outline's level line. Those two changes of $\mathbf n$ per pixel give the change of $\mathbf r$, and the environment is filtered over that patch: the map is sampled anisotropically with those two gradients, and the edges of the analytic lights are softened by half the patch width. The key light's lobe is filtered the same way, by widening its roughness with the spread of normals inside the pixel [S22]:
+
+$$\alpha'^2 = \alpha^2 + \min\!\Bigl(2\sigma^2\bigl(\lVert\partial_x \mathbf n\rVert^2 + \lVert\partial_y \mathbf n\rVert^2\bigr),\ \kappa_c\Bigr), \qquad \sigma^2 = \frac{1}{2\pi}, \quad \kappa_c = 0.18$$
+
+$\sigma^2$ is the variance of a Gaussian pixel filter of peak 1, and the clamp bounds the error of the derivative estimate (tested). Without this a thin highlight on a tight edge breaks into flickering dots.
+
 **Key light.** The one virtual light of a cluster is a directional light of irradiance $E_L$ along $\mathbf l$. Its highlight is a GGX microfacet lobe [S9][S13], with half vector $\mathbf h = (\mathbf l + \mathbf v)/\lVert \mathbf l + \mathbf v \rVert$ and roughness $\alpha$:
 
 $$D(\mathbf h) = \frac{\alpha^2}{\pi\bigl(\cos^2\theta_h\,(\alpha^2 - 1) + 1\bigr)^2}, \qquad \Lambda(\theta) = \frac{\sqrt{1 + \alpha^2\tan^2\theta} - 1}{2}, \qquad G = \frac{1}{1 + \Lambda(\theta_l) + \Lambda(\theta_v)}$$
@@ -153,9 +176,11 @@ $B$ is what lies under the piece: the kit's layers drawn before the glass, over 
 
 **Energy conservation.** A fraction $F$ is reflected and $1 - F$ transmitted, and they sum to 1 at every angle (tested against the Fresnel transmission coefficients, which are computed separately). Absorption only removes light. So with a uniform environment and a uniform backdrop of the same radiance and no absorption, a piece of glass is invisible. The GPU test renders exactly that and requires every pixel to equal the backdrop.
 
-**Alpha.** The overlay is drawn over the game with premultiplied alpha. Where there is no captured frame to bend, the game shows through unbent and the piece hides the fraction it reflects or absorbs:
+**Display light.** The overlay is composited over the game in sRGB-encoded values, not in linear light: the kit's resolve writes colour up to the alpha as coverage, $E(c/a)\,a$, and light beyond it as emission ($E$ is the sRGB encoding). So the equation above is evaluated on displayed linear light. What lies under the piece is first converted to the light it will show, the physics is done in linear light, and the result is converted back to the scene value that shows it at the piece's alpha. Without that step a 7.7% reflection would be written as 7.7% of the encoded range and show as 0.7% (the GPU Fresnel test caught exactly this).
 
-$$a = 1 - (1 - \bar F)\,\bar T\,(1 - a_B)$$
+**Alpha.** Where there is no captured frame to bend, the game shows through unbent and the piece hides the fraction it reflects or absorbs. Because the compositor multiplies encoded values, the game behind is attenuated by the encoded value of the glass's linear transmission:
+
+$$a = 1 - E\bigl((1 - \bar F)\,\bar T\bigr)\,(1 - a_B)$$
 
 with $a_B$ the alpha of the kit's own layers under the piece and the bars the mean over the three channels. Glass never fills its footprint with an opaque colour, so off pixels stay off.
 
@@ -249,6 +274,8 @@ All in `crates/fh6-kit/src/optics.rs` unless a file is named.
 | §5 colour | `colour_matching_fit_and_matrix` | Equal-energy white has $X = Y = Z$; D65 maps to (1, 1, 1) |
 | §6 absorption | `beer_lambert` | 0.5 at the reference depth, 0.25 at twice it |
 | §7 GGX | `ggx_is_normalised`, `ggx_lobe_never_reflects_more_than_arrives` | $\int D\cos\theta\,d\omega = 1$; albedo ≤ 1 |
+| §7 pixel footprint | `the_normal_turns_at_the_profile_curvature`, `the_footprint_filter_widens_and_clamps` | $-1/(Rs	heta)$ on a sphere and the finite difference of the normal on four profiles; $sigma^2 = 1/2pi$, the clamp at 0.18 |
+| §7 key light on the GPU | `tests/glass_gpu.rs`: `highlights_follow_the_light` | The highlight sits where the half vector meets the normal and moves with the light |
 | §8 conservation | `reflection_plus_transmission_is_one`; `tests/glass_gpu.rs` | $R + T = 1$ at every angle; invisible glass in a uniform field |
 | §9 thin film | `thin_film_known_values`, `a_quarter_wave_coating_reflects_purple_not_a_guessed_hex` | 0, 1.26% and the bare interface; the slab closed form; green is the minimum |
 | §10 prism | `prism_minimum_deviation` | 37.18° for 60° and $n$ = 1.5 |
@@ -279,3 +306,5 @@ Read on 2026-11-27. Where a page's text extraction dropped Greek letters or frac
 - **[S18]** P. Bourke, "Chladni plate interference surfaces", http://paulbourke.net/geometry/chladni/
 - **[S19]** "Vibration of plates", https://en.wikipedia.org/wiki/Vibration_of_plates (Kirchhoff-Love plate; simply supported rectangular plate).
 - **[S20]** "Chladni's law", https://en.wikipedia.org/wiki/Chladni%27s_law (cites Rossing and Fletcher, Principles of Vibration and Sound, 2004).
+- **[S21]** F. Hunter, S. Biver and P. Fuqua, *Light: Science & Magic*, chapter 7, "The Case of the Disappearing Glass" (bright-field and dark-field lighting: glass is defined by dark lines on a light ground or light lines on a dark ground). Contents via https://www.oreilly.com/library/view/light-science-and/9780240808192/13_Chapter7.xhtml
+- **[S22]** Y. Tokuyoshi and A. S. Kaplanyan, "Stable Geometric Specular Antialiasing with Projected-Space NDF Filtering", Journal of Computer Graphics Techniques 10(2), 2021, https://www.jcgt.org/published/0010/02/02/ (listing 5: isotropic filtering from the normal's screen derivatives; appendix B: $sigma^2 = 1/2pi$; equation 10: the clamp 0.18, from A. S. Kaplanyan, S. Hill, A. Patney and A. Lefohn, "Filtering Distributions of Normals for Shading Antialiasing", HPG 2016).

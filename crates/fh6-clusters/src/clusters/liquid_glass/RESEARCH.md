@@ -34,6 +34,21 @@ Apple's Liquid Glass (iOS 26, CarPlay, visionOS glass) as Apple describes and sp
 - **Cited (9to5Mac, 2025-06-30):** the theme and the centre content switch from a steering-wheel touchpad; response is immediate.
 - **Not found:** theme names, typography details, or any Apple statement that CarPlay Ultra clusters use Liquid Glass. HIG CarPlay does not mention Liquid Glass or clusters. **Our reading:** the cluster benchmark is the gauge grammar (thin or thick bars, a calm centre, one accent colour); the glass benchmark is iOS 26 and visionOS.
 
+### 3.1 The benchmark, feature by feature
+
+Liquid Glass is a catalog concept with no single real display. It is benchmarked against two real things: the **CarPlay Ultra instrument cluster** (Aston Martin launch, May 2025) for what a cluster shows and how calm it is, and **Apple's Liquid Glass material** (iOS 26, §2) for how the pieces look and move.
+
+| What makes the benchmark recognisable | In this dash |
+|---|---|
+| Speed and revs as bars, thin or thick, in one accent colour (Apple's four looks) | **Matched** for revs: one thin bar of light under a glass rod, in the palette's primary colour. **Changed** for speed: tabular digits, because rank 2 must read in 150 ms and a bar cannot. |
+| A calm centre with one large value | **Matched:** the gear, alone in the centre puck. |
+| Themes chosen by the driver, with their colours | **Matched:** every colour is a palette role (factory, custom or random), the numerals follow the user's font, and the logo zone shows the car's logo or the custom name. |
+| Wallpaper behind the gauges | **Changed:** none. Off pixels are true black on the OLED, and the game is the only picture behind the dash. |
+| Fuel and temperature gauges, maps, media, widgets | **Changed:** not shown. Fuel and temperature are not verified against the golden packets; power and boost are, so they take the secondary pill. Maps and media are not a dash's job in a racing game. |
+| Glass elements that float as separate pieces and merge like liquid (A4, A5, A13) | **Matched:** seven kinds of separate pieces; the cabochons fuse on the limiter and the side pills bud out of the puck on show. |
+| Shape defined by lensing and by highlights that move with the device (A1, A7) | **Matched:** every piece is computed optics, and the one light rig moves with lateral and longitudinal G. |
+| Glass that adapts light or dark to its content, and blurs it (A10, A11) | **Changed:** one clear variant with no frost, because on OLED a frosted fill reads as a grey panel. |
+
 ## 4. Why the first pilot was rejected
 
 From its own handover and code (`mod.rs` before this rebuild, `common/glass_plate.rs`, the kit's `glass_delta`):

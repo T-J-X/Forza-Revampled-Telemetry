@@ -292,6 +292,7 @@ pub(crate) struct Renderer {
     staging: Vec<u8>,
     sampler: wgpu::Sampler,
     sampler_rep: wgpu::Sampler,
+    sampler_aniso: wgpu::Sampler,
     atlas: Tex,
     atlas_generation: u32,
     world_dummy: Tex,
@@ -389,6 +390,7 @@ impl Renderer {
                 tex_entry(7),
                 sampler_entry(8),
                 sampler_entry(9),
+                sampler_entry(10),
             ],
         });
         let shape_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -551,6 +553,15 @@ impl Renderer {
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
+        // Environment maps are minified very unevenly across a bevel (`shape.wgsl`, section 7).
+        let sampler_aniso = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("fh6-kit anisotropic clamp"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: 16,
+            ..Default::default()
+        });
         let atlas = Tex::new(
             device,
             "fh6-kit glyph atlas",
@@ -624,6 +635,7 @@ impl Renderer {
             staging: Vec::with_capacity(UPLOAD_SIZE as usize),
             sampler,
             sampler_rep,
+            sampler_aniso,
             atlas,
             atlas_generation: 0,
             world_dummy,
@@ -797,6 +809,10 @@ impl Renderer {
                     wgpu::BindGroupEntry {
                         binding: 9,
                         resource: wgpu::BindingResource::Sampler(&self.sampler_rep),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 10,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler_aniso),
                     },
                 ],
             }));

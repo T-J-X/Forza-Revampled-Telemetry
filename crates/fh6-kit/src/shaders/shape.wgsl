@@ -85,6 +85,7 @@ struct Clip {
 @group(0) @binding(7) var world_tex: texture_2d<f32>;
 @group(0) @binding(8) var samp: sampler;
 @group(0) @binding(9) var samp_rep: sampler;
+@group(0) @binding(10) var samp_aniso: sampler;
 @group(1) @binding(0) var image: texture_2d<f32>;
 
 struct InstanceIn {
@@ -736,17 +737,25 @@ fn softbox(e: vec3<f32>, c: vec3<f32>, tx: vec3<f32>, ty: vec3<f32>, half: vec2<
     return 1.0 - smoothstep(-soft, soft, sd_box(q, half));
 }
 
-// The analytic studio, in the environment frame (x right, y down, z at the viewer): a key
-// softbox up and to the left (azimuth -135 deg, 40 deg above the screen, 84 x 30 deg), a long
-// thin strip opposite and lower (azimuth 45 deg, 25 deg up), and a faint sky from above.
-fn studio(e: vec3<f32>) -> vec3<f32> {
+// The analytic studio, in the environment frame (x right, y down, z at the viewer):
+// - a horizon ring: a band of light from the plane of the screen to 9 deg above it, all the
+//   way round, brightest towards the key (azimuth -135 deg) and, cooler, opposite it. A rounded
+//   edge mirrors it as one thin line along the outline: the white line of dark-field glass
+//   photography;
+// - a key strip up and to the left (azimuth -135 deg, 40 deg above the screen, 74 x 9 deg);
+// - a long thin strip opposite and lower (azimuth 45 deg, 25 deg up, 105 x 7 deg);
+// - a faint sky from above.
+// `spread` is the width of one pixel's footprint on the environment (radians): the lights'
+// edges are softened by it, which is the pixel filter applied to the reflection.
+fn studio(e: vec3<f32>, spread: f32) -> vec3<f32> {
+    let soft = 0.5 * spread;
     let key = softbox(
         e,
         vec3<f32>(-0.5417, -0.5417, 0.6428),
         vec3<f32>(0.7071, -0.7071, 0.0),
         vec3<f32>(0.4545, 0.4545, 0.7660),
-        vec2<f32>(0.90, 0.27),
-        0.05,
+        vec2<f32>(0.75, 0.08),
+        0.02 + soft,
     );
     let strip = softbox(
         e,
@@ -754,10 +763,16 @@ fn studio(e: vec3<f32>) -> vec3<f32> {
         vec3<f32>(-0.7071, 0.7071, 0.0),
         vec3<f32>(-0.2988, -0.2988, 0.9063),
         vec2<f32>(1.30, 0.06),
-        0.02,
+        0.02 + soft,
     );
     let sky = 0.10 * smoothstep(0.0, 1.0, -e.y) * smoothstep(-0.1, 0.4, e.z);
-    return vec3<f32>(9.0) * key + vec3<f32>(4.2, 4.7, 5.2) * strip + vec3<f32>(sky);
+    let band = smoothstep(-0.01 - soft, 0.01 + soft, e.z)
+        * (1.0 - smoothstep(0.1464 - soft, 0.1664 + soft, e.z));
+    let side = e.xy / max(length(e.xy), 1e-4);
+    let to_key = pow(max(dot(side, vec2<f32>(-0.7071, -0.7071)), 0.0), 6.0);
+    let to_far = pow(max(dot(side, vec2<f32>(0.7071, 0.7071)), 0.0), 6.0);
+    let ring = band * (vec3<f32>(0.9) + vec3<f32>(5.0) * to_key + vec3<f32>(1.98, 2.2, 2.46) * to_far);
+    return vec3<f32>(8.0) * key + vec3<f32>(4.2, 4.7, 5.2) * strip + vec3<f32>(sky) + ring;
 }
 
 // Octahedral layout of the sphere: the hemisphere facing the viewer fills the inner diamond.
@@ -785,24 +800,41 @@ fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
     return select(pow((x + 0.055) / 1.055, vec3<f32>(2.4)), x / 12.92, x <= vec3<f32>(0.04045));
 }
 
-// The linear light a scene value shows over black once resolved (mirrors fs_resolve in
-// post.wgsl: colour up to the alpha is encoded as coverage, light beyond it as emission).
-fn shown(s: vec4<f32>) -> vec3<f32> {
-    let a = clamp(s.a, 0.0, 1.0);
-    let covered = min(s.rgb, vec3<f32>(a));
-    var enc = srgb_encode(max(s.rgb - covered, vec3<f32>(0.0))) * (1.0 - a);
-    if (a > 1e-4) {
-        enc = enc + srgb_encode(covered / a) * a;
+fn enc1(c: f32) -> f32 {
+    let x = clamp(c, 0.0, 1.0);
+    return select(1.055 * pow(x, 1.0 / 2.4) - 0.055, x * 12.92, x <= 0.0031308);
+}
+
+fn dec1(c: f32) -> f32 {
+    let x = clamp(c, 0.0, 1.0);
+    return select(pow((x + 0.055) / 1.055, 2.4), x / 12.92, x <= 0.04045);
+}
+
+// The linear light one channel of a scene value shows over black once resolved (mirrors
+// fs_resolve in post.wgsl: colour up to the alpha is encoded as coverage, light beyond it as
+// emission). With no coverage or full coverage the two encodings cancel.
+fn shown1(c: f32, alpha: f32) -> f32 {
+    let a = clamp(alpha, 0.0, 1.0);
+    if (a < 1e-4 || a > 0.9999) {
+        return clamp(c, 0.0, 1.0);
     }
-    return srgb_decode(enc);
+    let covered = min(c, a);
+    return dec1(enc1(max(c - covered, 0.0)) * (1.0 - a) + enc1(covered / a) * a);
+}
+
+fn shown(s: vec4<f32>) -> vec3<f32> {
+    return vec3<f32>(shown1(s.r, s.a), shown1(s.g, s.a), shown1(s.b, s.a));
 }
 
 // The scene value that shows linear light `l` over black at alpha `a` (the inverse of `shown`).
 fn unshown(l: vec3<f32>, a: f32) -> vec3<f32> {
+    if (a > 0.9999) {
+        return clamp(l, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
     let t = srgb_encode(l);
-    let as_cover = srgb_decode(t / max(a, 1e-4)) * a;
-    let as_light = vec3<f32>(a) + srgb_decode((t - vec3<f32>(a)) / max(1.0 - a, 1e-4));
-    return select(as_light, as_cover, t <= vec3<f32>(a));
+    let cover = t <= vec3<f32>(a);
+    let dec = srgb_decode(select((t - vec3<f32>(a)) / max(1.0 - a, 1e-4), t / max(a, 1e-4), cover));
+    return select(vec3<f32>(a) + dec, dec * a, cover);
 }
 
 fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) -> vec4<f32> {
@@ -818,12 +850,21 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     let ex = vec2<f32>(one_px, 0.0);
     let ey = vec2<f32>(0.0, one_px);
     let f0 = glass_field(in, kind, flags, p, section);
+    // Further in than the rounded edge the surface is level, so its neighbours are not needed.
+    var fxp = f0;
+    var fxm = f0;
+    var fyp = f0;
+    var fym = f0;
+    if (-f0.x < f0.z + 2.0 * one_px) {
+        fxp = glass_field(in, kind, flags, p + ex, section);
+        fxm = glass_field(in, kind, flags, p - ex, section);
+        fyp = glass_field(in, kind, flags, p + ey, section);
+        fym = glass_field(in, kind, flags, p - ey, section);
+    }
     let hk = height_pow(f0, k, grown);
     let gq = vec2<f32>(
-        height_pow(glass_field(in, kind, flags, p + ex, section), k, grown)
-            - height_pow(glass_field(in, kind, flags, p - ex, section), k, grown),
-        height_pow(glass_field(in, kind, flags, p + ey, section), k, grown)
-            - height_pow(glass_field(in, kind, flags, p - ey, section), k, grown),
+        height_pow(fxp, k, grown) - height_pow(fxm, k, grown),
+        height_pow(fyp, k, grown) - height_pow(fym, k, grown),
     ) / (2.0 * one_px);
     let h = pow(hk, 1.0 / k);
     // n is proportional to (-grad h, 1) = (-grad(h^k), k h^(k-1)); the second form has no
@@ -835,6 +876,26 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     let n_len = length(vec3<f32>(slope, up));
     if (n_len > 1e-12) {
         n = vec3<f32>(-slope, up) / n_len;
+    }
+
+    // Section 7, pixel footprint: how far the normal turns across one device pixel. Along the slope it turns
+    // at the profile's curvature, d(theta)/ds = (G' U - G U') / (G^2 + U^2) with
+    // G = |grad(h^k)| and U = k h^(k-1); across the slope it turns with the outline, whose
+    // curvature is the Laplacian of the distance. dn_s and dn_c are those two changes of n.
+    let big_g = length(gq);
+    var dn_s = vec3<f32>(0.0);
+    var dn_c = vec3<f32>(0.0);
+    if (big_g > 1e-9 && n_len > 1e-12) {
+        let w = max(f0.z, 1e-3);
+        let tt = clamp(1.0 + f0.x / w, 1e-4, 1.0);
+        let g_s = -pow(max(f0.y * grown, 0.0), k) * k * (k - 1.0) * pow(tt, k - 2.0) / (w * w);
+        let u_s = (k - 1.0) * big_g / max(h, 1e-5);
+        let theta_s = (g_s * up - big_g * u_s) / (n_len * n_len) * one_px;
+        let kappa = (fxp.x + fxm.x + fyp.x + fym.x - 4.0 * f0.x) / one_px;
+        let sin_t = big_g / n_len;
+        let downhill = -slope / big_g;
+        dn_s = theta_s * vec3<f32>(downhill * n.z, -sin_t);
+        dn_c = kappa * sin_t * vec3<f32>(-downhill.y, downhill.x, 0.0);
     }
 
     // Sections 3 to 6: Fresnel, Snell and Beer-Lambert, one index per channel.
@@ -859,15 +920,20 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         let ur = backdrop_uv(wp + n.xy * reach.x);
         let ug = backdrop_uv(wp + n.xy * reach.y);
         let ub = backdrop_uv(wp + n.xy * reach.z);
-        var sr = textureSampleLevel(backdrop, samp, ur, 0.0);
         var sg = textureSampleLevel(backdrop, samp, ug, 0.0);
-        var sb = textureSampleLevel(backdrop, samp, ub, 0.0);
+        var sr = sg;
+        var sb = sg;
+        if (big_g > 1e-9) {
+            // Only a sloped surface sends the three colours to different places.
+            sr = textureSampleLevel(backdrop, samp, ur, 0.0);
+            sb = textureSampleLevel(backdrop, samp, ub, 0.0);
+        }
         if (frost > 0.001 && g.backdrop_lod >= 0.0) {
             sr = mix(sr, textureSampleLevel(backdrop_blur, samp, ur, g.backdrop_lod), frost);
             sg = mix(sg, textureSampleLevel(backdrop_blur, samp, ug, g.backdrop_lod), frost);
             sb = mix(sb, textureSampleLevel(backdrop_blur, samp, ub, g.backdrop_lod), frost);
         }
-        under = vec3<f32>(shown(sr).r, shown(sg).g, shown(sb).b);
+        under = vec3<f32>(shown1(sr.r, sr.a), shown1(sg.g, sg.a), shown1(sb.b, sb.a));
         veil = clamp(sg.a, 0.0, 1.0);
         here = textureSampleLevel(backdrop, samp, backdrop_uv(wp), 0.0);
     }
@@ -888,15 +954,23 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     // sits on, so a rim picks up the light of its neighbours.
     let r = vec3<f32>(2.0 * n.z * n.xy, 2.0 * n.z * n.z - 1.0);
     let e = vec3<f32>(dot(pa.colors[2].xyz, r), dot(pa.colors[3].xyz, r), dot(pa.colors[4].xyz, r));
+    // Section 7, pixel footprint: its extent on the environment, from r = 2 (n.v) n - v.
+    let dr_s = vec3<f32>(2.0 * (dn_s.z * n.xy + n.z * dn_s.xy), 4.0 * n.z * dn_s.z);
+    let dr_c = vec3<f32>(2.0 * (dn_c.z * n.xy + n.z * dn_c.xy), 4.0 * n.z * dn_c.z);
+    var de_s = vec3<f32>(dot(pa.colors[2].xyz, dr_s), dot(pa.colors[3].xyz, dr_s), dot(pa.colors[4].xyz, dr_s));
+    var de_c = vec3<f32>(dot(pa.colors[2].xyz, dr_c), dot(pa.colors[3].xyz, dr_c), dot(pa.colors[4].xyz, dr_c));
+    de_s = de_s * min(1.0, 0.5 / max(length(de_s), 1e-6));
+    de_c = de_c * min(1.0, 0.5 / max(length(de_c), 1e-6));
     let env_kind = pa.g3.w;
     var env = pa.colors[1].xyz;
     if (env_kind < 0.5) {
-        env = env * studio(e);
+        env = env * studio(e, max(length(de_s), length(de_c)));
     } else if (env_kind > 1.5) {
-        env = env * textureSampleLevel(image, samp, oct_uv(e), 0.0).rgb;
+        let uv_e = oct_uv(e);
+        env = env * textureSampleGrad(image, samp_aniso, uv_e, oct_uv(e + de_s) - uv_e, oct_uv(e + de_c) - uv_e).rgb;
     }
     if (abs(env_kind - 1.0) > 0.5) {
-        let below = smoothstep(0.0, 0.2, -r.z);
+        let below = smoothstep(0.0, 0.05, -r.z);
         var ground = vec3<f32>(0.0);
         if (below > 0.0 && g.backdrop_valid > 0.5) {
             let far = depth / max(-r.z, 0.25);
@@ -912,7 +986,9 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     if (nl > 1e-3 && ci > 1e-3) {
         let hv = normalize(l + vec3<f32>(0.0, 0.0, 1.0001));
         let nh = max(dot(n, hv), 0.0);
-        let a2 = pa.g2.w * pa.g2.w;
+        // Section 7, pixel footprint: the lobe is widened by the spread of normals inside the
+        // pixel, alpha^2 + min(2 sigma^2 (|dn/dx|^2 + |dn/dy|^2), 0.18) with sigma^2 = 1 / (2 pi).
+        let a2 = min(pa.g2.w * pa.g2.w + min(0.3183099 * (dot(dn_s, dn_s) + dot(dn_c, dn_c)), 0.18), 1.0);
         let dd = nh * nh * (a2 - 1.0) + 1.0;
         let lam_l = 0.5 * (sqrt(1.0 + a2 * (1.0 - nl * nl) / (nl * nl)) - 1.0);
         let lam_v = 0.5 * (sqrt(1.0 + a2 * (1.0 - ci * ci) / (ci * ci)) - 1.0);

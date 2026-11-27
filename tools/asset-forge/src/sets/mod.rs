@@ -27,6 +27,7 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "gt7_hood_pro" => crate::recipes::gt7_hood_pro::build(ctx),
         "retro_cyber" => crate::recipes::retro_cyber::build(ctx),
         "bosch_ddu" => crate::recipes::bosch_ddu::build(ctx),
+        "liquid_glass" => crate::recipes::liquid_glass::build(ctx),
         _ => Ok(()),
     }
 }

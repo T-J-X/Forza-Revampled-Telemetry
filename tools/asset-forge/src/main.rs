@@ -44,6 +44,7 @@ const SETS: &[&str] = &[
     "gt7_hood_pro",
     "retro_cyber",
     "bosch_ddu",
+    "liquid_glass",
 ];
 
 fn main() -> ExitCode {

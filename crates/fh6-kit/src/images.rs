@@ -479,38 +479,68 @@ pub fn rasterize_svg(bytes: &[u8], size: Option<(u32, u32)>) -> Result<(u32, u32
     Ok((pixmap.width(), pixmap.height(), pixmap.take()))
 }
 
-/// Straight sRGB RGBA8 to premultiplied (in linear light), re-encoded as sRGB RGBA8.
+/// The linear value of each 8-bit sRGB code.
+fn srgb8_to_linear_table() -> [f32; 256] {
+    let mut table = [0.0_f32; 256];
+    for (code, v) in table.iter_mut().enumerate() {
+        *v = srgb_to_linear(code as f32 / 255.0);
+    }
+    table
+}
+
+/// Straight sRGB RGBA8 to premultiplied (in linear light), re-encoded as sRGB RGBA8. Opaque
+/// and empty pixels need no arithmetic, which is most of a 4K plate.
 #[must_use]
 pub fn premultiply_srgb8(rgba: &[u8]) -> Vec<u8> {
-    rgba.chunks_exact(4)
-        .flat_map(|p| {
-            let a = f32::from(p[3]) / 255.0;
-            let enc = |c: u8| (linear_to_srgb(srgb_to_linear(f32::from(c) / 255.0) * a) * 255.0).round() as u8;
-            [enc(p[0]), enc(p[1]), enc(p[2]), p[3]]
-        })
-        .collect()
+    let linear = srgb8_to_linear_table();
+    let mut out = Vec::with_capacity(rgba.len());
+    for p in rgba.chunks_exact(4) {
+        match p[3] {
+            255 => out.extend_from_slice(p),
+            0 => out.extend_from_slice(&[0, 0, 0, 0]),
+            alpha => {
+                let a = f32::from(alpha) / 255.0;
+                let enc = |c: u8| (linear_to_srgb(linear[usize::from(c)] * a) * 255.0).round() as u8;
+                out.extend_from_slice(&[enc(p[0]), enc(p[1]), enc(p[2]), alpha]);
+            }
+        }
+    }
+    out
 }
 
 /// Halves a premultiplied sRGB RGBA8 image with a 2x2 box filter in linear light.
 fn downsample_srgb8(src: &[u8], w: u32, h: u32) -> (u32, u32, Vec<u8>) {
     let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+    let linear = srgb8_to_linear_table();
     let mut out = vec![0u8; (nw * nh * 4) as usize];
-    let at = |x: u32, y: u32, c: usize| -> f32 {
-        let i = ((y.min(h - 1) * w + x.min(w - 1)) * 4) as usize + c;
-        let v = f32::from(src[i]) / 255.0;
-        if c == 3 {
-            v
-        } else {
-            srgb_to_linear(v)
-        }
-    };
+    let index = |x: u32, y: u32| ((y.min(h - 1) * w + x.min(w - 1)) * 4) as usize;
     for y in 0..nh {
         for x in 0..nw {
+            let (sx, sy) = (x * 2, y * 2);
+            let taps = [
+                index(sx, sy),
+                index(sx + 1, sy),
+                index(sx, sy + 1),
+                index(sx + 1, sy + 1),
+            ];
+            let o = ((y * nw + x) * 4) as usize;
             for c in 0..4 {
-                let (sx, sy) = (x * 2, y * 2);
-                let v = (at(sx, sy, c) + at(sx + 1, sy, c) + at(sx, sy + 1, c) + at(sx + 1, sy + 1, c)) * 0.25;
-                let v = if c == 3 { v } else { linear_to_srgb(v) };
-                out[((y * nw + x) * 4) as usize + c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                let codes = taps.map(|i| src[i + c]);
+                out[o + c] = if codes[0] == codes[1] && codes[0] == codes[2] && codes[0] == codes[3] {
+                    // Four equal texels average to themselves (flat areas need no arithmetic).
+                    codes[0]
+                } else {
+                    let value = |code: u8| {
+                        if c == 3 {
+                            f32::from(code) / 255.0
+                        } else {
+                            linear[usize::from(code)]
+                        }
+                    };
+                    let v = (value(codes[0]) + value(codes[1]) + value(codes[2]) + value(codes[3])) * 0.25;
+                    let v = if c == 3 { v } else { linear_to_srgb(v) };
+                    (v.clamp(0.0, 1.0) * 255.0).round() as u8
+                };
             }
         }
     }
@@ -534,6 +564,79 @@ mod tests {
         let (w, h, out) = downsample_srgb8(&src, 4, 4);
         assert_eq!((w, h), (2, 2));
         assert!(out.iter().all(|v| *v == 255));
+    }
+
+    /// The arithmetic the fast paths skip: every pixel through decode, scale and encode.
+    fn premultiply_slow(rgba: &[u8]) -> Vec<u8> {
+        rgba.chunks_exact(4)
+            .flat_map(|p| {
+                let a = f32::from(p[3]) / 255.0;
+                let enc = |c: u8| (linear_to_srgb(srgb_to_linear(f32::from(c) / 255.0) * a) * 255.0).round() as u8;
+                [enc(p[0]), enc(p[1]), enc(p[2]), p[3]]
+            })
+            .collect()
+    }
+
+    fn downsample_slow(src: &[u8], w: u32, h: u32) -> Vec<u8> {
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        let mut out = vec![0u8; (nw * nh * 4) as usize];
+        let at = |x: u32, y: u32, c: usize| -> f32 {
+            let v = f32::from(src[((y.min(h - 1) * w + x.min(w - 1)) * 4) as usize + c]) / 255.0;
+            if c == 3 {
+                v
+            } else {
+                srgb_to_linear(v)
+            }
+        };
+        for y in 0..nh {
+            for x in 0..nw {
+                for c in 0..4 {
+                    let (sx, sy) = (x * 2, y * 2);
+                    let v = (at(sx, sy, c) + at(sx + 1, sy, c) + at(sx, sy + 1, c) + at(sx + 1, sy + 1, c)) * 0.25;
+                    let v = if c == 3 { v } else { linear_to_srgb(v) };
+                    out[((y * nw + x) * 4) as usize + c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_fast_paths_change_no_pixel() {
+        // Every code survives decode and encode, which is what the opaque and flat paths rely on.
+        for code in 0..=255u8 {
+            let back = (linear_to_srgb(srgb_to_linear(f32::from(code) / 255.0)) * 255.0).round() as u8;
+            assert_eq!(back, code);
+        }
+        // Pseudo-random texels with opaque, empty, partial and flat runs (odd sizes too).
+        let mut state = 0x2545_F491_4F6C_DD1D_u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 32) as u8
+        };
+        for (w, h) in [(8u32, 8u32), (7, 5), (1, 4), (16, 2)] {
+            let mut px = Vec::with_capacity((w * h * 4) as usize);
+            for i in 0..w * h {
+                let alpha = match i % 5 {
+                    0 => 255,
+                    1 => 0,
+                    _ => next(),
+                };
+                let grey = next();
+                if i % 3 == 0 {
+                    px.extend_from_slice(&[grey, grey, grey, alpha]);
+                } else {
+                    px.extend_from_slice(&[next(), next(), 200, alpha]);
+                }
+            }
+            let premul = premultiply_srgb8(&px);
+            assert_eq!(premul, premultiply_slow(&px), "premultiply {w}x{h}");
+            let (nw, nh, mip) = downsample_srgb8(&premul, w, h);
+            assert_eq!((nw, nh), ((w / 2).max(1), (h / 2).max(1)));
+            assert_eq!(mip, downsample_slow(&premul, w, h), "mip of {w}x{h}");
+        }
     }
 
     #[test]

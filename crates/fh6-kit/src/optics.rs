@@ -420,6 +420,44 @@ impl Profile {
             n
         }
     }
+
+    /// How fast the surface normal turns per unit of inset along the slope, in radians per unit
+    /// (`docs/specs/optics.md` §7, pixel footprint). With `G = |∇(h^k)|` and `U = k h^(k−1)` the
+    /// normal's tilt is `atan(G / U)`, so `dθ/ds = (G′U − G U′) / (G² + U²)`. It is negative on
+    /// the bevel (the normal rights itself inwards), zero on the flat top and unbounded at the
+    /// rim.
+    #[must_use]
+    pub fn turn_rate(&self, inset: f32) -> f32 {
+        let (u, k) = self.unit(inset);
+        if u >= 1.0 {
+            return 0.0;
+        }
+        let w = self.bevel.max(1e-6);
+        let hk = self.thickness.max(0.0).powf(k);
+        let t = (1.0 - u).max(1e-4);
+        let g = hk * k * t.powf(k - 1.0) / w;
+        let g_s = -hk * k * (k - 1.0) * t.powf(k - 2.0) / (w * w);
+        let h = self.height(inset).max(1e-5);
+        let up = k * h.powf(k - 1.0);
+        let u_s = (k - 1.0) * g / h;
+        (g_s * up - g * u_s) / (g * g + up * up).max(1e-12)
+    }
+}
+
+/// Variance of the pixel filter (a Gaussian of peak 1: 1 / 2π) and the clamp of the footprint
+/// filter (`docs/specs/optics.md` §7, [S22]).
+pub const FOOTPRINT_SIGMA2: f32 = 0.159_154_94;
+/// See [`FOOTPRINT_SIGMA2`].
+pub const FOOTPRINT_KAPPA: f32 = 0.18;
+
+/// The squared GGX roughness of a highlight filtered over one pixel, across which the surface
+/// normal changes by `dn_dx` and `dn_dy`: `α² + min(2σ²(|∂n/∂x|² + |∂n/∂y|²), κ)` [S22]. A
+/// surface that curves inside a pixel shows a wider, dimmer highlight instead of a flickering
+/// one.
+#[must_use]
+pub fn footprint_roughness_sq(alpha: f32, dn_dx: Vec3, dn_dy: Vec3) -> f32 {
+    let spread = 2.0 * FOOTPRINT_SIGMA2 * (dn_dx.dot(dn_dx) + dn_dy.dot(dn_dy));
+    (alpha * alpha + spread.min(FOOTPRINT_KAPPA)).clamp(0.0, 1.0)
 }
 
 /// What the viewer sees through one point of a glass piece.
@@ -686,6 +724,71 @@ mod tests {
             transmittance(sigma, 7.0),
             1e-6,
             "paths multiply",
+        );
+    }
+
+    #[test]
+    fn the_normal_turns_at_the_profile_curvature() {
+        // A radius-50 sphere: the tilt is asin(1 - s / 50), so it turns at -1 / (50 cos θ).
+        let p = Profile {
+            thickness: 50.0,
+            bevel: 50.0,
+            base: 0.0,
+            exponent: 2.0,
+        };
+        close(p.turn_rate(20.0), -1.0 / 40.0, 1e-4, "hemisphere, 20 in");
+        close(p.turn_rate(50.0), 0.0, 1e-6, "pole and flat top");
+        assert!(p.turn_rate(0.01) < -1.0, "unbounded at the rim");
+        // Any profile: the analytic rate equals the finite difference of the normal's tilt.
+        for (thickness, bevel, exponent) in [(20.0, 26.0, 2.0), (30.0, 46.0, 2.0), (12.0, 40.0, 3.0), (9.0, 9.0, 2.5)] {
+            let p = Profile {
+                thickness,
+                bevel,
+                base: 0.0,
+                exponent,
+            };
+            for frac in [0.2_f32, 0.5, 0.8] {
+                let s = bevel * frac;
+                let tilt = |x: f32| {
+                    let n = p.normal(x, vec2(1.0, 0.0));
+                    n.x.atan2(n.z)
+                };
+                let numeric = (tilt(s + 0.01) - tilt(s - 0.01)) / 0.02;
+                close(p.turn_rate(s), numeric, 2e-3 * numeric.abs().max(0.01), "turn rate");
+            }
+        }
+    }
+
+    #[test]
+    fn the_footprint_filter_widens_and_clamps() {
+        let zero = vec3(0.0, 0.0, 0.0);
+        close(
+            FOOTPRINT_SIGMA2,
+            1.0 / (2.0 * PI),
+            1e-7,
+            "a Gaussian pixel filter of peak 1",
+        );
+        // A level surface keeps its roughness.
+        close(footprint_roughness_sq(0.07, zero, zero), 0.0049, 1e-7, "flat");
+        // The normal turns 0.1 rad across the pixel: α² + 2 σ² 0.01.
+        close(
+            footprint_roughness_sq(0.07, vec3(0.1, 0.0, 0.0), zero),
+            0.0049 + 0.01 / PI,
+            1e-6,
+            "0.1 rad per pixel",
+        );
+        // A rim that turns a radian per pixel is clamped at κ, and nothing passes 1.
+        close(
+            footprint_roughness_sq(0.07, vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0)),
+            0.0049 + 0.18,
+            1e-6,
+            "clamp",
+        );
+        close(
+            footprint_roughness_sq(1.0, vec3(1.0, 0.0, 0.0), zero),
+            1.0,
+            1e-7,
+            "never above 1",
         );
     }
 
