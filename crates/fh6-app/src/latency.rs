@@ -90,14 +90,23 @@ pub struct FrameStats {
     pub receive_to_present: SampleRing,
     /// Packet receive to the first vblank after `present` (estimated on-screen time).
     pub receive_to_vblank: SampleRing,
-    /// CPU time per presented frame (build + upload + record + submit + present).
+    /// CPU time per presented frame (build + draw + upload/record/submit + present).
     pub cpu_frame: SampleRing,
+    /// The same, for frames the OLED idle dim turned down (a parked car).
+    pub cpu_frame_dimmed: SampleRing,
     /// Time blocked on the swapchain's frame-latency wait.
     pub acquire_wait: SampleRing,
-    /// Building the quad batch.
+    /// Building the frame: config, layout, signals and the cluster's `update`.
     pub build: SampleRing,
+    /// Drawing the frame into the kit's arena: scrim, wash, the cluster's `draw`, the dim and
+    /// the OSD.
+    pub draw: SampleRing,
     /// Uploading, recording and submitting.
     pub encode_submit: SampleRing,
+    /// Of `encode_submit`: the kit's pack, upload and pass recording, and `finish`.
+    pub record: SampleRing,
+    /// Of `encode_submit`: `Queue::submit`.
+    pub submit: SampleRing,
     /// The `present` call.
     pub present: SampleRing,
     /// New packets presented before the first vblank after they arrived.
@@ -112,9 +121,13 @@ impl FrameStats {
         self.receive_to_present.clear();
         self.receive_to_vblank.clear();
         self.cpu_frame.clear();
+        self.cpu_frame_dimmed.clear();
         self.acquire_wait.clear();
         self.build.clear();
+        self.draw.clear();
         self.encode_submit.clear();
+        self.record.clear();
+        self.submit.clear();
         self.present.clear();
         self.vsync_hits = 0;
         self.vsync_checked = 0;
