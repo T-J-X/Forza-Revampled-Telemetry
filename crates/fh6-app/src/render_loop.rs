@@ -193,8 +193,10 @@ pub struct RenderSummary {
     pub draw: Percentiles,
     /// Kit render (pack, upload, record) and submit.
     pub encode_submit: Percentiles,
-    /// Of `encode_submit`: the kit's pack, upload and pass recording, and `finish`.
+    /// Of `encode_submit`: the swapchain view, the encoder, the kit's render and `finish`.
     pub record: Percentiles,
+    /// Of `record`: the kit's own render (pack, the upload's `write_buffer`, pass recording).
+    pub kit: Percentiles,
     /// Of `encode_submit`: `Queue::submit`.
     pub submit: Percentiles,
     /// The `present` call.
@@ -726,8 +728,8 @@ impl Loop {
     }
 
     /// Records and presents one frame at `fade`. With `draw` false, presents a fully transparent
-    /// frame (hide). `None` when nothing was presented; otherwise the outcome and the time spent
-    /// drawing into the kit's arena (before `render_with`).
+    /// frame (hide). `None` when nothing was presented; otherwise the outcome, the time spent
+    /// drawing into the kit's arena (before `render_with`) and the kit's own render time.
     ///
     /// The OLED idle dim turns down the light of the wash and of the cluster ([`dim_dash`]). The
     /// scrim is black, so it stays as it is: a faded scrim would uncover the game's own gauges
@@ -740,7 +742,7 @@ impl Loop {
         stats_on: bool,
         scrim: Option<(ScrimFit, Wash)>,
         osd: Option<&OsdFrame<'_>>,
-    ) -> Option<(FrameOutcome, Duration)> {
+    ) -> Option<(FrameOutcome, Duration, Duration)> {
         let draw_start = Instant::now();
         let gpu = self.gpu.as_mut()?;
         let Gpu { ctx, surface, kit } = gpu;
@@ -764,7 +766,7 @@ impl Loop {
                     multiview_mask: None,
                 }));
             });
-            return result.ok().map(|outcome| (outcome, Duration::ZERO));
+            return result.ok().map(|outcome| (outcome, Duration::ZERO, Duration::ZERO));
         };
         // The OSD dims the game through the kit's underlay (free in the resolve); a hide frame
         // and the normal dash have none.
@@ -811,12 +813,15 @@ impl Loop {
             }
         }
         let drawn = draw_start.elapsed();
+        let mut kit_cpu = Duration::ZERO;
         let result = surface.render_with(ctx, |ctx, encoder, view, format, size| {
-            kit.render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity);
+            kit_cpu = kit
+                .render(&ctx.device, &ctx.queue, encoder, view, format, size, fade.opacity)
+                .cpu;
         });
         let failed = ctx.has_failed();
         match result {
-            Ok(outcome) if !failed => Some((outcome, drawn)),
+            Ok(outcome) if !failed => Some((outcome, drawn, kit_cpu)),
             Ok(_) => {
                 self.lose_gpu("wgpu reported an error");
                 None
@@ -886,10 +891,14 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         on_bench_done,
         osd: osd_setup,
     } = setup;
-    // Frame work runs from wake to `present` without being parked behind the game's threads
-    // (known defect 10: the p99 of "CPU per frame" is wall-clock time on this thread).
+    // Frame work runs from wake to `present` without being parked behind the game's threads or
+    // slowed as background work (known defect 10: "CPU per frame" is wall-clock time here).
     let priority = fh6_win::system::raise_frame_thread();
-    tracing::info!(class = ?priority.class(), "render thread scheduling class");
+    tracing::info!(
+        class = ?priority.class(),
+        full_speed = priority.full_speed(),
+        "render thread scheduling class"
+    );
     let refresh = fh6_win::system::composition_timing()
         .map(|t| t.refresh_period)
         .unwrap_or(FALLBACK_REFRESH);
@@ -1108,7 +1117,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
                 // Hide = one fully transparent frame, then idle.
                 blank_presented = matches!(
                     lp.render(HIDDEN, &layout, false, false, None, None),
-                    Some((FrameOutcome::Presented { .. }, _))
+                    Some((FrameOutcome::Presented { .. }, _, _))
                 );
                 tracing::debug!(reason = ?vis.hidden_because, blank_presented, "overlay hidden");
             }
@@ -1210,7 +1219,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             },
             blocker: osd.host.blocker_focused(&rows_cfg),
         });
-        if let Some((FrameOutcome::Presented { timings, at }, drawn)) =
+        if let Some((FrameOutcome::Presented { timings, at }, drawn, kit_cpu)) =
             lp.render(fade, &layout, true, stats_on, scrim, osd_draw.as_ref())
         {
             lp.frames += 1;
@@ -1226,6 +1235,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             lp.stats.draw.record(drawn);
             lp.stats.encode_submit.record(timings.encode_submit);
             lp.stats.record.record(timings.record);
+            lp.stats.kit.record(kit_cpu);
             lp.stats.submit.record(timings.submit);
             lp.stats.present.record(timings.present);
             if new_packet {
@@ -1267,6 +1277,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         draw: lp.stats.draw.percentiles(&mut lp.scratch),
         encode_submit: lp.stats.encode_submit.percentiles(&mut lp.scratch),
         record: lp.stats.record.percentiles(&mut lp.scratch),
+        kit: lp.stats.kit.percentiles(&mut lp.scratch),
         submit: lp.stats.submit.percentiles(&mut lp.scratch),
         present: lp.stats.present.percentiles(&mut lp.scratch),
         vsync_hits: lp.stats.vsync_hits,

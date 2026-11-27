@@ -90,8 +90,13 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
     row(&mut out, "  of which: upload + record + submit", &s.encode_submit);
     row(
         &mut out,
-        "    of which: kit pack, upload, pass recording, `finish`",
+        "    of which: swapchain view, encoder, kit render, `finish`",
         &s.record,
+    );
+    row(
+        &mut out,
+        "      of which: kit render (pack, `write_buffer`, pass recording)",
+        &s.kit,
     );
     row(&mut out, "    of which: `Queue::submit`", &s.submit);
     row(&mut out, "  of which: `present` call", &s.present);
@@ -148,15 +153,25 @@ pub fn markdown(s: &RenderSummary, seconds: u64, stats_overlay: bool) -> String 
          presented frame.\n\
          - \"CPU per frame\" is everything the render thread does for a frame except the frame-latency wait: \
          building it, drawing the scrim, the cluster and the OSD into the kit's arena, the kit's render and \
-         submit, and `present`.\n\
-         - The idle-dimmed row needs a parked car: `mock-udp --scenario parked` and a bench longer than the 30 s \
-         idle wait (`--bench-seconds 60`)."
+         submit, and `present`."
     );
+    if s.cpu_frame_dimmed.count == 0 {
+        let _ = writeln!(
+            out,
+            "- No frame was idle-dimmed. To measure a parked car, run `mock-udp --scenario parked` and a bench \
+             longer than the 30 s idle wait (`--bench-seconds 60`)."
+        );
+    }
+    let scenario = if s.cpu_frame_dimmed.count > 0 {
+        "parked"
+    } else {
+        "bmw_m4_cs"
+    };
     let _ = writeln!(
         out,
         "\n## Reproduce\n\n```\ncargo build --release -p fh6-app -p mock-udp\n\
          target/release/fh6-stand-in   (focused, full screen)\n\
-         target/release/mock-udp --scenario bmw_m4_cs --duration 120 --rate-hz 60\n\
+         target/release/mock-udp --scenario {scenario} --duration 120 --rate-hz 60\n\
          target/release/FH6_WheelDash --game-process fh6-stand-in.exe --bench-seconds {seconds} \
          --bench-out docs/perf/engine.md\n```"
     );
@@ -193,6 +208,7 @@ mod tests {
             draw: p,
             encode_submit: p,
             record: p,
+            kit: p,
             submit: p,
             present: p,
             vsync_hits: 1000,
@@ -208,11 +224,19 @@ mod tests {
         assert!(md.contains("Indicative only"));
         assert!(md.contains("draw (scrim"));
         assert!(md.contains("`Queue::submit`"));
-        assert!(!md.contains("idle-dimmed"), "no dimmed frames, no dimmed row");
+        assert!(
+            !md.contains("idle-dimmed frames only"),
+            "no dimmed frames, no dimmed row"
+        );
+        assert!(md.contains("No frame was idle-dimmed"));
+        assert!(md.contains("--scenario bmw_m4_cs"));
         let parked = RenderSummary {
             cpu_frame_dimmed: p,
             ..s
         };
-        assert!(markdown(&parked, 20, false).contains("idle-dimmed frames only"));
+        let md = markdown(&parked, 60, false);
+        assert!(md.contains("idle-dimmed frames only"));
+        assert!(!md.contains("No frame was idle-dimmed"));
+        assert!(md.contains("--scenario parked"));
     }
 }

@@ -10,8 +10,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::System::Threading::{
-    AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateMutexW, GetCurrentThread, SetThreadPriority,
-    THREAD_PRIORITY_ABOVE_NORMAL,
+    AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateMutexW, GetCurrentThread,
+    SetThreadInformation, SetThreadPriority, ThreadPowerThrottling, THREAD_POWER_THROTTLING_CURRENT_VERSION,
+    THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE, THREAD_PRIORITY_ABOVE_NORMAL,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
@@ -180,6 +181,7 @@ pub enum FrameThreadClass {
 pub struct FrameThreadGuard {
     mmcss: Option<HANDLE>,
     class: FrameThreadClass,
+    full_speed: bool,
     /// The MMCSS handle is per thread: the guard must be dropped where it was made.
     _not_send: std::marker::PhantomData<*const ()>,
 }
@@ -189,6 +191,13 @@ impl FrameThreadGuard {
     #[must_use]
     pub fn class(&self) -> FrameThreadClass {
         self.class
+    }
+
+    /// True when the thread is opted out of Windows power throttling (EcoQoS), so it is not
+    /// moved to efficiency cores or a low clock while another window (the game) has the focus.
+    #[must_use]
+    pub fn full_speed(&self) -> bool {
+        self.full_speed
     }
 }
 
@@ -204,13 +213,18 @@ impl Drop for FrameThreadGuard {
     }
 }
 
-/// Raises the calling thread for frame work that must not be preempted mid-frame: an MMCSS
-/// "Games" task (the class Windows gives game render threads), or above-normal priority when MMCSS
-/// is unavailable. The frame thread works for well under 1 ms per refresh and then waits, so it
-/// takes no time from the game; it only stops a busy game's threads from parking it between the
-/// start of a frame and its `present`.
+/// Raises the calling thread for frame work that must not be preempted or slowed mid-frame:
+/// - an MMCSS "Games" task (the class Windows gives game render threads), or above-normal
+///   priority when MMCSS is unavailable;
+/// - out of power throttling. The overlay never has the focus (the game does), so Windows treats
+///   it as background work and may run it on an efficiency core at a low clock (EcoQoS).
+///
+/// The frame thread works for well under 1 ms per refresh and then waits, so it takes no time
+/// from the game; it only stops the frame from being parked or slowed between its wake and its
+/// `present`.
 #[must_use = "dropping the guard reverts the thread's class at once"]
 pub fn raise_frame_thread() -> FrameThreadGuard {
+    let full_speed = opt_out_of_power_throttling();
     let mut index = 0u32;
     // SAFETY: the task name is a static wide string; `index` is a valid out-param (0 asks for a new
     // task). The handle is reverted by the guard on this thread.
@@ -219,6 +233,7 @@ pub fn raise_frame_thread() -> FrameThreadGuard {
             return FrameThreadGuard {
                 mmcss: Some(handle),
                 class: FrameThreadClass::Mmcss,
+                full_speed,
                 _not_send: std::marker::PhantomData,
             }
         }
@@ -233,8 +248,34 @@ pub fn raise_frame_thread() -> FrameThreadGuard {
     FrameThreadGuard {
         mmcss: None,
         class,
+        full_speed,
         _not_send: std::marker::PhantomData,
     }
+}
+
+/// Turns execution-speed throttling off for the calling thread (control the policy, state off:
+/// always full speed). False when Windows refuses (before Windows 11 the thread class is unknown).
+fn opt_out_of_power_throttling() -> bool {
+    let state = THREAD_POWER_THROTTLING_STATE {
+        Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+        StateMask: 0,
+    };
+    let size = u32::try_from(std::mem::size_of::<THREAD_POWER_THROTTLING_STATE>()).unwrap_or(0);
+    // SAFETY: `state` is a valid THREAD_POWER_THROTTLING_STATE that outlives the call, `size` is
+    // its size, and the pseudo-handle names the calling thread.
+    let result = unsafe {
+        SetThreadInformation(
+            GetCurrentThread(),
+            ThreadPowerThrottling,
+            std::ptr::from_ref(&state).cast(),
+            size,
+        )
+    };
+    if let Err(err) = &result {
+        tracing::debug!(error = %err.message(), "power throttling opt-out refused");
+    }
+    result.is_ok()
 }
 
 #[cfg(test)]
@@ -254,14 +295,16 @@ mod tests {
     fn the_frame_thread_is_raised_and_reverted_on_its_own_thread() {
         let class = std::thread::spawn(|| {
             let guard = raise_frame_thread();
-            let class = guard.class();
+            let class = (guard.class(), guard.full_speed());
             drop(guard);
             class
         })
         .join()
         .expect("the test thread ran");
         // MMCSS runs on every desktop Windows; a stripped-down one still gets the priority bump.
-        assert_ne!(class, FrameThreadClass::Normal);
+        assert_ne!(class.0, FrameThreadClass::Normal);
+        // Windows 10 1709 and later accept the throttling opt-out.
+        assert!(class.1, "the frame thread is not throttled");
     }
 
     #[test]

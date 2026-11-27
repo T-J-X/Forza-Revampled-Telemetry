@@ -1,8 +1,9 @@
 //! Frame-time and latency statistics with no allocation after startup.
 use std::time::Duration;
 
-/// How many recent samples each series keeps (about 2 minutes at 60 Hz).
-pub const SAMPLE_CAPACITY: usize = 8192;
+/// How many recent samples each series keeps: about 2 minutes at 144 fps, so a 60 s parked bench
+/// at a high refresh counts every frame (64 KiB per series, allocated once).
+pub const SAMPLE_CAPACITY: usize = 16384;
 
 /// A ring of the most recent samples, in milliseconds.
 #[derive(Debug, Clone)]
@@ -103,8 +104,10 @@ pub struct FrameStats {
     pub draw: SampleRing,
     /// Uploading, recording and submitting.
     pub encode_submit: SampleRing,
-    /// Of `encode_submit`: the kit's pack, upload and pass recording, and `finish`.
+    /// Of `encode_submit`: the swapchain view, the encoder, the kit's render and `finish`.
     pub record: SampleRing,
+    /// Of `record`: the kit's own render (pack, the upload's `write_buffer`, pass recording).
+    pub kit: SampleRing,
     /// Of `encode_submit`: `Queue::submit`.
     pub submit: SampleRing,
     /// The `present` call.
@@ -127,6 +130,7 @@ impl FrameStats {
         self.draw.clear();
         self.encode_submit.clear();
         self.record.clear();
+        self.kit.clear();
         self.submit.clear();
         self.present.clear();
         self.vsync_hits = 0;
