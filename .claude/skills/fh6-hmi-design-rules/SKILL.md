@@ -52,7 +52,7 @@ A domed binnacle shape, not a rectangle. The inner core is 100% `#000000` at alp
 - `ChronoMultiverse`: warping ferrofluid
 - `ChronoEventHorizon`, `NeuralCyberSynapse`, `Gt7ModularTripod`, `ArNavWayfinder`, `SolarisWarpCore`, `VisionSpatialGlass`, `GlyphDotMatrix`, `AeroPlasmaBlade`, `CymaticResonanceField`, `KineticLiquidMetal`, `ShibuyaChromaticPrisma`: see `docs/specs/phase-8-materials-and-shaders.md`
 
-The full list of 29 themes is in `crates/fh6-core/src/theme.rs`.
+The full list of 48 themes is in `crates/fh6-core/src/theme.rs`, and the catalog rows are in `fh6_clusters::catalog`.
 
 ## Hybrid rendering
 Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/design_tokens.json`, not hardcoded hex values.

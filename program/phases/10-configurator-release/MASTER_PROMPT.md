@@ -6,7 +6,7 @@ You lead Phase 10 of FH6 WheelDash v2, running in your own chat and worktree. **
 `ONBOARDING.md`, root `AGENTS.md` / `SKILLS.md`, this folder's `AGENTS.md` / `SKILLS.md`, the handovers of Phases 3, 4, 5, 8 and 9 and the finished cluster handovers, `docs/design/*` (the configurator direction frame), `docs/kit/README.md`, `tools/web-preview/` (Phase 5), and `crates/fh6-app/src/main.rs` (the widget server on 127.0.0.1:5301).
 
 ## Required work
-1. **Design in Penpot first** on page `10 · Configurator` of the Penpot master file (`docs/design/PENPOT.md`). It is a dark, premium, motorsport web app that matches the OSD's design language. Critique until it's excellent.
+1. **Design in Penpot first** on page `10 · Configurator` of the Penpot master file (`docs/design/PENPOT.md`). It is a dark, premium, motorsport web app that matches the OSD's design language. Review it against a fixed yes/no checklist, and get TJX's direction check before you build. No scores and no critic loops (AGENTS.md rule 12).
 2. **Served by the exe** at `http://127.0.0.1:5301/`:
    - The HTML shell, the WASM renderer and the assets are embedded in the exe (pure Rust, for example `include_bytes!` or `rust-embed`).
    - Opened from the tray, or with `FH6_WheelDash.exe --configure`.

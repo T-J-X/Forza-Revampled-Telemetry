@@ -1,6 +1,6 @@
 ---
 name: aesthetic
-description: Create aesthetically beautiful interfaces following proven design principles. Use when building UI/UX, analyzing designs from inspiration sites, generating design images with ai-multimodal, implementing visual hierarchy and color theory, adding micro-interactions, or creating design documentation. Includes workflows for capturing and analyzing inspiration screenshots with chrome-devtools and ai-multimodal, iterative design image generation until aesthetic standards are met, and comprehensive design system guidance covering BEAUTIFUL (aesthetic principles), RIGHT (functionality/accessibility), SATISFYING (micro-interactions), and PEAK (storytelling) stages. Integrates with chrome-devtools, ai-multimodal, media-processing, ui-styling, and web-frameworks skills.
+description: Create aesthetically beautiful interfaces following proven design principles. Use when building UI/UX, analyzing designs from inspiration sites, implementing visual hierarchy and color theory, adding micro-interactions, or creating design documentation. Includes workflows for capturing and analyzing inspiration screenshots with the built-in browser and for reviewing generated design images against a fixed yes/no checklist, and comprehensive design system guidance covering BEAUTIFUL (aesthetic principles), RIGHT (functionality/accessibility), SATISFYING (micro-interactions), and PEAK (storytelling) stages.
 ---
 
 # Aesthetic
@@ -48,8 +48,8 @@ Elevate with narrative elements—parallax effects, particle systems, thematic c
 
 **Steps**:
 1. Browse inspiration sites (Dribbble, Mobbin, Behance, Awwwards)
-2. Use **chrome-devtools** skill to capture full-screen screenshots (not full page)
-3. Use **ai-multimodal** skill to analyze screenshots and extract:
+2. Use the built-in browser to capture full-screen screenshots (not full page)
+3. Analyze the screenshots yourself and extract:
    - Design style (Minimalism, Glassmorphism, Neo-brutalism, etc.)
    - Layout structure & grid systems
    - Typography system & hierarchy
@@ -68,7 +68,7 @@ Elevate with narrative elements—parallax effects, particle systems, thematic c
 
 **Steps**:
 1. Define design prompt with: style, colors, typography, audience, animation specs
-2. Use **ai-multimodal** skill to generate design images with Gemini API
+2. Generate design images with ComfyUI (the `comfyui-hero-textures` skill), holding the GPU lock
 3. Review the output against the project's fixed checklist (in this repo: "Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`). Answer each line yes or no; never give a numeric score
 4. For each no:
    - Identify the specific weakness (color, typography, layout, spacing, hierarchy)
@@ -101,12 +101,10 @@ Save in project `./docs/design-story.md`.
 ## Resources & Integration
 
 ### Related Skills
-None of the five skills below is installed in this repo. Use ComfyUI (`comfyui-hero-textures`) for generated images, the built-in browser for screenshots, and `frontend-design` for web UI.
-- **ai-multimodal**: Analyze documents, screenshots & videos, generate design images, edit generated images, evaluate aesthetic quality using Gemini API
-- **chrome-devtools**: Capture full-screen screenshots from inspiration websites, navigate between pages, interact with elements, read console logs & network requests
-- **media-processing**: Refine generated images (FFmpeg for video, ImageMagick for images)
-- **ui-styling**: Implement designs with shadcn/ui components + Tailwind CSS utility-first styling
-- **web-frameworks**: Build with Next.js (App Router, Server Components, SSR/SSG)
+- **comfyui-hero-textures**: Generated textures and images through ComfyUI
+- **The built-in browser**: Screenshots of inspiration sites and of the rendered pages
+- **frontend-design**: Web UI direction and typography
+- **fh6-hmi-design-rules**: The project's own design rules, which win where the two differ
 
 ### Reference Documentation
 **References**: [`references/design-resources.md`](references/design-resources.md) - Inspiration platforms, design systems, AI tools, MCP integrations, development strategies.

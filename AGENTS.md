@@ -1,8 +1,8 @@
 # AGENTS.md: FH6 WheelDash specialist council (Rust)
 
-**Project:** a Forza Horizon 6 overlay. It draws ultrawide cockpit/hood instrument clusters (29 styles), a 0–100% OEM dash blackout scrim, and a gamepad-driven OSD from the game's UDP telemetry. It also patches the game's camera FOV and seat position.
+**Project:** a Forza Horizon 6 overlay. It draws ultrawide cockpit/hood instrument clusters (a catalog of 48 dashes, each rebuilt in its own thread), a 0–100% OEM dash blackout scrim, and a gamepad-driven OSD from the game's UDP telemetry. It also patches the game's camera FOV and seat position.
 **Root:** the repository root (locally `%USERPROFILE%\Documents\FOV and Dash digtal clusters\`). This is a Cargo workspace; run every command from the root.
-**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, MSRV 1.80 (`clippy.toml`).
+**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, MSRV 1.87 (`Cargo.toml` and `clippy.toml`).
 **Display target:** 55" LG C1 4K OLED at `3840x2160` and 200% DPI. Off pixels are true black, `#000000`.
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
@@ -15,10 +15,10 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 
 | Crate / tool | Owns | May depend on |
 |---|---|---|
-| `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail | std, serde, arc-swap, thiserror |
-| `crates/fh6-render` | Theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, OEM scrim and ambient wash | fh6-core, tiny-skia |
+| `crates/fh6-core` | Telemetry decoder (324-byte packet), UDP engine, `AppConfig`, car/brand/profile data (per-car `Option` overlay), cockpit fit model (`fit`: dome scrim, per-view placement), camera patch status, `ClusterTheme`, rev limiter, shift guard, OLED care, world-map trail (these four modules exist, but nothing calls them yet) | std, serde, arc-swap, thiserror |
+| `crates/fh6-render` | The v1 tiny-skia layer, kept for the v1 clusters in `legacy/` and for `preview-export --legacy`: theme dispatch (camera 3 → cockpit, camera 4 → hood), layout kit, tokens, text, asset cache, and CPU twins of the scrim and wash. The live scrim, wash, tokens and text are in `fh6-kit` | fh6-core, tiny-skia |
 | `crates/fh6-clusters` | The cluster catalog as data (`catalog::CATALOG`, 48 rows), the registry (`registry::REGISTRY`, contract v2), one module per cluster (`clusters/<snake_name>/`: `mod.rs`, `spec.md`, `README.md`), shared components (`common/`), review states and the motion sequence (`review`), the two Phase 5 samples (`kit/`), and the 29 v1 tiny-skia clusters (`legacy/`) behind `LegacyClusterRenderer` | fh6-core, fh6-kit, fh6-render |
-| `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
+| `crates/fh6-kit` | GPU render kit: `Painter`, SDF shapes, paints, bloom, blur, Liquid Glass, MTSDF text, springs, palette engine, token binding, 2.5D camera, glTF mesh pass, fluid, particles, noise, the OEM scrim and ambient wash, `Cluster` / `FrameInput` / `Layout`; native and WebGPU | fh6-core, wgpu |
 | `crates/fh6-osd` | Controller-first Liquid Glass OSD (Phase 9, spec `docs/design/OSD.md`): 5-tab row model, navigation state machine, on-screen keyboard, button remapper, live view host and carousel thumbnails drawn with the kit, auto-pause (behind a `KeyboardInjector` trait), debounced config saver, live dyno, cockpit-fit seam | fh6-core, fh6-render, fh6-clusters, fh6-kit |
 | `crates/fh6-input` | XInput dynamic loading (System32 only, ordinal 100 for Guide), 125 Hz poller thread, button tracker, the single `HoldToggle` (suspended while the OSD has focus), press/release latches for the OSD, Guide edge detection, scripted pad (`--pad-script`) | fh6-core, `windows` |
 | `crates/fh6-win` | Overlay window (DirectComposition target, click-through, topmost), app message window + tray, foreground hook, quit signal, monitor/DPI, single instance, process list, DWM timing, screen capture, camera INI/XML patcher (backups, restore, never while the game runs), Steam library lookup (`steam`), `car_brands.json` binding, `SendInput` key taps (the OSD auto-pause ESC) | fh6-core, `windows`, raw-window-handle |
@@ -32,6 +32,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `tools/wgc-bench` | Windows.Graphics.Capture cost benchmark for the glass refraction source | fh6-win |
 | `tools/screen-capture` | DPI-aware desktop or region screenshot to PNG | fh6-win |
 | `tools/stand-in-game` | Solid, focusable full-screen window (`fh6-stand-in.exe`) for focus and screenshot checks | fh6-win |
+| `tools/asset-forge` | Builds every asset from Rust: headless Blender (bpy as Rust string constants) and ComfyUI over HTTP, the hero library (`src/hero/`: light rigs, camera matching, PBR materials, parts, SDXL graphs), per-set and per-cluster recipes, and the asset ledger (`assets/ASSETS.md`). Commands: `doctor`, `build --set <name>`, `sheet`, `hero-demo`, `hero-detail`, `hero-versus` | std, serde, image, resvg, ureq |
 
 Rules for the layers:
 - Render code (`fh6-render`, `fh6-clusters`, `fh6-osd`, `fh6-gpu`) never calls Win32. Only `fh6-win` and `fh6-input` touch the `windows` crate; `fh6-gpu` reaches DX12 through wgpu, and `fh6-app` only uses their safe APIs.
@@ -55,6 +56,8 @@ cargo run --release -p bench-render -- --frames 600
 cargo test -p fh6-clusters --test golden_images
 cargo test -p fh6-clusters liquid_glass
 cargo build -p fh6-kit --target wasm32-unknown-unknown
+cargo run --release -p asset-forge -- doctor
+cargo run --release -p asset-forge -- build --set <name>
 ```
 
 Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Check, test, clippy `-D warnings`, fmt and parity are all green.
@@ -90,6 +93,11 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
     - Blender's bpy snippets live as Rust string constants inside `tools/asset-forge`.
     - Web logic is Rust compiled to WASM; generated JS is never committed.
     - Prefer pure-Rust crates.
+12. **Reviews (TJX, 2026-11-27).** A review is a fixed checklist with yes/no answers, then TJX's sign-off. No scores, no critic loop that runs until a reviewer passes, and no rewriting of a prompt to chase a score. Direction checks and sign-offs come from TJX only; no session answers for TJX.
+13. **Threads (TJX, 2026-11-27).** Every phase and every dash runs in its own thread. A thread opens with an introduction (the task, the rule files that apply, what done looks like). It closes only after a line-by-line review against this file and `SKILLS.md`, and TJX's sign-off. No thread is ever archived.
+14. **Order for every dash (TJX, 2026-11-27).** R&D on the web → Penpot → ComfyUI → final 3D in Blender. All assets are 4K. The 4K masters go to the one Google Drive folder (`SKILLS.md` section 2); git keeps the compressed runtime assets.
+15. **One GPU, one job (TJX, 2026-11-27).** One GPU job at a time across all threads, holding the lock file (`SKILLS.md` section 5). A cloud GPU only after TJX approves the provider and the cost.
+16. **Merging (TJX, 2026-11-27).** When a job is finished and its checks pass, the coordinator merges it into `main` and pushes. Threads that share a checkout commit with explicit paths and never switch its branch.
 
 ---
 
@@ -118,7 +126,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 
 ## Agent 2: Principal Rust Systems, Win32/XInput & Real-Time Graphics Engineer (`@Rust_Systems_Lead`)
 
-**Background:** 25 years in low-level Windows internals (`user32`, `gdi32`, `xinput1_4`), lock-free telemetry pipelines, premultiplied 32-bit compositing and real-time vehicle kinematics. Now works in Rust with the `windows` 0.58 crate and tiny-skia.
+**Background:** 25 years in low-level Windows internals (`user32`, `gdi32`, `xinput1_4`), lock-free telemetry pipelines, premultiplied 32-bit compositing and real-time vehicle kinematics. Now works in Rust with the `windows` 0.62 crate and wgpu 30.
 
 **Responsibilities:**
 - **GPU renderer (v2):**
@@ -128,9 +136,9 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
   - Composite the dynamic vectors (needles, ribbons, tabular digits, road curvature) on top of the cached textures.
 - **Telemetry:**
   - The 324-byte little-endian packet arrives on port 8000, with fallback 5500 and forward 5607. `fh6-core::udp` publishes it lock-free via `ArcSwap` and handles stale timeouts.
-  - World position at bytes 244..255 feeds the 120-point breadcrumb trail (`fh6-core::trail`).
+  - World position at bytes 244..255 feeds the 120-point breadcrumb trail (`fh6-core::trail`). The module exists, but nothing feeds it until the WindshieldHud dash is rebuilt.
 - **XInput:**
-  - Load `xinput1_4.dll` dynamically, falling back to `xinput9_1_0.dll`, and poll slots 0..3 at 60 Hz.
+  - Load `xinput1_4.dll` dynamically, falling back to `xinput9_1_0.dll`, and poll slots 0..3 at 125 Hz.
   - **RB camera ring:** on the rising edge of `0x0200`, while `IsRaceOn == 1` and the OSD is closed, set `CurrentCameraIndex = (i + 1) % 6`.
     - Landing on `[3]` activates `CockpitHudStyle` and `OemDashOpaquePct`.
     - Landing on `[4]` activates `BonnetHudStyle` and forces the scrim to 0%.
@@ -138,7 +146,7 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
 - **Safety and performance:**
   - Keep `unsafe` in `fh6-win` and `fh6-input`, each block with a `// SAFETY:` comment.
   - No allocation in the frame loop.
-  - Measure against the 1.8 ms budget with `bench-render`.
+  - Measure against the budget in directive 7 (under 1 ms CPU per frame and under 0.5 ms GPU per cluster) with `bench-render`.
 
 ## Agent 3: Council of 4 Graphic Design & Optical Shader Directors (`@Design_Council`)
 
@@ -149,7 +157,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 - **Mandate:** an authentic iOS 26 / CarPlay Ultra / visionOS Liquid Glass cluster:
   - an 18–24% ultra-translucent frosted sapphire lens that the 3D cockpit refracts through
   - the optional cached caustic overlay `assets/liquid_glass_caustic_lens.png`, composited with procedural 1 px multi-stop specular bevel rims (`#FFFFFF -> #38BDF8`)
-  - an arched upper crown sheen and floating Bahnschrift Light / SF-style typography
+  - an arched upper crown sheen and floating light-weight typography in the OFL motorsport default, Saira Condensed (Bahnschrift is not OFL, so it is not shipped)
   - a sculpted crystal hero-gear prism
   - a luminous fluid light-ribbon tach with a glowing radial meniscus orb
 - Optical maths is in `docs/specs/phase-8-materials-and-shaders.md` (card P8-1).
@@ -182,7 +190,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
   - a sequential rev / power bar
   - blind-spot status
 - **Underneath zone:** a 3D homogeneous perspective road.
-  - Eye at `(0, 1.85 m, -3.4 m)`, near plane at Z > 0.1 m.
+  - Eye at `(0, 3.4 m, -6.0 m)`, pitched 8° down, near plane at Z > 0.1 m. Phase 3 raised it from `(0, 1.85 m, -3.4 m)`, because the old eye hid the road behind the ego car.
   - The road curves with κ = ω_y / V and drift slip β.
   - Low-speed singularity guards.
 - **Cars:**
@@ -208,6 +216,7 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 **Background:** 20 years in automotive CGI and real-time look development: Cycles and Octane studio renders, substance-grade procedural materials, and generative imaging pipelines.
 
 **Responsibilities:**
+- **Order and storage (TJX, 2026-11-27):** for every dash, the ComfyUI textures and plates come first and the final 3D is rendered in Blender, which uses them. Every asset is 4K. The 4K masters go to the Google Drive folder, and git keeps the compressed runtime files.
 - **Blender 5.3 (headless bpy through `tools/asset-forge`):**
   - Liquid Glass sets: normal, refraction, caustic and fresnel maps.
   - Abstract fluid: liquid-metal and ferrofluid flipbooks with matching flow and normal maps.

@@ -1,6 +1,6 @@
 # ONBOARDING: read this first in every chat
 
-You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work runs as a chain of chats: one chat per phase, and one per cluster in the cluster factory. A conductor chat starts each one, verifies what it delivers, and merges it. This page is everything a new chat needs before touching the repo.
+You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work runs as threads: one thread per phase, and one per dash. A coordinator starts each one, and merges its work into `main` when the job is finished and its checks pass. TJX signs each thread off. This page is everything a new chat needs before touching the repo.
 
 ## 1. What we are building
 **The overlay:**
@@ -19,19 +19,22 @@ You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work r
 
 ## 2. Repo map
 ```
-crates/fh6-core      telemetry decoder (golden-tested), UDP engine, config, car/brand data, rev limiter, trail
-crates/fh6-render    render layer (moving to wgpu in Phase 5), scrim and ambient wash, tokens
-crates/fh6-clusters  one module per cluster
+crates/fh6-core      telemetry decoder (golden-tested), UDP engine, config, car/brand data, cockpit fit model
+crates/fh6-gpu       wgpu DX12 device, premultiplied overlay surface, offscreen target
+crates/fh6-kit       the GPU render kit every v2 dash draws with: shapes, glass, text, springs, tokens, scrim and wash
+crates/fh6-render    the v1 tiny-skia layer, kept for the v1 clusters in legacy/
+crates/fh6-clusters  the catalog (48 rows) and one module per dash; the v1 clusters live in legacy/
 crates/fh6-osd       OSD model and rendering
 crates/fh6-input     XInput (ABXY lock)
 crates/fh6-win       window and Win32, camera patcher
 crates/fh6-app       binaries FH6_WheelDash and FH6_SteamLauncher
-tools/               preview-export (4K mockups -> mockups/), mock-udp, parity-dump, bench-render
-tests/golden/packets 20 telemetry captures with expected JSON. Never edit them to make a test pass.
-assets/              textures, car_brands/, reference/ photos; logos/ and fonts/ arrive in Phase 6
+tools/               preview-export (4K renders -> mockups/), asset-forge (Blender and ComfyUI assets), mock-udp,
+                     parity-dump, bench-render, web-preview, wgc-bench, screen-capture, stand-in-game
+tests/golden/packets 20 golden telemetry packets with expected JSON. Never edit them to make a test pass.
+assets/              textures, logos/, fonts/, car_brands/, clusters/<snake_name>/, reference/ photos
 data/                config.json, car profiles, ordinals, design_tokens.json, game camera files
-docs/                PROGRESS.md (status), specs/, design/ (from Phase 3)
-program/             this build program: roadmap, per-phase MASTER_PROMPT / AGENTS / SKILLS, handovers
+docs/                PROGRESS.md (status), specs/, design/, kit/ (the kit guide), adr/
+program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENTS / SKILLS, handovers
 ```
 
 ## 3. Rules that are never broken
@@ -62,14 +65,15 @@ program/             this build program: roadmap, per-phase MASTER_PROMPT / AGEN
 - **Penpot** (the design tool since 2026-11-23): Penpot's hosted MCP is registered at user scope as the `penpot` server (`execute_code`, `high_level_overview`, `penpot_api_info`, `export_shape`). It only reaches the design file while that file is **open in a browser tab and connected** (main menu ⋮ → MCP server → Connect; a green ● MCP badge shows in the toolbar), so the tab must stay open. Call `high_level_overview` once before the first `execute_code`. Setup, limits and the master file are in `docs/design/PENPOT.md`. Never ask for the MCP key or write it into a file. HTML boards are the fallback.
 - **context7 MCP** for crate docs (it needs no API key); the **built-in browser** for viewing `mockups/index.html` and HTML boards, served over loopback (a `file://` page loads without its images; see `SKILLS.md` section 2).
 
-## 5. How a chat works
-1. Read in this order: this file → root `AGENTS.md` → root `SKILLS.md` → your `program/phases/<phase>/MASTER_PROMPT.md`, `AGENTS.md` and `SKILLS.md` → `docs/PROGRESS.md` → the `HANDOVER.md` of every phase you depend on.
-2. Load the skills your phase's SKILLS.md lists, in order, at the moment it says.
-3. Work autonomously. TJX pre-approved the whole program on 2026-11-20, including the downloads listed in `program/README.md`. Don't stop to ask unless the 97% rule truly blocks you; record decisions as "my call" in your handover.
-4. Commit early and often on your branch, as TJX.
-5. **Finish:**
-   1. Fill in `program/phases/<phase>/HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`.
+## 5. How a thread works (TJX, 2026-11-27)
+1. Read in this order: the approved plan (the coordinator gives you the link) → this file → root `AGENTS.md` → root `SKILLS.md` → your phase's files in `program/phases/<phase>/` (`MASTER_PROMPT.md`, `AGENTS.md`, `SKILLS.md`; a dash thread follows `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`) → `docs/PROGRESS.md` → the `HANDOVER.md` of every phase you depend on.
+2. **Open with an introduction** to TJX in your thread: the task, the rule files that apply, and what done looks like.
+3. Load the skills your phase's `SKILLS.md` lists, at the step it names. Root `SKILLS.md` says how to call a skill or an MCP tool.
+4. Work without check-in questions. Stop for TJX only where the rules ask for TJX: the direction check on design work, a sign-in, a paid service, a deploy, anything that cannot be undone, and the sign-off. Record your other decisions as "my call" in your handover. The downloads TJX pre-approved are listed in `program/README.md`.
+5. Hold the GPU lock for every GPU job (`SKILLS.md` section 5). Threads can share one checkout: commit as TJX with explicit paths, and never switch its branch.
+6. **Review with a fixed checklist,** line by line against `AGENTS.md` and `SKILLS.md`, with yes/no answers. No scores and no critic loops. A dash uses the checklist in `CLUSTER_PROMPT.md`.
+7. **Finish:**
+   1. Fill in your `HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`.
    2. Update `docs/PROGRESS.md`.
-   3. Commit.
-   4. End with a short report.
-   The conductor verifies, merges and starts the next chat.
+   3. Commit, and report the finished job to the coordinator. Once its checks pass, the coordinator merges it into `main` and pushes.
+   4. Ask TJX for the sign-off. The thread closes only on it, and it is never archived.

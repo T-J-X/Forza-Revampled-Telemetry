@@ -10,7 +10,7 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 ```
 
-Rust 1.80+ (developed on 1.100, MSVC). Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
+Rust 1.87+ (developed on 1.100, MSVC). Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
 
 ## Tools
 

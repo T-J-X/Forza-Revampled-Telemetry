@@ -24,7 +24,8 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 | Before merging or pushing a branch | `requesting-code-review`, `/code-review`, `/simplify` | |
 | Cleaning up folders and finding duplicates | `file-organizer` | Never touch the deploy targets. |
 | Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). |
-| Reviewing a dash, the OSD or a phase | the fixed checklist ("Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`), then TJX's sign-off | No scores and no critic loops (TJX, 2026-11-27). The `ui-ux-designer` agent or `design:design-critique` may list findings once, as input to the checklist; never ask them for a score. |
+| Reviewing a dash | the fixed checklist ("Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`), then TJX's sign-off | No scores and no critic loops (AGENTS.md rule 12). The `ui-ux-designer` agent or `design:design-critique` may list findings once, as input to the checklist; never ask them for a score. |
+| Reviewing the OSD or a phase | a fixed yes/no checklist written at the start of the thread from AGENTS.md and SKILLS.md (sections A and B of the dash checklist apply as they are), then TJX's sign-off | The same rule: no scores and no critic loops. |
 
 ### How to call them
 - **A skill:** call the Skill tool with its name, for example `rust-review`, or `design:design-critique` for a plugin skill. A person types `/<skill-name>`. Project skills live in `.claude/skills/` and are listed to every new session when it starts.
@@ -45,10 +46,9 @@ Notes (checked 2026-11-27):
 | **Blender** (`Blender`, user scope) | Asset checks and test renders in a running Blender 5.3 with the MCP add-on (`blender-hero-assets`); repo assets are still built headless by `tools/asset-forge`. The MCP's Blender runs headless and its Cycles device defaults to CPU, so set OptiX in your code when you render through it | Saving `.blend` or script files into the repo |
 | **ComfyUI** (HTTP at `127.0.0.1:8188`, no MCP) | Textures and environment plates driven from `tools/asset-forge` (`comfyui-hero-textures`); it must be running. Installed: SDXL base and refiner, the depth and canny ControlNets, 4x-UltraSharp. A 4096×4096 texture fits the card (58 s, 7.5 GB peak, measured 2026-11-27) | Generating above 1 megapixel before the upscale, or any job without the GPU lock |
 | **Google Drive** (desktop app to write, connector to read) | The 4K masters. Write to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\` (or `shared\`) and the desktop app syncs it (check the drive letter first). Use the connector to list and check what arrived | Uploading through the connector (it refuses files over about 7 MB), or creating another Drive folder |
-| **Picsart** (hosted connector; not connected as of 2026-11-27) | Only after TJX connects it and signs in: generating, background removal, enhancing and vectorising images when Blender and ComfyUI don't fit; it spends Picsart credits and shows the cost first | Assuming it is available, or anything without TJX's go-ahead on the cost |
-| **Built-in browser** | Opening `mockups/index.html` and the product pages over loopback (`http://localhost:<port>/`). A `file://` page opens as a static snapshot and its images don't load, so serve the folder on `127.0.0.1` first (for example with ComfyUI's bundled Python: `python_embeded\python.exe -I -m http.server 5311 --bind 127.0.0.1 --directory mockups`), and stop the server after | Anything that needs a sign-in |
+| **Built-in browser** | Opening `mockups/index.html` and the product pages over loopback (`http://localhost:5311/`). A `file://` page opens as a static snapshot and its images don't load, so serve the folder on `127.0.0.1` first. From the repo root in the Bash tool, ComfyUI's bundled Python does it: `"$USERPROFILE/Documents/Dash_Tools/ComfyUI_windows_portable/python_embeded/python.exe" -I -m http.server 5311 --bind 127.0.0.1 --directory mockups`. Stop that server when you are done | Anything that needs a sign-in |
 
-Token flow: `data/design_tokens.json` (the source of truth) → `fh6-render::tokens` / `fh6-kit` → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/design_tokens.json` and log it in `docs/PROGRESS.md`.
+Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens` (the live loader; `fh6-render::tokens` serves only the v1 clusters) → every cluster, and mirrored into Penpot token sets for design work. Don't hardcode a hex colour or a typography value when a token exists. Add any missing token to `data/design_tokens.json` and log it in `docs/PROGRESS.md`.
 
 ## 3. Rust rendering and input laws (v2 GPU renderer)
 
@@ -66,8 +66,8 @@ Token flow: `data/design_tokens.json` (the source of truth) → `fh6-render::tok
 5. **Fonts.**
    - MSDF text from `fh6-kit`. The default is a motorsport OFL font from `assets/fonts/`, and users can add fonts in `fonts/` next to the exe.
    - Speed and RPM use tabular figures (a fixed advance), so numbers never shift sideways.
-   - Noto stays as the fallback for missing glyphs (JP included).
-6. **OLED.** Use `#000000` (transparent) where pixels must be off, or glass at alpha 28..64 with crisp 1 px rims. Never draw an opaque grey or navy box, and never fill the whole canvas. The orbit and dimmer (`fh6-core::oled_care`) run in `fh6-app`, not in clusters.
+   - Noto Sans stays as the fallback for missing glyphs. The font pack has no CJK face yet, so Japanese text does not render until one is added.
+6. **OLED.** Use `#000000` (transparent) where pixels must be off, or glass at alpha 28..64 with crisp 1 px rims. Never draw an opaque grey or navy box, and never fill the whole canvas. The orbit and dimmer (`fh6-core::oled_care`) belong in `fh6-app`, not in clusters. Nothing calls them yet (fix phase B of the 2026-11-27 Rust assessment wires them).
 7. **Determinism and animation.**
    - Clusters get `dt` and `t` through `FrameInput`, and keep their springs and state in `&mut self`.
    - Never read the wall clock inside a cluster.
@@ -84,10 +84,11 @@ Each phase of the v2 program has its own skill list, with the load order and tim
 
 One 8 GB card serves every thread, so GPU jobs take turns (TJX, 2026-11-27).
 
-1. Before any GPU job (ComfyUI, Blender, `asset-forge`, `preview-export`, the live demo, GPU tests), look for `%USERPROFILE%\Documents\Dash_Tools\gpu.lock`.
-2. If it is absent, create it with your thread name, the start time (UTC) and the job, then run the job.
-3. Delete it as soon as the job ends, also when the job fails.
-4. If it exists, wait and work on a step that needs no GPU. If it is older than 30 minutes, ask its owner through the coordinator before removing it.
+1. Before any GPU job (ComfyUI, Blender, `asset-forge`, `preview-export`, the live demo, GPU tests), take the lock `%USERPROFILE%\Documents\Dash_Tools\gpu.lock`. Take it with this one command in the Bash tool, which creates the file only if it does not exist, so two threads cannot both get it:
+   `( set -o noclobber; printf 'thread: %s\nstarted: %s\njob: %s\n' "<thread name>" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<job>" > "$USERPROFILE/Documents/Dash_Tools/gpu.lock" ) 2>/dev/null && echo LOCKED || cat "$USERPROFILE/Documents/Dash_Tools/gpu.lock"`
+2. If it prints `LOCKED`, run the job. If it prints another thread's lock instead, wait and work on a step that needs no GPU.
+3. Release it as soon as the job ends, also when the job fails: `rm -f "$USERPROFILE/Documents/Dash_Tools/gpu.lock"`. Only the thread named in the file releases it.
+4. If a lock is older than 30 minutes, ask its owner through the coordinator before removing it.
 
 A cloud GPU is used only after TJX approves the provider and the cost.
 

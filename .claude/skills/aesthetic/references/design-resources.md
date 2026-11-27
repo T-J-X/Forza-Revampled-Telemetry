@@ -22,7 +22,7 @@ Search pattern: "design system + [style name]"
 ## AI Tools for Design
 
 ### Generation
-- **Gemini**: Image generation via ai-multimodal skill
+- **ComfyUI (SDXL)**: Image generation through the `comfyui-hero-textures` skill
 - **Claude**: Design variations, component code
 
 ### Prompt Structure
@@ -37,11 +37,8 @@ Include in prompts:
 ## MCP Integrations
 
 ### Available MCPs
-- **Chrome MCP**: Research designs, analyze trends from Dribbble/Mobbin
+- **The built-in browser**: Research designs, analyze trends from Dribbble/Mobbin
 - **Penpot MCP**: Read and write the design file (`docs/design/PENPOT.md`)
-- **Freepik MCP**: Access stock imagery
-- **ChatGPT-Image MCP**: Image resources
-- **gallery-dl**: Download reference images via bash
 
 ### Usage
 Connect MCPs for enhanced capabilities when researching, analyzing, or implementing designs.

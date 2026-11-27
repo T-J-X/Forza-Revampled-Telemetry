@@ -52,7 +52,8 @@ cluster with `ImagePaint { rect }` where `rect` = the frame's rect in local px.
 Reference implementation: `hero/demo.rs` (PorscheAnalog proof:
 `cargo run --release -p asset-forge -- hero-demo [--preview]`). The demo rewrites three tracked
 files, `docs/handover-shots/asset-pipeline-v2-{after,passes,materials}.png`, also with
-`--preview`: after a test run, restore them with `git checkout -- docs/handover-shots/`.
+`--preview`: after a test run, restore exactly those three files with `git checkout --` and
+their paths. Don't restore the whole folder: other threads keep their shots there.
 
 ## Camera matching (`hero/frame.rs`)
 
