@@ -75,7 +75,7 @@ Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens
    - Never read the wall clock inside a cluster.
    - Golden tests render a fixed time sequence.
 8. **Hot paths.** No file I/O, allocation, logging or locking inside per-frame update or draw code. Batch draws, and reuse buffers and arenas.
-9. **Budget.** Under 0.5 ms GPU per cluster and under 1 ms CPU per frame at 3840x2160. Measure GPU time with `preview-export --cluster <Name>` and CPU with the live bench (`--bench-seconds`), and record the numbers in handovers.
+9. **Budget.** Under 0.5 ms GPU per cluster and under 1 ms CPU per frame at 3840x2160, with at most 0.3 ms of that CPU for the dash's own share (AGENTS.md rule 7). Measure GPU time with `preview-export --cluster <Name>` and CPU with the live bench (`--bench-seconds`), and record the numbers in handovers.
 10. **Rust only.** See AGENTS.md rule 11.
 
 ## 4. Program phases
