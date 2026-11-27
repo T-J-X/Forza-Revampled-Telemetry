@@ -7,16 +7,22 @@ use std::ffi::OsString;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Output, Stdio};
+use std::sync::mpsc;
 
 /// Marks the pod as in use, then makes the pod's own variables (`RUNPOD_POD_ID` and friends)
 /// visible, which a non-interactive SSH shell does not get by default.
 const PREAMBLE: &str =
     "mkdir -p /run/forge && touch /run/forge/activity\nif [ -f /etc/rp_environment ]; then . /etc/rp_environment; fi\n";
 
-/// What the tunnel's remote side runs: keep marking the pod as in use until this end closes
-/// its input, which happens when asset-forge exits for any reason.
-const KEEPALIVE: &str =
-    "mkdir -p /run/forge; while :; do touch /run/forge/activity; sleep 15; done & cat >/dev/null; kill $!";
+/// What the tunnel's remote side runs: mark the pod as in use each time a beat arrives from
+/// this PC ([`BEAT`]), and stop at once when the beats stop for a minute or the input ends. A
+/// PC that sleeps, or loses its network, sends no beats, so the pod's idle clock starts within
+/// a minute even though the connection itself may look open for hours.
+pub(super) const KEEPALIVE: &str =
+    "bash -c 'mkdir -p /run/forge; touch /run/forge/activity; while read -r -t 60 _; do touch /run/forge/activity; done'";
+
+/// How often the tunnel sends a beat to the pod.
+const BEAT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// The line that ends a script on its way to the pod. A script must not contain it.
 const SCRIPT_END: &str = "FORGE_SCRIPT_END";
@@ -243,7 +249,8 @@ impl Ssh {
     }
 
     /// Opens a forward from `127.0.0.1:<local_port>` here to `127.0.0.1:<remote_port>` on the
-    /// pod, and keeps the pod marked as in use for as long as the returned value lives.
+    /// pod, and keeps the pod marked as in use for as long as the returned value lives: a
+    /// thread sends a beat every [`BEAT`] that the far side answers with an "in use" mark.
     pub fn tunnel(&self, local_port: u16, remote_port: u16) -> Result<Tunnel> {
         let mut child = self
             .ssh()
@@ -258,17 +265,34 @@ impl Ssh {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| tool_err("ssh", e.to_string()))?;
-        let stdin = child.stdin.take();
-        Ok(Tunnel { child, stdin })
+        let (stop, beat) = match child.stdin.take() {
+            Some(stdin) => {
+                let (stop, wait) = mpsc::channel();
+                (Some(stop), Some(std::thread::spawn(move || beat(stdin, &wait))))
+            }
+            None => (None, None),
+        };
+        Ok(Tunnel { child, stop, beat })
     }
 }
 
-/// A running port forward. Dropping it closes the forward; so does the end of this process,
-/// because the far side stops when its input closes.
+/// Sends a newline to the far side every [`BEAT`] until told to stop (or until the channel's
+/// sender is gone), then closes the input, which ends the far side.
+fn beat(mut stdin: ChildStdin, stop: &mpsc::Receiver<()>) {
+    while let Err(mpsc::RecvTimeoutError::Timeout) = stop.recv_timeout(BEAT) {
+        if stdin.write_all(b"\n").and_then(|()| stdin.flush()).is_err() {
+            return;
+        }
+    }
+}
+
+/// A running port forward. Dropping it closes the forward. If this process ends without
+/// dropping it, the beats stop and the far side ends within a minute.
 #[derive(Debug)]
 pub struct Tunnel {
     child: Child,
-    stdin: Option<ChildStdin>,
+    stop: Option<mpsc::Sender<()>>,
+    beat: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Tunnel {
@@ -280,7 +304,11 @@ impl Tunnel {
 
 impl Drop for Tunnel {
     fn drop(&mut self) {
-        drop(self.stdin.take());
+        // Dropping the sender wakes the beat thread at once; it then closes the input.
+        drop(self.stop.take());
+        if let Some(beat) = self.beat.take() {
+            let _ = beat.join();
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -357,8 +385,43 @@ mod tests {
     #[test]
     fn every_script_marks_the_pod_as_in_use_first() {
         assert!(PREAMBLE.starts_with("mkdir -p /run/forge && touch /run/forge/activity"));
-        assert!(KEEPALIVE.contains("touch /run/forge/activity"));
-        assert!(KEEPALIVE.contains("cat >/dev/null"));
+    }
+
+    #[test]
+    fn the_tunnel_keeps_the_pod_in_use_only_while_beats_arrive() {
+        // Each beat marks the pod; a minute without one, or the end of the input, ends the loop.
+        assert!(KEEPALIVE.contains("while read -r -t 60 _; do touch /run/forge/activity; done"));
+        // Nothing runs in the background, so nothing can outlive the connection and keep
+        // marking the pod.
+        assert!(!KEEPALIVE.contains('&'));
+        assert!(
+            BEAT.as_secs() * 3 <= 60,
+            "at least three beats fit in the far side's minute"
+        );
+    }
+
+    #[test]
+    fn the_beat_thread_stops_at_once_and_closes_the_input() {
+        // A real child stands in for ssh.exe: it reads its input until the input ends.
+        let mut child = match Command::new("cmd")
+            .args(["/C", "more"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            // Not on Windows: nothing to stand in with, so nothing to test here.
+            Err(_) => return,
+        };
+        let stdin = child.stdin.take().unwrap();
+        let (stop, wait) = mpsc::channel();
+        let thread = std::thread::spawn(move || beat(stdin, &wait));
+        drop(stop);
+        // The thread wakes at once when the sender is dropped, and closes the input.
+        thread.join().unwrap();
+        let out = child.wait_with_output().unwrap();
+        assert!(out.status.success());
     }
 
     #[test]

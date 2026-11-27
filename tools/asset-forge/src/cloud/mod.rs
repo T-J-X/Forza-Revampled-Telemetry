@@ -33,9 +33,10 @@ use crate::error::{io_err, tool_err, ForgeError, Result};
 use crate::lane::{Lane, Lock};
 use crate::net;
 use crate::paths::Paths;
-use runpod::{Created, DataCenter, GpuType, Pod, PodRequest, Runpod, Window};
+use runpod::{Api, Created, DataCenter, GpuType, Pod, PodRequest, Runpod, Window};
 use serde::{Deserialize, Serialize};
 use ssh::{Ssh, Tunnel};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -190,6 +191,9 @@ pub struct Spent {
     pub pods: f64,
     /// Volume storage, as far as Runpod has billed it.
     pub storage: f64,
+    /// Lines of the spend log that are not a session. While there are any, the budget cannot
+    /// be counted and no pod starts.
+    pub damaged: usize,
 }
 
 impl Spent {
@@ -200,6 +204,7 @@ impl Spent {
         Self {
             pods: (logged + running).max(billed_pods),
             storage: billed_storage,
+            damaged: 0,
         }
     }
 
@@ -291,7 +296,12 @@ impl Home {
 
     /// The Runpod API key: the `RUNPOD_API_KEY` variable, or the first line of `runpod.key`.
     pub fn api_key(&self) -> Result<String> {
-        let from_env = std::env::var("RUNPOD_API_KEY").ok().filter(|k| !k.trim().is_empty());
+        self.api_key_from(std::env::var("RUNPOD_API_KEY").ok())
+    }
+
+    /// [`Home::api_key`] with the variable's value passed in.
+    fn api_key_from(&self, env: Option<String>) -> Result<String> {
+        let from_env = env.filter(|k| !k.trim().is_empty());
         let key = from_env.or_else(|| std::fs::read_to_string(self.key_file()).ok());
         key.as_deref()
             .and_then(|k| k.lines().next())
@@ -432,13 +442,26 @@ pub struct Session {
     pub comfy_url: String,
     home: Home,
     _tunnel: Tunnel,
+    _run: RunLock,
+}
+
+impl Session {
+    /// Marks the pod on record as used now. If this run is killed, the estimate of when the pod
+    /// ended starts from the last of these marks.
+    fn touch(&self) {
+        if let Some(mut state) = self.home.state() {
+            state.touched = clock::now();
+            let _ = self.home.save_state(Some(&state));
+        }
+    }
 }
 
 /// The session of this process. It is opened by the first job that needs the pod and kept
 /// until [`close`], so the forward and the pod's "in use" mark last for the whole run.
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
-/// Runs `job` with the pod, starting the pod first when it is not up.
+/// Runs `job` with the pod, starting the pod first when it is not up. The session stays locked
+/// while `job` runs, so `job` must not call this function again.
 pub fn with_session<T>(paths: &Paths, job: impl FnOnce(&Session) -> Result<T>) -> Result<T> {
     let mut slot = SESSION
         .lock()
@@ -446,10 +469,13 @@ pub fn with_session<T>(paths: &Paths, job: impl FnOnce(&Session) -> Result<T>) -
     if slot.is_none() {
         *slot = Some(open(paths)?);
     }
-    match slot.as_ref() {
-        Some(session) => job(session),
-        None => Err(tool_err("cloud", "the session did not open")),
-    }
+    let Some(session) = slot.as_ref() else {
+        return Err(tool_err("cloud", "the session did not open"));
+    };
+    session.touch();
+    let result = job(session);
+    session.touch();
+    result
 }
 
 /// The pod's ComfyUI address on this PC, starting the pod when needed.
@@ -462,10 +488,55 @@ pub fn comfy_url(paths: &Paths) -> Result<String> {
 pub fn close() {
     let Ok(mut slot) = SESSION.lock() else { return };
     if let Some(session) = slot.take() {
-        if let Some(mut state) = session.home.state() {
-            state.touched = clock::now();
-            let _ = session.home.save_state(Some(&state));
+        session.touch();
+    }
+}
+
+/// Windows' `ERROR_SHARING_VIOLATION`: another process has the file open and shares nothing.
+const SHARING_VIOLATION: i32 = 32;
+
+/// Held by a run from the moment it opens the pod until it closes it, so two runs on this PC
+/// can never start two pods or overwrite each other's record. Windows lets go of it by itself
+/// when the process ends, so a run that crashed leaves nothing to clear. (Other systems open
+/// the file without this guard; the tool runs on Windows.)
+#[derive(Debug)]
+struct RunLock {
+    _file: std::fs::File,
+}
+
+impl RunLock {
+    fn path(home: &Home) -> PathBuf {
+        home.dir.join("run.lock")
+    }
+
+    fn open(home: &Home) -> std::io::Result<std::fs::File> {
+        std::fs::create_dir_all(&home.dir)?;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt as _;
+            // Share nothing: every other open of the file fails while this handle lives.
+            options.share_mode(0);
         }
+        options.open(Self::path(home))
+    }
+
+    /// Takes the lock, or says that another run has it.
+    fn take(home: &Home) -> Result<Self> {
+        match Self::open(home) {
+            Ok(file) => Ok(Self { _file: file }),
+            Err(e) if e.raw_os_error() == Some(SHARING_VIOLATION) => Err(tool_err(
+                "cloud",
+                "another asset-forge run on this PC is using the pod. Let it finish first (one job per lane, SKILLS.md section 5)",
+            )),
+            Err(e) => Err(io_err(&Self::path(home), e)),
+        }
+    }
+
+    /// True when another run on this PC holds the lock right now.
+    fn busy(home: &Home) -> bool {
+        matches!(Self::open(home), Err(e) if e.raw_os_error() == Some(SHARING_VIOLATION))
     }
 }
 
@@ -473,18 +544,47 @@ fn say(text: &str) {
     println!("  cloud: {text}");
 }
 
-/// Deletes the pod and books its session.
-fn retire(api: &Runpod, home: &Home, state: &State, how: &str) -> Result<spend::Session> {
+/// The hourly rate a pod is booked at: its own price, or the price cap when the answer gave
+/// none, so a missing figure never books a pod as free.
+fn rate_of(pod: &Pod, config: &Config) -> f64 {
+    if pod.cost.is_finite() && pod.cost > 0.0 {
+        pod.cost
+    } else {
+        config.max_usd_per_hour
+    }
+}
+
+/// The age at which a pod's watchdog deletes it: what the pod was created with, or `max_hours`
+/// when the answer did not include its environment.
+fn life_of(pod: &Pod, config: &Config) -> u64 {
+    pod.env_number("FORGE_MAX_SECS")
+        .filter(|secs| *secs > 0)
+        .unwrap_or_else(|| config.max_secs())
+}
+
+/// The lock fields for a pod that this PC has no record of.
+fn no_record() -> Lock {
+    Lock {
+        thread: "(no record on this PC)".to_owned(),
+        ..Lock::default()
+    }
+}
+
+/// Deletes a pod that is up and books its session up to now.
+fn retire(api: &dyn Api, home: &Home, state: &State, how: &str) -> Result<spend::Session> {
     api.terminate(&state.pod_id)?;
     let session = spend::Session::close(state, clock::now(), how);
     book(home, state, &session)?;
     Ok(session)
 }
 
-/// Writes a finished session to the spend log and forgets the pod.
+/// Writes a finished session to the spend log, and forgets the pod when it is the one on
+/// record. A pod that the log already has is not booked again.
 fn book(home: &Home, state: &State, session: &spend::Session) -> Result<()> {
     spend::append(&home.spend_log(), session)?;
-    home.save_state(None)?;
+    if home.state().is_some_and(|recorded| recorded.pod_id == state.pod_id) {
+        home.save_state(None)?;
+    }
     let _ = std::fs::remove_file(home.known_hosts(&state.pod_id));
     mirror_spend(home);
     Ok(())
@@ -500,21 +600,68 @@ fn watchdog_end(state: &State, config: &Config, now: u64) -> u64 {
     now.min(idle_end).min(life_end)
 }
 
-/// Adds up what the lane has cost: the spend log, the pod that is up now, and Runpod's own
-/// billing. Runpod's figures are left out when they cannot be read; the log does not depend on
-/// them.
-fn spent(api: &Runpod, home: &Home, now: u64) -> Spent {
-    let (logged, _) = spend::total(&spend::load(&home.spend_log()));
-    let running = home.state().map_or(0.0, |state| {
+/// Books a pod that ended without `cloud down`: its watchdog deleted it, or it stopped. The end
+/// is estimated from its last use. When Runpod has already billed more for it, that amount is
+/// booked instead, so the log never holds less than the pod cost.
+fn book_lost(api: &dyn Api, home: &Home, config: &Config, state: &State) -> Result<()> {
+    let ended = watchdog_end(state, config, clock::now());
+    let mut session = spend::Session::close(state, ended, "the pod's watchdog (end time estimated)");
+    if let Ok(billed) = api.pod_billing(Window::Days(3), Some(&state.pod_id)) {
+        let billed = (billed * 1000.0).round() / 1000.0;
+        if billed > session.usd {
+            session.usd = billed;
+            session.how = "the pod's watchdog (amount from Runpod's billing)".to_owned();
+        }
+    }
+    say(&format!(
+        "pod {} ended without `cloud down`; booked {} and ${:.3}",
+        state.pod_id,
+        clock::span(session.seconds),
+        session.usd
+    ));
+    book(home, state, &session)
+}
+
+/// Looks at the pod on record. One that is still up is returned. One that is gone, or stopped,
+/// is deleted for good and booked up to its estimated end (never up to now), and its record is
+/// cleared.
+fn settle(api: &dyn Api, home: &Home, config: &Config) -> Result<Option<(State, Pod)>> {
+    let Some(state) = home.state() else {
+        return Ok(None);
+    };
+    match api.pod(&state.pod_id)? {
+        Some(pod) if pod.is_alive() => Ok(Some((state, pod))),
+        Some(pod) => {
+            // Stopped or failed: no compute is billed, but it must not linger.
+            api.terminate(&pod.id)?;
+            book_lost(api, home, config, &state)?;
+            Ok(None)
+        }
+        None => {
+            book_lost(api, home, config, &state)?;
+            Ok(None)
+        }
+    }
+}
+
+/// Adds up what the lane has cost: the spend log, the pod that is up now (`live`, which the
+/// caller has checked is still running), and Runpod's own billing. Runpod's figures are left
+/// out when they cannot be read; the log does not depend on them.
+fn spent(api: &dyn Api, home: &Home, live: Option<&State>, now: u64) -> Spent {
+    let (sessions, damaged) = spend::load_checked(&home.spend_log());
+    let (logged, _) = spend::total(&sessions);
+    let running = live.map_or(0.0, |state| {
         spend::cost(state.usd_per_hour, now.saturating_sub(state.started))
     });
     let window = Window::Months(BUDGET_MONTHS);
-    Spent::from_parts(
+    let mut spent = Spent::from_parts(
         logged,
         running,
         api.pod_billing(window, None).unwrap_or(0.0),
         api.volume_billing(window).unwrap_or(0.0),
-    )
+    );
+    spent.damaged = damaged;
+    spent
 }
 
 /// The budget in one line, for status reports, warnings and refusals.
@@ -530,17 +677,35 @@ fn budget_line(config: &Config, spent: &Spent) -> String {
 
 /// Prints the budget line of `cloud status` and `cloud spend`.
 fn print_budget(config: &Config, spent: &Spent) {
-    let note = match config.budget(spent.total()) {
-        Budget::Fine => String::new(),
-        Budget::Warn => format!("; that is over the ${:.2} warning line", config.budget_warn_usd),
-        Budget::Spent => "; it is used up, and no pod starts until TJX raises `budget_usd` in lane.json".to_owned(),
+    let note = if spent.damaged > 0 {
+        format!(
+            "; the spend log has {} damaged line(s), so no pod starts until they are fixed",
+            spent.damaged
+        )
+    } else {
+        match config.budget(spent.total()) {
+            Budget::Fine => String::new(),
+            Budget::Warn => format!("; that is over the ${:.2} warning line", config.budget_warn_usd),
+            Budget::Spent => "; it is used up, and no pod starts until TJX raises `budget_usd` in lane.json".to_owned(),
+        }
     };
     println!("budget: {}{note}", budget_line(config, spent));
 }
 
-/// Stops the lane when its budget is used up, and says so when it is close. A pod that is
-/// still up at that point is deleted.
-fn hold_to_budget(api: &Runpod, home: &Home, config: &Config, spent: &Spent) -> Result<()> {
+/// Stops the lane when its budget is used up or cannot be counted, and says so when it is
+/// close. When the budget is used up, the pod that is up (`live`) is deleted and booked up to
+/// now.
+fn hold_to_budget(api: &dyn Api, home: &Home, config: &Config, spent: &Spent, live: Option<&State>) -> Result<()> {
+    if spent.damaged > 0 {
+        return Err(tool_err(
+            "cloud",
+            format!(
+                "{} has {} line(s) that are not a session, so the budget cannot be counted. Fix or remove them, then run the job again",
+                home.spend_log().display(),
+                spent.damaged
+            ),
+        ));
+    }
     match config.budget(spent.total()) {
         Budget::Fine => Ok(()),
         Budget::Warn => {
@@ -548,9 +713,9 @@ fn hold_to_budget(api: &Runpod, home: &Home, config: &Config, spent: &Spent) -> 
             Ok(())
         }
         Budget::Spent => {
-            if let Some(state) = home.state() {
+            if let Some(state) = live {
                 // If the delete fails, the pod's own lifetime cap still ends it.
-                let _ = retire(api, home, &state, "deleted: the budget is used up");
+                let _ = retire(api, home, state, "deleted: the budget is used up");
             }
             Err(tool_err(
                 "cloud",
@@ -563,30 +728,13 @@ fn hold_to_budget(api: &Runpod, home: &Home, config: &Config, spent: &Spent) -> 
     }
 }
 
-/// Books a pod that is gone without `cloud down` (its watchdog deleted it, or the credit ran
-/// out). The end time is an estimate; when Runpod already reports what it billed for the pod,
-/// that amount replaces the estimate.
-fn book_lost(api: &Runpod, home: &Home, config: &Config, state: &State) -> Result<()> {
-    let ended = watchdog_end(state, config, clock::now());
-    let mut session = spend::Session::close(state, ended, "the pod's watchdog (end time estimated)");
-    if let Ok(billed) = api.pod_billing(Window::Days(3), Some(&state.pod_id)) {
-        if billed > 0.0 {
-            session.usd = (billed * 1000.0).round() / 1000.0;
-            session.how = "the pod's watchdog (amount from Runpod's billing)".to_owned();
-        }
-    }
-    say(&format!(
-        "the last pod ({}) was deleted by its watchdog; booked {} and ${:.3}",
-        state.pod_id,
-        clock::span(session.seconds),
-        session.usd
-    ));
-    book(home, state, &session)
-}
-
 /// Copies the spend log as CSV into the Drive masters folder (`shared\cloud-gpu-spend.csv`), so
 /// it can be read from another machine. Skipped when the Drive folder is not mounted.
 fn mirror_spend(home: &Home) {
+    // The tests book sessions in folders of their own; they must never write the real copy.
+    if cfg!(test) {
+        return;
+    }
     let Some(root) = crate::lane::masters_root() else {
         return;
     };
@@ -599,12 +747,12 @@ fn mirror_spend(home: &Home) {
     }
 }
 
-fn state_for(pod: &Pod, lock: &Lock, started: u64, max_secs: u64) -> State {
+fn state_for(pod: &Pod, lock: &Lock, started: u64, max_secs: u64, usd_per_hour: f64) -> State {
     State {
         pod_id: pod.id.clone(),
         gpu: pod.gpu_id().to_owned(),
         data_center: pod.data_center_id.clone().unwrap_or_default(),
-        usd_per_hour: pod.cost,
+        usd_per_hour,
         started,
         touched: clock::now(),
         thread: lock.thread.clone(),
@@ -614,8 +762,9 @@ fn state_for(pod: &Pod, lock: &Lock, started: u64, max_secs: u64) -> State {
 }
 
 /// Starts a new pod: the first GPU type in the settings that has room gets it. The pod's
-/// lifetime cap is what the rest of the budget pays for, when that is less than `max_hours`.
-fn create_pod(api: &Runpod, home: &Home, config: &Config, lock: &Lock, spent: &Spent) -> Result<(State, Pod)> {
+/// lifetime cap is what the rest of the budget pays for, when that is less than `max_hours`,
+/// and its deadline is set in its environment, so its own watchdog enforces both.
+fn create_pod(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, spent: &Spent) -> Result<(State, Pod)> {
     let Some(life) = config.pod_life_secs(spent.total()) else {
         return Err(tool_err(
             "cloud",
@@ -632,9 +781,6 @@ fn create_pod(api: &Runpod, home: &Home, config: &Config, lock: &Lock, spent: &S
         ));
     }
     let balance = api.balance()?;
-    if balance.billing_mode != "PREPAID" {
-        say("warning: this Runpod account is invoiced, so the credit balance is not a spending cap");
-    }
     let public_key_file = home.ssh_key().with_extension("pub");
     let public_key = std::fs::read_to_string(&public_key_file).map_err(|e| io_err(&public_key_file, e))?;
     let template = pod::template(&config.image, config.container_disk_gb);
@@ -652,14 +798,16 @@ fn create_pod(api: &Runpod, home: &Home, config: &Config, lock: &Lock, spent: &S
                 ("PUBLIC_KEY".to_owned(), public_key.trim().to_owned()),
                 ("FORGE_IDLE_SECS".to_owned(), config.idle_secs().to_string()),
                 ("FORGE_MAX_SECS".to_owned(), life.to_string()),
+                ("FORGE_DEADLINE".to_owned(), (clock::now() + life).to_string()),
             ],
             volume_id: config.volume_id.clone(),
             own_disk_gb: config.volume_gb,
         };
         match api.create_pod(&request)? {
             Created::Pod(pod) => {
+                let state = state_for(&pod, lock, clock::now(), life, rate_of(&pod, config));
                 if pod.cost > config.max_usd_per_hour + 1e-6 {
-                    api.terminate(&pod.id)?;
+                    retire(api, home, &state, "deleted at once: over the price cap")?;
                     return Err(tool_err(
                         "cloud",
                         format!(
@@ -668,11 +816,14 @@ fn create_pod(api: &Runpod, home: &Home, config: &Config, lock: &Lock, spent: &S
                         ),
                     ));
                 }
-                let state = state_for(&pod, lock, clock::now(), life);
-                home.save_state(Some(&state))?;
+                if let Err(e) = home.save_state(Some(&state)) {
+                    // A pod with no record would run unbooked; delete it before giving up.
+                    let _ = api.terminate(&pod.id);
+                    return Err(e);
+                }
                 say(&format!(
                     "started pod {} on {gpu} in {} at ${:.2} an hour (balance ${:.2})",
-                    pod.id, config.data_center, pod.cost, balance.balance_amount
+                    pod.id, config.data_center, state.usd_per_hour, balance.balance_amount
                 ));
                 return Ok((state, *pod));
             }
@@ -697,45 +848,91 @@ fn worth_keeping(age_secs: u64, cap_secs: u64) -> bool {
     age_secs + RECYCLE_MARGIN_SECS.min(cap_secs / 4) < cap_secs
 }
 
-/// Returns the pod to use: the one on record when it is still up, a pod of ours that this PC
-/// has no record of, or a new one. Never more than one.
-fn ensure_pod(api: &Runpod, home: &Home, config: &Config, lock: &Lock, spent: &Spent) -> Result<(State, Pod)> {
-    if let Some(state) = home.state() {
-        match api.pod(&state.pod_id)? {
-            Some(pod) if pod.is_alive() => {
-                let age = clock::now().saturating_sub(state.started);
-                if worth_keeping(age, state.cap(config)) {
-                    return Ok((state, pod));
-                }
-                say("the pod is close to its lifetime cap; replacing it before the job starts");
-                retire(api, home, &state, "replaced before the lifetime cap")?;
-            }
-            Some(pod) => {
-                // Stopped or failed: nothing is billed for compute, but it must not linger.
-                api.terminate(&pod.id)?;
-                book_lost(api, home, config, &state)?;
-            }
-            None => book_lost(api, home, config, &state)?,
-        }
-    }
-    for stray in api.pods()?.into_iter().filter(|p| p.name == pod::POD_NAME) {
-        if !stray.is_alive() {
-            api.terminate(&stray.id)?;
+/// Deals with pods of ours that this PC has no record of (a run that crashed before it saved
+/// one, or a pod started by hand). The first one that is up and within the price cap is
+/// adopted; every other one that is up is deleted and booked from its creation, and stopped
+/// ones are deleted. `skip` is a pod this run has just deleted, which the provider's list may
+/// still show.
+fn adopt_strays(
+    api: &dyn Api,
+    home: &Home,
+    config: &Config,
+    lock: &Lock,
+    skip: Option<&str>,
+) -> Result<Option<(State, Pod)>> {
+    let mut adopted = None;
+    let listed = api.pods()?;
+    for id in listed
+        .iter()
+        .filter(|p| p.name == pod::POD_NAME && Some(p.id.as_str()) != skip)
+        .map(|p| p.id.as_str())
+    {
+        let Some(pod) = api.pod(id)? else { continue };
+        if !pod.is_alive() {
+            api.terminate(&pod.id)?;
             continue;
         }
-        let Some(pod) = api.pod(&stray.id)? else { continue };
         let started = clock::parse_rfc3339(&pod.created_at).unwrap_or_else(clock::now);
-        // Its own cap is not known here; the pod's watchdog holds the real one.
-        let state = state_for(&pod, lock, started, config.max_secs());
-        home.save_state(Some(&state))?;
-        say(&format!("found pod {} already running; using it", pod.id));
-        return Ok((state, pod));
+        let fits = pod.cost <= config.max_usd_per_hour + 1e-6;
+        if adopted.is_none() && fits {
+            let state = state_for(&pod, lock, started, life_of(&pod, config), rate_of(&pod, config));
+            home.save_state(Some(&state))?;
+            say(&format!("found pod {} already running; using it", pod.id));
+            adopted = Some((state, pod));
+        } else {
+            let state = state_for(
+                &pod,
+                &no_record(),
+                started,
+                life_of(&pod, config),
+                rate_of(&pod, config),
+            );
+            say(&format!(
+                "deleting pod {}: one pod at a time, within the price cap",
+                pod.id
+            ));
+            retire(api, home, &state, "deleted: an extra pod with no record")?;
+        }
+    }
+    Ok(adopted)
+}
+
+/// Returns the pod to use: `live` (the pod on record, still up) when it has time left, else a
+/// pod of ours that this PC has no record of, else a new one. Never more than one.
+fn ensure_pod(
+    api: &dyn Api,
+    home: &Home,
+    config: &Config,
+    lock: &Lock,
+    spent: &Spent,
+    live: Option<(State, Pod)>,
+) -> Result<(State, Pod)> {
+    let mut retired = None;
+    if let Some((state, pod)) = live {
+        if worth_keeping(clock::now().saturating_sub(state.started), state.cap(config)) {
+            return Ok((state, pod));
+        }
+        say("the pod is close to its lifetime cap; replacing it before the job starts");
+        retire(api, home, &state, "replaced before the lifetime cap")?;
+        retired = Some(state.pod_id);
+    }
+    if let Some(found) = adopt_strays(api, home, config, lock, retired.as_deref())? {
+        return Ok(found);
     }
     create_pod(api, home, config, lock, spent)
 }
 
+/// Everything before the pod is reached: books a pod on record that has ended, holds the lane
+/// to its budget, and returns the pod to use, starting one when needed.
+fn prepare(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, now: u64) -> Result<(State, Pod)> {
+    let live = settle(api, home, config)?;
+    let spent = spent(api, home, live.as_ref().map(|(state, _)| state), now);
+    hold_to_budget(api, home, config, &spent, live.as_ref().map(|(state, _)| state))?;
+    ensure_pod(api, home, config, lock, &spent, live)
+}
+
 /// Waits until the pod runs and its sshd takes the key.
-fn wait_for_ssh(api: &Runpod, home: &Home, state: &State, mut pod: Pod) -> Result<Ssh> {
+fn wait_for_ssh(api: &dyn Api, home: &Home, state: &State, mut pod: Pod) -> Result<Ssh> {
     let deadline = clock::now() + START_TIMEOUT_SECS;
     let mut told = false;
     loop {
@@ -754,10 +951,10 @@ fn wait_for_ssh(api: &Runpod, home: &Home, state: &State, mut pod: Pod) -> Resul
             }
         }
         if !pod.is_alive() {
-            book_lost(api, home, &home.config()?, state)?;
+            retire(api, home, state, "deleted: it stopped while starting")?;
             return Err(tool_err(
                 "cloud",
-                format!("the pod stopped while starting (status {})", pod.status),
+                format!("the pod stopped while starting (status {}); it was deleted", pod.status),
             ));
         }
         if clock::now() > deadline {
@@ -792,15 +989,18 @@ fn make_ready(ssh: &Ssh) -> Result<()> {
         }
         return start_services(ssh);
     }
-    // The pod's start command is bringing the services up; wait for its verdict.
-    let probe =
-        "if [ -f /run/forge/ready ]; then echo ready; elif [ -f /run/forge/failed ]; then echo failed; else echo wait; fi";
+    // The pod's start command is bringing the services up; wait for its verdict. A "ready"
+    // left by an earlier session counts only while ComfyUI still answers.
+    let probe = format!(
+        "if [ -f /run/forge/ready ]; then if curl -fsS -m 5 http://127.0.0.1:{}/system_stats >/dev/null 2>&1; then echo ready; else echo dead; fi; elif [ -f /run/forge/failed ]; then echo failed; else echo wait; fi",
+        pod::COMFY_PORT
+    );
     let deadline = clock::now() + READY_TIMEOUT_SECS;
     loop {
-        match ssh.check(probe)?.trim() {
+        match ssh.check(&probe)?.trim() {
             "ready" => return Ok(()),
             "wait" if clock::now() < deadline => std::thread::sleep(Duration::from_secs(4)),
-            // It failed or is too slow: try once from here, with the output visible.
+            // It failed, died or is too slow: start it from here, with the output visible.
             _ => return start_services(ssh),
         }
     }
@@ -817,6 +1017,14 @@ fn start_services(ssh: &Ssh) -> Result<()> {
 
 /// Opens the forward to the pod's ComfyUI and waits until it answers through it.
 fn open_tunnel(ssh: &Ssh, port: u16) -> Result<(Tunnel, String)> {
+    // A forward left over from an earlier run would answer in the pod's place: refuse to start
+    // while the port is taken.
+    if std::net::TcpListener::bind(("127.0.0.1", port)).is_err() {
+        return Err(tool_err(
+            "cloud",
+            format!("port {port} on this PC is in use, probably by an ssh.exe from an earlier run. End that process and run the command again"),
+        ));
+    }
     let url = format!("http://127.0.0.1:{port}");
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
@@ -825,17 +1033,17 @@ fn open_tunnel(ssh: &Ssh, port: u16) -> Result<(Tunnel, String)> {
         .into();
     let mut tunnel = ssh.tunnel(port, pod::COMFY_PORT)?;
     for _ in 0..60 {
-        if net::get_bytes(&agent, &format!("{url}/system_stats")).is_ok() {
-            return Ok((tunnel, url));
-        }
         if !tunnel.alive() {
             break;
+        }
+        if net::get_bytes(&agent, &format!("{url}/system_stats")).is_ok() {
+            return Ok((tunnel, url));
         }
         std::thread::sleep(Duration::from_millis(500));
     }
     Err(tool_err(
         "cloud",
-        format!("the SSH forward to the pod's ComfyUI did not open. Is port {port} on this PC in use?"),
+        format!("the SSH forward to the pod's ComfyUI on port {port} did not open"),
     ))
 }
 
@@ -843,11 +1051,10 @@ fn open(paths: &Paths) -> Result<Session> {
     let home = Home::of(paths);
     let config = home.config()?;
     let lock = Lock::require(&paths.tools, Lane::Cloud)?;
+    let run = RunLock::take(&home)?;
     let api = Runpod::new(&home.api_key()?);
     let began = clock::now();
-    let spent = spent(&api, &home, began);
-    hold_to_budget(&api, &home, &config, &spent)?;
-    let (state, pod) = ensure_pod(&api, &home, &config, &lock, &spent)?;
+    let (state, pod) = prepare(&api, &home, &config, &lock, began)?;
     let ssh = wait_for_ssh(&api, &home, &state, pod)?;
     make_ready(&ssh)?;
     let (tunnel, comfy_url) = open_tunnel(&ssh, config.tunnel_port)?;
@@ -865,6 +1072,7 @@ fn open(paths: &Paths) -> Result<Session> {
         comfy_url,
         home,
         _tunnel: tunnel,
+        _run: run,
     })
 }
 
@@ -885,7 +1093,7 @@ fn number<T: std::str::FromStr>(args: &[String], flag: &str) -> Result<Option<T>
     }
 }
 
-const USAGE: &str = "asset-forge cloud setup [--dry-run] [--region EUROPE]... [--data-center <id>] [--volume-gb 30 | --no-volume] [--max-usd-per-hour 0.90] [--idle-minutes 10] [--max-hours 4] [--image <ref>] [--keep] | key [<api key>] | up | down | status | spend | doctor";
+const USAGE: &str = "asset-forge cloud setup [--dry-run] [--region EUROPE]... [--data-center <id>] [--volume-gb 30 | --no-volume] [--max-usd-per-hour 0.90] [--idle-minutes 10] [--max-hours 4] [--image <ref>] [--keep] | key | up | down | status | spend | doctor";
 
 /// The `cloud` commands.
 pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
@@ -902,12 +1110,19 @@ pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
     }
 }
 
-/// Saves a new API key (given as an argument, or as the first line of standard input) once
-/// Runpod has accepted it. The key itself is never printed.
+/// Saves a new API key once Runpod has accepted it. The key is read from standard input (the
+/// command asks for it), so it stays out of the command line, the shell's history and cargo's
+/// "Running" line. A key given as an argument still works, with a warning. The key itself is
+/// never printed.
 fn set_key(home: &Home, key: Option<&str>) -> Result<()> {
     let key = match key {
-        Some(key) => key.trim().to_owned(),
+        Some(key) => {
+            say("warning: a key on the command line stays in the shell's history, and `cargo run` prints the line. Next time run `asset-forge cloud key` and paste the key when it asks");
+            key.trim().to_owned()
+        }
         None => {
+            eprint!("Paste the Runpod API key and press Enter: ");
+            let _ = std::io::stderr().flush();
             let mut line = String::new();
             std::io::stdin()
                 .read_line(&mut line)
@@ -916,7 +1131,9 @@ fn set_key(home: &Home, key: Option<&str>) -> Result<()> {
         }
     };
     if key.is_empty() {
-        return Err(ForgeError::Usage("asset-forge cloud key <api key>".to_owned()));
+        return Err(ForgeError::Usage(
+            "asset-forge cloud key   (then paste the key when it asks)".to_owned(),
+        ));
     }
     let balance = Runpod::new(&key).balance()?;
     let path = home.key_file();
@@ -1060,8 +1277,11 @@ fn setup(paths: &Paths, home: &Home, args: &[String]) -> Result<()> {
     }
 
     // From here on things cost money, and the set-up ends by starting a pod, so it needs the
-    // lane like any other job.
+    // lane like any other job, and the budget must not be used up.
     Lock::require(&paths.tools, Lane::Cloud)?;
+    let live = settle(&api, home, &config)?;
+    let spent_now = spent(&api, home, live.as_ref().map(|(state, _)| state), clock::now());
+    hold_to_budget(&api, home, &config, &spent_now, live.as_ref().map(|(state, _)| state))?;
     ssh::ensure_key(&home.ssh_key())?;
     if create_volume {
         let volume = api.create_volume(pod::VOLUME_NAME, config.volume_gb, &config.data_center)?;
@@ -1081,18 +1301,15 @@ fn setup(paths: &Paths, home: &Home, args: &[String]) -> Result<()> {
 
 fn down(home: &Home) -> Result<()> {
     close();
+    if RunLock::busy(home) {
+        say("warning: another asset-forge run on this PC is using the pod; its jobs will fail");
+    }
+    let config = home.config().unwrap_or_default();
     let api = Runpod::new(&home.api_key()?);
-    let Some(state) = home.state() else {
-        // No record: still make sure nothing of ours is left running.
-        let mut found = 0;
-        for stray in api.pods()?.into_iter().filter(|p| p.name == pod::POD_NAME) {
-            api.terminate(&stray.id)?;
-            found += 1;
-        }
-        println!("cloud: no pod on record; deleted {found} unrecorded pod(s)");
-        return Ok(());
-    };
-    let session = retire(&api, home, &state, "cloud down")?;
+    down_with(&api, home, &config)
+}
+
+fn print_retired(session: &spend::Session) {
     println!(
         "cloud: deleted pod {} after {} (about ${:.3} at ${:.2} an hour)",
         session.pod_id,
@@ -1100,65 +1317,116 @@ fn down(home: &Home) -> Result<()> {
         session.usd,
         session.usd_per_hour
     );
+}
+
+/// Deletes the pod on record and every other pod of ours that is up, and books each one. A pod
+/// on record that has already ended is booked up to its estimated end, not up to now.
+fn down_with(api: &dyn Api, home: &Home, config: &Config) -> Result<()> {
+    let mut deleted = 0;
+    let mut skip = None;
+    if let Some((state, _)) = settle(api, home, config)? {
+        print_retired(&retire(api, home, &state, "cloud down")?);
+        deleted += 1;
+        skip = Some(state.pod_id);
+    }
+    let listed = api.pods()?;
+    for id in listed
+        .iter()
+        .filter(|p| p.name == pod::POD_NAME && Some(&p.id) != skip.as_ref())
+        .map(|p| p.id.as_str())
+    {
+        let Some(pod) = api.pod(id)? else { continue };
+        if !pod.is_alive() {
+            api.terminate(&pod.id)?;
+            continue;
+        }
+        let started = clock::parse_rfc3339(&pod.created_at).unwrap_or_else(clock::now);
+        let state = state_for(
+            &pod,
+            &no_record(),
+            started,
+            life_of(&pod, config),
+            rate_of(&pod, config),
+        );
+        print_retired(&retire(
+            api,
+            home,
+            &state,
+            "cloud down (a pod with no record on this PC)",
+        )?);
+        deleted += 1;
+    }
+    if deleted == 0 {
+        println!("cloud: no pod was up");
+    }
     Ok(())
 }
 
 fn status(home: &Home) -> Result<()> {
     let config = home.config()?;
     let api = Runpod::new(&home.api_key()?);
+    status_with(&api, home, &config)
+}
+
+fn status_with(api: &dyn Api, home: &Home, config: &Config) -> Result<()> {
     let balance = api.balance()?;
     println!("balance: ${:.2} ({})", balance.balance_amount, balance.billing_mode);
     println!(
         "limits: ${:.2} an hour at most; deleted after {} idle minutes or {} hours",
         config.max_usd_per_hour, config.idle_minutes, config.max_hours
     );
-    match home.state() {
-        None => println!("pod: none on record"),
-        Some(state) => match api.pod(&state.pod_id)? {
-            Some(pod) if pod.is_alive() => {
-                let age = clock::now().saturating_sub(state.started);
-                println!(
-                    "pod: {} {} on {} in {}, up {}, about ${:.3} so far at ${:.2} an hour",
-                    pod.id,
-                    pod.status,
-                    state.gpu,
-                    state.data_center,
-                    clock::span(age),
-                    spend::cost(state.usd_per_hour, age),
-                    state.usd_per_hour
-                );
-                println!("     started for: {} / {}", state.thread, state.job);
-            }
-            gone => {
-                if let Some(stopped) = gone {
-                    api.terminate(&stopped.id)?;
-                }
-                book_lost(&api, home, &config, &state)?;
-                println!("pod: none (the last one deleted itself)");
-            }
-        },
+    let live = settle(api, home, config)?;
+    match &live {
+        None => println!("pod: none up"),
+        Some((state, pod)) => {
+            let age = clock::now().saturating_sub(state.started);
+            println!(
+                "pod: {} {} on {} in {}, up {}, about ${:.3} so far at ${:.2} an hour",
+                pod.id,
+                pod.status,
+                state.gpu,
+                state.data_center,
+                clock::span(age),
+                spend::cost(state.usd_per_hour, age),
+                state.usd_per_hour
+            );
+            println!("     started for: {} / {}", state.thread, state.job);
+        }
     }
+    let ours = live.as_ref().map(|(state, _)| state.pod_id.as_str());
     let strays = api
         .pods()?
         .into_iter()
-        .filter(|p| p.is_alive() && home.state().is_none_or(|s| s.pod_id != p.id))
+        .filter(|p| p.is_alive() && Some(p.id.as_str()) != ours)
         .count();
     if strays > 0 {
         println!("warning: {strays} other pod(s) are running on this account");
     }
-    // Last, so a pod that turned out to be gone is already in the log.
-    print_budget(&config, &spent(&api, home, clock::now()));
+    print_budget(
+        config,
+        &spent(api, home, live.as_ref().map(|(state, _)| state), clock::now()),
+    );
     Ok(())
 }
 
 fn spend_report(home: &Home) -> Result<()> {
-    let sessions = spend::load(&home.spend_log());
+    let api = Runpod::new(&home.api_key()?);
+    let config = home.config().ok();
+    // A pod on record that has ended is booked first, so the log below is complete.
+    let live = match &config {
+        Some(config) => settle(&api, home, config)?,
+        None => None,
+    };
+    let (sessions, damaged) = spend::load_checked(&home.spend_log());
     let (usd, seconds) = spend::total(&sessions);
     println!(
         "spend log: {} session(s), {}, ${usd:.3}",
         sessions.len(),
         clock::span(seconds)
     );
+    if damaged > 0 {
+        println!("warning: {damaged} line(s) of the log are not a session");
+    }
     let mut threads: Vec<&str> = sessions.iter().map(|s| s.thread.as_str()).collect();
     threads.sort_unstable();
     threads.dedup();
@@ -1171,15 +1439,17 @@ fn spend_report(home: &Home) -> Result<()> {
             clock::span(seconds)
         );
     }
-    let api = Runpod::new(&home.api_key()?);
     let window = Window::Months(BUDGET_MONTHS);
     println!(
         "Runpod's own billing (it runs hours behind): pods ${:.3}, volume storage ${:.3}",
         api.pod_billing(window, None)?,
         api.volume_billing(window)?
     );
-    if let Ok(config) = home.config() {
-        print_budget(&config, &spent(&api, home, clock::now()));
+    if let Some(config) = &config {
+        print_budget(
+            config,
+            &spent(&api, home, live.as_ref().map(|(state, _)| state), clock::now()),
+        );
     }
     let balance = api.balance()?;
     println!("balance: ${:.2} ({})", balance.balance_amount, balance.billing_mode);
@@ -1342,6 +1612,12 @@ fn doctor(paths: &Paths) -> Result<()> {
     let services = field(&report, "services");
     if !services.is_empty() {
         println!("· last start of the services by a pod: {services}");
+    }
+    // This run's own forward is one; more means a forward of an earlier run is still marking
+    // the pod as in use.
+    let tunnels = field(&report, "tunnels");
+    if !tunnels.is_empty() {
+        println!("· forwards keeping the pod in use: {tunnels}");
     }
     if checks.iter().all(|(_, pass, _)| *pass) {
         println!("cloud doctor: all checks passed");
@@ -1630,23 +1906,26 @@ mod tests {
 
     #[test]
     fn the_api_key_is_the_first_line_of_the_key_file() {
-        let dir = std::env::temp_dir().join("forge_cloud_home_key");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let home = Home { dir: dir.clone() };
-        if std::env::var_os("RUNPOD_API_KEY").is_none() {
-            assert!(home.api_key().is_err());
-            std::fs::write(home.key_file(), "  rpa_test_key  \nnotes\n").unwrap();
-            assert_eq!(home.api_key().ok().as_deref(), Some("rpa_test_key"));
-        }
-        let _ = std::fs::remove_dir_all(&dir);
+        let home = test_home("key");
+        assert!(home.api_key_from(None).is_err());
+        std::fs::write(home.key_file(), "  rpa_test_key  \nnotes\n").unwrap();
+        assert_eq!(home.api_key_from(None).ok().as_deref(), Some("rpa_test_key"));
+        // The variable wins over the file; an empty one does not count.
+        assert_eq!(
+            home.api_key_from(Some("rpa_env".into())).ok().as_deref(),
+            Some("rpa_env")
+        );
+        assert_eq!(
+            home.api_key_from(Some("  ".into())).ok().as_deref(),
+            Some("rpa_test_key")
+        );
+        let _ = std::fs::remove_dir_all(&home.dir);
     }
 
     #[test]
     fn state_is_saved_and_cleared() {
-        let dir = std::env::temp_dir().join("forge_cloud_home_state");
-        let _ = std::fs::remove_dir_all(&dir);
-        let home = Home { dir: dir.clone() };
+        let home = test_home("state");
+        let dir = home.dir.clone();
         assert_eq!(home.state(), None);
         home.save_state(Some(&state())).unwrap();
         assert_eq!(home.state(), Some(state()));
@@ -1750,5 +2029,428 @@ mod tests {
             .collect();
         assert_eq!(failed, ["sd_xl_base_1.0.safetensors"]);
         assert!(doctor_checks("").iter().all(|c| !c.1));
+    }
+
+    // The code that spends money, run against a provider that keeps its pods in memory.
+
+    use std::cell::{Cell, RefCell};
+
+    /// A provider that keeps its pods in memory, so the code that starts, deletes and books pods
+    /// can be tested without spending anything.
+    #[derive(Default)]
+    struct Fake {
+        pods: RefCell<Vec<Pod>>,
+        created: RefCell<Vec<PodRequest>>,
+        terminated: RefCell<Vec<String>>,
+        /// The hourly price of a pod it creates.
+        price: Cell<f64>,
+        /// What it reports as billed for one pod, and for all pods together.
+        billed_pod: Cell<f64>,
+        billed_all: Cell<f64>,
+        /// Every delete fails.
+        refuse_terminate: Cell<bool>,
+        /// Deleted pods still show, as running, in the list and when fetched (a lagging list).
+        lagging: Cell<bool>,
+        deleted: RefCell<Vec<Pod>>,
+    }
+
+    fn fake_pod(id: &str, status: &str, cost: f64, created: u64) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "name": pod::POD_NAME,
+            "status": status,
+            "cost": cost,
+            "dataCenterId": "EU-RO-1",
+            "gpu": { "id": "NVIDIA GeForce RTX 4090" },
+            "createdAt": clock::rfc3339(created),
+        }))
+        .unwrap()
+    }
+
+    impl Fake {
+        fn with(pods: Vec<Pod>) -> Self {
+            let fake = Self::default();
+            fake.price.set(0.89);
+            *fake.pods.borrow_mut() = pods;
+            fake
+        }
+
+        fn env_of(&self, at: usize, name: &str) -> Option<String> {
+            self.created.borrow()[at]
+                .env
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+        }
+    }
+
+    impl Api for Fake {
+        fn balance(&self) -> Result<runpod::Balance> {
+            Ok(runpod::Balance {
+                balance_amount: 9.0,
+                billing_mode: "PREPAID".into(),
+            })
+        }
+
+        fn template_id(&self, _name: &str) -> Result<Option<String>> {
+            Ok(Some("tpl".into()))
+        }
+
+        fn put_template(&self, _existing: Option<&str>, _template: &serde_json::Value) -> Result<String> {
+            Ok("tpl".into())
+        }
+
+        fn pods(&self) -> Result<Vec<Pod>> {
+            let mut list = self.pods.borrow().clone();
+            if self.lagging.get() {
+                list.extend(self.deleted.borrow().iter().cloned());
+            }
+            Ok(list)
+        }
+
+        fn pod(&self, id: &str) -> Result<Option<Pod>> {
+            let up = self.pods.borrow().iter().find(|p| p.id == id).cloned();
+            let stale = || {
+                self.lagging
+                    .get()
+                    .then(|| self.deleted.borrow().iter().find(|p| p.id == id).cloned())
+                    .flatten()
+            };
+            Ok(up.or_else(stale))
+        }
+
+        fn create_pod(&self, request: &PodRequest) -> Result<Created> {
+            let id = format!("new{}", self.created.borrow().len() + 1);
+            self.created.borrow_mut().push(request.clone());
+            let mut pod = fake_pod(&id, "RUNNING", self.price.get(), clock::now());
+            let env: serde_json::Map<String, serde_json::Value> = request
+                .env
+                .iter()
+                .map(|(key, value)| (key.clone(), serde_json::json!(value)))
+                .collect();
+            pod.env = serde_json::Value::Object(env);
+            self.pods.borrow_mut().push(pod.clone());
+            Ok(Created::Pod(Box::new(pod)))
+        }
+
+        fn terminate(&self, id: &str) -> Result<()> {
+            if self.refuse_terminate.get() {
+                return Err(tool_err("fake", "the delete was refused"));
+            }
+            let mut pods = self.pods.borrow_mut();
+            if let Some(at) = pods.iter().position(|p| p.id == id) {
+                self.deleted.borrow_mut().push(pods.remove(at));
+            }
+            self.terminated.borrow_mut().push(id.to_owned());
+            Ok(())
+        }
+
+        fn pod_billing(&self, _window: Window, pod: Option<&str>) -> Result<f64> {
+            Ok(if pod.is_some() {
+                self.billed_pod.get()
+            } else {
+                self.billed_all.get()
+            })
+        }
+
+        fn volume_billing(&self, _window: Window) -> Result<f64> {
+            Ok(0.0)
+        }
+    }
+
+    /// A lane folder of its own for one test, with an SSH public key in it.
+    fn test_home(name: &str) -> Home {
+        let dir = std::env::temp_dir().join(format!("forge_cloud_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("id_ed25519.pub"), "ssh-ed25519 AAAA test\n").unwrap();
+        Home { dir }
+    }
+
+    fn test_config() -> Config {
+        Config {
+            data_center: "EU-RO-1".into(),
+            gpus: vec!["NVIDIA GeForce RTX 4090".into()],
+            ..Config::default()
+        }
+    }
+
+    fn test_lock() -> Lock {
+        Lock {
+            thread: "test thread".into(),
+            started: String::new(),
+            job: "test job".into(),
+        }
+    }
+
+    fn record(id: &str, started: u64, touched: u64) -> State {
+        State {
+            pod_id: id.into(),
+            gpu: "NVIDIA GeForce RTX 4090".into(),
+            data_center: "EU-RO-1".into(),
+            usd_per_hour: 0.89,
+            started,
+            touched,
+            thread: "t".into(),
+            job: "j".into(),
+            max_secs: 4 * 3600,
+        }
+    }
+
+    /// Puts an earlier session of `usd` in the log.
+    fn booked(home: &Home, id: &str, usd: f64) {
+        let mut session = spend::Session::close(&record(id, 1_000_000, 1_000_000), 1_003_600, "earlier");
+        session.usd = usd;
+        spend::append(&home.spend_log(), &session).unwrap();
+    }
+
+    fn logged(home: &Home) -> Vec<spend::Session> {
+        spend::load(&home.spend_log())
+    }
+
+    fn cleanup(home: &Home) {
+        let _ = std::fs::remove_dir_all(&home.dir);
+    }
+
+    #[test]
+    fn a_pod_that_ended_long_ago_is_booked_to_its_estimated_end_not_to_now() {
+        // The review's case: the watchdog deleted the pod, and nothing ran for three days.
+        let home = test_home("ended_long_ago");
+        let fake = Fake::with(Vec::new());
+        let now = clock::now();
+        let started = now - 3 * 24 * 3600;
+        home.save_state(Some(&record("gone1", started, started + 600))).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        let log = logged(&home);
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].pod_id, "gone1");
+        assert_eq!(log[0].seconds, 600 + 600 + 30, "last use, ten idle minutes, one look");
+        assert!(log[0].usd < 0.31, "{}", log[0].usd);
+        // The lane stays open, and the new pod gets the whole lifetime.
+        assert_eq!(state.pod_id, "new1");
+        assert_eq!(fake.env_of(0, "FORGE_MAX_SECS").as_deref(), Some("14400"));
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_pod_that_is_up_is_counted_up_to_now_and_kept() {
+        let home = test_home("up");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("up1", "RUNNING", 0.89, now - 3600)]);
+        home.save_state(Some(&record("up1", now - 3600, now - 60))).unwrap();
+        let live = settle(&fake, &home, &test_config()).unwrap();
+        let counted = spent(&fake, &home, live.as_ref().map(|(s, _)| s), now);
+        assert!((counted.total() - 0.89).abs() < 0.001, "{}", counted.total());
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        assert_eq!(state.pod_id, "up1");
+        assert!(fake.created.borrow().is_empty());
+        assert!(logged(&home).is_empty());
+        cleanup(&home);
+    }
+
+    #[test]
+    fn at_the_budget_the_pod_that_is_up_is_deleted_and_none_starts() {
+        let home = test_home("budget_used");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("up2", "RUNNING", 0.89, now - 3600)]);
+        booked(&home, "old", 49.5);
+        home.save_state(Some(&record("up2", now - 3600, now - 60))).unwrap();
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), now)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("the cloud lane is closed"), "{err}");
+        assert_eq!(*fake.terminated.borrow(), ["up2"]);
+        assert!(fake.created.borrow().is_empty());
+        assert_eq!(home.state(), None);
+        assert_eq!(logged(&home).len(), 2);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn near_the_budget_a_new_pod_lives_only_as_long_as_the_rest_pays_for() {
+        let home = test_home("budget_near");
+        let fake = Fake::with(Vec::new());
+        booked(&home, "old", 48.0);
+        let now = clock::now();
+        prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        // $2 left at the $0.90 price cap.
+        assert_eq!(fake.env_of(0, "FORGE_MAX_SECS").as_deref(), Some("8000"));
+        let deadline: u64 = fake.env_of(0, "FORGE_DEADLINE").unwrap().parse().unwrap();
+        assert!(deadline >= now + 8000 && deadline <= clock::now() + 8000, "{deadline}");
+        assert_eq!(home.state().unwrap().max_secs, 8000);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_new_pod_over_the_price_cap_is_deleted_at_once_and_booked() {
+        let home = test_home("over_cap");
+        let fake = Fake::with(Vec::new());
+        fake.price.set(1.25);
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("over the $0.90 limit"), "{err}");
+        assert_eq!(*fake.terminated.borrow(), ["new1"]);
+        assert_eq!(home.state(), None);
+        let log = logged(&home);
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].pod_id, "new1");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_pod_without_a_price_is_booked_at_the_price_cap() {
+        let home = test_home("no_price");
+        let fake = Fake::with(Vec::new());
+        fake.price.set(0.0);
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), clock::now()).unwrap();
+        assert!((state.usd_per_hour - 0.90).abs() < 1e-9);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn one_unrecorded_pod_is_adopted_and_every_other_is_deleted_and_booked() {
+        let home = test_home("strays");
+        let now = clock::now();
+        let fake = Fake::with(vec![
+            fake_pod("s1", "RUNNING", 0.89, now - 600),
+            fake_pod("s2", "RUNNING", 0.89, now - 300),
+            fake_pod("s3", "EXITED", 0.89, now - 900),
+        ]);
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        assert_eq!(state.pod_id, "s1");
+        assert_eq!(home.state().unwrap().pod_id, "s1");
+        assert_eq!(*fake.terminated.borrow(), ["s2", "s3"]);
+        assert!(fake.created.borrow().is_empty());
+        let log = logged(&home);
+        assert_eq!(log.len(), 1, "the stopped pod costs no compute and is not booked");
+        assert_eq!(log[0].pod_id, "s2");
+        assert!(log[0].seconds >= 300);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn an_unrecorded_pod_over_the_price_cap_is_deleted_not_adopted() {
+        let home = test_home("stray_over_cap");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("s4", "RUNNING", 1.50, now - 300)]);
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        assert_eq!(state.pod_id, "new1");
+        assert_eq!(*fake.terminated.borrow(), ["s4"]);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_pod_replaced_near_its_cap_is_not_taken_back_from_a_lagging_list() {
+        let home = test_home("replaced");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("old", "RUNNING", 0.89, now - 14_000)]);
+        fake.lagging.set(true);
+        home.save_state(Some(&record("old", now - 14_000, now - 100))).unwrap();
+        let (state, _) = prepare(&fake, &home, &test_config(), &test_lock(), now).unwrap();
+        assert_eq!(state.pod_id, "new1");
+        assert_eq!(*fake.terminated.borrow(), ["old"]);
+        let log = logged(&home);
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].pod_id, "old");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_refused_delete_keeps_the_record_so_the_next_command_tries_again() {
+        let home = test_home("refused");
+        let now = clock::now();
+        let fake = Fake::with(vec![fake_pod("up3", "RUNNING", 0.89, now - 3600)]);
+        fake.refuse_terminate.set(true);
+        booked(&home, "old", 49.5);
+        home.save_state(Some(&record("up3", now - 3600, now - 60))).unwrap();
+        assert!(prepare(&fake, &home, &test_config(), &test_lock(), now).is_err());
+        assert_eq!(home.state().unwrap().pod_id, "up3");
+        assert!(down_with(&fake, &home, &test_config()).is_err());
+        assert_eq!(home.state().unwrap().pod_id, "up3");
+        assert_eq!(logged(&home).len(), 1, "nothing is booked for a pod that is still up");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn cloud_down_books_an_ended_pod_to_its_estimate_and_deletes_every_other_pod() {
+        let home = test_home("down");
+        let now = clock::now();
+        let started = now - 3 * 24 * 3600;
+        let fake = Fake::with(vec![fake_pod("s5", "RUNNING", 0.89, now - 900)]);
+        home.save_state(Some(&record("gone2", started, started + 600))).unwrap();
+        down_with(&fake, &home, &test_config()).unwrap();
+        let log = logged(&home);
+        assert_eq!(log.len(), 2);
+        assert_eq!((log[0].pod_id.as_str(), log[0].seconds), ("gone2", 1230));
+        assert_eq!(log[1].pod_id, "s5");
+        assert!(log[1].seconds >= 900);
+        assert_eq!(*fake.terminated.borrow(), ["s5"]);
+        assert_eq!(home.state(), None);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_new_pod_whose_record_cannot_be_saved_is_deleted() {
+        let home = test_home("unsaved");
+        // A folder where the record should go makes writing it fail.
+        std::fs::create_dir_all(home.dir.join("state.json")).unwrap();
+        let fake = Fake::with(Vec::new());
+        assert!(prepare(&fake, &home, &test_config(), &test_lock(), clock::now()).is_err());
+        assert_eq!(*fake.terminated.borrow(), ["new1"]);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_damaged_spend_log_stops_the_lane() {
+        let home = test_home("damaged");
+        std::fs::write(home.spend_log(), "not a session\n").unwrap();
+        let fake = Fake::with(Vec::new());
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("cannot be counted"), "{err}");
+        assert!(fake.created.borrow().is_empty());
+        cleanup(&home);
+    }
+
+    #[test]
+    fn an_ended_pod_is_booked_at_runpods_bill_only_when_that_is_higher() {
+        let now = clock::now();
+        let started = now - 3 * 24 * 3600;
+        for (billed, expected) in [(0.05, 0.304), (0.75, 0.75)] {
+            let home = test_home(&format!("billed_{billed}"));
+            let fake = Fake::with(Vec::new());
+            fake.billed_pod.set(billed);
+            home.save_state(Some(&record("gone3", started, started + 600))).unwrap();
+            assert!(settle(&fake, &home, &test_config()).unwrap().is_none());
+            let log = logged(&home);
+            assert!((log[0].usd - expected).abs() < 1e-9, "{billed}: {}", log[0].usd);
+            cleanup(&home);
+        }
+    }
+
+    #[test]
+    fn runpods_total_counts_when_it_is_above_the_log() {
+        let home = test_home("billed_total");
+        let fake = Fake::with(Vec::new());
+        booked(&home, "old", 3.0);
+        fake.billed_all.set(4.5);
+        assert!((spent(&fake, &home, None, clock::now()).total() - 4.5).abs() < 1e-9);
+        cleanup(&home);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn only_one_run_on_this_pc_holds_the_pod() {
+        let home = test_home("run_lock");
+        let first = RunLock::take(&home).unwrap();
+        assert!(RunLock::busy(&home));
+        let err = RunLock::take(&home).unwrap_err().to_string();
+        assert!(err.contains("another asset-forge run"), "{err}");
+        drop(first);
+        assert!(!RunLock::busy(&home));
+        assert!(RunLock::take(&home).is_ok());
+        cleanup(&home);
     }
 }

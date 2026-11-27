@@ -13,11 +13,11 @@ The criteria are the goals the coordinator set when it started the thread, plus 
 | Pick a provider and give the reason | yes | Runpod. The reasons are in `docs/cloud-gpu.md`, "Choices made on 2026-11-27". |
 | A template that runs ComfyUI (SDXL base and refiner, canny and depth ControlNet, 4x-UltraSharp, as on this PC) and headless Blender 5.3 with Cycles OptiX | yes | Template `asset-forge-gpu` on Runpod. `cloud doctor` on a new pod passes all 13 checks (output below): the same Blender build hash as this PC, OptiX and CUDA listed, the five model files at this PC's sizes (their SHA-256 are checked at download and equal this PC's files), 101 pinned packages. |
 | Callable from this PC, so asset-forge and the dash threads can send jobs | yes | `asset-forge --lane cloud <command>`. `--lane cloud selftest` ran an SDXL texture with the 4x upscale, base and refiner with the canny ControlNet, and a 3840x2160 Cycles render, on two different pods (output below). |
-| Outputs come back to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\` | yes, with one limit | `--masters <snake_name>` copies each Blender output folder and each ComfyUI image of 2048 px or more. It was tested into a test folder (two 4096² textures and the 4K render arrived), so that no test picture sits in the Drive. The Drive folder itself was written by the same code path for the spend log (`shared\cloud-gpu-spend.csv` is there). |
+| Outputs come back to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\` | yes, with one limit | `--masters <snake_name>` copies the files in each Blender job's output folder and each ComfyUI image of 2048 px or more. It was tested into a test folder (two 4096² textures and the 4K render arrived), so that no test picture sits in the Drive. The Drive folder itself was written by the same code path for the spend log (`shared\cloud-gpu-spend.csv` is there). |
 | The gpu.lock rule has two lanes and is documented in `SKILLS.md` | yes | `SKILLS.md` section 5; `AGENTS.md` directive 15; the lines that point at them in `ONBOARDING.md`, `program/README.md`, the dash prompt and its checklist line 34, the phase 7 skill list and the two asset skills. asset-forge refuses a cloud job without `gpu-cloud.lock`. |
-| Pods stop by themselves when idle | yes | The first pod was left alone after its last use at 15:22:07 UTC. Its watchdog wrote `2026-11-27T15:32:16Z afb069dhdonioy idle for 600s`, and Runpod's API answered 404 for it at 15:32:22. |
-| Spend is recorded | yes | `spend.jsonl` holds the three sessions ($0.863); `cloud spend` prints them by thread next to Runpod's own billing; the CSV copy is in the Drive folder. The first session's $0.734 matched the fall of the balance ($10.00 to $9.27). |
-| TJX creates the account and pays; no card details asked for; nothing over a small test (about $1) without asking | yes | TJX made the account, paid in $10 and created the key. The whole set-up and all tests cost $0.86. |
+| Pods stop by themselves when idle | yes | The first pod was left alone after its last use at 15:22:07 UTC. Its watchdog wrote `2026-11-27T15:32:16Z afb069dhdonioy idle for 600s`, and Runpod's API answered 404 for it at 15:32:22. After the code review the watchdog was hardened (see "Code review"); the new version was run on this PC against stubs in six cases (idle, busy GPU, end of life, a deadline in the past, a hung GPU probe, a failed delete), and each ended as it should. |
+| Spend is recorded | yes | `spend.jsonl` holds the four sessions ($1.014); `cloud spend` prints them by thread next to Runpod's own billing; the CSV copy is in the Drive folder. The first session's $0.734 matched the fall of the balance ($10.00 to $9.27). |
+| TJX creates the account and pays; no card details asked for; nothing over a small test (about $1) without asking | yes | TJX made the account, paid in $10 and created the key. The set-up and its tests cost $0.86, and one more pod that proved the review fixes cost $0.15: $1.01 in all, of the $50 budget. |
 | The pilot thread's GPU use and files are left alone | yes | The local GPU jobs this thread ran were the comparison run (2 minutes) and the final `cargo test --workspace` in a clean clone, both under `gpu.lock`. The commit touches none of the pilot's files. |
 | A $50 cap for the whole lane, a warning at $40 (TJX, 15:42 UTC, after turning on auto-pay) | yes | `budget_usd` and `budget_warn_usd` in `lane.json`. Tried against the real account: with the budget set under the spend, `cloud up` answered `the cloud lane is closed: $0.81 of the $0.50 budget is spent`; with $0.09 left, `too little of the budget is left to start a pod`; with the warning line under the spend, the warning printed. A pod started with $0.24 left got `FORGE_MAX_SECS=944` in its environment on Runpod (the usual value is 14400). |
 
@@ -25,8 +25,8 @@ The criteria are the goals the coordinator set when it started the thread, plus 
 
 - `tools/asset-forge/src/lane.rs`: the two lanes, their lock files, and the copy of 4K outputs to the Drive masters folder (`--masters`).
 - `tools/asset-forge/src/cloud/`:
-  - `mod.rs`: settings, the pod on record, the budget, starting and adopting pods, the session with its SSH forward, and the `cloud` commands (`setup`, `key`, `up`, `down`, `status`, `spend`, `doctor`).
-  - `runpod.rs`: the Runpod REST API v2 calls the lane needs.
+  - `mod.rs`: settings, the pod on record, the budget, starting, adopting, deleting and booking pods, the session with its SSH forward and its run lock, and the `cloud` commands (`setup`, `key`, `up`, `down`, `status`, `spend`, `doctor`).
+  - `runpod.rs`: the Runpod REST API v2 calls the lane needs, behind the `Api` trait so the tests can use a fake.
   - `ssh.rs`: the OpenSSH client that ships with Windows, for scripts, file transfer and the forward.
   - `pod.rs`: what runs on the pod (the idle watchdog, the services, the installer, the doctor) as Rust string constants, with every version and checksum pinned.
   - `remote.rs`: a Blender recipe's parameters rewritten for the pod, inputs uploaded, outputs fetched.
@@ -36,7 +36,7 @@ The criteria are the goals the coordinator set when it started the thread, plus 
 - Docs: `docs/cloud-gpu.md` (new), `SKILLS.md` section 5 and the lines that point at it (see "Shared places touched"), this tool's `README.md`, and `docs/PROGRESS.md`.
 - No dependency was added: `tools/asset-forge/Cargo.toml` and `Cargo.lock` are unchanged.
 - On Runpod (TJX's account): the network volume `asset-forge` (30 GB, EU-RO-1) and the template `asset-forge-gpu`. No pod is left running.
-- On this PC, outside the repo: `%USERPROFILE%\Documents\Dash_Tools\cloud\` (the key, the SSH key pair, `lane.json`, `spend.jsonl`).
+- On this PC, outside the repo: `%USERPROFILE%\Documents\Dash_Tools\cloud\` (the key, the SSH key pair, `lane.json`, `spend.jsonl`, `run.lock`).
 
 ## Verification output
 
@@ -101,7 +101,7 @@ selftest on the local lane
 selftest: passed
 ```
 
-`cloud spend` after the last pod:
+`cloud spend` after the third pod:
 
 ```
 spend log: 3 session(s), 58 min 09 s, $0.863
@@ -111,14 +111,43 @@ budget: $0.86 of the $50.00 budget is spent (pods $0.86, volume storage $0.00)
 balance: $9.19 (PREPAID)
 ```
 
+After the code review's fixes, in a clean clone of `main` (commit `0f53915`) with the fixes added:
+
+```
+$ cargo check --workspace
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.69s
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.27s
+$ cargo fmt --all -- --check
+(no output, exit 0)
+$ cargo test -p asset-forge
+test result: ok. 145 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+The fixes change only `tools/asset-forge` and docs, so the rest of the workspace's tests were not run again.
+
+One pod proved the changed pod scripts (16:59 to 17:10 UTC): the installer ran again for the new stamp and the pod's own start left the services to it; `FORGE_DEADLINE` was in the pod's environment; `cloud doctor` passed every check twice, and the second run counted one forward keeping the pod in use, so the first run's forward had ended when its process did; the selftest passed through the new forward; `cloud down` booked the pod:
+
+```
+  cloud: pod jm2wrpb2zlvr0i is ready after 5 min 21 s (a new pod)
+pod jm2wrpb2zlvr0i RUNNING | env: FORGE_DEADLINE=1795813196 FORGE_IDLE_SECS=600 FORGE_MAX_SECS=14400
+· forwards keeping the pod in use: 1
+cloud doctor: all checks passed
+· forwards keeping the pod in use: 1
+cloud doctor: all checks passed
+selftest: passed
+cloud: deleted pod jm2wrpb2zlvr0i after 10 min 11 s (about $0.151 at $0.89 an hour)
+budget: $1.02 of the $50.00 budget is spent (pods $1.01, volume storage $0.01)
+```
+
 The pod's scripts were also checked with `bash -n` by hand, and the installer's Python step was run against stubs for eight starting states (fresh, already stamped, an older stamp, cut off, a second attempt, another Python, a failing install, no GPU). No test in the repo starts bash.
 
 ## Measurements
 
 The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 
-- A new pod is ready for a job 2 min 42 s to 3 min 18 s after the command.
-- Once a model is loaded: SDXL 4096² in 9.1 s against 27.1 s here; the 4K Cycles render in 12.6 s against 32.4 s.
+- A new pod is ready for a job 2 min 42 s to 3 min 18 s after the command, and 5 min 21 s for the first pod after the installer changed.
+- Once a model is loaded: SDXL 4096² in 9.1 to 11.8 s against 27.1 s here; the 4K Cycles render in 12.6 to 17.0 s against 32.4 s (three pods).
 - The first job on a new pod is no faster than this PC.
 - An idle pod was gone 10 min 9 s after its last use.
 - The one-time install took 21 minutes.
@@ -151,6 +180,9 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 9. **The local lane's lock is not enforced by asset-forge,** as before. Only the cloud lane refuses a job without its lock.
 10. **If this PC dies in the middle of a Blender job,** the pod finishes the render, then idles for 10 minutes and deletes itself. The render is lost with it.
 11. **`cloud setup` was run before the pins and the budget existed.** Its later parts were run through `cloud up`, `cloud doctor` and `cloud down`; the whole command was not run again from an empty account.
+12. **The watchdog's backstop and the creation deadline were proved on this PC against stubs, not on a pod.** A pod run would mean waiting for a pod to reach its end of life; the idle deletion, which uses the same delete commands, was proved on a pod.
+13. **`run.lock` keeps two runs apart on Windows only.** On another system the file opens without the guard; the tool runs on Windows.
+14. **A pod started outside asset-forge counts towards the budget only once Runpod bills it,** which can be hours later. The rule in `SKILLS.md` section 5 forbids starting one.
 
 ## Shared places touched
 
@@ -166,6 +198,8 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 ## What other threads must know
 
 - Take `gpu-cloud.lock` before any `--lane cloud` job, run `asset-forge cloud down` when your batch is done, and put your spend in your handover (`asset-forge cloud spend`).
+- One asset-forge run at a time uses the pod. A second one stops with `another asset-forge run on this PC is using the pod`.
+- A new API key is saved with `asset-forge cloud key`, which asks for it. Never put the key on a command line.
 - Start pods only through asset-forge. A pod started from Runpod's console, CLI or MCP tools has no idle shut-off and is not in the spend log. TJX enabled the Runpod plugin on 2026-11-27, which brings that CLI and those MCP tools: use it to look things up only.
 - Never edit `budget_usd` in `lane.json`. Tell TJX when a job prints the budget warning.
 - A recipe needs no change to run on the pod, as long as every file it reads is named in its parameters by an absolute path and everything it writes goes into `out`.
@@ -174,7 +208,32 @@ The full tables are in `docs/cloud-gpu.md`, "Measured on 2026-11-27". In short:
 
 ## Code review
 
-A second agent reviews the change against the requirements (the `requesting-code-review` skill). It was still running when this was committed on 2026-11-27 at about 16:40 UTC, because the pilot thread was waiting for these shared files. Its findings, and what was done with each, follow in the next commit.
+A second agent reviewed the change against the requirements (the `requesting-code-review` skill; findings only, no score). It was still running when the lane was first committed (`d24ab34`, 16:40 UTC), because the pilot thread was waiting for the shared rule files. Its verdict was "with fixes". Every finding and what was done with it:
+
+| # | Finding | What was done |
+|---|---|---|
+| 1 | **Critical.** A pod that its watchdog deleted was still counted as running, up to now. After a weekend that could book about $50 that was never spent and close the lane. `cloud down` had the same flaw. | Fixed. Every command that counts or books first settles the pod on record: one that is up is counted up to now; one that has ended is booked up to its last use plus the idle time. Tests: `a_pod_that_ended_long_ago_is_booked_to_its_estimated_end_not_to_now`, `cloud_down_books_an_ended_pod_to_its_estimate_and_deletes_every_other_pod`. |
+| 2 | **Critical.** One hung command (`nvidia-smi`, `runpodctl`, a write to the volume) could stop the watchdog for good, lifetime cap included. | Fixed. Time limits on the GPU probe and every delete command, both limits checked before the probes, the log line written in the background, and a second loop that needs only the clock (the backstop). Run on this PC against stubs in six cases. |
+| 3 | A watchdog deletion could be booked for less than it cost: a killed run left no last use, and a partial bill from Runpod replaced the estimate. | Fixed. The last use is saved before and after every job, and the larger of the estimate and Runpod's bill is booked. Test: `an_ended_pod_is_booked_at_runpods_bill_only_when_that_is_higher`. |
+| 4 | A PC that sleeps or loses its network kept the pod "in use" for about 2 hours through the open forward. | Fixed. The run sends a beat every 15 s over the forward's connection, and the pod stops counting a minute after the last one, so the pod is freed about 11 minutes later. |
+| 5 | Two runs at once could start two pods, and the second overwrote the first one's record. | Fixed. `run.lock`, held from opening the pod to closing it; Windows releases it when the process ends. A pod with no record is adopted once; every other one is deleted and booked; `cloud down` deletes every pod of the lane. Tests: `only_one_run_on_this_pc_holds_the_pod`, `one_unrecorded_pod_is_adopted_and_every_other_is_deleted_and_booked`. |
+| 6 | The documented way to save a new key put it on the command line, where `cargo run` prints it. | Fixed. `cloud key` asks for the key; an argument still works, with a warning. Guide and error hint changed. |
+| 7 | After a pin change, the pod's own start could launch ComfyUI while the installer rewrote its Python environment. | Fixed. The installer holds the services' lock for its whole run, and a pod starts its services by itself only on a disk with the current stamp. |
+| 8 | A pod that stopped while starting was booked but not deleted. | Fixed: deleted, then booked. |
+| 9 | Pods with no record were handled loosely (no price check on adoption; others left running). | Fixed with 5. Test: `an_unrecorded_pod_over_the_price_cap_is_deleted_not_adopted`. |
+| 10 | A pod just replaced could be adopted again from a lagging pod list. | Fixed: the pod just deleted is skipped. Test: `a_pod_replaced_near_its_cap_is_not_taken_back_from_a_lagging_list`. |
+| 11 | The watchdog's clocks restarted with the container. | Fixed: a deadline set at creation (`FORGE_DEADLINE`) holds across restarts. |
+| 12 | A "ready" mark left by an earlier session was trusted; a stale forward on port 8189 could answer in the pod's place. | Fixed. "Ready" counts only while ComfyUI answers; the port is checked before the forward opens; an answer counts only while the forward's own process runs. |
+| 13 | The ComfyUI process match worked line by line, so a future line in the start command could make it stop the container. | Fixed: the whole command line is joined into one line before matching, and the test models that. |
+| 14 | Spend log: a line could be torn, damaged lines were skipped silently, a crash could book a pod twice. | Fixed. One write per line; a damaged line stops the lane until it is fixed; a pod is booked once. Tests in `spend.rs` and `a_damaged_spend_log_stops_the_lane`. |
+| 15 | Volume storage is outside the $50 stop. | Documented in the guide; `cloud setup` checks the budget before it creates a volume. |
+| 16 | Four statements in the docs that the code did not match. | Fixed in `docs/cloud-gpu.md` and the README. |
+| 17 | `--lane` with no value silently meant local. | Fixed: refused, with a test. |
+| 18 | A pod whose answer had no price was booked at $0. | Fixed: booked at the price cap. Test: `a_pod_without_a_price_is_booked_at_the_price_cap`. |
+| 19 | A missing input travelled to the pod as a path of this PC. | Fixed: the job stops on this PC. |
+| 20 | Calling `with_session` inside its own job would deadlock. | Documented on the function; nothing does it. |
+| 21 | A placeholder in this file. | Not in the committed file: the reviewer read a copy made before the closing review was filled in. |
+| 22 | The functions that move money had no tests. | 16 tests against a fake provider through the new `Api` trait, a `bash -n` check of every pod script, and tests that no longer depend on environment variables or shared temp folders. |
 
 ## Closing review
 

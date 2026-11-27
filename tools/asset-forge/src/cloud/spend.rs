@@ -61,32 +61,52 @@ pub fn cost(usd_per_hour: f64, seconds: u64) -> f64 {
     (usd_per_hour * seconds as f64 / 3600.0 * 1000.0).round() / 1000.0
 }
 
-/// Adds a session to the log.
-pub fn append(log: &Path, session: &Session) -> Result<()> {
+/// Adds a session to the log, unless the log already has one for the same pod: two commands
+/// that find the same ended pod, or a run that stopped between booking a pod and forgetting it,
+/// must not count it twice. Returns whether a line was written. The line goes out in one write,
+/// so a crash cannot leave half a line for the next one to join.
+pub fn append(log: &Path, session: &Session) -> Result<bool> {
+    if load(log).iter().any(|s| s.pod_id == session.pod_id) {
+        return Ok(false);
+    }
     if let Some(dir) = log.parent() {
         std::fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
     }
-    let line = serde_json::to_string(session).map_err(|source| ForgeError::Json {
+    let mut line = serde_json::to_string(session).map_err(|source| ForgeError::Json {
         context: log.display().to_string(),
         source,
     })?;
+    line.push('\n');
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(log)
         .map_err(|e| io_err(log, e))?;
-    writeln!(file, "{line}").map_err(|e| io_err(log, e))
+    file.write_all(line.as_bytes()).map_err(|e| io_err(log, e))?;
+    Ok(true)
 }
 
-/// Every session in the log, oldest first. A missing log is an empty one; a damaged line is
-/// skipped.
+/// Every session in the log, oldest first, and the number of lines that are not a session. A
+/// missing log is an empty one.
+#[must_use]
+pub fn load_checked(log: &Path) -> (Vec<Session>, usize) {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let mut sessions = Vec::new();
+    let mut damaged = 0;
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        match serde_json::from_str(line) {
+            Ok(session) => sessions.push(session),
+            Err(_) => damaged += 1,
+        }
+    }
+    (sessions, damaged)
+}
+
+/// Every session in the log, oldest first, leaving out damaged lines. The budget does not use
+/// this: it refuses to count a log with damaged lines ([`load_checked`]).
 #[must_use]
 pub fn load(log: &Path) -> Vec<Session> {
-    std::fs::read_to_string(log)
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|line| serde_json::from_str(line).ok())
-        .collect()
+    load_checked(log).0
 }
 
 /// Total USD and total seconds over `sessions`.
@@ -171,27 +191,53 @@ mod tests {
         assert_eq!(Session::close(&open(), 5, "cloud down").seconds, 0);
     }
 
-    #[test]
-    fn the_log_round_trips_and_skips_damage() {
-        let dir = std::env::temp_dir().join("forge_spend_log");
+    /// A folder of its own for one test, so test runs that overlap never share a log.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("forge_spend_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn the_log_round_trips_and_counts_damage() {
+        let dir = scratch("round_trip");
         let log = dir.join("spend.jsonl");
         assert!(load(&log).is_empty());
+        assert_eq!(load_checked(&log).1, 0);
         let a = Session::close(&open(), 1_795_787_495 + 600, "cloud down");
-        let b = Session::close(&open(), 1_795_787_495 + 1200, "the pod's watchdog");
-        append(&log, &a).unwrap();
+        let second = crate::cloud::State {
+            pod_id: "p2".into(),
+            ..open()
+        };
+        let b = Session::close(&second, 1_795_787_495 + 1200, "the pod's watchdog");
+        assert!(append(&log, &a).unwrap());
         std::fs::OpenOptions::new()
             .append(true)
             .open(&log)
             .unwrap()
             .write_all(b"not json\n")
             .unwrap();
-        append(&log, &b).unwrap();
-        let back = load(&log);
+        assert!(append(&log, &b).unwrap());
+        let (back, damaged) = load_checked(&log);
         assert_eq!(back, vec![a, b]);
+        assert_eq!(damaged, 1);
         let (usd, seconds) = total(&back);
         assert_eq!(seconds, 1800);
         assert!((usd - 0.345).abs() < 1e-9);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_pod_is_booked_once_however_often_it_is_found() {
+        let dir = scratch("once");
+        let log = dir.join("spend.jsonl");
+        let first = Session::close(&open(), 1_795_787_495 + 600, "the pod's watchdog (end time estimated)");
+        let again = Session::close(&open(), 1_795_787_495 + 900, "cloud down");
+        assert!(append(&log, &first).unwrap());
+        assert!(!append(&log, &again).unwrap());
+        assert_eq!(load(&log), vec![first]);
+        // Every line ends with a newline, so the next one always starts on its own line.
+        assert!(std::fs::read_to_string(&log).unwrap().ends_with("}\n"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -200,10 +246,7 @@ mod tests {
         let (usd, seconds) = total(&[]);
         assert_eq!(seconds, 0);
         assert_eq!(format!("{usd:.3}"), "0.000");
-        assert!(csv(&[]).ends_with(
-            "total,,0.0,0.000,,,,,,,
-"
-        ));
+        assert!(csv(&[]).ends_with("total,,0.0,0.000,,,,,,,\n"));
     }
 
     #[test]

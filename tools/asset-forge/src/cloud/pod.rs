@@ -228,38 +228,53 @@ pub const MODELS: &[Model] = &[
 /// How often the watchdog looks, in seconds (the `sleep` in [`WATCHDOG`]).
 pub const WATCHDOG_POLL_SECS: u64 = 30;
 
-/// The watchdog. It deletes the pod when nothing has used it for `FORGE_IDLE_SECS`, or when the
-/// pod is older than `FORGE_MAX_SECS`. "Used" means a script from this PC ran, the tunnel from
-/// this PC is open, Blender is running, or the GPU is busy. It starts with the container, so
-/// it guards the pod even if this PC never connects.
+/// The watchdog. It deletes the pod when nothing has used it for `FORGE_IDLE_SECS`, or at the
+/// end of its life: `FORGE_MAX_SECS` after this container started, or `FORGE_DEADLINE` (Unix
+/// seconds, set when the pod was created, so it also holds across restarts), whichever is
+/// earlier. "Used" means a script from this PC ran, the tunnel from this PC is open, Blender is
+/// running, or the GPU is busy. It starts with the container, so it guards the pod even if this
+/// PC never connects.
+///
+/// Nothing in it may wait for long: the GPU probe and the delete commands have time limits, the
+/// log line goes to the network volume in the background, the two limits are checked before the
+/// probes, and a second loop that needs nothing but the clock enforces the end of life on its
+/// own, in case the first one hangs anyway.
 const WATCHDOG: &str = r#"# asset-forge cloud lane: the pod's start command (asset-forge, src/cloud/pod.rs).
-mkdir -p /run/forge /workspace/forge
+mkdir -p /run/forge
 date +%s > /run/forge/boot
 touch /run/forge/activity
 forge_stop() {
-  echo "$(date -u +%FT%TZ) $RUNPOD_POD_ID $1" >> /workspace/forge/stops.log
-  runpodctl pod delete "$RUNPOD_POD_ID" && return
-  runpodctl remove pod "$RUNPOD_POD_ID" && return
+  ( mkdir -p /workspace/forge && echo "$(date -u +%FT%TZ) $RUNPOD_POD_ID $1" >> /workspace/forge/stops.log ) &
+  timeout -k 5 60 runpodctl pod delete "$RUNPOD_POD_ID" && return
+  timeout -k 5 60 runpodctl remove pod "$RUNPOD_POD_ID" && return
   curl -fsS -m 30 -X DELETE -H "Authorization: Bearer $RUNPOD_API_KEY" "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID" && return
-  runpodctl pod stop "$RUNPOD_POD_ID" && return
-  runpodctl stop pod "$RUNPOD_POD_ID" && return
+  timeout -k 5 60 runpodctl pod stop "$RUNPOD_POD_ID" && return
+  timeout -k 5 60 runpodctl stop pod "$RUNPOD_POD_ID" && return
   curl -fsS -m 30 -X POST -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" -d '{"action":"stop"}' "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID/action"
+}
+forge_end=$(( $(cat /run/forge/boot) + ${FORGE_MAX_SECS:-14400} ))
+case "${FORGE_DEADLINE:-}" in
+  ''|*[!0-9]*) ;;
+  *) if [ "$FORGE_DEADLINE" -lt "$forge_end" ]; then forge_end=$FORGE_DEADLINE; fi ;;
+esac
+forge_backstop() {
+  while [ "$(date +%s)" -lt "$forge_end" ]; do sleep 30; done
+  while :; do forge_stop "end of life (backstop)"; sleep 60; done
 }
 forge_watch() {
   idle=${FORGE_IDLE_SECS:-600}
-  life=${FORGE_MAX_SECS:-14400}
-  boot=$(cat /run/forge/boot)
   while sleep 30; do
     now=$(date +%s)
+    if [ "$now" -ge "$forge_end" ]; then forge_stop "end of life"; continue; fi
+    last=$(stat -c %Y /run/forge/activity 2>/dev/null || echo "$now")
+    if [ $((now - last)) -ge "$idle" ]; then forge_stop "idle for ${idle}s"; continue; fi
     if grep -qx blender /proc/[0-9]*/comm 2>/dev/null; then touch /run/forge/activity; fi
-    util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -n 1)
+    util=$(timeout -k 5 20 nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -n 1)
     case "$util" in ''|*[!0-9]*) util=0 ;; esac
     if [ "$util" -ge 5 ]; then touch /run/forge/activity; fi
-    last=$(stat -c %Y /run/forge/activity 2>/dev/null || echo "$now")
-    if [ $((now - boot)) -ge "$life" ]; then forge_stop "lifetime cap of ${life}s"; fi
-    if [ $((now - last)) -ge "$idle" ]; then forge_stop "idle for ${idle}s"; fi
   done
 }
+forge_backstop > /run/forge/backstop.log 2>&1 &
 forge_watch > /run/forge/watchdog.log 2>&1 &
 "#;
 
@@ -270,7 +285,7 @@ const SERVICES: &str = r#"log() { echo "$(date -u +%T) [services] $*"; }
 fail() { log "$1"; echo "$1" > /run/forge/failed; exit 1; }
 comfy_pid() {
   for p in /proc/[0-9]*; do
-    if tr '\0' ' ' 2>/dev/null < "$p/cmdline" | grep -q '^/workspace/venv/bin/python main.py '; then echo "${p##*/}"; return 0; fi
+    if tr '\0\n' '  ' 2>/dev/null < "$p/cmdline" | grep -q '^/workspace/venv/bin/python main.py '; then echo "${p##*/}"; return 0; fi
   done
   return 1
 }
@@ -322,7 +337,12 @@ const PROVISION: &str = r#"set -euo pipefail
 W=/workspace
 say() { echo "$(date -u +%T) [provision] $*"; }
 mkdir -p "$W/forge" "$W/cache" "$W/models" /run/forge
-( while :; do touch /run/forge/activity; sleep 20; done ) &
+# One installer or services script at a time: the pod's start command may be bringing the
+# services up from this disk, and ComfyUI must never start while its files are being replaced.
+# The services script takes the same lock and waits here.
+exec 9> /run/forge/services.lock
+flock 9
+( while :; do touch /run/forge/activity; sleep 20; done ) 9>&- &
 KEEP=$!
 trap 'kill $KEEP 2>/dev/null || true' EXIT
 # Stops a running ComfyUI before its files are replaced. It matches ComfyUI's own command line
@@ -331,7 +351,7 @@ trap 'kill $KEEP 2>/dev/null || true' EXIT
 # a pass that finds everything in place leaves ComfyUI running.
 stop_comfyui() {
   for p in /proc/[0-9]*; do
-    if tr '\0' ' ' 2>/dev/null < "$p/cmdline" | grep -q '^/workspace/venv/bin/python main.py '; then kill "${p##*/}" 2>/dev/null || true; fi
+    if tr '\0\n' '  ' 2>/dev/null < "$p/cmdline" | grep -q '^/workspace/venv/bin/python main.py '; then kill "${p##*/}" 2>/dev/null || true; fi
   done
   rm -f /run/forge/ready
 }
@@ -460,6 +480,7 @@ echo "stamp=$(cat /workspace/forge/provisioned 2>/dev/null)"
 echo "disk_mb=$(du -sm /workspace 2>/dev/null | cut -f1)"
 echo "stops=$(tail -n 3 /workspace/forge/stops.log 2>/dev/null | tr '\n' '|')"
 echo "services=$(tail -n 4 /workspace/forge/services.log 2>/dev/null | tr '\n' '|')"
+echo "tunnels=$(for p in /proc/[0-9]*; do tr '\0' ' ' < "$p/cmdline" 2>/dev/null; echo; done | grep -c '[r]ead -r -t 60')"
 "#;
 
 fn fill(text: &str) -> String {
@@ -529,8 +550,11 @@ pub fn doctor_script() -> String {
 /// then the image's own start script.
 #[must_use]
 pub fn start_command() -> String {
+    // The services start here only on a disk this version installed. After a pin change the
+    // PC runs the installer first and then the services itself.
     format!(
-        "{WATCHDOG}if [ -f /workspace/forge/provisioned ]; then\n(\n{}) >> /workspace/forge/services.log 2>&1 &\nfi\n{HANDOVER}",
+        "{WATCHDOG}if [ \"$(cat /workspace/forge/provisioned 2>/dev/null)\" = \"{}\" ]; then\n(\n{}) >> /workspace/forge/services.log 2>&1 &\nfi\n{HANDOVER}",
+        stamp(),
         services_script()
     )
 }
@@ -595,16 +619,93 @@ mod tests {
     }
 
     #[test]
+    fn nothing_in_the_watchdog_can_hold_up_a_deletion() {
+        let w = WATCHDOG;
+        // Every command that talks to the GPU or to the provider has a time limit.
+        assert!(w.contains("timeout -k 5 20 nvidia-smi"));
+        for line in w.lines().filter(|l| l.contains("runpodctl")) {
+            assert!(line.trim_start().starts_with("timeout -k 5 60 runpodctl"), "{line}");
+        }
+        for line in w.lines().filter(|l| l.contains("curl ")) {
+            assert!(line.contains("curl -fsS -m 30 "), "{line}");
+        }
+        // The log line on the network volume is written in the background.
+        assert!(w.contains(">> /workspace/forge/stops.log ) &\n"));
+        assert!(!w.contains("mkdir -p /run/forge /workspace"));
+        // Both limits are checked before the probes.
+        let probe = w.find("nvidia-smi").unwrap();
+        assert!(w.find("forge_stop \"end of life\"").unwrap() < probe);
+        assert!(w.find("forge_stop \"idle for").unwrap() < probe);
+        // A second loop ends the pod on time with nothing but the clock, and the deadline set
+        // at creation holds across restarts of the container.
+        assert!(w.contains("forge_backstop > /run/forge/backstop.log 2>&1 &\n"));
+        assert!(w.contains("if [ \"$FORGE_DEADLINE\" -lt \"$forge_end\" ]; then forge_end=$FORGE_DEADLINE; fi"));
+    }
+
+    #[test]
     fn the_provisioner_stops_comfyui_without_matching_the_containers_init() {
         // The container's init runs as `docker-init -- bash -c <the start command>`, so its
-        // command line holds every word of the start command. The provisioner must only match
-        // a command line that begins with ComfyUI's own.
+        // command line holds every word of the start command, newlines included. Both scripts
+        // turn the whole command line into one line before matching, so `^` can only match
+        // its start: ComfyUI's own command.
         let own = "/workspace/venv/bin/python main.py ";
-        assert!(provision_script().contains(&format!("grep -q '^{own}'")));
+        let matcher = format!("tr '\\0\\n' '  ' 2>/dev/null < \"$p/cmdline\" | grep -q '^{own}'");
+        assert_eq!(provision_script().matches(&matcher).count(), 1);
+        assert_eq!(services_script().matches(&matcher).count(), 1);
         assert!(services_script().contains(&format!("setsid nohup {own}--listen")));
-        let init = format!("/sbin/docker-init -- bash -c {}", start_command().replace('\n', " "));
+        let init = format!("/sbin/docker-init\0--\0bash\0-c\0{}", start_command()).replace(['\0', '\n'], " ");
         assert!(init.contains("main.py --listen"));
         assert!(!init.starts_with(own));
+    }
+
+    #[test]
+    fn the_pod_starts_the_services_only_on_a_disk_this_version_installed() {
+        let start = start_command();
+        assert!(start.contains(&format!(
+            "if [ \"$(cat /workspace/forge/provisioned 2>/dev/null)\" = \"{}\" ]; then\n(\n",
+            stamp()
+        )));
+        // The installer holds the services' lock from before its first step to its end, and
+        // its keep-alive loop does not inherit the lock.
+        let script = provision_script();
+        let lock = script.find("exec 9> /run/forge/services.lock\nflock 9\n").unwrap();
+        assert!(lock < script.find("B=\"$W/blender-").unwrap());
+        assert!(script.contains("done ) 9>&- &\nKEEP=$!"));
+        assert!(services_script().contains("exec 9> /run/forge/services.lock\nflock 9\n"));
+    }
+
+    #[test]
+    fn every_script_is_valid_bash() {
+        // `bash -n` reads each script from standard input and checks its syntax. Without bash
+        // on this PC (Git for Windows brings one) there is nothing to run, and the test passes.
+        let Ok(probe) = std::process::Command::new("bash").arg("--version").output() else {
+            return;
+        };
+        if !probe.status.success() {
+            return;
+        }
+        for (name, text) in [
+            ("start", start_command()),
+            ("provision", provision_script()),
+            ("services", services_script()),
+            ("doctor", doctor_script()),
+            ("keepalive", super::super::ssh::KEEPALIVE.to_owned()),
+        ] {
+            let mut child = std::process::Command::new("bash")
+                .arg("-n")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            {
+                use std::io::Write as _;
+                let mut stdin = child.stdin.take().unwrap();
+                stdin.write_all(text.as_bytes()).unwrap();
+            }
+            let out = child.wait_with_output().unwrap();
+            assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+        }
     }
 
     #[test]

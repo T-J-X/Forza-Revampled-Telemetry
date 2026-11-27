@@ -12,7 +12,7 @@ cargo run --release -p asset-forge -- cloud down      # when your batch is done;
 ```
 
 - `--lane cloud` sends the run's ComfyUI and Blender work to the pod. Everything else stays on this PC, and the results land in the same folders as a local run. A recipe needs no change.
-- `--masters <snake_name>` also copies each Blender output folder and each ComfyUI image of 2048 px or more to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`. It works on both lanes.
+- `--masters <snake_name>` also copies the files in each Blender job's output folder (not its sub-folders) and each ComfyUI image of 2048 px or more to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`. It works on both lanes.
 - The pod starts by itself when a job needs it, and is ready about 3 minutes later (measured below). It is deleted by `cloud down`, or by itself after 10 minutes without use.
 - Only `asset-forge` jobs can run there. `preview-export`, the golden tests and everything else that draws with the kit need the local card.
 
@@ -23,7 +23,7 @@ cargo run --release -p asset-forge -- cloud down      # when your batch is done;
 | RTX 4090 pod (first choice) | $0.89 an hour, billed per second | only while a pod is up |
 | RTX PRO 4500 Blackwell, 32 GB (fallback) | $0.72 an hour | when no 4090 is free |
 | RTX PRO 4000 Blackwell, 24 GB (fallback) | $0.57 an hour | when neither is free |
-| 30 GB network volume | about $2.10 a month | always, until it is deleted |
+| 30 GB network volume | about $2.10 a month | always, until it is deleted, also while the lane is closed |
 
 The 4090's price is what the three test pods were billed. The other prices are Runpod's secure-cloud list prices on 2026-11-27, and neither fallback card has been used yet.
 
@@ -35,14 +35,16 @@ Five things keep the cost down, and none of them depends on a thread remembering
 
 1. **A budget for the whole lane: $50** (TJX, 2026-11-27: "all clusters should cost under $50"). It is `budget_usd` in `lane.json`.
    - From $40 (`budget_warn_usd`) every cloud job prints how much is spent.
-   - At $50 no pod starts. A pod that is still up then is deleted by the next cloud command.
-   - A pod that starts close to $50 gets only the lifetime the rest of the budget pays for at the price cap, and its own watchdog enforces that. So pod time cannot take the total past $50 even if this PC is off. When the rest pays for less than 10 minutes, no pod starts.
+   - At $50 no pod starts. A pod that is still up then is deleted by the next cloud job, `cloud up` or `cloud down`.
+   - A pod that starts close to $50 gets only the lifetime the rest of the budget pays for at the price cap. Its own watchdog enforces that, from a deadline set when the pod is created. So pod time cannot take the total past $50 even if this PC is off. When the rest pays for less than 10 minutes, no pod starts.
    - What counts: the spend log plus the pod that is up now, or Runpod's own billing for pods when that is higher, plus the volume storage Runpod has billed.
+   - The volume keeps costing about $2.10 a month after the lane closes, until it is deleted. The budget counts that too, as Runpod bills it.
+   - If a line of the spend log is damaged, the budget cannot be counted, and no pod starts until the line is fixed or removed.
    - Only TJX raises the budget. A thread never edits `budget_usd`.
-2. **No pod over the price cap.** `max_usd_per_hour` in `lane.json` is $0.90. A GPU type above it is never asked for, and a pod that comes back dearer is deleted at once.
-3. **Idle shut-off.** A watchdog inside the pod deletes it after `idle_minutes` (10) without use. "Use" is a command from this PC, an open asset-forge run, a running Blender, or a busy GPU. The watchdog is part of the pod's start command, so it guards the pod even if this PC goes to sleep.
-4. **Lifetime cap.** The same watchdog deletes the pod at `max_hours` (4), whatever it is doing. asset-forge replaces a pod that is within 30 minutes of the cap before it starts a job on it.
-5. **One pod.** asset-forge never starts a second pod, and it adopts a pod of its own that it finds running.
+2. **No pod over the price cap.** `max_usd_per_hour` in `lane.json` is $0.90. `cloud setup` lists only GPU types at or under it, and a pod that comes back dearer is deleted at once and booked. A pod whose answer gives no price is booked at the cap.
+3. **Idle shut-off.** A watchdog inside the pod deletes it after `idle_minutes` (10) without use. "Use" is a command from this PC, a beat from an open asset-forge run, a running Blender, or a busy GPU. The run sends a beat every 15 seconds, and the pod stops counting them a minute after the last one. So a PC that sleeps, crashes or loses its network frees the pod about 11 minutes later. The watchdog is part of the pod's start command, so it works with this PC off.
+4. **Lifetime cap.** The same watchdog deletes the pod at `max_hours` (4), whatever it is doing, or earlier when the budget is nearly used up. A second loop that needs nothing but the clock enforces this too, in case the first one hangs. Nothing in the watchdog waits without a time limit. asset-forge replaces a pod that is within 30 minutes of the cap before it starts a job on it.
+5. **One pod.** Only one asset-forge run on this PC can use the pod at a time (`run.lock`); a second one stops with a message. A run adopts a pod of its own that it finds running with no record, and deletes and books any other one.
 
 All five hold only for pods that asset-forge starts. The Runpod plugin on TJX's account (enabled 2026-11-27) can start pods too, through Runpod's CLI and MCP tools. Such a pod has no watchdog and no price cap, and it reaches the budget only when Runpod bills it, hours later. So the plugin is for looking things up, and pods are started through asset-forge only (SKILLS.md, section 5).
 
@@ -52,11 +54,11 @@ All five hold only for pods that asset-forge starts. The Runpod plugin on TJX's 
 |---|---|
 | `asset-forge cloud setup [--dry-run]` | One-time set-up: picks the GPU types and the data centre from live stock, creates the volume and the template, installs everything on a first pod, checks it and deletes the pod. Safe to run again. `--dry-run` prints the choices and creates nothing. |
 | `asset-forge cloud up` | Starts the pod now and waits until it is ready. |
-| `asset-forge cloud down` | Deletes the pod and writes the session to the spend log. |
-| `asset-forge cloud status` | The balance, the limits, the pod that is up with its cost so far, and how much of the budget is spent. |
-| `asset-forge cloud spend` | The spend log by thread, Runpod's own billing, the budget and the balance. |
+| `asset-forge cloud down` | Deletes the pod, and any other pod of the lane, and writes each session to the spend log. |
+| `asset-forge cloud status` | The balance, the limits, the pod that is up with its cost so far, and how much of the budget is spent. A pod that has ended is booked first. |
+| `asset-forge cloud spend` | The spend log by thread, Runpod's own billing, the budget and the balance. A pod that has ended is booked first. |
 | `asset-forge cloud doctor` | Checks the pod like `doctor` checks this PC: GPU, Blender, Cycles devices, ComfyUI, torch, every model file, every pinned Python package and the disk. |
-| `asset-forge cloud key <key>` | Saves a new Runpod API key after Runpod has accepted it. |
+| `asset-forge cloud key` | Asks for a new Runpod API key (paste it and press Enter) and saves it once Runpod has accepted it. The key never goes on the command line, where the shell's history and `cargo run` would keep it. |
 | `asset-forge [--lane cloud] selftest` | Three fixed jobs with timings, on either lane: an SDXL texture with the 4x upscale, base and refiner with the canny ControlNet, and a 3840x2160 glass render. |
 
 `up`, `setup`, `doctor` and every `--lane cloud` job need the cloud lane's lock. `down`, `status`, `spend` and `key` do not.
@@ -68,25 +70,25 @@ Starting and stopping:
 | What | Time |
 |---|---|
 | The one-time install on the empty volume | 21 min (13 of them writing the Python environment) |
-| A new pod, from the command to ready for a job | 2 min 42 s and 3 min 18 s (two pods) |
+| A new pod, from the command to ready for a job | 2 min 42 s and 3 min 18 s (two pods); 5 min 21 s for the first pod after the installer changed |
 | Of that: until the container runs | about 25 s |
-| Of that: ComfyUI's own start from the network volume | 2 min 12 s on the first of the two (3 min 1 s earlier, right after packages had changed) |
+| Of that: ComfyUI's own start from the network volume | 2 min 12 s to 3 min 31 s |
 | Connecting to a pod that is already up | 4 to 5 s |
 | An idle pod deleting itself | 10 min 9 s after its last use |
 
-The same three jobs on both lanes (`asset-forge selftest`). The cloud column is a new pod; the first pod's figures are in brackets.
+The same three jobs on both lanes (`asset-forge selftest`). The cloud column gives the fastest and the slowest of three pods; pods on different hosts differ.
 
 | Job | Local, RTX 3070 Ti 8 GB | Cloud, RTX 4090 24 GB |
 |---|---|---|
-| SDXL 1024², 32 steps, 4x upscale to 4096²: first run, loads the checkpoint | 33.4 s | 36.9 s (43.0 s) |
-| The same, second run | 27.1 s | 9.1 s (10.4 s) |
-| SDXL base and refiner with the canny ControlNet, 1024²: first use of both models | 25.5 s | 25.1 s (29.6 s) |
-| Cycles on OptiX, 3840x2160, 128 samples, glass plate: Blender's own clock at the save | 32.4 s | 12.6 s (15.1 s) |
-| The same, with the 4K PNG copied back to this PC | 33.0 s | 21.8 s (24.3 s) |
+| SDXL 1024², 32 steps, 4x upscale to 4096²: first run, loads the checkpoint | 33.4 s | 36.9 to 51.3 s |
+| The same, second run | 27.1 s | 9.1 to 11.8 s |
+| SDXL base and refiner with the canny ControlNet, 1024²: first use of both models | 25.5 s | 25.1 to 31.3 s |
+| Cycles on OptiX, 3840x2160, 128 samples, glass plate: Blender's own clock at the save | 32.4 s | 12.6 to 17.0 s |
+| The same, with the 4K PNG copied back to this PC | 33.0 s | 21.8 to 27.1 s |
 
 What the numbers say:
 
-- Once a model is loaded, the pod is 2.6 to 3 times as fast on SDXL, and 2.1 to 2.6 times as fast in Cycles.
+- Once a model is loaded, the pod is 2.3 to 3 times as fast on SDXL, and 1.9 to 2.6 times as fast in Cycles.
 - The first job on a new pod is no faster than this PC, because each model is read from the network volume first.
 - So the lane pays off for batches and for heavy renders. One small job is quicker on the local card, which needs no 3-minute start.
 - The other two gains are not in the table: the lane runs at the same time as the local card, and it has 24 GB where the local card has 8.
@@ -102,14 +104,14 @@ What the numbers say:
   - `cloud doctor` compares every package on the pod with the pins.
   - The pins are a snapshot. If this PC's ComfyUI is updated, the two drift apart until the pins are read again; nothing checks this PC's packages.
   - The GPU is a different card, so the same recipe and seed can still differ in small numbers between the lanes.
-- **Nothing on the pod is public.** The only open port is SSH, with a key that never leaves this PC. ComfyUI listens on the pod's loopback and is reached through an SSH forward on `127.0.0.1:8189` (the local ComfyUI keeps 8188).
+- **Nothing on the pod is public.** The only open port is SSH, with a key that never leaves this PC. ComfyUI listens on the pod's loopback and is reached through an SSH forward on `127.0.0.1:8189` (the local ComfyUI keeps 8188). The same SSH connection carries the run's beats.
 - **ComfyUI jobs** go through that forward and use the same HTTP calls as the local lane.
 - **Blender jobs** are rewritten for the pod: the recipe's `out` folder becomes a folder on the pod, every input file the parameters name is uploaded, Blender runs with the same script and flags, and the output folder is copied back into the local `out`.
   - Job folders are on the pod's own disk and go with the pod.
   - An uploaded input is kept on the volume for 14 days under a name made from its content, so a texture that many renders use is sent once.
-  - A recipe works unchanged as long as every file it reads is named in its parameters by an absolute path, and everything it writes goes into `out`.
+  - A recipe works unchanged as long as every file it reads is named in its parameters by an absolute path, and everything it writes goes into `out`. A parameter that names a path on this PC with nothing behind it stops the job here, so no path of this PC is sent to the pod.
 - **The pod's scripts are Rust string constants** in `tools/asset-forge/src/cloud/pod.rs`, like the Blender recipes. The repo holds no shell files.
-- **A changed pin updates the volume by itself.** The volume carries a stamp of the installer's text. When a pin or the installer changes, the next cloud job runs the installer first; it replaces only what changed.
+- **A changed pin updates the volume by itself.** The volume carries a stamp of the installer's text. When a pin or the installer changes, the next cloud job runs the installer first; it replaces only what changed. A pod starts ComfyUI by itself only on a disk with the current stamp, and the installer and the pod's own start never run at the same time.
 
 ## Where things live
 
@@ -121,6 +123,7 @@ Everything personal is outside the repo, in `%USERPROFILE%\Documents\Dash_Tools\
 | `id_ed25519`, `id_ed25519.pub` | The SSH key pair for pods, made by `cloud setup`. |
 | `lane.json` | The settings: data centre, volume, GPU types in order, price cap, idle minutes, lifetime hours, image, and the budget. Plain JSON. The budget is TJX's to change. |
 | `state.json` | The pod that is up, until its session is booked. |
+| `run.lock` | Held by the one asset-forge run that is using the pod. Windows releases it when that run ends, also after a crash. |
 | `spend.jsonl` | One line per finished session: thread, job, GPU, start, end, seconds and dollars. |
 
 The spend log is also written as `shared\cloud-gpu-spend.csv` in the Drive masters folder, so it can be read from another machine.
@@ -128,6 +131,8 @@ The spend log is also written as `shared\cloud-gpu-spend.csv` in the Drive maste
 Two things about the numbers in the spend log:
 
 - A session's dollars are the hourly rate times the seconds the pod was up. For the first pod that gave $0.734, and the balance fell by the same amount.
+- A pod that ended without `cloud down` is booked up to its last use plus the idle time, or at Runpod's bill for it when that is higher. Its last use is saved before and after every job, so a run that was killed is counted too.
+- A pod is booked once, however many commands find it.
 - Runpod's own billing history runs behind. `cloud spend` prints it next to the log. It showed $0.00 for more than an hour after the first pod started, and $0.17 of the $0.86 after 70 minutes.
 
 ## Choices made on 2026-11-27 (my call, for TJX to change)
@@ -148,11 +153,13 @@ Two things about the numbers in the spend log:
 | `too little of the budget is left to start a pod` | The rest of the budget pays for less than 10 minutes. | The same. |
 | `no pod could be started in EU-RO-1` | None of the GPU types has room right now. | Run the job on the local lane, or try again later. |
 | `the Runpod balance is too low` | The credit ran out and auto-pay did not refill it. | Tell TJX. |
-| `the SSH forward ... did not open` | Port 8189 on this PC is taken, usually by a stale `ssh.exe`. | End that process and run the command again. |
+| `port 8189 on this PC is in use` | A stale `ssh.exe` from an earlier run, or another program, holds the port. | End that process and run the command again. |
+| `another asset-forge run on this PC is using the pod` | A second run was started while one is using the pod. | Let the first one finish: one job per lane (SKILLS.md, section 5). |
+| `... has ... line(s) that are not a session` | The spend log is damaged, so the budget cannot be counted. | Fix or remove the named lines in `spend.jsonl`. |
 | `cloud doctor` fails on `pins` | The volume was installed by an older asset-forge. | Run any cloud job: it brings the volume up to date first. |
-| `cloud doctor` fails on `python packages` | A package on the pod is not at its pinned version. | Run `cloud doctor` once more: opening a session re-applies the pins. If it still fails, the line names the packages. |
+| `cloud doctor` fails on `python packages` | A package on the pod is not at its pinned version, although the installer's stamp is current: something changed the environment by hand. | Tell TJX. The line names the packages. The installer brings them back the next time any pin in `cloud/pod.rs` changes. |
 | `cloud doctor` says the disk is low | Under 3 GB of the volume is free. | Tell TJX: a bigger volume costs $0.07 a month for each GB. |
-| `status 401` from Runpod | The API key is wrong or has expired. Runpod's key dialog defaults to a 30-day expiry, so the key made on 2026-11-27 may stop on 2026-12-27. | TJX makes a new key on Runpod's Credentials page; save it with `asset-forge cloud key <key>`. |
+| `status 401` from Runpod | The API key is wrong or has expired. Runpod's key dialog defaults to a 30-day expiry, so the key made on 2026-11-27 may stop on 2026-12-27. | TJX makes a new key on Runpod's Credentials page; save it with `asset-forge cloud key`, which asks for it. |
 | A pod is up and nobody is using it | A run was interrupted. | `asset-forge cloud down`. Without it, the pod deletes itself after 10 idle minutes. |
 
 If the balance reaches $0, Runpod stops the pods and keeps the volume. If it stays at $0, Runpod may delete the volume in the end. Nothing of ours is lost with it: `asset-forge cloud setup` builds it again in about 21 minutes for about $0.35.

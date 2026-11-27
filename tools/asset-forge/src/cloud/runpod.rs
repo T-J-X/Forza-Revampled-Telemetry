@@ -174,6 +174,9 @@ pub struct Pod {
     /// Live numbers; `None` unless it is running and was fetched by id.
     #[serde(default)]
     pub runtime: Option<PodRuntime>,
+    /// The environment the pod was created with (an object of strings), when the answer has it.
+    #[serde(default)]
+    pub env: Value,
 }
 
 impl Pod {
@@ -187,6 +190,12 @@ impl Pod {
     #[must_use]
     pub fn gpu_id(&self) -> &str {
         self.gpu.as_ref().map_or("?", |g| g.id.as_str())
+    }
+
+    /// A whole-number value from the pod's environment, such as `FORGE_MAX_SECS`.
+    #[must_use]
+    pub fn env_number(&self, name: &str) -> Option<u64> {
+        self.env.get(name)?.as_str()?.trim().parse().ok()
     }
 }
 
@@ -409,7 +418,7 @@ impl Runpod {
             return Ok(reply.body);
         }
         let hint = match reply.status {
-            401 => " (the API key is missing, wrong or expired; save a new one with `asset-forge cloud key <key>`)",
+            401 => " (the API key is missing, wrong or expired; save a new one with `asset-forge cloud key`, which asks for it)",
             403 => " (the API key lacks this permission)",
             _ => "",
         };
@@ -575,6 +584,67 @@ impl Runpod {
     }
 }
 
+/// The provider calls that find, start, delete and bill pods. [`Runpod`] makes them over HTTP;
+/// the lane's tests use a fake, so the code that spends money is tested without spending any.
+pub trait Api {
+    /// The account balance and billing mode.
+    fn balance(&self) -> Result<Balance>;
+    /// The id of the account's template called `name`, if it has one.
+    fn template_id(&self, name: &str) -> Result<Option<String>>;
+    /// Creates the template, or brings an existing one up to date. Returns its id.
+    fn put_template(&self, existing: Option<&str>, template: &Value) -> Result<String>;
+    /// The account's pods, without their SSH ports or live numbers.
+    fn pods(&self) -> Result<Vec<Pod>>;
+    /// One pod, or `None` when it no longer exists.
+    fn pod(&self, id: &str) -> Result<Option<Pod>>;
+    /// Asks for one pod; a lack of room is an answer, not an error.
+    fn create_pod(&self, request: &PodRequest) -> Result<Created>;
+    /// Deletes a pod for good; one that is already gone counts as deleted.
+    fn terminate(&self, id: &str) -> Result<()>;
+    /// USD billed for pods over `window`; with `pod`, for that pod only.
+    fn pod_billing(&self, window: Window, pod: Option<&str>) -> Result<f64>;
+    /// USD billed for network volume storage over `window`.
+    fn volume_billing(&self, window: Window) -> Result<f64>;
+}
+
+impl Api for Runpod {
+    fn balance(&self) -> Result<Balance> {
+        Runpod::balance(self)
+    }
+
+    fn template_id(&self, name: &str) -> Result<Option<String>> {
+        Runpod::template_id(self, name)
+    }
+
+    fn put_template(&self, existing: Option<&str>, template: &Value) -> Result<String> {
+        Runpod::put_template(self, existing, template)
+    }
+
+    fn pods(&self) -> Result<Vec<Pod>> {
+        Runpod::pods(self)
+    }
+
+    fn pod(&self, id: &str) -> Result<Option<Pod>> {
+        Runpod::pod(self, id)
+    }
+
+    fn create_pod(&self, request: &PodRequest) -> Result<Created> {
+        Runpod::create_pod(self, request)
+    }
+
+    fn terminate(&self, id: &str) -> Result<()> {
+        Runpod::terminate(self, id)
+    }
+
+    fn pod_billing(&self, window: Window, pod: Option<&str>) -> Result<f64> {
+        Runpod::pod_billing(self, window, pod)
+    }
+
+    fn volume_billing(&self, window: Window) -> Result<f64> {
+        Runpod::volume_billing(self, window)
+    }
+}
+
 /// How far back a billing total reaches. The current day or month counts as the last one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Window {
@@ -649,8 +719,21 @@ mod tests {
         assert!(pod.is_alive());
         assert_eq!(pod.gpu_id(), "NVIDIA GeForce RTX 4090");
         assert_eq!(pod.ssh.direct.as_ref().map(|d| d.port), Some(17445));
-        assert_eq!(pod.runtime.map(|r| r.uptime), Some(42));
+        assert_eq!(pod.runtime.as_ref().map(|r| r.uptime), Some(42));
         assert!((pod.cost - 0.69).abs() < 1e-9);
+        assert_eq!(pod.env_number("FORGE_MAX_SECS"), None);
+    }
+
+    #[test]
+    fn the_pods_environment_is_read_back() {
+        // The shape of the answer for the third test pod, 2026-11-27 (key shortened).
+        let text = r#"{"id":"p3","status":"RUNNING","cost":0.89,
+            "env":{"FORGE_IDLE_SECS":"600","FORGE_MAX_SECS":"944","PUBLIC_KEY":"ssh-ed25519 AAAA test"}}"#;
+        let pod: Pod = serde_json::from_str(text).unwrap();
+        assert_eq!(pod.env_number("FORGE_MAX_SECS"), Some(944));
+        assert_eq!(pod.env_number("FORGE_IDLE_SECS"), Some(600));
+        assert_eq!(pod.env_number("PUBLIC_KEY"), None);
+        assert_eq!(pod.env_number("MISSING"), None);
     }
 
     #[test]

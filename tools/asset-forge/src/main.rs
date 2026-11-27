@@ -74,14 +74,39 @@ fn main() -> ExitCode {
 /// Takes `--lane <local|cloud>` and `--masters <snake_name>` out of the arguments (they may
 /// stand anywhere) and applies them, or `FH6_GPU_LANE` and `FH6_MASTERS` when they are absent.
 fn globals(paths: &mut paths::Paths, args: &[String]) -> Result<Vec<String>> {
-    let mut lane = std::env::var("FH6_GPU_LANE").ok();
-    let mut masters = std::env::var("FH6_MASTERS").ok().filter(|m| !m.trim().is_empty());
+    globals_from(
+        paths,
+        args,
+        std::env::var("FH6_GPU_LANE").ok(),
+        std::env::var("FH6_MASTERS").ok(),
+    )
+}
+
+/// [`globals`] with the two environment variables passed in, so tests do not depend on the
+/// environment they run in.
+fn globals_from(
+    paths: &mut paths::Paths,
+    args: &[String],
+    env_lane: Option<String>,
+    env_masters: Option<String>,
+) -> Result<Vec<String>> {
+    let mut lane = env_lane;
+    let mut masters = env_masters.filter(|m| !m.trim().is_empty());
     let mut rest = Vec::with_capacity(args.len());
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
-            "--lane" => lane = Some(it.next().cloned().unwrap_or_default()),
-            "--masters" => masters = Some(it.next().cloned().unwrap_or_default()),
+            flag @ ("--lane" | "--masters") => {
+                let value = it
+                    .next()
+                    .cloned()
+                    .ok_or_else(|| ForgeError::Usage(format!("{flag} needs a value")))?;
+                if flag == "--lane" {
+                    lane = Some(value);
+                } else {
+                    masters = Some(value);
+                }
+            }
             _ => rest.push(arg.clone()),
         }
     }
@@ -269,24 +294,42 @@ mod tests {
         list.iter().map(|a| (*a).to_owned()).collect()
     }
 
+    fn parse(list: &[&str]) -> (Result<Vec<String>>, paths::Paths) {
+        let mut paths = paths::Paths::discover();
+        let rest = globals_from(&mut paths, &args(list), None, None);
+        (rest, paths)
+    }
+
     #[test]
     fn the_lane_flag_is_taken_out_wherever_it_stands() {
-        let mut paths = paths::Paths::discover();
-        let rest = globals(&mut paths, &args(&["build", "--lane", "cloud", "--set", "glass"])).unwrap();
-        assert_eq!(rest, args(&["build", "--set", "glass"]));
+        let (rest, paths) = parse(&["build", "--lane", "cloud", "--set", "glass"]);
+        assert_eq!(rest.unwrap(), args(&["build", "--set", "glass"]));
         assert_eq!(paths.lane, lane::Lane::Cloud);
 
+        let (rest, paths) = parse(&["--lane", "local", "doctor"]);
+        assert_eq!(rest.unwrap(), args(&["doctor"]));
+        assert_eq!(paths.lane, lane::Lane::Local);
+
+        // Without the flag, the environment decides, and the flag wins over it.
         let mut paths = paths::Paths::discover();
-        let rest = globals(&mut paths, &args(&["--lane", "local", "doctor"])).unwrap();
-        assert_eq!(rest, args(&["doctor"]));
+        globals_from(&mut paths, &args(&["doctor"]), Some("cloud".into()), None).unwrap();
+        assert_eq!(paths.lane, lane::Lane::Cloud);
+        let mut paths = paths::Paths::discover();
+        globals_from(
+            &mut paths,
+            &args(&["--lane", "local", "doctor"]),
+            Some("cloud".into()),
+            None,
+        )
+        .unwrap();
         assert_eq!(paths.lane, lane::Lane::Local);
     }
 
     #[test]
-    fn a_wrong_lane_or_masters_name_is_refused() {
-        let mut paths = paths::Paths::discover();
-        assert!(globals(&mut paths, &args(&["--lane", "moon", "doctor"])).is_err());
-        assert!(globals(&mut paths, &args(&["doctor", "--lane"])).is_err() || paths.lane == lane::Lane::Local);
-        assert!(globals(&mut paths, &args(&["--masters", "Not A Dash", "doctor"])).is_err());
+    fn a_wrong_or_missing_lane_or_masters_name_is_refused() {
+        assert!(parse(&["--lane", "moon", "doctor"]).0.is_err());
+        assert!(parse(&["doctor", "--lane"]).0.is_err());
+        assert!(parse(&["doctor", "--masters"]).0.is_err());
+        assert!(parse(&["--masters", "Not A Dash", "doctor"]).0.is_err());
     }
 }

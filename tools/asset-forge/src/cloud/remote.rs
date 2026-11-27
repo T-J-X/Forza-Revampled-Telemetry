@@ -48,6 +48,9 @@ pub struct Plan {
     pub out: Option<PathBuf>,
     /// The job's folder on the pod.
     pub dir: String,
+    /// Parameters that name a file or folder on this PC that is not there. The job is refused
+    /// rather than sent with a path of this PC in it.
+    pub missing: Vec<PathBuf>,
 }
 
 impl Plan {
@@ -59,6 +62,7 @@ impl Plan {
             uploads: Vec::new(),
             out: None,
             dir,
+            missing: Vec::new(),
         };
         let mut rewritten = params.clone();
         if let Some(out) = rewritten.get_mut("out") {
@@ -110,7 +114,12 @@ impl Plan {
         let (remote, cached) = match look(path) {
             Local::File(key) => (format!("{WORKSPACE}/cache/{key}_{base}"), true),
             Local::Folder => (format!("{}/in/{}_{base}", self.dir, self.uploads.len()), false),
-            Local::Other => return None,
+            Local::Other => {
+                if !self.missing.iter().any(|m| m == path) {
+                    self.missing.push(path.to_path_buf());
+                }
+                return None;
+            }
         };
         self.uploads.push(Upload {
             local: path.to_path_buf(),
@@ -198,8 +207,18 @@ fn send(ssh: &Ssh, plan: &Plan, stage: &Path) -> Result<()> {
 /// Runs a Blender recipe on the pod. `source` is the whole script (prelude and recipe).
 /// Returns Blender's log, as the local run returns its standard output.
 pub fn run_blender(paths: &Paths, name: &str, source: &str, params: &Value) -> Result<String> {
+    let plan = Plan::new(name, params, &mut look_on_disk);
+    if !plan.missing.is_empty() {
+        let list: Vec<String> = plan.missing.iter().map(|p| p.display().to_string()).collect();
+        return Err(tool_err(
+            "blender (cloud)",
+            format!(
+                "recipe {name} names input(s) that are not on this PC: {}",
+                list.join(", ")
+            ),
+        ));
+    }
     super::with_session(paths, |session| {
-        let plan = Plan::new(name, params, &mut look_on_disk);
         let stage = paths.scratch.join("cloud").join(safe_name(name));
         std::fs::create_dir_all(&stage).map_err(|e| io_err(&stage, e))?;
         let script = stage.join("job.py");
@@ -298,10 +317,12 @@ mod tests {
         }));
         assert_eq!(p.params["maps"], json!("/root/forge-jobs/hero_bezel/in/0_maps"));
         assert_eq!(p.params["prefix"], json!("housing"));
-        assert_eq!(p.params["missing"], json!(r"C:\in\not-there.png"));
         assert_eq!(p.params["relative"], json!("weave.png"));
         assert_eq!(p.uploads.len(), 1);
         assert!(!p.uploads[0].cached);
+        // A path of this PC with nothing behind it is listed, so the job is refused here
+        // instead of failing on the pod with this PC's folder names in it.
+        assert_eq!(p.missing, vec![PathBuf::from(r"C:\in\not-there.png")]);
     }
 
     #[test]
