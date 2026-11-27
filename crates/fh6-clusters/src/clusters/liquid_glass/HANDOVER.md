@@ -13,7 +13,7 @@ This is a draft. It replaces the handover of the first pilot, which TJX rejected
 | One bespoke ComfyUI asset and one bespoke Blender asset, used, with ledger rows and masters on Drive | yes | [assets/clusters/liquid_glass/ASSETS.md](../../../../../assets/clusters/liquid_glass/ASSETS.md) |
 | The module is complete, with no TODOs, and goldens pass | first build | `cargo test --workspace`: every suite ok, 49 goldens |
 | 4K renders, the 60-frame sequence and the product page | first build | `mockups/LiquidGlass/` |
-| GPU under 0.5 ms; the live bench | GPU yes; live bench *pending* | sequence p50 0.344 ms, p99 0.411 ms |
+| GPU under 0.5 ms; the live bench | yes (second build) | sequence p50 0.344 ms, p99 0.411 ms; 60 s live bench below |
 | The direction check got a go from TJX | *pending* | first render posted 2026-11-27; TJX's reply and the second render are under "TJX's direction check" |
 | Every line of the closing review is yes | *pending* | |
 | TJX has signed off | *pending* | |
@@ -37,6 +37,16 @@ First build, 2026-11-27 (`preview-export --cluster LiquidGlass`, RTX 3070 Ti Lap
   hood_04_drift_braking     0.316 ms GPU   15 draws    62 instances
   sequence: 60 frames, GPU p50 0.336 ms, p99 0.378 ms
 ```
+
+Live bench of the second build, 2026-11-27 (`FH6_WheelDash --demo --cluster <Name> --stats --bench-seconds 60`, `mock-udp` at 60 Hz, 120 Hz display, no errors). Reports: `mockups/LiquidGlass/live_bench.md` and `live_bench_scaffold.md`.
+
+| Run | Frames | Receive to present p50 / p99 (ms) | CPU per frame p50 / p99 (ms) |
+|---|---|---|---|
+| LiquidGlass | 6138 | 0.811 / 2.594 | 0.751 / 1.309 |
+| Scaffold (`VisionSpatialGlass`, row 8) | 6202 | 0.794 / 2.405 | 0.727 / 1.502 |
+
+The dash's own CPU share is 0.751 − 0.727 = 0.024 ms (limit 0.3). The app's p99 is over 1 ms in both runs: known defect 10 in `docs/PROGRESS.md`, not this dash.
+
 The final `cargo check`, `cargo test`, `cargo clippy`, `rustfmt` and live-bench output goes here at the close.
 
 ## TJX's direction check

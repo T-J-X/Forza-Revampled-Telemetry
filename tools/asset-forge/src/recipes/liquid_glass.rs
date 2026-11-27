@@ -76,6 +76,10 @@ const PLATE_SIZE: (usize, usize) = (4096, 2048);
 /// Radiance of the plate's white on the cyclorama: its ceiling lights show in the rounded edges as
 /// faint second reflections, well under the studio's own lights.
 const PLATE_RADIANCE: f32 = 0.30;
+/// Softening of the plate before it goes on the cyclorama (Gaussian sigma in plate pixels, in
+/// linear light). A sapphire rim compresses the studio into a few pixels, and the plate's sharp
+/// tube lights and wall slats then read as scratches; softened, they read as soft reflections.
+const PLATE_SOFTEN_PX: f32 = 6.0;
 
 /// Octahedral map size.
 const ENV_SIZE: usize = 4096;
@@ -395,6 +399,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         &mut master_rows,
     );
 
+    let soft_plate = soften_plate(&plate_path, &scratch)?;
     // 3. Blender: the studio as six cube faces.
     let params = json!({
         "out": scratch.to_string_lossy(),
@@ -402,7 +407,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "size": FACE_SIZE,
         "fov": FACE_FOV_DEG,
         "samples": 24,
-        "plate": plate_path.to_string_lossy(),
+        "plate": soft_plate.to_string_lossy(),
         "plate_radiance": PLATE_RADIANCE,
         "panels": PANELS.iter().map(|p| json!({
             "name": p.name, "c": p.c, "tx": p.tx, "ty": p.ty, "half": p.half,
@@ -414,7 +419,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         }),
         "faces": FACES.iter().map(|(n, f, u)| json!([n, f, u])).collect::<Vec<_>>(),
     });
-    let plate_bytes = crate::ctx::read(&plate_path)?;
+    let plate_bytes = crate::ctx::read(&soft_plate)?;
     let fp = fingerprint(&[STUDIO.as_bytes(), params.to_string().as_bytes(), &plate_bytes]);
     let fp_path = scratch.join("studio.fp");
     let faces_exist = FACES
@@ -456,7 +461,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     }
     let env_kb = std::fs::metadata(&env_out).map_or(0, |m| m.len() / 1024);
     rows.push(format!(
-        "| `studio_env.png` | environment, octahedral (z at the viewer in the centre), sRGB, white = radiance {ENV_RANGE} | {s}x{s} | {env_kb} KB | blender:liquid_glass::STUDIO (Cycles, 6 faces {FACE_SIZE} px, fov {FACE_FOV_DEG}°, 24 samples, seed={BLENDER_SEED}): horizon ring 0..{RING_ELEV_DEG}° (radiance {RING_BASE} to 5.9 towards the key), key strip 74x9° radiance 8, strip 105x7° radiance 4.7, warm kicker, cyclorama with the ComfyUI studio plate at radiance {PLATE_RADIANCE}; resampled to octahedral, cleared within {}° of the viewer | CreativeML Open RAIL++-M output (SDXL plate); MIT (asset-forge) | what every glass piece reflects (`OpticalGlass` environment, gain {ENV_RANGE}). Masters `studio_px.exr` .. `studio_nz.exr` |",
+        "| `studio_env.png` | environment, octahedral (z at the viewer in the centre), sRGB, white = radiance {ENV_RANGE} | {s}x{s} | {env_kb} KB | blender:liquid_glass::STUDIO (Cycles, 6 faces {FACE_SIZE} px, fov {FACE_FOV_DEG}°, 24 samples, seed={BLENDER_SEED}): horizon ring 0..{RING_ELEV_DEG}° (radiance {RING_BASE} to 5.9 towards the key), key strip 74x9° radiance 8, strip 105x7° radiance 4.7, warm kicker, cyclorama with the ComfyUI studio plate (softened by a {PLATE_SOFTEN_PX} px Gaussian) at radiance {PLATE_RADIANCE}; resampled to octahedral, cleared within {}° of the viewer | CreativeML Open RAIL++-M output (SDXL plate); MIT (asset-forge) | what every glass piece reflects (`OpticalGlass` environment, gain {ENV_RANGE}). Masters `studio_px.exr` .. `studio_nz.exr` |",
         VIEWER_CLEAR.0,
         s = ENV_SIZE
     ));
@@ -675,6 +680,29 @@ fn stats(values: &[f32]) -> (f32, f32, f32) {
         sum += f64::from(v);
     }
     (lo, hi, (sum / values.len().max(1) as f64) as f32)
+}
+
+/// The plate as the cyclorama shows it: blurred in linear light by [`PLATE_SOFTEN_PX`], cached
+/// by fingerprint beside the plate.
+fn soften_plate(plate: &Path, scratch: &Path) -> Result<PathBuf> {
+    let out = scratch.join("studio_plate_soft.png");
+    let src = crate::ctx::read(plate)?;
+    let fp = fingerprint(&[&src, format!("soften v1 {PLATE_SOFTEN_PX}").as_bytes()]);
+    let fp_path = out.with_extension("fp");
+    if out.is_file() && std::fs::read_to_string(&fp_path).is_ok_and(|s| s == fp) {
+        return Ok(out);
+    }
+    let mut linear = img::load(plate)?.to_channels(3);
+    for v in &mut linear.data {
+        *v = img::srgb_decode(*v);
+    }
+    let mut soft = crate::procedural::blur(&linear, PLATE_SOFTEN_PX, false);
+    for v in &mut soft.data {
+        *v = img::srgb_encode(*v);
+    }
+    img::save_png(&soft, &out, false, true)?;
+    img::write_file(&fp_path, fp.as_bytes())?;
+    Ok(out)
 }
 
 /// Generates the studio panorama: txt2img near 1 MP, roll by half the width, repaint the seam
