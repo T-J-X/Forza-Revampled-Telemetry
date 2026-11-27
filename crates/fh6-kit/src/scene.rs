@@ -180,6 +180,10 @@ pub(crate) struct Segment {
     pub blur_px: f32,
     /// Backdrop frost sigma in device pixels, when the segment snapshots the backdrop.
     pub backdrop_px: Option<f32>,
+    /// Union of this segment's draws in target pixels (a blurred layer's spread included). A
+    /// blurred layer is blurred and composited only inside it, so a small blurred layer stays
+    /// cheap when something else (the OSD) makes the work rectangle the whole screen.
+    pub bounds: Rect,
 }
 
 /// Packs bloom (intensity, threshold) into one `u32` as two f16 halves.

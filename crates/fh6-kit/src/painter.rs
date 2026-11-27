@@ -366,6 +366,9 @@ impl<'f> Painter<'f> {
         }
         let viewport = self.state.xf.apply_rect(&draw.viewport);
         self.scene.bounds = self.scene.bounds.union(&viewport);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&viewport);
+        }
         self.scene.meshes.push(MeshCmd {
             draw: *draw,
             viewport,
@@ -546,6 +549,7 @@ impl<'f> Painter<'f> {
             draws: at..at,
             blur_px: self.state.segment.blur_px,
             backdrop_px: self.state.segment.backdrop_px,
+            bounds: Rect::EMPTY,
         });
         self.segment_open = true;
         true
@@ -593,7 +597,11 @@ impl<'f> Painter<'f> {
         }
         let world = xf.apply_rect(&bbox);
         let blur_margin = self.state.segment.blur_px * 3.0;
-        self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
+        let drawn = world.expand(blur_margin);
+        self.scene.bounds = self.scene.bounds.union(&drawn);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&drawn);
+        }
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };
         if bloom != 0 {
             self.scene.bloom_used = true;

@@ -216,6 +216,41 @@ fn glass_bloom_blur_and_effects() {
 }
 
 #[test]
+fn a_blurred_layer_looks_the_same_when_far_draws_widen_the_work_rectangle() {
+    // A blurred layer is blurred and composited only round what it drew, so a dot in the far
+    // corner, which stretches the work rectangle over most of the target, changes nothing.
+    let (ctx, mut kit) = setup();
+    let layer = |p: &mut Painter<'_>| {
+        p.layer(LayerOptions::blurred(20.0), |p| {
+            p.fill(&Shape::rect(Rect::from_xywh(500.0, 200.0, 100.0, 100.0)), Color::WHITE);
+        });
+    };
+    let alone = render_named(&mut kit, &ctx, "blur_alone", layer);
+    let widened = render_named(&mut kit, &ctx, "blur_widened", |p| {
+        p.fill(&Shape::circle(vec2(-850.0, -450.0), 10.0), Color::WHITE);
+        layer(p);
+    });
+    let mut worst = 0u8;
+    for y in 250..H {
+        for x in 600..W {
+            let (a, b) = (
+                alone.pixel(x, y).unwrap_or([0; 4]),
+                widened.pixel(x, y).unwrap_or([0; 4]),
+            );
+            for (ca, cb) in a.iter().zip(b.iter()) {
+                worst = worst.max(ca.abs_diff(*cb));
+            }
+        }
+    }
+    assert!(worst <= 2, "the far dot changed the blurred layer by {worst}");
+    assert!(
+        at(&widened, vec2(500.0 - 20.0, 250.0))[3] > 0,
+        "blur still spreads the layer"
+    );
+    assert!(at(&widened, vec2(-850.0, -450.0))[3] > 200, "the far dot is drawn");
+}
+
+#[test]
 fn warm_frames_do_not_grow_the_arena() {
     let (ctx, mut kit) = setup();
     let font = kit.fonts().role(fh6_kit::FontRole::Text);

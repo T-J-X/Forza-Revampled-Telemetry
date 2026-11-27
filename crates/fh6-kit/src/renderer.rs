@@ -976,6 +976,7 @@ impl Renderer {
         clear: bool,
         params: PostParams,
         post_base: u64,
+        scissor: Option<[u32; 4]>,
     ) {
         let Some(offset) = self.push_post(post_base, params) else {
             return;
@@ -999,6 +1000,11 @@ impl Renderer {
         });
         let (vw, vh) = viewport;
         pass.set_viewport(0.0, 0.0, vw.max(1) as f32, vh.max(1) as f32, 0.0, 1.0);
+        // The clear above still covers the whole target, so texels outside the scissor read
+        // as zero in the next pass.
+        if let Some([x, y, w, h]) = scissor {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, group, &[offset]);
         pass.draw(0..3, 0..1);
@@ -1013,7 +1019,8 @@ impl Renderer {
 
     /// Downsamples `src` (full resolution) to pyramid `level` of `chain`, then Gaussian-blurs it
     /// there with `sigma_px` (in full-resolution pixels). The result is in `chain` mip
-    /// `level - 1`.
+    /// `level - 1`. With `region` (work pixels, see [`blur_region`]) every pass writes only
+    /// that part of its mip; the rest of each mip is cleared to zero.
     #[allow(clippy::too_many_arguments)]
     fn blur_chain(
         &mut self,
@@ -1027,6 +1034,7 @@ impl Renderer {
         work: (u32, u32),
         uv_max: [f32; 2],
         post_base: u64,
+        region: Option<[u32; 4]>,
     ) {
         let at = |m: u32| match chain {
             Chain::Pyr => V::Pyr(m),
@@ -1054,10 +1062,12 @@ impl Renderer {
                 true,
                 params,
                 post_base,
+                region.map(|r| scissor_at(r, 2 << m, vp)),
             );
         }
         let m = level - 1;
         let vp = (work.0.div_ceil(2 << m), work.1.div_ceil(2 << m));
+        let clip = region.map(|r| scissor_at(r, 2 << m, vp));
         let sigma = (sigma_px / (1u32 << level) as f32).max(0.3);
         for (from, to, dir) in [(at(m), V::Tmp(m), [1.0, 0.0]), (V::Tmp(m), at(m), [0.0, 1.0])] {
             let params = PostParams {
@@ -1080,6 +1090,7 @@ impl Renderer {
                 true,
                 params,
                 post_base,
+                clip,
             );
         }
     }
@@ -1354,6 +1365,7 @@ impl Renderer {
                             (ww, wh),
                             uv_max,
                             offs.post,
+                            None,
                         );
                     }
                 } else if let Some(t) = self.targets.as_ref() {
@@ -1478,8 +1490,15 @@ impl Renderer {
                 }
             }
             scene_cleared = true;
-            if into_layer {
-                let level = blur_level(seg.blur_px);
+            // A blurred layer is blurred and composited only round what it drew (nothing when
+            // it drew nothing), not over the whole work rectangle.
+            let level = blur_level(seg.blur_px);
+            let region = if into_layer {
+                blur_region(seg.bounds, seg.blur_px, level, (wx, wy), (ww, wh))
+            } else {
+                None
+            };
+            if let Some(region) = region {
                 self.blur_chain(
                     device,
                     encoder,
@@ -1491,6 +1510,7 @@ impl Renderer {
                     (ww, wh),
                     uv_max,
                     offs.post,
+                    Some(region),
                 );
                 let src = V::Pyr(level - 1);
                 let params = PostParams {
@@ -1512,6 +1532,7 @@ impl Renderer {
                     false,
                     params,
                     offs.post,
+                    Some(scissor_at(region, 1, (ww, wh))),
                 );
             }
         }
@@ -1678,6 +1699,31 @@ fn blur_level(sigma_px: f32) -> u32 {
     ((s / 2.0).log2().ceil().max(1.0) as u32).min(PYRAMID_LEVELS)
 }
 
+/// The part of the work rectangle a blurred layer needs, in work pixels `[x0, y0, x1, y1]`:
+/// what it drew (`bounds`, target pixels, which already carry a 3 sigma spread) plus one more
+/// sigma and the reach of the pyramid's taps at `level`. `None` when it drew nothing inside the
+/// work rectangle at `origin` of size `work`.
+fn blur_region(bounds: Rect, sigma_px: f32, level: u32, origin: (u32, u32), work: (u32, u32)) -> Option<[u32; 4]> {
+    let reach = sigma_px.max(0.0) + 3.0 * (1u32 << level) as f32;
+    let r = bounds.expand(reach);
+    let x0 = (r.min.x - origin.0 as f32).floor().max(0.0);
+    let y0 = (r.min.y - origin.1 as f32).floor().max(0.0);
+    let x1 = (r.max.x - origin.0 as f32).ceil().min(work.0 as f32);
+    let y1 = (r.max.y - origin.1 as f32).ceil().min(work.1 as f32);
+    (x1 > x0 && y1 > y0).then_some([x0 as u32, y0 as u32, x1 as u32, y1 as u32])
+}
+
+/// `region` (work pixels) in the texels of a mip at `scale` (1 = full resolution, 2 = half),
+/// rounded outward and kept inside `size`: `[x, y, width, height]` for a scissor rectangle.
+fn scissor_at(region: [u32; 4], scale: u32, size: (u32, u32)) -> [u32; 4] {
+    let scale = scale.max(1);
+    let x0 = (region[0] / scale).min(size.0);
+    let y0 = (region[1] / scale).min(size.1);
+    let x1 = region[2].div_ceil(scale).min(size.0);
+    let y1 = region[3].div_ceil(scale).min(size.1);
+    [x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0)]
+}
+
 /// The caller's target, cleared to the premultiplied black underlay (`alpha` 0 = transparent).
 fn output_attachment(view: &wgpu::TextureView, alpha: f32) -> wgpu::RenderPassColorAttachment<'_> {
     wgpu::RenderPassColorAttachment {
@@ -1835,6 +1881,33 @@ mod tests {
         assert_eq!(blur_level(8.0), 2);
         assert_eq!(blur_level(30.0), 4);
         assert_eq!(blur_level(1000.0), PYRAMID_LEVELS);
+    }
+
+    #[test]
+    fn a_blur_region_covers_the_spread_inside_the_work_rectangle() {
+        // A 100 px square blurred by sigma 4: its bounds carry 3 sigma, the region adds one more
+        // sigma and three texels of the level-1 pyramid, in work pixels (origin 16, 32).
+        let drawn = Rect::from_xywh(1000.0, 500.0, 100.0, 100.0).expand(12.0);
+        let level = blur_level(4.0);
+        assert_eq!(
+            blur_region(drawn, 4.0, level, (16, 32), (3800, 2100)),
+            Some([962, 446, 1106, 590])
+        );
+        // Clamped to the work rectangle at both ends.
+        let corner = Rect::from_xywh(-50.0, -50.0, 80.0, 80.0);
+        assert_eq!(blur_region(corner, 4.0, level, (0, 0), (20, 20)), Some([0, 0, 20, 20]));
+        // Nothing drawn, or drawn outside the work rectangle: no blur at all.
+        assert_eq!(blur_region(Rect::EMPTY, 4.0, level, (0, 0), (100, 100)), None);
+        let away = Rect::from_xywh(500.0, 500.0, 10.0, 10.0);
+        assert_eq!(blur_region(away, 4.0, level, (0, 0), (100, 100)), None);
+    }
+
+    #[test]
+    fn a_scissor_rounds_outward_and_stays_inside_its_mip() {
+        assert_eq!(scissor_at([962, 446, 1106, 590], 1, (3800, 2100)), [962, 446, 144, 144]);
+        assert_eq!(scissor_at([962, 446, 1106, 590], 2, (1900, 1050)), [481, 223, 72, 72]);
+        assert_eq!(scissor_at([3, 5, 9, 11], 4, (100, 100)), [0, 1, 3, 2]);
+        assert_eq!(scissor_at([90, 90, 100, 100], 2, (48, 48)), [45, 45, 3, 3]);
     }
 
     #[test]
