@@ -11,7 +11,7 @@
 - **CSS Design Awards**: Cutting-edge web designs
 
 ### Design Systems
-Search pattern: "Figma Design System + [style name]"
+Search pattern: "design system + [style name]"
 - Material Design (Google)
 - Human Interface Guidelines (Apple)
 - Carbon Design System (IBM)
@@ -38,7 +38,7 @@ Include in prompts:
 
 ### Available MCPs
 - **Chrome MCP**: Research designs, analyze trends from Dribbble/Mobbin
-- **Figma MCP**: Code based on community designs
+- **Penpot MCP**: Read and write the design file (`docs/design/PENPOT.md`)
 - **Freepik MCP**: Access stock imagery
 - **ChatGPT-Image MCP**: Image resources
 - **gallery-dl**: Download reference images via bash

@@ -12,8 +12,17 @@ rendered plate.
 
 Code lives in `tools/asset-forge/src/hero/` (Rust; bpy is a Rust string constant in
 `hero/bpy.rs`). Never write `.py` files into the repo. Run Blender through `asset-forge` with
-the **Bash** tool, never PowerShell. One 8 GB RTX 3070 Ti is shared with other chats: one GPU
-job at a time, and `Scene::render` already retries once on failure.
+the **Bash** tool, never PowerShell. One 8 GB RTX 3070 Ti is shared with every thread: one GPU
+job at a time, holding `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job (root
+`SKILLS.md`, section 5), and `Scene::render` already retries once on failure.
+
+Where it sits (TJX, 2026-11-27): the order for every dash is R&D on the web → Penpot → ComfyUI →
+**final 3D in Blender**. Blender is the last image step. The ComfyUI textures are made first and
+come in as material inputs (`.set("texture", path)`); nothing repaints a finished Blender render.
+All assets are 4K: write each master (16-bit PNG or EXR) to the dash's folder in
+`G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (the Google Drive desktop app syncs it), and commit
+only the compressed runtime file. A 3840×2160 Cycles OptiX render of glass at 128 samples takes
+about 15 s on this card and peaks near 4 GB (measured 2026-11-27).
 
 ## Why earlier attempts were invisible (don't repeat these)
 
@@ -41,7 +50,9 @@ Then save the PNGs through `ctx.image(...)` so the ledger records them, and draw
 cluster with `ImagePaint { rect }` where `rect` = the frame's rect in local px.
 
 Reference implementation: `hero/demo.rs` (PorscheAnalog proof:
-`cargo run --release -p asset-forge -- hero-demo [--preview]`).
+`cargo run --release -p asset-forge -- hero-demo [--preview]`). The demo rewrites three tracked
+files, `docs/handover-shots/asset-pipeline-v2-{after,passes,materials}.png`, also with
+`--preview`: after a test run, restore them with `git checkout -- docs/handover-shots/`.
 
 ## Camera matching (`hero/frame.rs`)
 

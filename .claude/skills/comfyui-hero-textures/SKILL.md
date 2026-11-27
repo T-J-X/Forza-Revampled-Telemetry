@@ -1,6 +1,6 @@
 ---
 name: comfyui-hero-textures
-description: ComfyUI (SDXL) texture and detail work for FH6 WheelDash hero assets through asset-forge - SDXL base + refiner, ControlNet depth/canny guided by Blender passes (render → ControlNet → refine), img2img detail passes over Blender beauties, seamless tiling, 4x upscale, the per-material prompt/negative cookbook, seeds and the ledger, and 8 GB VRAM safety. Use whenever a cluster needs an organic texture (leather, alcantara, enamel, forged carbon), a generative detail pass over a render, or any ComfyUI job.
+description: ComfyUI (SDXL) texture work for FH6 WheelDash hero assets through asset-forge - SDXL base + refiner, seamless tiling, 4x upscale to 4096 px masters, ControlNet depth/canny, the per-material prompt/negative cookbook, seeds and the ledger, 8 GB VRAM safety and the GPU lock. It is the step before Blender in the dash order (R&D, Penpot, ComfyUI, Blender). Use whenever a cluster needs an organic texture (leather, alcantara, enamel, forged carbon), an environment plate, or any ComfyUI job.
 ---
 
 # ComfyUI hero textures
@@ -9,10 +9,18 @@ Code: `tools/asset-forge/src/hero/sdxl.rs` (graph builder) and `hero/texture.rs`
 seamless textures, detail pass); HTTP in `src/comfy.rs`. Run everything through `asset-forge`
 with the **Bash** tool, never PowerShell.
 
+## Where it sits (TJX, 2026-11-27)
+
+The order for every dash is R&D on the web → Penpot → **ComfyUI** → final 3D in Blender. ComfyUI
+makes the textures and environment plates first; Blender's materials use them and Blender renders
+the final image. ComfyUI never runs over a finished Blender render in that order, so the detail
+pass below ("Render → ControlNet → refine") is not a default step: use it only when TJX asks for
+it on a dash.
+
 ## What SDXL is for (and what it is not)
 
 - **Yes:** organic surfaces Blender can't fake convincingly — leather grain, alcantara nap,
-  grand-feu enamel depth, forged carbon — and a low-denoise detail pass over a Blender beauty.
+  grand-feu enamel depth, forged carbon — and environment plates.
 - **No:** metals, guilloché, carbon twill, anything that must be exact, symmetric or relit.
   Those are procedural in Blender (`blender-hero-assets`). SDXL never draws a whole cluster: it
   invents numerals and breaks geometry.
@@ -42,7 +50,7 @@ One builder covers every combination, so graphs are always valid:
 - **Upscale:** `job.upscale = Some("4x-UltraSharp.pth")`.
 - **Tiled VAE:** `job.tiled = true` (default) — `VAEEncodeTiled` / `VAEDecodeTiled` 512/64.
 
-## Render → ControlNet → refine
+## Render → ControlNet → refine (only when TJX asks for it)
 
 1. Blender renders the part with `Passes::ALL` (`beauty_0.png`, `depth.png`, `normal.png`).
 2. `texture::detail_pass(paths, beauty, Some(depth), prompt, 0.25, seed, out)` (CLI:
@@ -60,6 +68,10 @@ One builder covers every combination, so graphs are always valid:
 3. Masked img2img (denoise 0.55) with `seam_mask(w, h, 0.08)` repaints only the cross.
 4. 4x upscale (4096²), resize to the target, `img::make_seamless` band 0.04 as a final guard,
    `img::tile_seam_score` printed — reject anything above the existing comfy set's QA line.
+   (That number is a seam measurement in pixel values, not a review score.)
+5. All assets are 4K: keep the 4096² image as the master and write it to the dash's folder in
+   `G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (the Google Drive desktop app syncs it). Git gets
+   the compressed runtime file.
 
 Use the tile in Blender with `mat::leather(..).set("texture", path).set("tile_px", 520.0)`.
 
@@ -90,8 +102,11 @@ text in a prompt.
 
 ## 8 GB VRAM safety
 
-- One GPU job at a time, across Blender and ComfyUI. Never start ComfyUI work while a Cycles
-  render is running from the same recipe.
+- One GPU job at a time, across Blender and ComfyUI and across every thread. Hold
+  `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job (root `SKILLS.md`, section 5). Never
+  start ComfyUI work while a Cycles render is running from the same recipe.
+- Measured on this card (2026-11-27): 1024² at 32 steps plus the 4x upscale to 4096² takes 58 s
+  and peaks at 7.5 GB.
 - `Comfy::run_retry` frees VRAM (`POST /free`) and retries once on an out-of-memory error;
   `texture.rs` calls `free()` after each job so Blender gets the card back.
 - Tiled VAE always; keep generation near 1 MP and upscale with the 4x model, never generate at

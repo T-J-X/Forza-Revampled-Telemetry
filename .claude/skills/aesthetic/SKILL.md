@@ -59,7 +59,7 @@ Elevate with narrative elements—parallax effects, particle systems, thematic c
    - Component patterns & styling
    - Micro-interactions
    - Accessibility considerations
-   - Overall aesthetic quality rating (1-10)
+   - Overall aesthetic quality, described in words (no numeric rating)
 4. Document findings in project design guidelines using templates
 
 ### Workflow 2: Generate & Iterate Design Images
@@ -69,12 +69,11 @@ Elevate with narrative elements—parallax effects, particle systems, thematic c
 **Steps**:
 1. Define design prompt with: style, colors, typography, audience, animation specs
 2. Use **ai-multimodal** skill to generate design images with Gemini API
-3. Use **ai-multimodal** skill to analyze output images and evaluate aesthetic quality
-4. If score < 7/10 or fails professional standards:
-   - Identify specific weaknesses (color, typography, layout, spacing, hierarchy)
-   - Refine prompt with improvements
-   - Regenerate with **ai-multimodal** or use **media-processing** skill to modify outputs (resize, crop, filters, composition)
-5. Repeat until aesthetic standards met (score ≥ 7/10)
+3. Review the output against the project's fixed checklist (in this repo: "Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`). Answer each line yes or no; never give a numeric score
+4. For each no:
+   - Identify the specific weakness (color, typography, layout, spacing, hierarchy)
+   - Fix that weakness, then walk the checklist again
+5. The person signs off the result. Never loop until a score passes, and never rewrite a prompt to chase a score
 6. Document final design decisions using templates
 
 ## Design Documentation
@@ -102,6 +101,7 @@ Save in project `./docs/design-story.md`.
 ## Resources & Integration
 
 ### Related Skills
+None of the five skills below is installed in this repo. Use ComfyUI (`comfyui-hero-textures`) for generated images, the built-in browser for screenshots, and `frontend-design` for web UI.
 - **ai-multimodal**: Analyze documents, screenshots & videos, generate design images, edit generated images, evaluate aesthetic quality using Gemini API
 - **chrome-devtools**: Capture full-screen screenshots from inspiration websites, navigate between pages, interact with elements, read console logs & network requests
 - **media-processing**: Refine generated images (FFmpeg for video, ImageMagick for images)
@@ -118,4 +118,4 @@ Save in project `./docs/design-story.md`.
 3. Balance beauty with functionality and accessibility
 4. Document decisions for consistency across development
 5. Use progressive disclosure in design—reveal complexity gradually
-6. Always evaluate aesthetic quality objectively (score ≥ 7/10)
+6. Always evaluate against the fixed checklist, with yes or no answers; the person signs off (no numeric scores)

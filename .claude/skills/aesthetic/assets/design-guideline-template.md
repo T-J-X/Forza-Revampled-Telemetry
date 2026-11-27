@@ -155,7 +155,7 @@ _Generated: [Date]_
 ## Resources
 
 ### Design Files
-- Figma: [Link]
+- Penpot: [Link]
 - Assets: [Link]
 
 ### Related Documentation

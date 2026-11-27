@@ -37,7 +37,7 @@ Not empty—essential for clarity. Proper spacing between sections, buttons, tex
 ## RIGHT: Ensuring Functionality
 
 ### Design Systems Research
-Search "Figma Design System + [style]" to understand:
+Search "design system + [style]" to understand:
 - Component architecture (atomic design: atoms → molecules → organisms)
 - Layout principles (grid systems, responsive breakpoints)
 - UX patterns & interactions

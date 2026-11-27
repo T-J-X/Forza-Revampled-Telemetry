@@ -56,9 +56,11 @@ program/             this build program: roadmap, per-phase MASTER_PROMPT / AGEN
 - Windows 11, rustc and cargo 1.100 (MSVC), GPU RTX 3070 Ti Laptop (8 GB).
 - Display: LG C1 55" 4K OLED at 3840x2160.
 - **Blender 5.3:** `%USERPROFILE%\Documents\Dash_Tools\blender-5.3.0-windows-x64\blender.exe`. Run headless with `blender.exe -b -P script.py`.
-- **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. It has no models until Phase 6 installs them.
+- **ComfyUI portable:** `%USERPROFILE%\Documents\Dash_Tools\ComfyUI_windows_portable\`. Start it with `run_nvidia_gpu.bat`; the API is on `127.0.0.1:8188`. Installed models: SDXL base 1.0 and refiner, the depth and canny ControlNets and 4x-UltraSharp (`cargo run --release -p asset-forge -- doctor` lists them). A 4096×4096 texture fits the 8 GB card.
+- **One GPU, one job:** every GPU job (ComfyUI, Blender, `asset-forge`, `preview-export`, the live demo) holds `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` while it runs. The rule is in `SKILLS.md` section 5.
+- **4K masters:** the Google Drive desktop app mounts the folder `FH6 WheelDash v2 - 4K Masters` at `G:\My Drive\FH6 WheelDash v2 - 4K Masters\` (check the drive letter). Write masters there, one subfolder per dash plus `shared\`, and it syncs. Git keeps only the compressed runtime assets. The Drive connector can't upload files over about 7 MB.
 - **Penpot** (the design tool since 2026-11-23): Penpot's hosted MCP is registered at user scope as the `penpot` server (`execute_code`, `high_level_overview`, `penpot_api_info`, `export_shape`). It only reaches the design file while that file is **open in a browser tab and connected** (main menu ⋮ → MCP server → Connect; a green ● MCP badge shows in the toolbar), so the tab must stay open. Call `high_level_overview` once before the first `execute_code`. Setup, limits and the master file are in `docs/design/PENPOT.md`. Never ask for the MCP key or write it into a file. HTML boards are the fallback.
-- **context7 MCP** for crate docs; the **built-in browser** for viewing `mockups/index.html` and HTML boards.
+- **context7 MCP** for crate docs (it needs no API key); the **built-in browser** for viewing `mockups/index.html` and HTML boards, served over loopback (a `file://` page loads without its images; see `SKILLS.md` section 2).
 
 ## 5. How a chat works
 1. Read in this order: this file → root `AGENTS.md` → root `SKILLS.md` → your `program/phases/<phase>/MASTER_PROMPT.md`, `AGENTS.md` and `SKILLS.md` → `docs/PROGRESS.md` → the `HANDOVER.md` of every phase you depend on.

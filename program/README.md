@@ -36,7 +36,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
    - the required artefacts exist
    - screenshots or golden renders are present for visual work
 3. **If it passes:** merge the branch into `main` (fast-forward or a merge commit as TJX, no co-author trailer), push to `origin`, and tick the roadmap above.
-4. **If it fails:** send the chat its concrete gaps and have it continue. After 2 failed rounds, triage like an incident (the `engineering:incident-response` skill): record the cause in the handover, then re-scope or split the phase.
+4. **If it fails:** send the chat its concrete gaps and have it continue. After 2 failed rounds, triage like an incident (the `superpowers:systematic-debugging` skill; the `engineering` plugin is not enabled): record the cause in the handover, then re-scope or split the phase.
 5. **Next:** start every phase whose dependencies are now merged. The cluster factory runs at most 6 cluster chats at once.
 6. **If the chain stops by itself,** TJX types `continue` in the conductor chat.
 
