@@ -14,6 +14,13 @@ use fh6_osd::{draw, ConfigOnlyFit, Frame, LiveDynoGenerator, LiveStatus, OsdHost
 use std::path::Path;
 use std::time::Duration;
 
+/// Frames rendered back to back before a state's timed frames, so the GPU is at full clocks.
+const WARM_UP: u32 = 100;
+/// The same for the first timed state, which starts from an idle GPU.
+const FIRST_WARM_UP: u32 = 600;
+/// Frames timed one by one after the warm-up (their median and minimum are reported).
+const TIMED_FRAMES: u32 = 20;
+
 /// One OSD review state.
 struct OsdState {
     name: &'static str,
@@ -224,6 +231,9 @@ pub fn render_all(
     let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
+    // The first timed state also brings the GPU up from idle (about a second of frames), so every
+    // state is timed at the clocks it runs at while the menu is open.
+    let mut warm_up = FIRST_WARM_UP;
     for state in STATES.iter().filter(|s| only.is_none_or(|o| s.name.contains(o))) {
         let mut cfg = AppConfig {
             current_camera_index: 3,
@@ -294,10 +304,11 @@ pub fn render_all(
         };
         let mut gpu = Vec::new();
         let mut draws = 0;
+        let mut passes = 0;
         let mut segments = 0;
         // Frame 1 queues missing glyphs; later frames are steady state and timed.
-        // Timing: 100 frames back to back (the GPU clocks up), then 20 timed frames.
-        let frames = if timing { 120 } else { 2 };
+        // Timing: `warm_up` frames back to back (the GPU clocks up), then 20 timed frames.
+        let frames = if timing { warm_up + TIMED_FRAMES } else { 2 };
         for f in 0..frames {
             {
                 let mut p = kit.begin_frame(&layout);
@@ -318,6 +329,7 @@ pub fn render_all(
                 1.0,
             );
             draws = stats.draw_calls;
+            passes = stats.passes;
             segments = kit.scene().segment_count();
             let last = f + 1 == frames;
             if last {
@@ -327,7 +339,7 @@ pub fn render_all(
             if last {
                 img = target.read(&ctx.device)?;
             }
-            if timing && f >= 100 {
+            if timing && f >= warm_up {
                 if let Some(d) = kit.gpu_time(&ctx.device) {
                     gpu.push(d.as_secs_f64() * 1000.0);
                 }
@@ -336,6 +348,7 @@ pub fn render_all(
         if ctx.has_failed() {
             return Err(format!("wgpu reported an error rendering OSD {}", state.name).into());
         }
+        warm_up = WARM_UP;
         gpu.sort_by(f64::total_cmp);
         let gpu_ms = gpu.get(gpu.len() / 2).copied();
         let gpu_min_ms = gpu.first().copied();
@@ -348,11 +361,12 @@ pub fn render_all(
             over_image(&img, bg).save_png(&out.join("osd").join(format!("{}_over_game.png", state.name)))?;
         }
         println!(
-            "OSD {:<24} {:>6.3} ms GPU median  {:>6.3} min  {:>3} draws  {:>2} segments",
+            "OSD {:<24} {:>6.3} ms GPU median  {:>6.3} min  {:>3} draws  {:>2} passes  {:>2} segments",
             state.name,
             gpu_ms.unwrap_or(f64::NAN),
             gpu_min_ms.unwrap_or(f64::NAN),
             draws,
+            passes,
             segments
         );
         renders.push(OsdRender {
