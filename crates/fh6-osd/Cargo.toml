@@ -10,5 +10,7 @@ rust-version.workspace = true
 fh6-core = { path = "../fh6-core" }
 fh6-clusters = { path = "../fh6-clusters" }
 fh6-kit = { path = "../fh6-kit" }
-serde_json.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

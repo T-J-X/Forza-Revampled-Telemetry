@@ -91,6 +91,11 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("preview-export failed: {e}");
+            let mut cause = e.source();
+            while let Some(c) = cause {
+                eprintln!("  caused by: {c}");
+                cause = c.source();
+            }
             ExitCode::FAILURE
         }
     }

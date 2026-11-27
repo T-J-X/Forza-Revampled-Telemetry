@@ -439,10 +439,9 @@ struct Loop {
     lost_since: Option<Instant>,
     active: Option<Active>,
     smoother: SignalSmoother,
-    /// Theme cache: the config it came from (pointer identity) and the view.
-    theme_cache: Option<(*const AppConfig, View, ClusterTheme)>,
-    /// Palette cache: config identity, car ordinal and family.
-    palette_cache: Option<(*const AppConfig, i32, Family)>,
+    /// Palette cache: the config it came from (held, so its address cannot be reused by a newer
+    /// config), the car ordinal and the family.
+    palette_cache: Option<(Arc<AppConfig>, i32, Family)>,
     palette: Palette,
     logo: Logo,
     last_update: Instant,
@@ -612,15 +611,7 @@ impl Loop {
 
     /// Makes sure the active cluster matches the config and view.
     fn ensure_cluster(&mut self, cfg: &Arc<AppConfig>, view: View) {
-        let ptr = Arc::as_ptr(cfg);
-        let theme = match self.theme_cache {
-            Some((p, v, t)) if p == ptr && v == view => t,
-            _ => {
-                let t = fh6_osd::theme_for_view(cfg, view);
-                self.theme_cache = Some((ptr, view, t));
-                t
-            }
-        };
+        let theme = cfg.theme(view.fit_view());
         if self.active.as_ref().is_some_and(|a| a.theme == theme && a.view == view) {
             return;
         }
@@ -647,8 +638,11 @@ impl Loop {
         let Some(family) = self.active.as_ref().map(|a| a.family) else {
             return;
         };
-        let key = (Arc::as_ptr(cfg), car_ordinal, family);
-        if self.palette_cache == Some(key) {
+        if self
+            .palette_cache
+            .as_ref()
+            .is_some_and(|(c, o, f)| Arc::ptr_eq(c, cfg) && *o == car_ordinal && *f == family)
+        {
             return;
         }
         let tokens = &self.resources.tokens;
@@ -681,7 +675,7 @@ impl Loop {
                 kit.fonts_mut().ensure_preloaded(font);
             }
         }
-        self.palette_cache = Some(key);
+        self.palette_cache = Some((Arc::clone(cfg), car_ordinal, family));
     }
 
     /// Creates the OSD carousel's thumbnail clusters when the selection moved.
@@ -967,7 +961,6 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         lost_since: None,
         active: None,
         smoother: SignalSmoother::new(),
-        theme_cache: None,
         palette_cache: None,
         palette,
         logo: Logo::default(),

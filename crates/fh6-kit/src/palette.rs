@@ -307,9 +307,63 @@ mod tests {
         let t = tokens();
         // 3595 is in the shipped database; 1 is not, and falls back to the DEFAULT brand.
         assert!(cars.car(3595).is_some() && cars.car(1).is_none());
-        for ordinal in [3595, 1] {
+        // The colours tell a hit (Ferrari) from the fallback (DEFAULT); the source cannot.
+        for (ordinal, primary) in [(3595, "#D40000"), (1, "#00E5FF")] {
             let p = Palette::for_car(&t, &cars, ordinal, "modernDigital");
             assert_eq!(p.source, PaletteSource::Factory, "car {ordinal}");
+            assert_eq!(p.primary.to_string(), primary, "car {ordinal}");
         }
+    }
+
+    #[test]
+    fn from_config_follows_every_colour_mode() {
+        let cars = CarDatabase::from_json_str(
+            r##"{"BrandPalettes":{
+                    "FERRARI":{"PrimaryHex":"#D40000"},
+                    "PORSCHE":{"PrimaryHex":"#D5001C"},
+                    "DEFAULT":{"PrimaryHex":"#00E5FF"}},
+                "Cars":{"3595":{"BrandKey":"FERRARI"}}}"##,
+        )
+        .expect("valid");
+        let t = tokens();
+        let family = "modernDigital";
+        let with = |color_mode: ColorMode, brand: &str, seed: Option<u64>| AppConfig {
+            color_mode,
+            custom_brand_key: brand.into(),
+            palette_seed: seed,
+            ..AppConfig::default()
+        };
+        let pick = |cfg: &AppConfig| Palette::from_config(&t, cfg, &cars, 3595, family);
+        let primary = |p: Palette| p.primary.to_string();
+
+        let auto = pick(&with(ColorMode::AutoBrand, "DEFAULT", None));
+        assert_eq!(
+            (auto.source, primary(auto).as_str()),
+            (PaletteSource::Factory, "#D40000")
+        );
+        let brand = pick(&with(ColorMode::Brand, " porsche ", None));
+        assert_eq!(
+            (brand.source, primary(brand).as_str()),
+            (PaletteSource::Factory, "#D5001C")
+        );
+        // Brand with the DEFAULT key means the car's own brand.
+        assert_eq!(pick(&with(ColorMode::Brand, " default ", None)), auto);
+        // A brand the database does not have falls back to the family palette.
+        assert_eq!(
+            pick(&with(ColorMode::Brand, "nosuch", None)),
+            Palette::family(&t, family)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Random, "DEFAULT", None)).source,
+            PaletteSource::Random(3595)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Random, "DEFAULT", Some(7))).source,
+            PaletteSource::Random(7)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Custom, "DEFAULT", None)).source,
+            PaletteSource::Custom
+        );
     }
 }

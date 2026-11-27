@@ -124,7 +124,9 @@ impl CarDatabase {
                 continue;
             };
             car.brand_key = normalise_brand_key(&car.brand_key);
-            cars.insert(ordinal, car);
+            if cars.insert(ordinal, car).is_some() {
+                tracing::warn!(%key, ordinal, "two cars share an ordinal; the later one is kept");
+            }
         }
         Ok(Self {
             version: raw.version,

@@ -6,12 +6,14 @@
 //! three steps:
 //!
 //! 1. **Migrate** the raw JSON object: one-time fixes for files written before
-//!    [`CONFIG_VERSION`], the old `ClusterHeightOffsetPx`, and the removal of the
-//!    [`RETIRED_KEYS`] that nothing reads any more.
+//!    [`CONFIG_VERSION`], the old `ClusterHeightOffsetPx`, one spelling per key (the canonical one
+//!    wins over an alias such as `BonnetFov`), and the removal of the [`RETIRED_KEYS`] that nothing
+//!    reads any more. A file whose version this build cannot read is not migrated.
 //! 2. **Type it leniently:** a value that does not fit its setting, such as text where a number
 //!    belongs or a style no cluster has, is dropped with a warning and takes its default. The rest
 //!    of the file still loads.
-//! 3. **Sanitise:** every value is brought into its range ([`AppConfig::sanitized`]).
+//! 3. **Sanitise:** a number that is not finite takes its default, and a setting with a range is
+//!    clamped to it ([`AppConfig::sanitized`]).
 //!
 //! A key missing from the file takes its value from [`AppConfig::default`], never zero. Keys this
 //! version does not know (a dash's own settings, a newer build's) are kept in
@@ -62,6 +64,9 @@ pub const RESYNC_HOLD_MS_MAX: u32 = 3000;
 pub const SHIFT_POINT_MIN: f32 = 0.80;
 /// Highest OSD shift point (fraction of the limiter rpm).
 pub const SHIFT_POINT_MAX: f32 = 1.0;
+/// The game's field of view limits in degrees (`MinFOV` / `MaxFOV` in `CameraSettings.ini`), for
+/// every camera view. The camera patcher writes within them.
+pub const FOV_RANGE: (f32, f32) = (40.0, 110.0);
 
 /// Default seat height (metres, DriverCam `Param.y`).
 const DEFAULT_SEAT_HEIGHT_M: f32 = -0.045;
@@ -71,6 +76,17 @@ const SEAT_HEIGHT_RANGE_M: (f32, f32) = (-0.100, 0.050);
 /// The driver name every config defaulted to before 7.0.0. The font pack has no CJK face, so it
 /// cannot be drawn; a file from before 7.0.0 that still holds it gets an empty name.
 const OLD_DEFAULT_DRIVER_NAME: &str = "ØG『死』ŦJ乂";
+
+/// Settings that also load from a second spelling: (canonical key, alias). When a file has both,
+/// the canonical one wins.
+const KEY_ALIASES: [(&str, &str); 6] = [
+    ("WheelLessCockpitFOV", "WheelLessCockpitFov"),
+    ("StandardCockpitFOV", "StandardCockpitFov"),
+    ("BonnetFOV", "BonnetFov"),
+    ("ChaseNearFOV", "ChaseNearFov"),
+    ("ChaseFarFOV", "ChaseFarFov"),
+    ("BumperFOV", "BumperFov"),
+];
 
 /// Keys earlier versions wrote that nothing reads any more. They are dropped on load, so the next
 /// save leaves them out. `docs/PROGRESS.md` (fix D) records why each one went.
@@ -345,6 +361,9 @@ impl fmt::Display for ColorMode {
 serde_by_name!(ColorMode, "a colour mode (AutoBrand, Brand, Custom or Random)");
 
 /// Every user setting of the overlay, as stored in `config.json`.
+///
+/// Load it with [`AppConfig::try_load`], [`AppConfig::load`] or [`AppConfig::from_json_str`].
+/// Deserializing it directly skips the migrations, the lenient parse and the range checks.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", default)]
 pub struct AppConfig {
@@ -753,8 +772,8 @@ impl AppConfig {
         cfg
     }
 
-    /// Step 3 of a load: brings every value into its range. Non-finite numbers take their
-    /// default. Idempotent.
+    /// Step 3 of a load: a number that is not finite takes its default, and a setting with a range
+    /// is clamped to it. Idempotent.
     fn sanitize(&mut self) {
         let d = AppConfig::default();
         let fix = |v: &mut f32, default: f32, lo: f32, hi: f32| {
@@ -819,7 +838,34 @@ impl AppConfig {
         fix(&mut self.oem_dash_feather_px, d.oem_dash_feather_px, 8.0, 240.0);
         fix(&mut self.oem_dash_column_void_px, d.oem_dash_column_void_px, 0.0, 600.0);
 
+        // Camera. The patcher keeps each offset inside the game's own limits; here a value that is
+        // not a number (or too large for an f32, which would save as null) takes its default.
+        for (fov, default) in [
+            (&mut self.wheel_less_cockpit_fov, d.wheel_less_cockpit_fov),
+            (&mut self.standard_cockpit_fov, d.standard_cockpit_fov),
+            (&mut self.bonnet_fov, d.bonnet_fov),
+            (&mut self.chase_near_fov, d.chase_near_fov),
+            (&mut self.chase_far_fov, d.chase_far_fov),
+            (&mut self.bumper_fov, d.bumper_fov),
+        ] {
+            fix(fov, default, FOV_RANGE.0, FOV_RANGE.1);
+        }
+        for (v, default) in [
+            (&mut self.cockpit_offset_x, d.cockpit_offset_x),
+            (&mut self.cockpit_offset_z, d.cockpit_offset_z),
+            (&mut self.hood_offset_y, d.hood_offset_y),
+            (&mut self.hood_offset_z, d.hood_offset_z),
+            (&mut self.hood_pitch_offset, d.hood_pitch_offset),
+            (&mut self.driver_seat_height_m, d.driver_seat_height_m),
+            (&mut self.steering_wheel_offset_y_m, d.steering_wheel_offset_y_m),
+        ] {
+            if !v.is_finite() {
+                *v = default;
+            }
+        }
+
         // Wash, OLED care and the dash options.
+        fix(&mut self.ambient_glow_intensity, d.ambient_glow_intensity, 0.0, 1.0);
         self.night_ambient_glow_intensity_pct = self.night_ambient_glow_intensity_pct.clamp(0, 100);
         fix(&mut self.oled_dimmer_min_alpha, d.oled_dimmer_min_alpha, 0.0, 1.0);
         self.shift_point_pct = self
@@ -834,26 +880,47 @@ impl AppConfig {
 
 /// Step 1 of a load: fixes on the raw object, before any value is typed.
 fn migrate_raw(raw: &mut Map<String, Value>) {
-    let major = raw.get("Version").and_then(Value::as_str).map_or(0, version_major);
-    if major < CONFIG_MAJOR {
-        migrate_before_7(raw);
-        raw.insert("Version".to_owned(), Value::from(CONFIG_VERSION));
+    // A number is a version too (`"Version": 8`); keep it, as text, through the typed parse.
+    if let Some(Value::Number(n)) = raw.get("Version") {
+        let text = n.to_string();
+        raw.insert("Version".to_owned(), Value::from(text));
+    }
+    let major = file_major(raw);
+    match major {
+        Some(major) if major < CONFIG_MAJOR => {
+            migrate_before_7(raw);
+            raw.insert("Version".to_owned(), Value::from(CONFIG_VERSION));
+        }
+        Some(_) => {}
+        None => tracing::warn!(
+            version = ?raw.get("Version"),
+            "config version not understood; the file is loaded without migrations"
+        ),
     }
     migrate_blank_styles(raw);
     migrate_cluster_height(raw);
-    for key in RETIRED_KEYS {
-        raw.remove(*key);
+    migrate_key_spellings(raw);
+    // A newer build may use one of these names again, so only files up to this version lose them.
+    if major.is_some_and(|major| major <= CONFIG_MAJOR) {
+        raw.retain(|key, _| !RETIRED_KEYS.contains(&key.as_str()));
     }
 }
 
-/// The major part of a `"7.0.0"` version; 0 when it has none.
-fn version_major(version: &str) -> u64 {
-    version
-        .trim()
-        .split('.')
-        .next()
-        .and_then(|major| major.parse().ok())
-        .unwrap_or(0)
+/// The file's major version: 0 when it has none (files from before versioning), `None` when it
+/// has one this build cannot read.
+fn file_major(raw: &Map<String, Value>) -> Option<u64> {
+    match raw.get("Version") {
+        None | Some(Value::Null) => Some(0),
+        Some(Value::String(version)) => version_major(version),
+        Some(_) => None,
+    }
+}
+
+/// The major part of a version such as `"7.0.0"` or `"7-beta"`: its leading digits.
+fn version_major(version: &str) -> Option<u64> {
+    let version = version.trim();
+    let end = version.find(|c: char| !c.is_ascii_digit()).unwrap_or(version.len());
+    version[..end].parse().ok()
 }
 
 /// One-time fixes for a file written before 7.0.0.
@@ -877,16 +944,17 @@ fn migrate_before_7(raw: &mut Map<String, Value>) {
         raw.insert("PowerUnit".to_owned(), Value::from(power.name()));
     }
 
-    // The seat height used to live in `CockpitOffsetY`, copied into `DriverSeatHeightM` on every
-    // load while the seat was at its default, so setting the seat back to the default brought the
-    // old value back. It is copied once here, and `CockpitOffsetY` is retired.
-    if let Some(old) = raw.get("CockpitOffsetY").and_then(Value::as_f64) {
+    // The C# port kept the seat height in `CockpitOffsetY`. The Rust build before 7.0.0 copied it
+    // into `DriverSeatHeightM` on every load while the seat was at its default, and wrote only
+    // `DriverSeatHeightM`, so a file that has `DriverSeatHeightM` already holds the user's seat
+    // (setting it back to the default used to bring the old value back). Only a file without it
+    // takes the old value, once; `CockpitOffsetY` is retired.
+    if let (false, Some(old)) = (
+        raw.contains_key("DriverSeatHeightM"),
+        raw.get("CockpitOffsetY").and_then(Value::as_f64),
+    ) {
         let old = old as f32;
-        let seat_at_default = raw
-            .get("DriverSeatHeightM")
-            .and_then(Value::as_f64)
-            .is_none_or(|seat| (seat as f32 - DEFAULT_SEAT_HEIGHT_M).abs() < f32::EPSILON);
-        if seat_at_default && old.abs() > f32::EPSILON {
+        if old.is_finite() && old.abs() > f32::EPSILON {
             let (lo, hi) = SEAT_HEIGHT_RANGE_M;
             raw.insert(
                 "DriverSeatHeightM".to_owned(),
@@ -914,13 +982,13 @@ fn migrate_blank_styles(raw: &mut Map<String, Value>) {
                 raw.insert("CockpitHudStyle".to_owned(), style);
             }
             None => {
-                raw.remove("CockpitHudStyle");
+                raw.shift_remove("CockpitHudStyle");
             }
         }
     }
     for key in ["BonnetHudStyle", "ChaseHudStyle"] {
         if blank(raw, key) {
-            raw.remove(key);
+            raw.shift_remove(key);
         }
     }
 }
@@ -928,7 +996,7 @@ fn migrate_blank_styles(raw: &mut Map<String, Value>) {
 /// Phase 8 replaced the one `ClusterHeightOffsetPx` with a height per view. A per-view height
 /// that is absent or zero takes the old value.
 fn migrate_cluster_height(raw: &mut Map<String, Value>) {
-    let Some(old) = raw.remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) else {
+    let Some(old) = raw.shift_remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) else {
         return;
     };
     for key in ["CockpitHeightOffsetPx", "BonnetHeightOffsetPx", "ChaseHeightOffsetPx"] {
@@ -938,6 +1006,21 @@ fn migrate_cluster_height(raw: &mut Map<String, Value>) {
             .is_none_or(|h| (h as f32).abs() < f32::EPSILON);
         if unset {
             raw.insert(key.to_owned(), Value::from(old));
+        }
+    }
+}
+
+/// One spelling per setting, so that the typed parse never sees two: the canonical key wins, and a
+/// lone alias is renamed to it.
+fn migrate_key_spellings(raw: &mut Map<String, Value>) {
+    for (canonical, alias) in KEY_ALIASES {
+        let Some(value) = raw.shift_remove(alias) else {
+            continue;
+        };
+        if raw.contains_key(canonical) {
+            tracing::warn!(%alias, %canonical, value = ?value, "config has two spellings of one key; the second is dropped");
+        } else {
+            raw.insert(canonical.to_owned(), value);
         }
     }
 }
@@ -958,7 +1041,7 @@ fn deserialize_lenient(raw: Map<String, Value>) -> AppConfig {
         match AppConfig::deserialize(&kept) {
             Ok(good) => cfg = good,
             Err(err) => {
-                let dropped = kept.remove(&key);
+                let dropped = kept.shift_remove(&key);
                 tracing::warn!(%key, value = ?dropped, error = %err, "config value dropped, using the default");
             }
         }
@@ -967,8 +1050,11 @@ fn deserialize_lenient(raw: Map<String, Value>) -> AppConfig {
 }
 
 /// Margins (px at 4K) a cluster's envelope must stay inside.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase", default)]
+///
+/// It loads margin by margin: a margin that is not a number takes its default with a warning and
+/// the others keep their values.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct SafeZone {
     /// Left and right margin.
     pub side_px: f32,
@@ -986,6 +1072,26 @@ impl Default for SafeZone {
             top_px: 0.0,
             bottom_px: 40.0,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for SafeZone {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = Map::<String, Value>::deserialize(deserializer)?;
+        let mut zone = Self::default();
+        for (key, value) in &raw {
+            let margin = match key.as_str() {
+                "SidePx" => &mut zone.side_px,
+                "TopPx" => &mut zone.top_px,
+                "BottomPx" => &mut zone.bottom_px,
+                _ => continue,
+            };
+            match value.as_f64() {
+                Some(v) => *margin = v as f32,
+                None => tracing::warn!(%key, value = ?value, "safe zone margin is not a number; using the default"),
+            }
+        }
+        Ok(zone)
     }
 }
 
@@ -1094,10 +1200,12 @@ mod tests {
 
     #[test]
     fn the_version_constants_agree() {
-        assert_eq!(version_major(CONFIG_VERSION), CONFIG_MAJOR);
+        assert_eq!(version_major(CONFIG_VERSION), Some(CONFIG_MAJOR));
         assert_eq!(AppConfig::default().version, CONFIG_VERSION);
-        assert_eq!(version_major(" 12.1 "), 12);
-        assert_eq!(version_major("abc"), 0);
+        assert_eq!(version_major(" 12.1 "), Some(12));
+        assert_eq!(version_major("7-beta"), Some(7));
+        assert_eq!(version_major("abc"), None);
+        assert_eq!(version_major("18446744073709551616.0.0"), None);
     }
 
     #[test]
@@ -1247,10 +1355,57 @@ mod tests {
     }
 
     #[test]
-    fn two_spellings_of_one_key_keep_the_first() {
-        let cfg = load(r#"{"BonnetFOV":91,"BonnetFov":99,"CockpitAnchorX":1700}"#);
-        assert_eq!(cfg.bonnet_fov, 91.0);
-        assert_eq!(cfg.cockpit_anchor_x, 1700);
+    fn the_canonical_spelling_wins_over_an_alias_in_any_order() {
+        for text in [
+            r#"{"BonnetFOV":91,"BonnetFov":99,"CockpitAnchorX":1700}"#,
+            r#"{"BonnetFov":99,"BonnetFOV":91,"CockpitAnchorX":1700}"#,
+            // Removing a retired key must not move the alias in front.
+            r#"{"Version":"7.0.0","CockpitScale":1,"BonnetFOV":91,"BonnetFov":99,"CockpitAnchorX":1700}"#,
+        ] {
+            let cfg = load(text);
+            assert_eq!(cfg.bonnet_fov, 91.0, "{text}");
+            assert_eq!(cfg.cockpit_anchor_x, 1700, "{text}");
+        }
+        // A lone alias still loads.
+        assert_eq!(load(r#"{"BumperFov":70}"#).bumper_fov, 70.0);
+    }
+
+    #[test]
+    fn unknown_keys_keep_their_order_on_save() {
+        let cfg = load(r#"{"Version":"7.0.0","Zeta":1,"CockpitScale":1,"Alpha":2,"Mid":3,"Last":4}"#);
+        let keys: Vec<&str> = cfg.extra.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["Zeta", "Alpha", "Mid", "Last"]);
+    }
+
+    #[test]
+    fn one_bad_safe_zone_margin_keeps_the_others() {
+        let cfg = load(r#"{"CockpitSafeZone":{"SidePx":"wide","TopPx":12,"BottomPx":60}}"#);
+        let d = SafeZone::default();
+        assert_eq!(
+            cfg.cockpit_safe_zone,
+            SafeZone {
+                side_px: d.side_px,
+                top_px: 12.0,
+                bottom_px: 60.0
+            }
+        );
+        // A missing margin takes its default too.
+        let cfg = load(r#"{"BonnetSafeZone":{"TopPx":8}}"#);
+        assert_eq!(cfg.bonnet_safe_zone, SafeZone { top_px: 8.0, ..d });
+    }
+
+    #[test]
+    fn numbers_too_large_for_the_setting_take_their_default() {
+        let cfg = load(r#"{"WheelLessCockpitFOV":1e300,"AmbientGlowIntensity":1e300,"HoodPitchOffset":-1e300}"#);
+        let d = AppConfig::default();
+        assert_eq!(cfg.wheel_less_cockpit_fov, d.wheel_less_cockpit_fov);
+        assert_eq!(cfg.ambient_glow_intensity, d.ambient_glow_intensity);
+        assert_eq!(cfg.hood_pitch_offset, d.hood_pitch_offset);
+        // In range otherwise, and a save never writes null.
+        let cfg = load(r#"{"BonnetFOV":200,"AmbientGlowIntensity":3}"#);
+        assert_eq!((cfg.bonnet_fov, cfg.ambient_glow_intensity), (FOV_RANGE.1, 1.0));
+        let saved = serde_json::to_string(&cfg).expect("serialises");
+        assert!(!saved.contains("null"), "{saved}");
     }
 
     #[test]
@@ -1288,9 +1443,12 @@ mod tests {
         let set = load(r#"{"Version":"6.0.0","CockpitOffsetY":-0.08,"DriverSeatHeightM":0.01}"#);
         assert_eq!(set.driver_seat_height_m, 0.01);
         // The bug this fixes: the user sets the seat back to the default, the file still holds
-        // the old key, and the next load brought the old value back. A 7.0.0 file is left alone.
-        let reset = load(r#"{"Version":"7.0.0","CockpitOffsetY":-0.08,"DriverSeatHeightM":-0.045}"#);
-        assert_eq!(reset.driver_seat_height_m, DEFAULT_SEAT_HEIGHT_M);
+        // the old key, and the next load brought the old value back. The Rust build before 7.0.0
+        // always wrote `DriverSeatHeightM`, so its files keep their seat, and so does a 7.0.0 file.
+        for version in ["6.0.0", "7.0.0"] {
+            let text = format!(r#"{{"Version":"{version}","CockpitOffsetY":-0.08,"DriverSeatHeightM":-0.045}}"#);
+            assert_eq!(load(&text).driver_seat_height_m, DEFAULT_SEAT_HEIGHT_M, "{version}");
+        }
         // After one save nothing is left to migrate.
         let saved = serde_json::to_string(&cfg).expect("serialises");
         assert!(!saved.contains("CockpitOffsetY"), "{saved}");
@@ -1325,8 +1483,55 @@ mod tests {
     }
 
     #[test]
-    fn a_newer_file_keeps_its_version() {
+    fn a_newer_file_keeps_its_version_and_its_keys() {
         assert_eq!(load(r#"{"Version":"8.1.0"}"#).version, "8.1.0");
+        // A newer build may reuse a retired name, and no migration runs.
+        let cfg = load(r#"{"Version":"8.0.0","FontPreset":"Inter","PowerUnit":"kW"}"#);
+        assert_eq!(cfg.extra.get("FontPreset"), Some(&Value::from("Inter")));
+        assert_eq!(cfg.power_unit, PowerUnit::Kw);
+        // A numeric version counts too, and is kept as text.
+        let cfg = load(r#"{"Version":8,"PowerUnit":"kW"}"#);
+        assert_eq!((cfg.version.as_str(), cfg.power_unit), ("8", PowerUnit::Kw));
+    }
+
+    #[test]
+    fn a_version_this_build_cannot_read_is_kept_and_not_migrated() {
+        let old_name = format!(r#"{{"Version":"v7","CustomDriverName":"{OLD_DEFAULT_DRIVER_NAME}"}}"#);
+        let cfg = load(&old_name);
+        assert_eq!(cfg.version, "v7");
+        assert_eq!(cfg.custom_driver_name, OLD_DEFAULT_DRIVER_NAME);
+        // "7-beta" reads as 7: no migration either.
+        let cfg = load(r#"{"Version":"7-beta","PowerUnit":"kW"}"#);
+        assert_eq!((cfg.version.as_str(), cfg.power_unit), ("7-beta", PowerUnit::Kw));
+    }
+
+    #[test]
+    fn every_key_a_migration_writes_is_a_setting() {
+        let cfg = AppConfig {
+            chase_hud_style: Some(ClusterTheme::BoschDdu),
+            ..AppConfig::default()
+        };
+        let saved = serde_json::to_value(&cfg).expect("serialises");
+        let mut keys = vec![
+            "Version",
+            "PowerUnit",
+            "SpeedUnit",
+            "DriverSeatHeightM",
+            "CustomDriverName",
+            "CockpitHudStyle",
+            "BonnetHudStyle",
+            "ChaseHudStyle",
+            "CockpitHeightOffsetPx",
+            "BonnetHeightOffsetPx",
+            "ChaseHeightOffsetPx",
+        ];
+        keys.extend(KEY_ALIASES.iter().map(|(canonical, _)| *canonical));
+        for key in keys {
+            assert!(saved.get(key).is_some(), "{key} is not a saved setting");
+        }
+        for (_, alias) in KEY_ALIASES {
+            assert!(saved.get(alias).is_none(), "{alias} is saved");
+        }
     }
 
     #[test]

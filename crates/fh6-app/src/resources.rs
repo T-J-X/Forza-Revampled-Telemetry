@@ -63,7 +63,10 @@ impl KitResources {
                 cars
             }
             Some(Err(err)) => {
-                tracing::warn!(error = %err, "car database unreadable; every car gets its dash's own palette");
+                let cause = std::error::Error::source(&err)
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette");
                 CarDatabase::default()
             }
             None => CarDatabase::default(),

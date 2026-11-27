@@ -5,6 +5,7 @@
 //! [`Line`], so nothing here allocates per frame.
 use crate::fit::{CameraApply, CockpitFit};
 use crate::palette_edit::{ColourTarget, Hsv, PRESETS};
+use fh6_core::config::FOV_RANGE;
 use fh6_core::{AppConfig, ClusterTheme, ColorMode, PowerUnit, SpeedUnit};
 use fh6_kit::View;
 use std::fmt::{self, Write as _};
@@ -245,7 +246,7 @@ pub enum RowKind {
     Info,
 }
 
-const FOV: SliderSpec = SliderSpec::new(40.0, 110.0, 1.0, 0, "°");
+const FOV: SliderSpec = SliderSpec::new(FOV_RANGE.0, FOV_RANGE.1, 1.0, 0, "°");
 const SHIFT: SliderSpec = SliderSpec::new(80.0, 100.0, 1.0, 0, "%");
 const HUE: SliderSpec = SliderSpec::new(0.0, 358.0, 2.0, 0, "°");
 const SAT: SliderSpec = SliderSpec::new(0.0, 100.0, 2.0, 0, "%");
@@ -1182,15 +1183,11 @@ mod tests {
         edit.view = View::Chase;
         adjust(RowId::ClusterHeight, -1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(cfg.chase_height_offset_px, -4.0);
-        assert!(
-            !cfg.extra.contains_key("ClusterHeightOffsetPx"),
-            "the old free-form key is gone"
-        );
 
-        // The chase cluster goes to the typed key the render loop reads.
+        // The chase cluster goes to the typed key the render loop reads, and survives a save.
         set_theme_for_view(&mut cfg, View::Chase, ClusterTheme::RetroCyber);
         assert_eq!(cfg.chase_hud_style, Some(ClusterTheme::RetroCyber));
-        assert!(!cfg.extra.contains_key("ChaseHudStyle"));
+        assert_eq!(saved_and_loaded(&cfg), cfg);
 
         // The camera patch switch drives the notice under the camera rows.
         assert!(!toggle_value(RowId::CameraPatch, &cfg), "off by default");
@@ -1297,13 +1294,20 @@ mod tests {
         assert_eq!(cfg.shift_point_pct, None);
         assert!((slider_value(RowId::ShiftPoint, ctx(&cfg, &edit)) - 97.0).abs() < 1e-3);
         adjust(RowId::ShiftPoint, -1, 1, &mut cfg, &mut edit, &mut fit);
-        let set = cfg.shift_point_pct.expect("the slider sets the shift point");
-        assert!((0.80..=1.0).contains(&set), "{set}");
+        assert_eq!(cfg.shift_point_pct, Some(0.96), "one step down from 97%");
         assert!(
             cfg.extra.is_empty(),
             "nothing lands in the untyped keys: {:?}",
             cfg.extra
         );
+        // What the rows wrote is what a save and a load give back.
+        assert_eq!(saved_and_loaded(&cfg), cfg);
+    }
+
+    /// `cfg` written as the saver writes it and loaded again.
+    fn saved_and_loaded(cfg: &AppConfig) -> AppConfig {
+        let text = serde_json::to_string_pretty(cfg).expect("serialises");
+        AppConfig::from_json_str(&text).expect("loads")
     }
 
     #[test]

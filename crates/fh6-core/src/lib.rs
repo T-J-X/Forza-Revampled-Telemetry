@@ -17,8 +17,7 @@ pub mod visibility;
 
 pub use camera_status::{CameraPatchHandle, CameraPatchState, CameraPatchStatus, CameraRequest};
 pub use cars::{BrandPalette, CarDatabase, CarDatabaseError, CarEntry};
-pub use config::{AppConfig, ColorMode, ParseSettingError, PowerUnit, SpeedUnit};
-pub use config::{SafeZone, TelemetryPorts};
+pub use config::{AppConfig, ColorMode, ParseSettingError, PowerUnit, SafeZone, SpeedUnit, TelemetryPorts};
 pub use config_watch::{ConfigHandle, ConfigWatcher};
 pub use fit::{FitView, ScrimFit, ViewPlacement};
 pub use profiles::{CarProfile, CarProfilesFile, ProfilesHandle};

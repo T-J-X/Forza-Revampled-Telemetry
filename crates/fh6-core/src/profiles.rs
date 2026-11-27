@@ -261,8 +261,15 @@ impl CarProfilesFile {
 
 /// A profile style: a cluster name or alias; anything else is logged and gives no override.
 fn lenient_theme<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<ClusterTheme>, D::Error> {
-    let name = Option::<String>::deserialize(deserializer)?;
-    Ok(name.and_then(|name| match name.parse() {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(value) = value.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let Some(name) = value.as_str() else {
+        tracing::warn!(style = ?value, "car profile style is not a name; style ignored");
+        return Ok(None);
+    };
+    Ok(match name.parse() {
         Ok(theme) => Some(theme),
         Err(_) => {
             if !name.trim().is_empty() {
@@ -270,22 +277,32 @@ fn lenient_theme<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Cl
             }
             None
         }
-    }))
+    })
 }
 
-/// The profiles map: JSON object keys are text, parsed to ordinals once at load.
+/// The profiles map: JSON object keys are text, parsed to ordinals once at load. A car whose key
+/// is not an ordinal, or whose profile does not load, is skipped with a warning; the other cars
+/// still load.
 fn ordinal_keys<'de, D: Deserializer<'de>>(deserializer: D) -> Result<BTreeMap<i32, CarProfile>, D::Error> {
-    let raw = BTreeMap::<String, CarProfile>::deserialize(deserializer)?;
-    Ok(raw
-        .into_iter()
-        .filter_map(|(key, profile)| match key.trim().parse::<i32>() {
-            Ok(ordinal) if ordinal > 0 => Some((ordinal, profile)),
-            _ => {
-                tracing::warn!(%key, "car profile key is not an ordinal; profile skipped");
-                None
+    let raw = BTreeMap::<String, serde_json::Value>::deserialize(deserializer)?;
+    let mut profiles = BTreeMap::new();
+    for (key, value) in raw {
+        let Some(ordinal) = key.trim().parse::<i32>().ok().filter(|&o| o > 0) else {
+            tracing::warn!(%key, "car profile key is not an ordinal; profile skipped");
+            continue;
+        };
+        let profile = match CarProfile::deserialize(value) {
+            Ok(profile) => profile,
+            Err(err) => {
+                tracing::warn!(%key, error = %err, "car profile does not load; profile skipped");
+                continue;
             }
-        })
-        .collect())
+        };
+        if profiles.insert(ordinal, profile).is_some() {
+            tracing::warn!(%key, ordinal, "two car profiles share an ordinal; the later one is kept");
+        }
+    }
+    Ok(profiles)
 }
 
 /// Shared, lock-free handle to the live profiles (see [`crate::ConfigWatcher`]).
@@ -426,5 +443,22 @@ mod tests {
             "ordinal keys are written as text: {json}"
         );
         assert!(json.contains(r#""CockpitHudStyle":"PorscheAnalog""#), "{json}");
+    }
+
+    #[test]
+    fn one_broken_car_profile_does_not_drop_the_others() {
+        let file = CarProfilesFile::from_json_str(
+            r#"{"Profiles":{
+                "7":{"CarOrdinal":7,"CockpitHudStyle":3,"CockpitAnchorY":1700},
+                "8":{"CarOrdinal":8,"CockpitAnchorY":"high"},
+                "9":{"CarOrdinal":9,"CockpitAnchorY":1650}}}"#,
+        )
+        .expect("a broken profile does not fail the file");
+        // A style that is not a name is ignored; the rest of car 7 loads.
+        let seven = file.get(7).expect("car 7 loads");
+        assert_eq!((seven.cockpit_hud_style, seven.cockpit_anchor_y), (None, Some(1700)));
+        // Car 8's anchor cannot load, so car 8 is skipped; car 9 is untouched.
+        assert!(file.get(8).is_none());
+        assert_eq!(file.get(9).and_then(|p| p.cockpit_anchor_y), Some(1650));
     }
 }
