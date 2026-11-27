@@ -271,3 +271,39 @@ fn dome_scrim_is_opaque_black_core_with_feather_and_void() {
         prev = a;
     }
 }
+
+/// A file loads once: the app builds a cluster again on every view or theme change, and the
+/// second build must get the textures it already has, not a second upload of each file.
+#[test]
+fn a_file_loads_once_until_it_changes() {
+    let (ctx, mut kit) = setup();
+    let dir = std::env::temp_dir().join(format!("fh6-kit-load-once-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("tile.png");
+    let image = |w: u32| RgbaImage {
+        width: w,
+        height: 2,
+        pixels: vec![200; (w * 2 * 4) as usize],
+    };
+    image(2).save_png(&path).expect("write png");
+    let first = kit
+        .images_mut()
+        .load_file(&ctx.device, &ctx.queue, &path, None)
+        .expect("load");
+    let count = kit.images().len();
+    let again = kit
+        .images_mut()
+        .load_file(&ctx.device, &ctx.queue, &path, None)
+        .expect("load again");
+    assert_eq!(first, again, "the same file gives the same image");
+    assert_eq!(kit.images().len(), count, "and uploads nothing new");
+    // A changed file (here a different length) is read again.
+    image(4).save_png(&path).expect("rewrite png");
+    let changed = kit
+        .images_mut()
+        .load_file(&ctx.device, &ctx.queue, &path, None)
+        .expect("load changed");
+    assert_ne!(changed, first);
+    assert_eq!(kit.images().size(changed), Some((4, 2)));
+    let _ = std::fs::remove_dir_all(&dir);
+}

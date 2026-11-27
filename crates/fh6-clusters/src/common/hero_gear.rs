@@ -65,6 +65,23 @@ impl HeroGear {
         };
     }
 
+    /// The glyph's entry motion now: px below its rest place (negative above) and its scale.
+    #[must_use]
+    pub fn entry(&self) -> (f32, f32) {
+        self.glyph.entry()
+    }
+
+    /// Takes `gear` as the gear already on screen: no entry motion, no rim flash and no change
+    /// to report. The app builds a cluster again on every view change, mid-race, and its first
+    /// frame must not play a gear change that did not happen.
+    pub fn snap(&mut self, gear: Gear) {
+        self.gear = gear;
+        self.since_change = 10.0;
+        self.upshift = false;
+        self.flash = 0.0;
+        self.glyph.snap(gear);
+    }
+
     /// The gear shown.
     #[must_use]
     pub fn gear(&self) -> Gear {
@@ -141,6 +158,18 @@ mod tests {
         assert_eq!(g.flash(), 0.0);
         g.update(Gear::Forward(2), 0.0, 1.0 / 60.0);
         assert!(!g.was_upshift());
+    }
+
+    #[test]
+    fn snap_shows_the_gear_at_rest_with_no_change() {
+        let t = Tokens::default();
+        let mut g = HeroGear::new(&t);
+        g.snap(Gear::Forward(4));
+        g.update(Gear::Forward(4), 0.0, 1.0 / 60.0);
+        assert_eq!(g.gear(), Gear::Forward(4));
+        assert!(g.since_change() > 0.0, "no change, so no upshift moment starts");
+        assert_eq!(g.flash(), 0.0);
+        assert!(!g.animating(), "no entry slide");
     }
 
     #[test]

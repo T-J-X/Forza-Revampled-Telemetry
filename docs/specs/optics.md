@@ -44,6 +44,8 @@ $$B = \frac{n_d - 1}{V_d\,(\lambda_F^{-2} - \lambda_C^{-2})}, \qquad A = n_d - \
 
 Cauchy holds for normal dispersion in the visible range only [S6]. For N-BK7 it stays within 0.001 of the Sellmeier index from 440 to 660 nm (tested).
 
+**Water** (the rippled surface that the liquid-light caustic of `tools/asset-forge` is traced through) is used at one index only, $n = 1.333$: the tabulated value at 550 and 575 nm for liquid water at 25 °C [S23]. The same table gives 1.339 at 400 nm and 1.331 at 700 nm; [§5](#5-dispersion) says why one index is enough there.
+
 ## 2. The surface comes from the outline
 
 A glass piece is described by its outline, a signed distance field $d(x, y)$ that is negative inside. Its top surface is a height above the rim, a function of the distance inwards $s = -d$:
@@ -57,7 +59,7 @@ $$u = \mathrm{clamp}(s / w,\ 0,\ 1), \qquad h(s) = H\,\bigl(1 - (1 - u)^k\bigr)^
 | $b$ | `base` | Glass below the rim level, down to the plane the piece sits on |
 | $k$ | `exponent` | Shape of the edge: 1 is a chamfer, 2 a circular arc, larger a squarer shoulder |
 
-With $k = 2$ and $H = w = R$ on a circle of radius $R$, the piece is a hemisphere (tested). With $w$ smaller than the piece, it has a flat top with a rounded edge.
+With $k = 2$ and $H = w = R$ on a circle of radius $R$, the piece is a hemisphere (tested). With $w$ smaller than the piece, it has a flat top with a rounded edge. The edge is a quadrant of a superellipse, the profile family of superquadrics [S24].
 
 The unit surface normal follows from the slope of $h$ and the gradient of the outline:
 
@@ -65,7 +67,7 @@ $$\mathbf n \propto \Bigl(H (1 - u)^{k-1}\,\nabla d,\ \ w\,\bigl(1 - (1 - u)^k\b
 
 It is horizontal at the rim, vertical on the flat top, and turns continuously between. Nothing else in this document paints an edge: every edge effect comes from this normal.
 
-**Liquid merging.** Pieces in one group share one outline, the smooth union of their distances:
+**Liquid merging.** Pieces in one group share one outline, the smooth union of their distances (the exponential smooth minimum of distance fields [S25]):
 
 $$\mathrm{smin}_k(a, b) = \min(a, b) - k \ln\bigl(1 + e^{-|a - b|/k}\bigr) = -k \ln\bigl(e^{-a/k} + e^{-b/k}\bigr)$$
 
@@ -77,7 +79,7 @@ Two outlines a gap $g$ apart first touch when $\mathrm{smin}_k$ reaches zero mid
 
 $$\eta(r) = A\,e^{-x^2}\cos(2\pi x), \qquad x = \frac{r - R}{\lambda}, \qquad \frac{d\eta}{dr} = \frac{A\,e^{-x^2}}{\lambda}\,\bigl(-2x\cos 2\pi x - 2\pi \sin 2\pi x\bigr)$$
 
-with amplitude $A$, wavelength $\lambda$ and ring radius $R$ (animated outwards). The surface is $h + \eta$, so the normal becomes $\mathbf n \propto (-\nabla h - \nabla\eta,\ 1)$ and everything after it (reflection, refraction, the highlight) follows without a special case. The steepest slope is about $2\pi A/\lambda$. Through a depth $D = H + b$ of glass a slope $\theta$ moves what lies under it by $D\tan(\theta - \theta_t)$ with $\sin\theta_t = \sin\theta / n$, so a wave over a numeral is kept under 5° (tested on the CPU and against the shader).
+with amplitude $A$, wavelength $\lambda$ and ring radius $R$ (animated outwards). The packet is a Gaussian-windowed cosine, a Gabor function [S26]. It is a shape chosen to look like the ring of waves that a drop sends across a liquid surface (the Cauchy–Poisson problem [S27]), not a solution of the capillary-wave equation, so its height and wavelength are design values held to the slope limit below. The surface is $h + \eta$, so the normal becomes $\mathbf n \propto (-\nabla h - \nabla\eta,\ 1)$ and everything after it (reflection, refraction, the highlight) follows without a special case. The steepest slope is about $2\pi A/\lambda$. Through a depth $D = H + b$ of glass a slope $\theta$ moves what lies under it by $D\tan(\theta - \theta_t)$ with $\sin\theta_t = \sin\theta / n$, so a wave over a numeral is kept under 5° (tested on the CPU and against the shader).
 
 **Materialise.** A piece appears by scaling $H$ and $b$ from 0 to their values. Lensing and highlights grow in; opacity is never ramped.
 
@@ -123,7 +125,9 @@ These are the dominant wavelengths of the sRGB primaries (derived in a test from
 - **Real dispersion is small.** Through a 40 px deep sapphire edge the blue and red images separate by well under a pixel. It becomes visible only through thick pieces and prisms. The earlier fixed 1.5 px red and blue split was not physical.
 - Fresnel uses the same per-channel index, so reflections are about 2% stronger in blue than in red.
 
-**Broadband light** (the offline caustic tracer, the coating colour in [§9](#9-thin-film-coating)) is integrated over wavelength and converted to linear sRGB:
+**The liquid-light caustic is traced at one wavelength.** Its tile is a single channel that the dash tints with the palette, so a spectral trace would have no colour to keep. Water's index falls by 0.008 from 400 to 700 nm [S23], which moves each caustic line by $\Delta n / (n - 1) = 2.4\%$ of its offset from the undeflected ray: at most about 1.5 px for a 64 px cell on screen, a softening and never a fringe. The floor under the water sits at the ripples' mean focal depth, $f = n / \bigl((n - 1)\,\kappa\bigr)$ for a surface of curvature $\kappa$: the paraxial focus of one refracting surface [S28].
+
+**Broadband light** (the coating colour in [§9](#9-thin-film-coating)) is integrated over wavelength and converted to linear sRGB:
 
 $$(X, Y, Z) = \int L(\lambda)\,(\bar x, \bar y, \bar z)(\lambda)\,d\lambda, \qquad \begin{pmatrix} R \\ G \\ B \end{pmatrix} = \begin{pmatrix} 3.2406 & -1.5372 & -0.4986 \\ -0.9689 & 1.8758 & 0.0415 \\ 0.0557 & -0.2040 & 1.0570 \end{pmatrix} \begin{pmatrix} X \\ Y \\ Z \end{pmatrix}$$
 
@@ -145,7 +149,7 @@ $$\mathbf r = -\mathbf v + 2\,(\mathbf n \cdot \mathbf v)\,\mathbf n$$
 
 and reflects the environment radiance $E_c(\mathbf r)$ weighted by $F_c$. The environment is a studio map when present and an analytic studio otherwise. It turns about the view axis with the virtual light, so every reflection moves together.
 
-**The studio.** A surface whose normal is tilted by $\theta$ from the view axis mirrors the direction at elevation $90° - 2\theta$ above the plane of the screen. Clear glass on a dark ground shows its shape only where its edges mirror a light, which studio photographers call dark-field lighting: light lines against a dark background [S21]. The analytic studio is built for that, and the rendered studio map has the same lights:
+**The studio.** A surface whose normal is tilted by $\theta$ from the view axis mirrors the direction at elevation $90° - 2\theta$ above the plane of the screen. Clear glass on a dark ground shows its shape only where its edges mirror a light, which studio photographers call dark-field lighting: light lines against a dark background [S21]. The analytic studio is built for that. The rendered studio map (the Liquid Glass recipe in `tools/asset-forge`) has the same lights, plus a cyclorama that carries the ComfyUI studio panorama at radiance 0.3 (`assets/clusters/liquid_glass/ASSETS.md`):
 
 | Light | Where (azimuth clockwise from 3 o'clock, elevation above the screen) | Radiance | What it draws on a rounded edge |
 |---|---|---|---|
@@ -154,7 +158,7 @@ and reflects the environment radiance $E_c(\mathbf r)$ weighted by $F_c$. The en
 | Far strip | azimuth 45°, elevation 25°, 105° × 7° | (4.2, 4.7, 5.2) | a thin cool line down and to the right ($\theta \approx 32°$) |
 | Sky | above, soft | up to 0.1 | a faint lift on edges that face up |
 
-Nothing lies within 22° of the view axis, so a flat face mirrors black and the numerals under it keep their contrast.
+A face tilted $\theta$ mirrors the direction $2\theta$ off the view axis. The rendered map is black within 44° of the axis (fading in by 45°, short of the key's nearest edge at 45.4°), so every face tilted less than 22° mirrors black and the numerals under it keep their contrast; the analytic studio has only its faint sky there (radiance at most 0.1). Every light is a long strip: a short card shows as a card wherever a ripple holds a rim's tilt still for a few frames.
 
 **The plane under the piece.** A mirrored ray with $r_z < 0$ meets the screen itself, a distance $(h + b)\,\lVert\mathbf r_{xy}\rVert / (-r_z)$ away, and the surface mirrors what is drawn there. The studio behind the plane of the screen is never seen.
 
@@ -174,7 +178,7 @@ $$D(\mathbf h) = \frac{\alpha^2}{\pi\bigl(\cos^2\theta_h\,(\alpha^2 - 1) + 1\big
 
 $$S_c = \frac{D(\mathbf h)\,G\,F_c(\mathbf v \cdot \mathbf h)}{4\,(\mathbf n \cdot \mathbf l)(\mathbf n \cdot \mathbf v)}\;E_{L,c}\,(\mathbf n \cdot \mathbf l)$$
 
-$D$ integrates to 1 over projected solid angle, and with $F = 1$ the lobe never reflects more than arrives (both tested). The light's direction comes from the tokens (`light`): azimuth 135° plus 25° per g of lateral acceleration.
+$D$ integrates to 1 over projected solid angle, and with $F = 1$ the lobe never reflects more than arrives (both tested). The light's direction comes from the tokens (`light.azimuthDeg`, `light.elevationDeg`). The code (`common::VirtualLight`) sets the azimuth to $-135° + 25° \cdot \mathrm{clamp}(g_{lat} / 1.5,\ -1,\ 1)$, clockwise on the screen from 3 o'clock, so the light starts at the upper left and swings by up to 25° at 1.5 g of lateral acceleration. The whole rig also leans by `glass.optics.tiltDegPerG` (6°) per g of acceleration about the two screen axes (`OpticalGlass::aim`), so every piece's highlights travel together. A cluster may keep the environment level and lean only the key light (the Liquid Glass pilot does): the environment's dark cone then stays on the view axis at any G.
 
 ## 8. What one pixel of glass shows
 
@@ -317,3 +321,11 @@ Read on 2026-11-27. Where a page's text extraction dropped Greek letters or frac
 - **[S20]** "Chladni's law", https://en.wikipedia.org/wiki/Chladni%27s_law (cites Rossing and Fletcher, Principles of Vibration and Sound, 2004).
 - **[S21]** F. Hunter, S. Biver and P. Fuqua, *Light: Science & Magic*, chapter 7, "The Case of the Disappearing Glass" (bright-field and dark-field lighting: glass is defined by dark lines on a light ground or light lines on a dark ground). Contents via https://www.oreilly.com/library/view/light-science-and/9780240808192/13_Chapter7.xhtml
 - **[S22]** Y. Tokuyoshi and A. S. Kaplanyan, "Stable Geometric Specular Antialiasing with Projected-Space NDF Filtering", Journal of Computer Graphics Techniques 10(2), 2021, https://www.jcgt.org/published/0010/02/02/ (listing 5: isotropic filtering from the normal's screen derivatives; appendix B: $sigma^2 = 1/2pi$; equation 10: the clamp 0.18, from A. S. Kaplanyan, S. Hill, A. Patney and A. Lefohn, "Filtering Distributions of Normals for Shading Antialiasing", HPG 2016).
+- **[S23]** G. M. Hale and M. R. Querry, "Optical constants of water in the 200-nm to 200-µm wavelength region", Appl. Opt. 12, 555-563 (1973), https://doi.org/10.1364/AO.12.000555. Table for liquid water at 25 °C via https://refractiveindex.info/?shelf=main&book=H2O&page=Hale (the record `database/data/main/H2O/nk/Hale.yml`): n = 1.339 at 0.400 µm, 1.337 at 0.450, 1.333 at 0.550 and 0.575, 1.332 at 0.600, 1.331 at 0.700.
+- **[S24]** A. H. Barr, "Superquadrics and angle-preserving transformations", IEEE Computer Graphics and Applications 1(1), 11-23 (1981), https://doi.org/10.1109/MCG.1981.1673799.
+- **[S25]** I. Quilez, "Smooth minimum", https://iquilezles.org/articles/smin/ (the exponential smooth minimum, $-k \log_2(2^{-a/k} + 2^{-b/k})$; the form above uses the natural logarithm, which only rescales $k$).
+- **[S26]** D. Gabor, "Theory of communication. Part 1: The analysis of information", Journal of the Institution of Electrical Engineers, Part III, 93(26), 429-441 (1946), https://doi.org/10.1049/ji-3-2.1946.0074 (harmonic oscillations modulated by a Gaussian "probability pulse").
+- **[S27]** H. Lamb, *Hydrodynamics*, 6th edition, Cambridge University Press (1932), chapter IX, "Surface waves" (pp. 363-475), which treats the waves that spread from a local disturbance (the Cauchy-Poisson problem).
+- **[S28]** E. Hecht, *Optics*, 5th edition, Pearson (2017), chapter 5, refraction at a spherical surface: a surface of radius $R$ from air into a medium of index $n$ brings parallel light to a focus $nR/(n - 1)$ behind it.
+
+[S24] to [S28] are cited for the form of a function, not for a number. Their bibliographic records were checked on 2026-11-27 (for [S27], its chapter and pages, not its text).

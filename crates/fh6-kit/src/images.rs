@@ -4,7 +4,8 @@
 use crate::color::{linear_to_srgb, srgb_to_linear};
 use crate::paint::ImageId;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 /// Errors loading images.
 #[derive(Debug, thiserror::Error)]
@@ -51,10 +52,24 @@ struct Entry {
     straight: bool,
 }
 
+/// A file that [`Images::load_file`] uploaded: its path, the SVG size it was rasterised at, and
+/// its length and modification time, so a changed file is loaded again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileKey {
+    path: PathBuf,
+    svg_size: Option<(u32, u32)>,
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
 /// Every image the kit can draw. Slot 0 is a 1x1 white texel used by draws without an image.
 #[derive(Debug)]
 pub struct Images {
     entries: Vec<Entry>,
+    /// The files already uploaded. The app builds a cluster again whenever the view or theme
+    /// changes, and the cluster loads its files in `new()`: this hands it the textures it already
+    /// has instead of decoding and uploading them again (and keeping both copies).
+    files: Vec<(FileKey, ImageId)>,
     layout: wgpu::BindGroupLayout,
     max_dim: u32,
     bc: bool,
@@ -80,6 +95,7 @@ impl Images {
         });
         let mut images = Self {
             entries: Vec::with_capacity(64),
+            files: Vec::new(),
             layout,
             max_dim: device.limits().max_texture_dimension_2d,
             bc: device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC),
@@ -130,7 +146,8 @@ impl Images {
     }
 
     /// Loads a `.png`, `.ktx2` or `.svg` file. SVGs are rasterised at `svg_size` (or their own
-    /// size when `None`).
+    /// size when `None`). A file loaded before, unchanged (same length and modification time)
+    /// and at the same SVG size, returns the same image without reading it again.
     ///
     /// # Errors
     /// [`ImageError`] when the file cannot be read or decoded.
@@ -141,6 +158,16 @@ impl Images {
         path: &Path,
         svg_size: Option<(u32, u32)>,
     ) -> Result<ImageId, ImageError> {
+        let meta = std::fs::metadata(path).ok();
+        let key = FileKey {
+            path: path.to_path_buf(),
+            svg_size,
+            len: meta.as_ref().map_or(0, std::fs::Metadata::len),
+            modified: meta.and_then(|m| m.modified().ok()),
+        };
+        if let Some(&(_, id)) = self.files.iter().find(|(k, _)| *k == key) {
+            return Ok(id);
+        }
         let bytes = std::fs::read(path).map_err(|source| ImageError::Io {
             path: path.display().to_string(),
             source,
@@ -151,12 +178,14 @@ impl Images {
             .map(str::to_ascii_lowercase)
             .unwrap_or_default();
         let label = path.file_name().and_then(|n| n.to_str()).unwrap_or("image");
-        match ext.as_str() {
+        let id = match ext.as_str() {
             "png" => self.load_png(device, queue, &bytes, label),
             "ktx2" => self.load_ktx2(device, queue, &bytes, label),
             "svg" => self.load_svg(device, queue, &bytes, svg_size, label),
             other => Err(ImageError::Unsupported(other.to_string())),
-        }
+        }?;
+        self.files.push((key, id));
+        Ok(id)
     }
 
     /// Decodes a PNG (any colour type) and uploads it premultiplied with mips.

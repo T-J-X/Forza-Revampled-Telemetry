@@ -30,7 +30,7 @@ Apple's Liquid Glass (iOS 26, CarPlay, visionOS glass) as Apple describes and sp
 ## 3. CarPlay Ultra clusters
 
 - **Cited (Apple Newsroom, 2025-05-15):** the cluster shows speedometer, tachometer, fuel and temperature gauges, with maps, media, widgets, ADAS and tyre pressure. Apple and the car maker design themes together; the driver picks from a curated set and changes colours and wallpapers. Apple's own captions describe four looks: thin blue bars on the speedometer and tachometer, multi-coloured bars, thick grey bars, and thick red bars.
-- **Cited (Auto Express, 2025-06-10):** six layouts, from a full-screen map or music view to minimalist line gauges; the Aston Martin theme is British Racing Green with a script on the speedometer.
+- **Cited (Auto Express, 2025-06-10):** six layouts, from a full-screen map or music view to minimalist line gauges; the Aston Martin theme is British Racing Green with a script on the speedometer; a centre widget, set from the steering-wheel controls, shows music, maps or car information.
 - **Cited (9to5Mac, 2025-06-30):** the theme and the centre content switch from a steering-wheel touchpad; response is immediate.
 - **Not found:** theme names, typography details, or any Apple statement that CarPlay Ultra clusters use Liquid Glass. HIG CarPlay does not mention Liquid Glass or clusters. **Our reading:** the cluster benchmark is the gauge grammar (thin or thick bars, a calm centre, one accent colour); the glass benchmark is iOS 26 and visionOS.
 
@@ -45,7 +45,10 @@ Liquid Glass is a catalog concept with no single real display. It is benchmarked
 | Themes chosen by the driver, with their colours | **Matched:** every colour is a palette role (factory, custom or random), the numerals follow the user's font, and the logo zone shows the car's logo or the custom name. |
 | Wallpaper behind the gauges | **Changed:** none. Off pixels are true black on the OLED, and the game is the only picture behind the dash. |
 | Fuel and temperature gauges, maps, media, widgets | **Changed:** not shown. Fuel and temperature are not verified against the golden packets; power and boost are, so they take the secondary pill. Maps and media are not a dash's job in a racing game. |
-| Glass elements that float as separate pieces and merge like liquid (A4, A5, A13) | **Matched:** seven kinds of separate pieces; the cabochons fuse on the limiter and the side pills bud out of the puck on show. |
+| ADAS and tyre pressure on the cluster (Apple Newsroom) | **Changed:** not shown. Neither is in the telemetry verified against the golden packets, and the game has no driver assistance to show. |
+| Six layouts the driver picks from, and a centre widget set from the wheel (Auto Express) | **Changed:** one layout of separate pieces. Each piece is its own zone in the `Geom` table, so the configurator (Phase 10) can move, hide or swap them; the centre holds the gear (rank 1), not a widget. |
+| Where the gauges sit, and the typeface | **Not stated** by Apple's release or Auto Express, and no frame grab was measured (§6), so nothing here is matched to them. **Our design:** speed on the left, the gear in the centre, power and boost on the right; OFL faces only (Saira Condensed, Saira, Titillium Web), because the project ships only OFL fonts. |
+| Glass elements that float as separate pieces and merge like liquid (A4, A5, A13) | **Matched:** seven kinds of separate pieces; the cabochons fuse on the limiter and the side capsules fuse with the gear lens under hard braking. |
 | Shape defined by lensing and by highlights that move with the device (A1, A7) | **Matched:** every piece is computed optics, and the one light rig moves with lateral and longitudinal G. |
 | Glass that adapts light or dark to its content, and blurs it (A10, A11) | **Changed:** one clear variant with no frost, because on OLED a frosted fill reads as a grey panel. |
 

@@ -8,8 +8,8 @@
 //!   with ceiling tube lights, seamless left to right. It is the picture on the cyclorama of the
 //!   Blender step, so it is what the glass rims mirror between the big lights.
 //! - **Studio environment (Blender, Cycles):** the studio the glass reflects, rendered as six
-//!   cube faces from the cluster's position: the key softbox, the strip light and a warm kicker
-//!   as emissive panels in exactly the directions of the kit's analytic studio, in front of a
+//!   cube faces from the cluster's position: the key softbox and the strip light as emissive
+//!   panels in exactly the directions of the kit's analytic studio, in front of a
 //!   cyclorama that carries the ComfyUI plate. The faces are resampled here into one octahedral
 //!   map (the layout `shape.wgsl` `oct_uv` reads).
 //! - **Liquid light (ray traced here):** the caustic that sunlight draws on the floor of a
@@ -83,21 +83,30 @@ const PLATE_SOFTEN_PX: f32 = 6.0;
 
 /// Octahedral map size.
 const ENV_SIZE: usize = 4096;
-/// Cube face size and field of view (wider than 90° so bilinear taps never leave a face).
-const FACE_SIZE: usize = 2048;
+/// Cube face size and field of view (wider than 90° so bilinear taps never leave a face). The
+/// faces are 4K masters: at 4096 px each holds more texels per degree than the octahedral map
+/// that is resampled from them, so nothing in the runtime file is scaled up.
+const FACE_SIZE: usize = 4096;
 const FACE_FOV_DEG: f32 = 94.0;
 /// Radiance that 8-bit white stores. The cluster sets `OpticalGlass::env_gain` to this.
 pub const ENV_RANGE: f32 = 16.0;
 /// Directions closer than `VIEWER_CLEAR.0` degrees to the viewer are black, fading in by
-/// `VIEWER_CLEAR.1`: a flat glass face mirrors exactly that direction, and anything there would
-/// veil the numerals under it.
-const VIEWER_CLEAR: (f32, f32) = (22.0, 34.0);
+/// `VIEWER_CLEAR.1`. A face tilted θ mirrors the direction 2θ off the view axis, so 44° keeps
+/// every surface tilted under 22° black: the numerals' clear zone (the cluster's test
+/// `the_numerals_sit_under_the_clear_middle_of_each_lens`). The fade ends at 45°, short of the
+/// key panel's nearest edge (45.4°).
+const VIEWER_CLEAR: (f32, f32) = (44.0, 45.0);
 /// Blender seed.
 const BLENDER_SEED: u64 = 77_301;
+/// Cycles samples per pixel of each 4096 px face: enough that the cyclorama's light and the
+/// panels' soft edges carry no noise into the rims.
+const STUDIO_SAMPLES: u32 = 256;
 
 /// One emissive panel of the studio, in the kit's environment frame (x right, y down, z at the
 /// viewer): centre direction, tangent axes, half size in tangent units, radiance and edge
-/// softness. The first two match `studio()` in `shape.wgsl`.
+/// softness. Both match `studio()` in `shape.wgsl`, so the baked map and the analytic fallback
+/// have the same lights. Every panel is a long strip: a short card shows as a card when the
+/// upshift ripple holds a rim's tilt still for a few frames.
 struct Panel {
     name: &'static str,
     c: [f32; 3],
@@ -109,7 +118,7 @@ struct Panel {
     grid: bool,
 }
 
-const PANELS: [Panel; 3] = [
+const PANELS: [Panel; 2] = [
     Panel {
         name: "key",
         c: [-0.5417, -0.5417, 0.6428],
@@ -128,16 +137,6 @@ const PANELS: [Panel; 3] = [
         half: [1.30, 0.06],
         radiance: [4.2, 4.7, 5.2],
         soft: 0.02,
-        grid: false,
-    },
-    Panel {
-        name: "kicker",
-        c: [-0.8529, 0.4924, 0.1736],
-        tx: [-0.5, -0.8660, 0.0],
-        ty: [0.1504, -0.0868, 0.9848],
-        half: [0.20, 0.08],
-        radiance: [3.4, 2.3, 1.2],
-        soft: 0.03,
         grid: false,
     },
 ];
@@ -406,7 +405,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "seed": BLENDER_SEED,
         "size": FACE_SIZE,
         "fov": FACE_FOV_DEG,
-        "samples": 24,
+        "samples": STUDIO_SAMPLES,
         "plate": soft_plate.to_string_lossy(),
         "plate_radiance": PLATE_RADIANCE,
         "panels": PANELS.iter().map(|p| json!({
@@ -432,15 +431,17 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         blender::run(&ctx.paths, "liquid_glass_studio", STUDIO, &params)?;
         img::write_file(&fp_path, fp.as_bytes())?;
     }
-    // 4. The octahedral environment map.
+    // 4. The octahedral environment map, and its 16-bit master (the same picture).
     let env_rel = format!("{DIR}/studio_env.png");
     let env_out = ctx.abs(&env_rel);
+    let env_master = scratch.join("studio_env_master.png");
     let env_fp = fingerprint(&[
         fp.as_bytes(),
-        format!("env v1 {ENV_SIZE} {ENV_RANGE} {VIEWER_CLEAR:?}").as_bytes(),
+        format!("env v2 {ENV_SIZE} {ENV_RANGE} {VIEWER_CLEAR:?}").as_bytes(),
     ]);
     let env_fp_path = scratch.join("studio_env.fp");
-    let env_fresh = env_out.is_file() && std::fs::read_to_string(&env_fp_path).is_ok_and(|s| s == env_fp);
+    let env_fresh =
+        env_out.is_file() && env_master.is_file() && std::fs::read_to_string(&env_fp_path).is_ok_and(|s| s == env_fp);
     if env_fresh {
         println!("  = environment map (fresh)");
     } else {
@@ -456,12 +457,20 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         copy_master(masters.as_deref(), &path, &file, &mut master_rows);
     }
     if !env_fresh {
-        img::save_png(&environment(&faces), &env_out, false, true)?;
+        let env = environment(&faces);
+        img::save_png(&encode_env(&env), &env_out, false, true)?;
+        img::save_png(&env, &env_master, true, false)?;
         img::write_file(&env_fp_path, env_fp.as_bytes())?;
     }
+    copy_master(
+        masters.as_deref(),
+        &env_master,
+        "studio_env_master.png",
+        &mut master_rows,
+    );
     let env_kb = std::fs::metadata(&env_out).map_or(0, |m| m.len() / 1024);
     rows.push(format!(
-        "| `studio_env.png` | environment, octahedral (z at the viewer in the centre), sRGB, white = radiance {ENV_RANGE} | {s}x{s} | {env_kb} KB | blender:liquid_glass::STUDIO (Cycles, 6 faces {FACE_SIZE} px, fov {FACE_FOV_DEG}°, 24 samples, seed={BLENDER_SEED}): horizon ring 0..{RING_ELEV_DEG}° (radiance {RING_BASE} to 5.9 towards the key), key strip 74x9° radiance 8, strip 105x7° radiance 4.7, warm kicker, cyclorama with the ComfyUI studio plate (softened by a {PLATE_SOFTEN_PX} px Gaussian) at radiance {PLATE_RADIANCE}; resampled to octahedral, cleared within {}° of the viewer | CreativeML Open RAIL++-M output (SDXL plate); MIT (asset-forge) | what every glass piece reflects (`OpticalGlass` environment, gain {ENV_RANGE}). Masters `studio_px.exr` .. `studio_nz.exr` |",
+        "| `studio_env.png` | environment, octahedral (z at the viewer in the centre), sRGB, white = radiance {ENV_RANGE} | {s}x{s} | {env_kb} KB | blender:liquid_glass::STUDIO (Cycles, 6 faces {FACE_SIZE} px, fov {FACE_FOV_DEG}°, {STUDIO_SAMPLES} samples, seed={BLENDER_SEED}): horizon ring 0..{RING_ELEV_DEG}° (radiance {RING_BASE} to 5.9 towards the key), key strip 74x9° radiance 8, strip 105x7° radiance 4.7, cyclorama with the ComfyUI studio plate (softened by a {PLATE_SOFTEN_PX} px Gaussian) at radiance {PLATE_RADIANCE}; resampled to octahedral, cleared within {}° of the viewer | CreativeML Open RAIL++-M output (SDXL plate); MIT (asset-forge) | what every glass piece reflects (`OpticalGlass` environment, gain {ENV_RANGE}). Masters `studio_env_master.png` (the same picture, 16-bit linear) and the cube faces `studio_px.exr` .. `studio_nz.exr` |",
         VIEWER_CLEAR.0,
         s = ENV_SIZE
     ));
@@ -504,6 +513,9 @@ fn copy_master(masters: Option<&Path>, src: &Path, name: &str, rows: &mut Vec<St
             "the ray-traced caustic as 16-bit linear irradiance (white = 16 x the floor under still water)"
         }
         "studio_plate_master.png" => "the ComfyUI studio panorama on the Blender cyclorama",
+        "studio_env_master.png" => {
+            "`studio_env.png` as 16-bit linear radiance (white = radiance 16): the same octahedral picture"
+        }
         _ => "one cube face of the Blender studio, 32-bit float EXR, scene-linear radiance",
     };
     let state = match masters {
@@ -844,8 +856,17 @@ fn sample_cube(faces: &[Img], d: [f32; 3]) -> [f32; 3] {
     ]
 }
 
+/// The runtime environment map: [`environment`]'s linear values sRGB-encoded for 8 bits.
+fn encode_env(env: &Img) -> Img {
+    let mut out = env.clone();
+    for v in &mut out.data {
+        *v = img::srgb_encode(*v);
+    }
+    out
+}
+
 /// Resamples the cube faces into the octahedral map (2x2 supersampled), clears the cone round
-/// the viewer and stores sRGB-encoded radiance / [`ENV_RANGE`].
+/// the viewer and stores linear radiance / [`ENV_RANGE`], clamped to 0..1.
 fn environment(faces: &[Img]) -> Img {
     let n = ENV_SIZE;
     let (clear0, clear1) = (VIEWER_CLEAR.0.to_radians().cos(), VIEWER_CLEAR.1.to_radians().cos());
@@ -861,9 +882,9 @@ fn environment(faces: &[Img]) -> Img {
             }
         }
         [
-            img::srgb_encode(acc[0] / ENV_RANGE),
-            img::srgb_encode(acc[1] / ENV_RANGE),
-            img::srgb_encode(acc[2] / ENV_RANGE),
+            (acc[0] / ENV_RANGE).clamp(0.0, 1.0),
+            (acc[1] / ENV_RANGE).clamp(0.0, 1.0),
+            (acc[2] / ENV_RANGE).clamp(0.0, 1.0),
             1.0,
         ]
     })
@@ -947,6 +968,25 @@ mod tests {
             // Away from the viewer's clear cone, and in front of the screen.
             assert!(p.c[2] > 0.0 && p.c[2] < VIEWER_CLEAR.1.to_radians().cos(), "{}", p.name);
         }
+    }
+
+    #[test]
+    fn every_light_is_a_long_strip_outside_the_clear_cone() {
+        for p in &PANELS {
+            // A short card shows as a card when the upshift ripple holds a rim's tilt still
+            // (the first studio's 0.20 x 0.08 kicker spread over 14 px of the gear lens).
+            assert!(p.half[0] >= 5.0 * p.half[1], "{} is a card", p.name);
+            for s in [-1.0_f32, 1.0] {
+                let e: [f32; 3] = std::array::from_fn(|i| p.c[i] + s * p.half[1] * p.ty[i]);
+                assert!(
+                    e[2] / dot(e, e).sqrt() < VIEWER_CLEAR.1.to_radians().cos(),
+                    "{}: an edge reaches into the clear cone",
+                    p.name
+                );
+            }
+        }
+        // A face tilted 22 degrees mirrors 44 degrees off the view axis.
+        const { assert!(VIEWER_CLEAR.0 >= 2.0 * 22.0) };
     }
 
     #[test]

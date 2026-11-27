@@ -178,17 +178,30 @@ impl GearGlyph {
         self.slide.update(0.0, dt);
     }
 
+    /// Shows `gear` at rest, with no entry motion (a cluster built while the car is in gear).
+    pub fn snap(&mut self, gear: Gear) {
+        self.gear = gear;
+        self.slide.reset(0.0);
+    }
+
     /// True while the entry motion runs.
     #[must_use]
     pub fn animating(&self) -> bool {
         !self.slide.settled(0.0, 1e-3)
     }
 
+    /// The entry motion now: how far below its rest place the glyph sits (px, negative above)
+    /// and its scale. Both are 0 and 1 once it has settled.
+    #[must_use]
+    pub fn entry(&self) -> (f32, f32) {
+        let s = self.slide.value();
+        (24.0 * s, 1.0 + 0.12 * s.abs())
+    }
+
     /// Draws the gear centred at `center` with cap height `cap`.
     pub fn draw(&self, p: &mut Painter<'_>, center: fh6_kit::Vec2, font: FontId, cap: f32, color: Color) {
-        let s = self.slide.value();
-        let scale = 1.0 + 0.12 * s.abs();
-        let pos = vec2(center.x, center.y + 24.0 * s);
+        let (dy, scale) = self.entry();
+        let pos = vec2(center.x, center.y + dy);
         p.scoped(|p| {
             p.translate(pos);
             p.scale(scale);
