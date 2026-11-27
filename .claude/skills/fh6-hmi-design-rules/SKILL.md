@@ -37,6 +37,9 @@ Each cluster's brief is `crates/fh6-clusters/src/clusters/<snake_name>/spec.md` 
 ## Hybrid rendering
 Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/design_tokens.json`, not hardcoded hex values.
 
+## Reviewing
+To review a render, a board or the motion sequence (your own included), also load the `fh6-visual-review` skill: the fixed yes/no checklist, the procedure that keeps a self-review honest, and the `visual-review` tool (`cargo run --release -p visual-review -- --help`). Claude sees a full 4K frame at about 0.4x, so detail is judged on 1:1 tiles, never on the full frame. No scores.
+
 ## Reference images
 - `assets/reference/cockpit_with_wheel.jpg`: stock in-car cockpit, the background for the in-cockpit compositor
 - `assets/reference/target_wide_cockpit_fov.jpg`: the target wide FOV and low seat

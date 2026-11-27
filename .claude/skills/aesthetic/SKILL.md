@@ -69,11 +69,11 @@ Elevate with narrative elements—parallax effects, particle systems, thematic c
 **Steps**:
 1. Define design prompt with: style, colors, typography, audience, animation specs
 2. Generate design images with ComfyUI (the `comfyui-hero-textures` skill), holding the GPU lock
-3. Review the output against the project's fixed checklist (in this repo: "Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`). Answer each line yes or no; never give a numeric score
+3. Review the output against the project's fixed checklist (in this repo: the `fh6-visual-review` skill for renders, boards and motion, and "Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`). Answer each line yes or no; never give a numeric score
 4. For each no:
    - Identify the specific weakness (color, typography, layout, spacing, hierarchy)
    - Fix that weakness, then walk the checklist again
-5. The person signs off the result. Never loop until a score passes, and never rewrite a prompt to chase a score
+5. In this repo the thread signs off its own result with that checklist, because TJX is hands-off (AGENTS.md rule 12); TJX's own words win whenever TJX answers. Never loop until a score passes, and never rewrite a prompt to chase a score
 6. Document final design decisions using templates
 
 ## Design Documentation
@@ -105,6 +105,7 @@ Save in project `./docs/design-story.md`.
 - **The built-in browser**: Screenshots of inspiration sites and of the rendered pages
 - **frontend-design**: Web UI direction and typography
 - **fh6-hmi-design-rules**: The project's own design rules, which win where the two differ
+- **fh6-visual-review**: The project's fixed visual checklist and the `visual-review` tool, for reviewing renders without scores
 
 ### Reference Documentation
 **References**: [`references/design-resources.md`](references/design-resources.md) - Inspiration platforms, design systems, AI tools, MCP integrations, development strategies.
@@ -116,4 +117,4 @@ Save in project `./docs/design-story.md`.
 3. Balance beauty with functionality and accessibility
 4. Document decisions for consistency across development
 5. Use progressive disclosure in design—reveal complexity gradually
-6. Always evaluate against the fixed checklist, with yes or no answers; the person signs off (no numeric scores)
+6. Always evaluate against the fixed checklist, with yes or no answers and no numeric scores; in this repo the thread's own review signs off (AGENTS.md rule 12)

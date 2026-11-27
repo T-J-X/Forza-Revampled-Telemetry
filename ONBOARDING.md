@@ -28,8 +28,9 @@ crates/fh6-osd       OSD model and rendering
 crates/fh6-input     XInput (ABXY lock)
 crates/fh6-win       window and Win32, camera patcher
 crates/fh6-app       binaries FH6_WheelDash and FH6_SteamLauncher
-tools/               preview-export (4K renders -> mockups/), asset-forge (Blender and ComfyUI assets), mock-udp,
-                     parity-dump, bench-render, web-preview, wgc-bench, screen-capture, stand-in-game
+tools/               preview-export (4K renders -> mockups/), visual-review (review images of those renders, CPU only),
+                     asset-forge (Blender and ComfyUI assets), mock-udp, parity-dump, bench-render, web-preview,
+                     wgc-bench, screen-capture, stand-in-game
 tests/golden/packets 20 golden telemetry packets with expected JSON. Never edit them to make a test pass.
 assets/              textures, logos/, fonts/, car_brands/, clusters/<snake_name>/, reference/ photos
 data/                config.json, car profiles, ordinals, design_tokens.json, game camera files
@@ -71,7 +72,8 @@ program/             the build program: roadmap, per-phase MASTER_PROMPT / AGENT
 3. Load the skills your phase's `SKILLS.md` lists, at the step it names. Root `SKILLS.md` says how to call a skill or an MCP tool.
 4. Work without check-in questions. Stop for TJX only where the rules ask for TJX: a sign-in, a paid service, a deploy, and anything that cannot be undone. TJX is hands-off on reviews (AGENTS.md rule 12): you run the direction check on design work and the closing review yourself with the review skills, post the results, and carry on. Record your other decisions as "my call" in your handover. The downloads TJX pre-approved are listed in `program/README.md`.
 5. Hold the lock of its lane for every GPU job (`SKILLS.md` section 5). Threads can share one checkout: commit as TJX with explicit paths, and never switch its branch.
-6. **Review with a fixed checklist,** line by line against `AGENTS.md` and `SKILLS.md`, with yes/no answers. No scores and no critic loops. A dash uses the checklist in `CLUSTER_PROMPT.md`.
+6. **Review with a fixed checklist,** line by line against `AGENTS.md` and `SKILLS.md`, with yes/no answers. No scores and no critic loops. A dash uses the checklist in `CLUSTER_PROMPT.md`. Every render, board and motion sequence is reviewed with the `fh6-visual-review` skill and its `visual-review` tool: Claude sees a 4K frame only at about 0.4x, so judge detail on 1:1 tiles, and measure what eyes get wrong.
+   Post a short update with a screenshot at each milestone and at least every 20 to 30 minutes (TJX, 2026-11-27); `visual-review annotate` makes it.
 7. **Finish:**
    1. Fill in your `HANDOVER.md` from `program/HANDOVER_TEMPLATE.md`.
    2. Update `docs/PROGRESS.md`. A dash thread only appends decision-log rows there (a new dependency or token); the coordinator keeps the status table.

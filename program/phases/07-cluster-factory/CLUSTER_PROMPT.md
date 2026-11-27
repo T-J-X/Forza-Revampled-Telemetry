@@ -21,11 +21,11 @@ Five shared places are yours to touch in a small way, each noted in your handove
 
 ## How every thread runs (TJX, 2026-11-27)
 - **Open with an introduction** to TJX in your thread: the task, the rule files that apply, and what done looks like.
-- **No scores, no critic loops.** Never score your own work, never ask a reviewer for a score, and never iterate "until the critic passes". Never rewrite a prompt to chase a score. The review is the fixed checklist at the end of this file, walked by you with the review skills and agents (steps 5 and 10).
+- **No scores, no critic loops.** Never score your own work, never ask a reviewer for a score, and never iterate "until the critic passes". Never rewrite a prompt to chase a score. The review is the fixed checklist at the end of this file, walked by you with the review skills and agents (steps 5 and 10). Renders, boards and the motion sequence are reviewed with the `fh6-visual-review` skill and its `visual-review` tool, which keep a self-review honest.
 - **TJX is hands-off (2026-11-27, AGENTS.md rule 12).** Your self-review stands in for TJX's direction check and sign-off: post its results and renders in your thread and carry on without waiting for an answer. Where TJX does answer, TJX's own words win and every change TJX lists is done. Only TJX's own message counts as TJX's; no other session answers for TJX.
 - **Close only after** the closing review has every line answered yes.
 - **The thread is never archived.**
-- **Messages.** Post in your own thread: TJX reads it, and so does the coordinator. Post a short update with a render or screenshot at each milestone, at least every 20 to 30 minutes, so TJX can follow the work without asking (TJX, 2026-11-27). Say plainly when a note is for the coordinator (a finished job, a GPU lock older than 30 minutes, a request for shared code). Attach a render by sending the local file itself; `mockups/` is not in git.
+- **Messages.** Post in your own thread: TJX reads it, and so does the coordinator. Post a short update with a render or screenshot at each milestone, at least every 20 to 30 minutes, so TJX can follow the work without asking (TJX, 2026-11-27); `visual-review annotate` makes the screenshot (section 7 of the `fh6-visual-review` skill). Say plainly when a note is for the coordinator (a finished job, a GPU lock older than 30 minutes, a request for shared code). Attach a render by sending the local file itself; `mockups/` is not in git.
 
 ## Read first
 - The approved plan (the coordinator gives you the link).
@@ -94,7 +94,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
    - Write each 4K master (16-bit PNG or EXR) to your Drive folder. Git gets the compressed runtime file.
 5. **First build, then the direction check (mandatory, a self-review).** The check needs a real render, so do a first build: replace the scaffold with a module that draws your Blender plate at full strength with the live data roughed in on top, and render it with `cargo run --release -p preview-export -- --cluster <Name>` (holding the GPU lock). Don't polish. As soon as that first real render of `02_mid_cruise` sits in the cockpit composite:
    - Post one message in your own thread: `DIRECTION CHECK <Name>`, the full-frame cockpit render attached (the 4K hood render for a hood-only dash), the Penpot board export attached if your session can save it and otherwise the page name and the board ID, then two or three lines on the idea and the references it follows.
-   - Review it yourself, once: run `design:design-critique` on the full-frame render and its crop against "The bar", your family spec and `RESEARCH.md`, asking for findings only. The bar is a 2027 production car or a film's hero prop, never merely modern (TJX, 2026-11-27: "2027 future not anything less"). From the findings decide go, go with changes, or no-go; write the decision and each finding, with what you do about it, into your handover, and post the decision in the thread.
+   - Review it yourself, once, with the `fh6-visual-review` skill: steps 1 to 6 of its procedure answer the lines of its checklist marked DC (the expectations frozen first, a cold look, one fresh-context `ui-ux-designer` reviewer, the glance gate, the flash audit, and the board and reference sheets). Add `design:design-critique` on the full-frame render and its crop against "The bar", your family spec and `RESEARCH.md`, asking for findings only. The bar is a 2027 production car or a film's hero prop, never merely modern (TJX, 2026-11-27: "2027 future not anything less"). From the findings decide go, go with changes, or no-go; write the decision and each finding, with what you do about it, into your handover, and post the decision in the thread.
    - Don't wait for TJX. If TJX answers, TJX's answer replaces yours: apply every change TJX lists.
    - A no-go means redesign, then a new check. Repeat the check after any major redesign.
 6. **Build:** load `rust-best-practices` before you write any `.rs`, the first build of step 5 included (`rust-skills` is the rule reference, `rust-testing` covers the goldens). Finish your `Cluster` in `mod.rs` (keep `pub fn make`). Use the kit and the `common/` components. Keep `update()` and `draw()` allocation-free after warm-up.
@@ -109,6 +109,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
 8. **Product page.** `mockups/<Name>/index.html`, generated by `preview-export` (Rust; only HTML and CSS are written), is the thread's final output: the fully rendered page of the dash. Read the Penpot page `10 · Configurator` first, because this page grows into the local catalog and configurator that the exe serves.
 9. **Handover draft.** Write `crates/fh6-clusters/src/clusters/<snake_name>/HANDOVER.md` from `program/HANDOVER_TEMPLATE.md` (its "Dash threads" part lists the sections), with renders (copy the four crops you want reviewed into `docs/handover-shots/cluster-<snake_name>-*.png`), the before and after pair (the render you kept before you started and the final one, both full-frame), perf numbers, the asset list, the Drive master list and "my calls".
 10. **Closing review (a self-review).** Walk the fixed checklist below line by line and write each answer, yes or no with its evidence, into the handover. Collect findings once from each review skill, each asked for findings only and never for a score, and treat them as input to the checklist, not as a verdict:
+    - the `fh6-visual-review` skill: all of its procedure, with every line of its checklist answered under `## Visual review` in the handover (line 39 below);
     - `design:design-critique` on the final full-frame renders and crops, against "The bar" and your family spec;
     - `design:accessibility-review` on contrast, the strobe and reduced-flash mode, colour-only cues and motion;
     - `rust-review` (with `rust-skills` as the rule reference) on your module and your recipe;
@@ -201,6 +202,7 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 36. The product page `mockups/<Name>/index.html` exists and was generated by `preview-export`. [step 8]
 37. The 60-second live bench ran with `mock-udp` streaming and no error; its frame count and its receive-to-present and CPU-per-frame rows are in the handover, and the 60-frame sequence shows no jitter or flicker (digits held by hysteresis, springs settling without a jump). [AGENTS 7]
 38. The handover holds findings and yes/no answers only: no scores anywhere. [AGENTS 12]
+39. Every line of the `fh6-visual-review` checklist (V1 to V26) is answered under `## Visual review` in the handover, each with its evidence: yes, or NOT ASSESSED for a reason that skill's section 8 lists or a part the dash does not have. [AGENTS 12; fh6-visual-review]
 
 ## Exit criteria
 - The introduction was posted, and the thread is not archived.
@@ -212,4 +214,5 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 - The live bench report is in the handover, and the GPU time under 0.5 ms from `preview-export` is recorded.
 - The direction check was posted and self-reviewed to a go (with any changes done), and its findings are in the handover, with TJX's words quoted where TJX answered.
 - Every line of the closing review is yes, or a line that could not be fixed afterwards is reported in the handover, in the thread and to the coordinator.
+- The visual review (`fh6-visual-review`, V1 to V26) is in the handover, each line with its evidence.
 - The handover is written, the job is reported to the coordinator for the merge, and the product page and the completed checklist are posted in the thread.
