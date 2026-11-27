@@ -26,6 +26,12 @@ const TIMER_SLOW: usize = 2;
 /// Foreground backstop poll (the WinEvent hook is the primary signal).
 const FOREGROUND_POLL: Duration = Duration::from_millis(100);
 const SLOW_TICK: Duration = Duration::from_secs(1);
+/// Exit code when the render thread panicked (0 is a clean quit, 1 a failed start, 2 a bad
+/// command line).
+const EXIT_RENDER_FAILED: i32 = 3;
+/// How long shutdown waits for a render thread that panicked to finish unwinding, counted from
+/// when the panic is seen.
+const FAILED_RENDER_WAIT: Duration = Duration::from_secs(2);
 
 /// Why the app could not start.
 #[derive(Debug, thiserror::Error)]
@@ -191,7 +197,8 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
     };
     // Before the render thread: if this fails, nothing is running yet that would need stopping.
     let quit_listener = spawn_quit_listener(app_window.close_handle())?;
-    let (render_join, render_thread) = render_loop::spawn(RenderSetup {
+    let ask_close = move || close.request_close();
+    let setup = RenderSetup {
         gpu,
         surface,
         window: overlay.surface_handle(),
@@ -204,15 +211,17 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
         options,
         resources: crate::resources::KitResources::resolve(&config_path),
         game_process: args.game_process.clone(),
-        on_bench_done: Box::new(move || close.request_close()),
+        on_bench_done: Box::new(ask_close),
         osd: render_loop::OsdSetup {
             saver,
             injector: Box::new(WinKeyboard(fh6_win::keyboard::SendInputKeyboard::new())),
             // Camera rows report the Phase 8 camera sync status; Resync drives the camera ring.
             fit: Box::new(crate::osd_fit::PatcherFit::new(camera.clone(), Arc::clone(&input))),
         },
-    })
-    .map_err(io_err("starting the render thread"))?;
+    };
+    // A dead render thread can neither draw the dash nor hide it: it closes the app at once.
+    let (render_join, render_thread) =
+        render_loop::spawn(setup, ask_close).map_err(io_err("starting the render thread"))?;
     let _ = waker.0.set(render_thread.clone());
 
     let ctl = app_window.ctl();
@@ -231,18 +240,61 @@ pub fn run(args: AppArgs) -> Result<i32, AppError> {
     // window; the window before the hook and the shared overlay.
     control.stop();
     render_thread.unpark();
-    let summary = render_join.join().ok();
-    tracing::info!("render thread joined");
+    // A render thread that panicked gets a short time to unwind. One that hangs on the way out
+    // must not keep the overlay window alive, so the app leaves without it and the process exit
+    // ends it.
+    let joined = join_render_thread(render_join, || control.render_failed(), FAILED_RENDER_WAIT);
+    // A panic in the thread's teardown, after its drop guard is gone, shows only in the join.
+    let render_failed = control.render_failed() || !matches!(joined, Some(Ok(_)));
+    let summary = match joined {
+        Some(Ok(summary)) => {
+            tracing::info!("render thread joined");
+            Some(summary)
+        }
+        Some(Err(_)) => {
+            tracing::info!("render thread joined after a panic");
+            None
+        }
+        None => {
+            tracing::error!("the render thread did not finish unwinding; exiting without it");
+            None
+        }
+    };
     quit_listener.stop();
     drop(app_window);
     drop(foreground);
     drop(poller);
     drop(overlay);
     tracing::info!("windows closed");
+    if render_failed {
+        tracing::error!("the render thread panicked; FH6 WheelDash quit so no dead dash stays on screen");
+        return Ok(EXIT_RENDER_FAILED);
+    }
     if let (Some(seconds), Some(summary)) = (args.bench_seconds, summary.as_ref()) {
         write_bench(&args.bench_out, seconds, summary, &args);
     }
     Ok(code)
+}
+
+/// Waits for the render thread to end and joins it. A thread that has not failed is waited for
+/// as long as it takes (a normal stop). Once `failed` reads true, the thread gets `limit` to
+/// finish unwinding; `None` when it does not, and the thread is left behind.
+fn join_render_thread<T>(
+    handle: thread::JoinHandle<T>,
+    failed: impl Fn() -> bool,
+    limit: Duration,
+) -> Option<thread::Result<T>> {
+    let mut deadline = None;
+    while !handle.is_finished() {
+        if failed() {
+            let give_up_at = *deadline.get_or_insert_with(|| Instant::now() + limit);
+            if Instant::now() >= give_up_at {
+                return None;
+            }
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    Some(handle.join())
 }
 
 /// The OSD's auto-pause ESC, sent through `SendInput`.
@@ -388,6 +440,10 @@ impl Handler {
     }
 
     fn slow_tick(&mut self, ctl: &fh6_win::app_window::WindowCtl) -> Flow {
+        if self.control.render_failed() {
+            // The dying render thread asks for a close itself; this catches a lost request.
+            return Flow::Quit;
+        }
         let processes = fh6_win::system::running_process_names();
         if let Some(state) = self.game.check(&processes) {
             tracing::info!(?state, game = %self.game_process, "game process");
@@ -425,5 +481,67 @@ impl Handler {
         };
         ctl.set_tooltip(&status);
         Flow::Continue
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    const LIMIT: Duration = Duration::from_millis(60);
+
+    #[test]
+    fn a_thread_that_ends_is_joined() {
+        let joined = join_render_thread(thread::spawn(|| 7), || false, LIMIT);
+        assert!(matches!(joined, Some(Ok(7))));
+    }
+
+    #[test]
+    fn a_thread_that_panics_is_joined_with_its_panic() {
+        // A destructor can panic after the drop guard is gone: the flag stays false, the join
+        // still shows the panic.
+        let joined = join_render_thread(
+            thread::spawn(|| -> u32 { panic!("teardown test panic") }),
+            || false,
+            LIMIT,
+        );
+        assert!(matches!(joined, Some(Err(_))));
+    }
+
+    #[test]
+    fn a_healthy_thread_is_waited_for_past_the_limit() {
+        let started = Instant::now();
+        let slow = thread::spawn(|| {
+            thread::sleep(Duration::from_millis(150));
+            7
+        });
+        assert!(matches!(join_render_thread(slow, || false, LIMIT), Some(Ok(7))));
+        assert!(
+            started.elapsed() >= Duration::from_millis(150),
+            "a normal stop has no limit"
+        );
+    }
+
+    #[test]
+    fn a_failed_thread_that_hangs_is_given_up_on_after_the_limit() {
+        let (release, wait) = mpsc::channel::<()>();
+        let started = Instant::now();
+        let hung = thread::spawn(move || wait.recv().is_ok());
+        assert!(join_render_thread(hung, || true, LIMIT).is_none());
+        assert!(started.elapsed() >= LIMIT, "it waited for the whole limit");
+        drop(release);
+    }
+
+    #[test]
+    fn the_limit_counts_from_when_the_failure_is_seen() {
+        // The panic shows up while the app is already waiting for a normal stop.
+        let (release, wait) = mpsc::channel::<()>();
+        let started = Instant::now();
+        let hung = thread::spawn(move || wait.recv().is_ok());
+        let failed_late = move || started.elapsed() >= Duration::from_millis(100);
+        assert!(join_render_thread(hung, failed_late, LIMIT).is_none());
+        assert!(started.elapsed() >= Duration::from_millis(100) + LIMIT);
+        drop(release);
     }
 }
