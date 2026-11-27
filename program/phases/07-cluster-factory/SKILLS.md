@@ -11,7 +11,7 @@ The steps run in this order (TJX, 2026-11-27). `CLUSTER_PROMPT.md` has the detai
 | 3. ComfyUI | `comfyui-hero-textures`, through asset-forge; hold the GPU lock (`SKILLS.md` section 5) |
 | 4. Blender (final 3D) | `blender-hero-assets`, through asset-forge; hold the GPU lock. The `Blender` MCP is for looking and checking |
 | Masters | write the 4K masters to `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\`; the Google Drive desktop app syncs them |
-| Rust | `rust-best-practices` (before any `.rs`), `rust-patterns`, `rust-testing` (goldens) |
+| Rust | `rust-best-practices` (before any `.rs`), `rust-skills` (the 265-rule reference: open the rule you need), `rust-patterns`, `rust-testing` (goldens) |
 | Review | the closing review in `CLUSTER_PROMPT.md` (a fixed checklist, no scores), `rust-review`, `requesting-code-review`. The `ui-ux-designer` agent or `design:design-critique` may list findings once; never ask them for a score |
 | Optional fan-out | the Workflow tool, at most 4 agents (for example findings from 3 director viewpoints plus a perf check); findings only, no scores |
 

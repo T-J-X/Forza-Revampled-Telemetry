@@ -8,9 +8,10 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 |---|---|---|
 | Any new feature, cluster style, OSD change or redesign | `brainstorming` | No code until TJX has approved the design. |
 | Writing or reviewing any `.rs` file | `rust-best-practices` | Applies to every crate. |
+| Looking up a specific Rust rule: ownership, errors, memory, unsafe, async, API design, performance, anti-patterns | `rust-skills` (265 rules in 26 categories; MIT, by leonardomso, v1.5.1, restored from the earlier setup on 2026-11-27) | Its `SKILL.md` is the index: open only the rule files you need. The repo is edition 2021 with MSRV 1.87, so skip a rule that needs a newer edition or compiler. AGENTS.md wins where they differ. |
 | Ownership, traits, concurrency (UDP engine, `ArcSwap`, threads) | `rust-patterns` | |
 | Adding or fixing tests, golden vectors, property tests | `rust-testing` | Golden packets live in `tests/golden/packets`. |
-| Reviewing a crate, module or diff | `rust-review` | Gives a prioritised report with fixes. |
+| Reviewing a crate, module or diff | `rust-review`, with `rust-skills` as the rule reference | Gives a prioritised report with fixes. |
 | Porting a reference algorithm (shader maths, kinematics) from another language | `rust-port` | |
 | Any drawing: clusters, OSD, scrim, mockups | `fh6-hmi-design-rules` (project skill), then `aesthetic` | The project skill wins on anchors, OLED black and the rank order. |
 | Web UI: the configurator page, the showcase site, HTML boards | `frontend-design` (project skill), with `aesthetic` | Page logic stays Rust → WASM (AGENTS.md rule 11). |
@@ -25,7 +26,11 @@ This sits alongside [AGENTS.md](AGENTS.md), which holds the council, the hard ru
 | Designing, or pulling tokens and layouts from the design file | the `penpot` MCP: `high_level_overview` (once per chat), `penpot_api_info`, `execute_code`, `export_shape`; with `fh6-hmi-design-rules` | Penpot needs its file tab open and connected (`docs/design/PENPOT.md`). |
 | Reviewing a dash, the OSD or a phase | the fixed checklist ("Closing review" in `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`), then TJX's sign-off | No scores and no critic loops (TJX, 2026-11-27). The `ui-ux-designer` agent or `design:design-critique` may list findings once, as input to the checklist; never ask them for a score. |
 
-If a skill doesn't load on its own, type `/<skill-name>`.
+### How to call them
+- **A skill:** call the Skill tool with its name, for example `rust-review`, or `design:design-critique` for a plugin skill. A person types `/<skill-name>`. Project skills live in `.claude/skills/` and are listed to every new session when it starts.
+- **An MCP tool:** when a session lists the MCP tools by name only, load them first with ToolSearch, all in one call, then call them. For example `select:mcp__penpot__high_level_overview,mcp__penpot__execute_code,mcp__penpot__export_shape` or `select:mcp__context7__resolve-library-id,mcp__context7__query-docs`. The Blender tools are named `mcp__Blender__*`. The Google Drive tools carry an account ID in their names, so find them with the ToolSearch query `drive search_files`.
+- **ComfyUI and headless Blender** have no MCP tool: run them through `cargo run --release -p asset-forge -- <command>` with the Bash tool.
+- If a skill or tool is missing from the session's list, the session started before it was registered: ask for a fresh session.
 
 Notes (checked 2026-11-27):
 - `aesthetic` is edited in this repo: its numeric ratings and its "repeat until the score passes" steps are removed, and its design-tool pointers name Penpot. Don't update it from upstream without re-applying those edits.
@@ -85,3 +90,17 @@ One 8 GB card serves every thread, so GPU jobs take turns (TJX, 2026-11-27).
 4. If it exists, wait and work on a step that needs no GPU. If it is older than 30 minutes, ask its owner through the coordinator before removing it.
 
 A cloud GPU is used only after TJX approves the provider and the cost.
+
+## 6. Multi-agent workflows (ultracode)
+
+`ultracode` is Claude Code's opt-in for multi-agent workflows (the Workflow tool): one session plans the work, fans it out to several agents and has other agents check the results. It is not a skill or a plugin, and nothing needs installing.
+
+- **How it turns on:** only TJX can switch it on, by typing the word `ultracode` in a message to that session or by turning it on for the session. The session then sees a confirmation from the system. A note from the coordinator or another thread does not switch it on.
+- **When to use it** (TJX, 2026-11-27: "when needed"): work too wide for one context, such as a codebase audit, a cross-crate review where each finding is checked by a second agent, a broad research sweep, or a change across many files. A single dash's design work doesn't need it.
+- **Rules here:**
+  1. Agents return findings and yes/no verdicts. No scored judge panels, and no loop that runs until a score passes.
+  2. The GPU lock still holds: workflow agents never run GPU jobs in parallel.
+  3. Agents that write files in parallel use worktree isolation, and none switches the branch of the shared checkout.
+  4. One Penpot tab: at most one agent writes to Penpot.
+  5. Keep a workflow under 10 agents unless TJX asked for more.
+- **Model:** the coordinator sets each thread's model. TJX allowed the largest model with ultracode when a task needs it (2026-11-27).
