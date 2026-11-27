@@ -447,6 +447,7 @@ dependencies = [
  "fh6-core",
  "fh6-gpu",
  "fh6-kit",
+ "serde_json",
  "tracing",
  "wgpu",
 ]

@@ -782,6 +782,13 @@ impl Fonts {
         self.faces.is_empty()
     }
 
+    /// Bumped each time the glyph atlas grows. Growing renormalises every glyph's UVs, so two
+    /// frames compare bit for bit only when they were recorded at the same generation.
+    #[must_use]
+    pub fn atlas_generation(&self) -> u32 {
+        self.atlas.generation
+    }
+
     /// Cap height / em of a face.
     #[must_use]
     pub fn cap_ratio(&self, font: FontId) -> f32 {

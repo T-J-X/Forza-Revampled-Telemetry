@@ -6,6 +6,7 @@
 //! Usage: `parity-dump [--write-missing] <packet.bin | directory>`
 use fh6_core::telemetry::decode;
 use std::fs;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -69,24 +70,29 @@ impl Outcome {
 }
 
 /// Checks `bin_path` against the `.json` beside it, writing the `.json` only when it is missing
-/// and `write_missing` is set.
+/// and `write_missing` is set. The write uses `create_new`, so a golden that appears meanwhile
+/// is compared, never overwritten.
 fn process_file(bin_path: &Path, write_missing: bool) -> Result<Outcome, String> {
     let bytes = fs::read(bin_path).map_err(|e| format!("read error: {e}"))?;
     let data = decode(&bytes).map_err(|e| format!("decode error: {e}"))?;
     let pretty = serde_json::to_string_pretty(&telemetry_to_json(&data)).map_err(|e| format!("json error: {e}"))?;
     let out_path = bin_path.with_extension("json");
-    if out_path.exists() {
-        let expected = fs::read_to_string(&out_path).map_err(|e| format!("read expected: {e}"))?;
-        Ok(if normalise(&expected) == normalise(&pretty) {
-            Outcome::Match
-        } else {
-            Outcome::Mismatch
-        })
-    } else if write_missing {
-        fs::write(&out_path, pretty).map_err(|e| format!("write error: {e}"))?;
-        Ok(Outcome::Wrote)
-    } else {
-        Ok(Outcome::Missing)
+    if write_missing {
+        match fs::OpenOptions::new().write(true).create_new(true).open(&out_path) {
+            Ok(mut file) => {
+                file.write_all(pretty.as_bytes())
+                    .map_err(|e| format!("write error: {e}"))?;
+                return Ok(Outcome::Wrote);
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("write error: {e}")),
+        }
+    }
+    match fs::read_to_string(&out_path) {
+        Ok(expected) if normalise(&expected) == normalise(&pretty) => Ok(Outcome::Match),
+        Ok(_) => Ok(Outcome::Mismatch),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(Outcome::Missing),
+        Err(e) => Err(format!("read expected: {e}")),
     }
 }
 

@@ -11,9 +11,13 @@ scenario, and fails when:
   Inputs table here differs from the test's `INPUTS` table.
 
 "Changes the frame" means the scene fingerprint differs (`Scene::fingerprint` in `fh6-kit`: every
-instance, paint, clip, point, draw and mesh the GPU would draw, bit for bit), after 21 updates
-with the probe applied, compared with a fresh build of the same dash fed the same scenario
-without it. The test also checks that two fresh builds fed the same packets draw the same frame.
+visible instance with its paint and clip, every point, draw run, layer segment and mesh draw, bit for
+bit). A probe builds the dash fresh, feeds the scenario for 8 updates, switches the input's probe
+value in for 20 and back out for 10, and fingerprints four frames: the first and last with the
+value, the first after it and the last. It compares them with a fresh build fed the scenario
+without the value, so an input that only shows while it changes (a start banner on `race_on`, a
+peak reset on a new car) counts as read. The test also checks that two fresh builds fed the same
+packets draw the same frames.
 
 Rebuilt on 2026-11-27 in Phase G from what the gate observes. It replaces the hand-audited v1
 snapshot of 2026-11-19, which covered the v1 tiny-skia clusters.
@@ -26,16 +30,20 @@ snapshot of 2026-11-19, which covered the v1 tiny-skia clusters.
 - An input the dash reads only together with another (a lamp with two conditions, a rate) needs
   a scenario where the other conditions hold: add it to `DASH_SCENARIOS` in the test. Bosch DDU's
   four are the example.
-- `car_ordinal` reaches every dash through the palette, which the host picks
-  (`fh6-app` `render_loop.rs`, `ensure_palette`); the gate gives each dash a fixed palette, so a row
-  lists `car_ordinal` only when the dash reads it itself. `race_on` and a stale stream hide the dash
+- `car_ordinal` reaches every dash through the palette and the logo's brand name, which the host
+  picks (`fh6-app` `render_loop.rs`, `ensure_palette` and `Logo.brand_name`); the gate gives each
+  dash a fixed palette and the default logo, so a row lists `car_ordinal` only when the dash reads
+  it itself. `race_on` and a stale stream hide the dash
   in the host (AGENTS.md directive 9); a row lists `race_on` only when the dash draws differently
   for it.
 
 ## Inputs
 
-The probe values are in the test's `INPUTS` table. Together the inputs cover every field of
-`FH6TelemetryData`, and the test fails to compile when a field is added without one.
+The probe values are in the test's `INPUTS` table; a discrete input gets several (gear 2, reverse
+and neutral; rear and all-wheel drive; throttle full and a quarter; steer both ways). Each field of
+`FH6TelemetryData` belongs to exactly one input and each probe value changes exactly its input's
+fields (`every_telemetry_field_has_exactly_one_input`), so a new field fails the test until it has
+a column. In a field list, `_fr` repeats the previous field's stem.
 
 | Key | Packet fields |
 |---|---|
@@ -68,9 +76,13 @@ The probe values are in the test's `INPUTS` table. Together the inputs cover eve
 
 ## Scenarios
 
-Every dash is probed in five: cruise (the mid-cruise review state), idle, redline and drift
-braking (the review states in `fh6_clusters::review::STATES`), each with the fields a review state
-leaves at zero (timestamp, suspension, car ordinal) set to a plausible reading.
+Every dash is probed in five common scenarios: cruise (the mid-cruise review state), idle, redline
+and drift braking (the review states in `fh6_clusters::review::STATES`), and a lift off (four
+frames at the limiter, then cruise, so a peak or a falling reading differs from the live one). Each
+has the fields a review state leaves at zero (timestamp, suspension, car ordinal) set to a
+plausible reading, the timestamp counting up and the position moving along the velocity. A dash is
+probed in each view the catalog designs it for (cockpit, hood or both; a raised HUD draws in the
+cockpit layout).
 
 Dash scenarios (`DASH_SCENARIOS`):
 
@@ -89,13 +101,13 @@ rpm, the limiter, gear and speed.
 
 | Theme | Dash | Reads |
 |---|---|---|
-| `LiquidGlass` | Liquid Glass | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
+| `LiquidGlass` | Liquid Glass | `race_on`, `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
 | `VisionSpatialGlass` | Vision Spatial Glass | `rpm`, `max_rpm`, `gear`, `speed` |
 | `Gt7HoodPro` | GT7 Hood Pro | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity` |
 | `AmgMbuxSuperscreen` | AMG MBUX Superscreen | `rpm`, `max_rpm`, `gear`, `speed` |
 | `DriftGlass` | Drift Glass | `rpm`, `max_rpm`, `gear`, `speed` |
 | `GlyphDotMatrix` | Glyph Dot Matrix | `rpm`, `max_rpm`, `gear`, `speed` |
-| `PorscheAnalog` | Porsche Analog | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `power`, `boost` |
+| `PorscheAnalog` | Porsche Analog | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `car_ordinal`, `power`, `boost` |
 | `PaganiHorologerie` | Pagani Horologerie | `rpm`, `max_rpm`, `gear`, `speed` |
 | `BugattiTourbillon` | Bugatti Tourbillon | `rpm`, `max_rpm`, `gear`, `speed` |
 | `LfaV10Nurburgring` | LFA V10 Nürburgring | `rpm`, `max_rpm`, `gear`, `speed` |
@@ -107,7 +119,7 @@ rpm, the limiter, gear and speed.
 | `WindshieldHud` | Windshield HUD | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ArNavWayfinder` | AR Nav Wayfinder | `rpm`, `max_rpm`, `gear`, `speed` |
 | `F35HelmetHmd` | F-35 Helmet HMD | `rpm`, `max_rpm`, `gear`, `speed` |
-| `RetroCyber` | Retro Cyber | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `boost` |
+| `RetroCyber` | Retro Cyber | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `boost` |
 | `SynthwaveOutrun` | Synthwave Outrun | `rpm`, `max_rpm`, `gear`, `speed` |
 | `EvaBioSync` | EVA Bio-Sync | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ChronoEventHorizon` | Chrono Event Horizon | `rpm`, `max_rpm`, `gear`, `speed` |

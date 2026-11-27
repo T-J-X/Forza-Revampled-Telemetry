@@ -12,15 +12,37 @@ pub fn deg(degrees: f32) -> f32 {
     degrees * (PI / 180.0)
 }
 
-/// `value` with NaN and infinities replaced by `fallback`.
+/// `value` with NaN and infinities replaced by `fallback`. Each replacement counts as a repair
+/// (see [`repairs`]).
 #[inline]
 #[must_use]
 pub fn finite_or(value: f32, fallback: f32) -> f32 {
     if value.is_finite() {
         value
     } else {
+        note_repair();
         fallback
     }
+}
+
+thread_local! {
+    static REPAIRS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Counts one repair on this thread: a NaN or infinity the kit replaced ([`finite_or`]), or a
+/// non-finite transform or shape it ignored.
+#[cold]
+pub(crate) fn note_repair() {
+    REPAIRS.with(|r| r.set(r.get().wrapping_add(1)));
+}
+
+/// Repairs made on this thread so far. A healthy cluster makes none: a repair means the cluster
+/// computed a NaN or an infinity that the kit hid (a needle left where it was, a shape dropped).
+/// The robustness gate (G5 in `fh6-clusters/tests/dash_gates.rs`) checks that this does not move
+/// while it drives each dash with hostile telemetry.
+#[must_use]
+pub fn repairs() -> u64 {
+    REPAIRS.with(std::cell::Cell::get)
 }
 
 /// Linear interpolation `a + (b - a) * t`.
@@ -743,6 +765,23 @@ impl Mat4 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finite_or_counts_each_repair_on_its_thread() {
+        let before = repairs();
+        assert_eq!(finite_or(2.0, 0.0), 2.0);
+        assert_eq!(repairs(), before, "a finite value is not a repair");
+        assert_eq!(finite_or(f32::NAN, 1.0), 1.0);
+        assert_eq!(finite_or(f32::NEG_INFINITY, 0.0), 0.0);
+        let _ = vec2(f32::INFINITY, 0.0).sanitized();
+        assert_eq!(repairs(), before + 3);
+        let other = std::thread::spawn(|| {
+            let _ = finite_or(f32::NAN, 0.0);
+            repairs()
+        });
+        assert_eq!(other.join().ok(), Some(1), "each thread counts its own");
+        assert_eq!(repairs(), before + 3);
+    }
 
     fn close(a: Vec2, b: Vec2) -> bool {
         (a - b).length() < 1e-4
