@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/fh6-core",
-    "crates/fh6-render",
     "crates/fh6-clusters",
     "crates/fh6-osd",
     "crates/fh6-input",
@@ -35,7 +34,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
-tiny-skia = "0.11"
 arc-swap = "1.7"
 png = "0.17"
 windows = "0.62"

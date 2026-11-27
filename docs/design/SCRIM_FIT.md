@@ -48,7 +48,7 @@ Shape test at the envelope: at y 1515 the core half-width is 592 px; at y 1760 i
 ## 3. Layering
 1. The game frame.
 2. **Scrim** (core plus feather), alpha × `OemDashOpaquePct`.
-3. **Binnacle ambient wash** (optional, existing `fh6-render` wash): a 1–2 px arc along the dome's top edge in the cluster's `primary` at alpha 12–35, brighter at night, like light spilling from the cluster onto the cowl lip. Never a fill.
+3. **Binnacle ambient wash** (optional, the kit's wash, `fh6_kit::scrim::Wash`): a 1–2 px arc along the dome's top edge in the cluster's `primary` at alpha 12–35, brighter at night, like light spilling from the cluster onto the cowl lip. Never a fill.
 4. The cluster (its glass at alpha 28–64 sits over the scrim's black, so glass reads as glass, not as a grey box).
 5. The OSD, when open.
 

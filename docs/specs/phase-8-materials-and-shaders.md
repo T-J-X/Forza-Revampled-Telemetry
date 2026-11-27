@@ -32,9 +32,9 @@ A comprehensive scan of `rust\crates\fh6-clusters\src\clusters\*.rs` and `fh6-os
    - Zero `"placeholder"`, zero hardcoded `"7"`, zero ignored `_roll/_pitch`.
    - Every gauge must respond continuously to live RPM, speed, boost, steering, and multi-axis G-forces.
 3. **`BANNED: Static OSD Dyno Stage`**:
-   - `fh6-osd::render::OsdRenderer::render_dyno_cluster` must dynamically render the active cluster selected in Tab 0 (`config.cockpit_hud_style`) using `fh6_clusters::render_cluster`.
-4. **`MANDATORY: 4K Asset Blitting via AssetCache`**:
-   - Wire `fh6-render::assets::AssetCache` to decode PNGs once at startup.
+   - ~~`fh6-osd::render::OsdRenderer::render_dyno_cluster` must dynamically render the active cluster selected in Tab 0 (`config.cockpit_hud_style`) using `fh6_clusters::render_cluster`.~~ Met since Phase 9: the OSD live view draws the selected cluster through `fh6_clusters::registry`; the v1 `OsdRenderer` and `render_cluster` are gone.
+4. **`MANDATORY: 4K Asset Blitting`**:
+   - ~~Wire `fh6-render::assets::AssetCache` to decode PNGs once at startup.~~ The kit decodes each PNG once when it is loaded (`fh6_kit::Images::load_file`); the v1 `AssetCache` went with `fh6-render` in Rust fix phase E.
    - Textures from `assets/` (`bosch_ddu_bezel.png`, `porsche_tach_dial.png`, `liquid_glass_caustic_lens.png`, `adas_ego_coupe.png`, `cyber_vfd_bezel.png`, `gt7_stadium_glass.png`) must be blitted with bilinear filtering and screen/source-over blending.
 5. **`MANDATORY: 4K In-Cockpit Photorealistic Compositor`**:
    - Composite all 29 clusters onto `assets/reference/cockpit_with_wheel.jpg` with OEM Scrim and Bézier-cowl ambient wash.
@@ -124,8 +124,8 @@ The optics of card P8-2 below are corrected in `optics.md` §10 (prism dispersio
    - Lowered bucket-seat steering hub anchor: $(X, Y) = (1920, 1860)$, $\text{scale} = 1.96$.
 3. **Compositing Pipeline**:
    - Layer 0: 4K in-car cockpit photo (`assets/reference/cockpit_with_wheel.jpg`).
-   - Layer 1: Recessed OEM Dash Blackout Scrim (`render_oem_scrim`, 85% opacity over factory dials).
-   - Layer 2: `BinnacleAmbientWash` (anti-orb Bézier cowl wash tinted to active cluster signature color).
+   - Layer 1: Recessed OEM Dash Blackout Scrim (`fh6_kit::scrim::draw_scrim`, 85% opacity over factory dials; the v1 `render_oem_scrim` is gone).
+   - Layer 2: the binnacle ambient wash (`fh6_kit::scrim::draw_wash`; anti-orb Bézier cowl wash tinted to active cluster signature color).
    - Layer 3: The 4K textured cluster gauge with transparent OLED background.
    - Layer 4: Visor lip shading / steering hub rim shadow.
 4. **Master Poster Generation**:

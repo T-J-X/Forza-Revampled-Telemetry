@@ -5,10 +5,9 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "wgpu device, premultiplied overlay surface, offscreen target and the minimal quad pipeline"
+description = "wgpu DX12 device and the premultiplied overlay surface"
 
 [dependencies]
 wgpu = { workspace = true }
-bytemuck = { workspace = true }
 thiserror.workspace = true
 tracing.workspace = true

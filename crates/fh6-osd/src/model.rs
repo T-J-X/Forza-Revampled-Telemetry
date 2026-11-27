@@ -724,7 +724,8 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
 // ----- clusters per view ---------------------------------------------------------------------
 
 /// The theme `cfg` selects for `view`: hood uses `BonnetHudStyle`; chase uses `ChaseHudStyle`
-/// when set, else the cockpit cluster; cockpit uses `CockpitHudStyle`, then `HudStyle`.
+/// when set, else the cockpit cluster; cockpit uses `CockpitHudStyle`, then `HudStyle`. A name
+/// that is neither a theme's own name nor a short alias selects `BoschDdu`. Allocation-free.
 #[must_use]
 pub fn theme_for_view(cfg: &AppConfig, view: View) -> ClusterTheme {
     let cockpit = || {
@@ -743,7 +744,7 @@ pub fn theme_for_view(cfg: &AppConfig, view: View) -> ClusterTheme {
         View::Chase => cockpit(),
         View::Cockpit => cockpit(),
     };
-    fh6_render::dispatch::style_to_theme(style)
+    style.parse().unwrap_or(ClusterTheme::BoschDdu)
 }
 
 /// Writes `theme` as the cluster for `view` (string and typed fields).

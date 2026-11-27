@@ -24,7 +24,7 @@ Rust 1.90 or newer (developed on 1.100, MSVC). The manifest declares 1.87, but t
 ## Layout
 
 ```
-crates/   fh6-core  fh6-gpu  fh6-kit  fh6-render  fh6-clusters  fh6-osd  fh6-input  fh6-win  fh6-app
+crates/   fh6-core  fh6-gpu  fh6-kit  fh6-clusters  fh6-osd  fh6-input  fh6-win  fh6-app
 tools/    preview-export  asset-forge  mock-udp  parity-dump  bench-render  web-preview  wgc-bench  screen-capture  stand-in-game
 tests/golden/packets/   324-byte golden telemetry packets (synthetic) + expected JSON
 assets/   textures, car brand colours, reference photos

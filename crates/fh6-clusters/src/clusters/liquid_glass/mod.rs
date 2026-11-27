@@ -174,7 +174,8 @@ const STROBE_LEAD: f32 = 1e-4;
 const STROBE_FLOOR: f32 = 0.2;
 /// Width of the ribbon's backlash (rpm): wider than the engine's bounce on the limiter (about
 /// 50 rpm from one frame to the next), so the ribbon and the bead hold still there, and a
-/// pull is drawn at most 30 rpm (under 5 px) behind.
+/// pull is drawn at most 30 rpm behind (at the review car's span, under 5 px on the cockpit
+/// rod and about 6 px on the hood rod).
 const REV_BAND: f32 = 60.0;
 
 /// Geometry of one view (local 4K px round the anchor): the zone table above, as data.
