@@ -9,6 +9,7 @@
 //!                    kit.render(..)                             // one batched GPU frame
 //! ```
 use crate::anim::Smoothed;
+use crate::family::Family;
 use crate::images::Images;
 use crate::math::{finite_or, vec2, Affine, Rect, Vec2};
 use crate::mesh::Meshes;
@@ -17,7 +18,7 @@ use crate::painter::Painter;
 use crate::palette::Palette;
 use crate::text::{FontId, Fonts};
 use crate::tokens::Tokens;
-use fh6_core::config::SafeZone;
+use fh6_core::config::{SafeZone, SHIFT_POINT_MAX, SHIFT_POINT_MIN};
 use fh6_core::fit::{clamp_anchor, FitView, ViewPlacement};
 use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 
@@ -189,26 +190,7 @@ impl Gear {
     }
 }
 
-/// Speed display units.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SpeedUnit {
-    /// Miles per hour.
-    #[default]
-    Mph,
-    /// Kilometres per hour.
-    Kmh,
-}
-
-impl SpeedUnit {
-    /// The unit label.
-    #[must_use]
-    pub fn label(self) -> &'static str {
-        match self {
-            SpeedUnit::Mph => "MPH",
-            SpeedUnit::Kmh => "KM/H",
-        }
-    }
-}
+pub use fh6_core::config::{PowerUnit, SpeedUnit};
 
 /// Telemetry decoded and smoothed for drawing.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -217,8 +199,11 @@ pub struct Signals {
     pub race_on: bool,
     /// Speed in display units.
     pub speed: f32,
-    /// Display unit.
+    /// Speed display unit.
     pub unit: SpeedUnit,
+    /// Engine power display unit (`PowerUnit`). A dash that shows power uses this, not the
+    /// speed unit.
+    pub power_unit: PowerUnit,
     /// Speed in m/s.
     pub speed_ms: f32,
     /// Engine rpm.
@@ -291,11 +276,7 @@ impl SignalSmoother {
     /// Advances by `dt` with a new telemetry sample.
     pub fn update(&mut self, data: &FH6TelemetryData, config: &AppConfig, tokens: &Tokens, dt: f32) -> Signals {
         let f = |v: f32| finite_or(v, 0.0);
-        let unit = if config.speed_unit.eq_ignore_ascii_case("KMH") || config.speed_unit.eq_ignore_ascii_case("KPH") {
-            SpeedUnit::Kmh
-        } else {
-            SpeedUnit::Mph
-        };
+        let unit = config.speed_unit;
         let speed_ms = f(data.speed_ms).max(0.0);
         let max_rpm = f(data.engine_max_rpm).max(1.0);
         let rpm = f(data.current_engine_rpm).clamp(0.0, max_rpm * 1.1);
@@ -305,11 +286,9 @@ impl SignalSmoother {
         };
         self.last_rpm = Some(rpm);
         // The OSD's shift point (`ShiftPointPct`, 0.80..1.00) overrides the tokens' value.
-        let shift_pct = config
-            .extra
-            .get("ShiftPointPct")
-            .and_then(serde_json::Value::as_f64)
-            .map_or(tokens.rev_stages.shift_pct, |v| (v as f32).clamp(0.80, 1.0));
+        let shift_pct = config.shift_point_pct.map_or(tokens.rev_stages.shift_pct, |v| {
+            v.clamp(SHIFT_POINT_MIN, SHIFT_POINT_MAX)
+        });
         let shift_rpm = max_rpm * finite_or(shift_pct, 0.97).clamp(0.5, 1.0);
         Signals {
             race_on: data.is_race_on == 1,
@@ -319,6 +298,7 @@ impl SignalSmoother {
             }
             .max(0.0),
             unit,
+            power_unit: config.power_unit,
             speed_ms,
             rpm,
             rpm_rate: self.rpm_rate.update(rate, dt),
@@ -432,8 +412,8 @@ pub struct ClusterEntry {
     pub theme: ClusterTheme,
     /// Display name.
     pub name: &'static str,
-    /// Design family key (tokens `families`).
-    pub family: &'static str,
+    /// Design family.
+    pub family: Family,
     /// Builds the cluster, loading its resources.
     pub make: fn(&mut Setup<'_>) -> Box<dyn Cluster>,
 }
@@ -548,6 +528,22 @@ mod tests {
     }
 
     #[test]
+    fn signals_carry_the_speed_and_power_units_separately() {
+        let data = FH6TelemetryData {
+            speed_ms: 10.0,
+            ..Default::default()
+        };
+        let cfg = AppConfig {
+            speed_unit: SpeedUnit::Kmh,
+            power_unit: PowerUnit::Hp,
+            ..AppConfig::default()
+        };
+        let sig = SignalSmoother::new().update(&data, &cfg, &Tokens::default(), 0.016);
+        assert_eq!((sig.unit, sig.power_unit), (SpeedUnit::Kmh, PowerUnit::Hp));
+        assert!((sig.speed - 36.0).abs() < 0.1, "{}", sig.speed);
+    }
+
+    #[test]
     fn shift_point_follows_the_osd_setting() {
         let data = FH6TelemetryData {
             engine_max_rpm: 9000.0,
@@ -558,10 +554,10 @@ mod tests {
         let mut cfg = AppConfig::default();
         let tokens_rpm = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
         assert!((tokens_rpm - 9000.0 * t.rev_stages.shift_pct).abs() < 1e-2);
-        cfg.extra.insert("ShiftPointPct".into(), serde_json::Value::from(0.90));
+        cfg.shift_point_pct = Some(0.90);
         let osd_rpm = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
         assert!((osd_rpm - 8100.0).abs() < 1e-2);
-        cfg.extra.insert("ShiftPointPct".into(), serde_json::Value::from(0.10));
+        cfg.shift_point_pct = Some(0.10);
         let clamped = SignalSmoother::new().update(&data, &cfg, &t, 0.016).shift_rpm;
         assert!((clamped - 7200.0).abs() < 1e-2, "clamped to 80%");
     }

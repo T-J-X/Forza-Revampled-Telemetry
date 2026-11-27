@@ -149,7 +149,7 @@ fn run() -> Result<()> {
 
     for entry in REGISTRY {
         let name = entry.theme.to_string();
-        let palette = Palette::family(&tokens, entry.family);
+        let palette = Palette::family(&tokens, entry.family.key());
         for state in &STATES {
             let started = Instant::now();
             let mut cluster = {

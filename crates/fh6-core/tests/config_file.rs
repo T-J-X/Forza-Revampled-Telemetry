@@ -1,6 +1,7 @@
 //! Loads the real `data/config.json` and checks the values the overlay depends on.
-use fh6_core::config::AppConfig;
+use fh6_core::config::{AppConfig, PowerUnit, SpeedUnit, CONFIG_VERSION, RETIRED_KEYS};
 use fh6_core::config_watch::ConfigWatcher;
+use fh6_core::ClusterTheme;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -10,18 +11,20 @@ fn data_config() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/config.json")
 }
 
+/// `data/config.json` as shipped before 7.0.0, byte for byte.
+const SHIPPED_6_0_0: &str = r##"{"Version":"6.0.0","CockpitAnchorX":1920,"CockpitAnchorY":1835,"CockpitScale":1.45,"BonnetAnchorX":1920,"BonnetAnchorY":1760,"BonnetScale":1.55,"CurrentCameraIndex":3,"CockpitStyle":"Digital","BonnetStyle":"Digital","HudStyle":"LiquidGlass","CockpitHudStyle":"BoschDdu","BonnetHudStyle":"Gt7HoodPro","OemDashOpaquePct":100,"OemDashBinnacleOffsetY":0,"OemDashWidthScale":1,"OsdAutoPauseGame":true,"OsdLiveDynoPreviewWhenPaused":true,"DriftSyncMode":"Off","DriftSyncSensitivity":1,"DriftSyncSmoothing":0.2,"DriftSyncMaxOffsetPx":400,"LockVisibleWhileDriving":false,"ShiftLightPattern":"Converging","ShiftStartPct":0.72,"RedlinePct":0.94,"ControllerCameraButton":"RB","SpeedUnit":"MPH","ShowBonnetGTWidgets":true,"DemoMode":false,"PerCarProfileEnabled":true,"OledPixelOrbitEnabled":true,"OledIdleDimmerEnabled":true,"OledDimmerMinAlpha":0.35,"ManualShiftGuardEnabled":true,"NightGlowMode":"Off","NightGlowIntensity":0.35,"UdpPort":8000,"FallbackPort":5500,"ForwardPort":5607,"PrimaryPort":8000,"ColorMode":"AutoBrand","CustomBrandKey":"DEFAULT","PrimaryHex":"#00D2FF","SecondaryHex":"#FFB300","AccentHex":"#00E5FF","ShiftFlashHex":"#FFFFFF","UseWidgetColorOverrides":false,"SpeedColorHex":"#FFFFFF","GearColorHex":"#FFFFFF","GForceColorHex":"#00E5FF","SuspensionColorHex":"#76FF03","WheelLessCockpitFOV":80,"StandardCockpitFOV":80,"BonnetFOV":95,"ChaseNearFOV":62,"ChaseFarFOV":68,"BumperFOV":78,"CockpitOffsetX":0,"CockpitOffsetY":-0.045,"CockpitOffsetZ":-0.5,"HoodOffsetY":0,"HoodOffsetZ":0,"HoodPitchOffset":0.04}"##;
+
 #[test]
 fn data_config_loads_real_values() {
     let cfg = AppConfig::try_load(data_config()).expect("data/config.json parses");
-    assert_eq!(cfg.version, "6.0.0");
+    assert_eq!(cfg.version, CONFIG_VERSION);
     assert_eq!((cfg.cockpit_anchor_x, cfg.cockpit_anchor_y), (1920, 1835));
     assert_eq!((cfg.bonnet_anchor_x, cfg.bonnet_anchor_y), (1920, 1760));
-    assert_eq!(cfg.cockpit_scale, 1.45);
-    assert_eq!(cfg.bonnet_scale, 1.55);
     assert_eq!(cfg.current_camera_index, 3);
-    assert_eq!(cfg.cockpit_hud_style, "BoschDdu");
-    assert_eq!(cfg.bonnet_hud_style, "Gt7HoodPro");
+    assert_eq!(cfg.cockpit_hud_style, ClusterTheme::BoschDdu);
+    assert_eq!(cfg.bonnet_hud_style, ClusterTheme::Gt7HoodPro);
     assert_eq!(cfg.oem_dash_opaque_pct, 100);
+    assert_eq!((cfg.speed_unit, cfg.power_unit), (SpeedUnit::Mph, PowerUnit::Hp));
 
     // The all-caps acronym keys that used to load as 0.
     assert_eq!(cfg.wheel_less_cockpit_fov, 80.0);
@@ -30,9 +33,7 @@ fn data_config_loads_real_values() {
     assert_eq!(cfg.chase_near_fov, 62.0);
     assert_eq!(cfg.chase_far_fov, 68.0);
     assert_eq!(cfg.bumper_fov, 78.0);
-    assert!(cfg.show_bonnet_gt_widgets);
 
-    // Keys absent from the file take defaults, not zero.
     assert_eq!(cfg.cluster_scale, 1.0);
     assert_eq!(cfg.osd_toggle_mask, 0x0020);
     assert_eq!(cfg.osd_hold_ms, 400);
@@ -43,9 +44,33 @@ fn data_config_loads_real_values() {
         (ports.primary, ports.fallback, ports.forward),
         (8000, Some(5500), Some(5607))
     );
+    assert!(cfg.extra.is_empty(), "every shipped key is a setting: {:?}", cfg.extra);
+}
 
-    // "PrimaryPort" is not a field; it must survive a save.
-    assert!(cfg.extra.contains_key("PrimaryPort"));
+#[test]
+fn data_config_is_what_a_save_writes() {
+    // Git may check the file out with CRLF line endings on Windows.
+    let text = std::fs::read_to_string(data_config())
+        .expect("data/config.json reads")
+        .replace("\r\n", "\n");
+    let cfg = AppConfig::from_json_str(&text).expect("data/config.json parses");
+    let saved = serde_json::to_string_pretty(&cfg).expect("serialises");
+    assert_eq!(
+        text.trim_end(),
+        saved,
+        "data/config.json is not in the form AppConfig::save writes"
+    );
+}
+
+#[test]
+fn the_config_shipped_before_7_loads_as_the_one_shipped_now() {
+    let old = AppConfig::from_json_str(SHIPPED_6_0_0).expect("the 6.0.0 file parses");
+    let now = AppConfig::try_load(data_config()).expect("data/config.json parses");
+    assert_eq!(old, now);
+    let saved = serde_json::to_string(&old).expect("serialises");
+    for key in RETIRED_KEYS {
+        assert!(!saved.contains(&format!("\"{key}\"")), "{key} survived a save");
+    }
 }
 
 #[test]

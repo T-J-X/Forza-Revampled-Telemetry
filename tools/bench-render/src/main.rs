@@ -253,7 +253,7 @@ fn main() -> Result<()> {
             None
         });
         let entry = sc.theme.map(fh6_clusters::registry::resolve);
-        let palette = Palette::family(&tokens, entry.map_or("liquidGlass", |e| e.family));
+        let palette = Palette::family(&tokens, entry.map_or("liquidGlass", |e| e.family.key()));
         kit.set_palette(palette);
         let mut cluster: Option<Box<dyn Cluster>> =
             entry.map(|e| (e.make)(&mut kit.setup(&ctx.device, &ctx.queue, None)));

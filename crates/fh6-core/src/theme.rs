@@ -2,14 +2,17 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use crate::serde_str::serde_by_name;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// A cluster design. In `config.json` it is stored by [`ClusterTheme::name`] and read with
+/// [`FromStr`], so the short aliases load too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(u8)]
 pub enum ClusterTheme {
     BoschDdu = 0,
     DriftGlass = 1,
     PorscheAnalog = 2,
+    #[default]
     LiquidGlass = 3,
     WindshieldHud = 4,
     TeslaAdas = 5,
@@ -56,13 +59,6 @@ pub enum ClusterTheme {
     IsochromaticLoadPath = 45,
     AbyssalShearBloom = 46,
     HarmonographDrive = 47,
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for ClusterTheme {
-    fn default() -> Self {
-        ClusterTheme::LiquidGlass
-    }
 }
 
 impl ClusterTheme {
@@ -316,6 +312,8 @@ impl FromStr for ClusterTheme {
     }
 }
 
+serde_by_name!(ClusterTheme, "a cluster style name");
+
 #[cfg(test)]
 mod tests {
     use super::{ClusterTheme, ParseClusterThemeError, ALIASES};
@@ -342,9 +340,18 @@ mod tests {
     }
 
     #[test]
-    fn serde_uses_the_variant_name() {
-        let json = serde_json::to_string(&ClusterTheme::VernierLoupe).unwrap_or_default();
-        assert_eq!(json, "\"VernierLoupe\"");
+    fn serde_uses_the_config_name_and_reads_aliases() {
+        for t in ClusterTheme::all() {
+            let json = serde_json::to_string(t).unwrap_or_default();
+            assert_eq!(json, format!("\"{}\"", t.name()));
+            assert_eq!(serde_json::from_str::<ClusterTheme>(&json).ok(), Some(*t));
+        }
+        assert_eq!(
+            serde_json::from_str::<ClusterTheme>("\"mbux\"").ok(),
+            Some(ClusterTheme::AmgMbuxSuperscreen)
+        );
+        let err = serde_json::from_str::<ClusterTheme>("\"NoSuchDash\"").map(|_| ());
+        assert!(err.is_err(), "an unknown name is an error, never a silent default");
     }
 
     #[test]

@@ -5,7 +5,8 @@
 //! the live config ([`CarProfilesFile::effective_config`]) whenever `car_ordinal` changes, so
 //! the scrim dome and the cluster placement follow the car automatically.
 use crate::config::AppConfig;
-use serde::{Deserialize, Serialize};
+use crate::theme::ClusterTheme;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
@@ -64,17 +65,11 @@ pub struct CarProfile {
     pub bonnet_height_offset_px: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bonnet_cluster_scale: Option<f32>,
-    /// v1 authoring multipliers (ignored by kit clusters; kept for the legacy renderers).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cockpit_scale: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bonnet_scale: Option<f32>,
-
-    // Styles.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cockpit_hud_style: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bonnet_hud_style: Option<String>,
+    // Styles. A name no cluster has is logged and ignored, so the rest of the file still loads.
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient_theme")]
+    pub cockpit_hud_style: Option<ClusterTheme>,
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient_theme")]
+    pub bonnet_hud_style: Option<ClusterTheme>,
 
     // Scrim dome.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,8 +119,6 @@ impl CarProfile {
         set(&mut cfg.bonnet_anchor_y, &self.bonnet_anchor_y);
         set(&mut cfg.bonnet_height_offset_px, &self.bonnet_height_offset_px);
         set(&mut cfg.bonnet_cluster_scale, &self.bonnet_cluster_scale);
-        set(&mut cfg.cockpit_scale, &self.cockpit_scale);
-        set(&mut cfg.bonnet_scale, &self.bonnet_scale);
         set(&mut cfg.cockpit_hud_style, &self.cockpit_hud_style);
         set(&mut cfg.bonnet_hud_style, &self.bonnet_hud_style);
         set(&mut cfg.oem_dash_opaque_pct, &self.oem_dash_opaque_pct);
@@ -178,8 +171,9 @@ impl CarProfile {
 pub struct CarProfilesFile {
     /// Schema version (`2.0.0`: optional overrides).
     pub version: String,
-    /// Profiles keyed by the ordinal as a string.
-    pub profiles: BTreeMap<String, CarProfile>,
+    /// Profiles by car ordinal. A key that is not a positive ordinal is logged and skipped.
+    #[serde(deserialize_with = "ordinal_keys")]
+    pub profiles: BTreeMap<i32, CarProfile>,
 }
 
 impl Default for CarProfilesFile {
@@ -240,17 +234,13 @@ impl CarProfilesFile {
     /// The profile of `car_ordinal`, if any.
     #[must_use]
     pub fn get(&self, car_ordinal: i32) -> Option<&CarProfile> {
-        if car_ordinal <= 0 {
-            return None;
-        }
-        let mut key = itoa_buf(car_ordinal);
-        self.profiles.get(key.as_str())
+        self.profiles.get(&car_ordinal)
     }
 
     /// Inserts or replaces a profile.
     pub fn upsert(&mut self, profile: CarProfile) {
         if profile.car_ordinal > 0 {
-            self.profiles.insert(profile.car_ordinal.to_string(), profile);
+            self.profiles.insert(profile.car_ordinal, profile);
         }
     }
 
@@ -269,41 +259,33 @@ impl CarProfilesFile {
     }
 }
 
-/// A small stack string for an `i32` key lookup (no heap allocation per frame).
-struct KeyBuf {
-    buf: [u8; 12],
-    len: usize,
-}
-
-impl KeyBuf {
-    fn as_str(&mut self) -> &str {
-        std::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
-    }
-}
-
-fn itoa_buf(v: i32) -> KeyBuf {
-    let mut out = KeyBuf { buf: [0; 12], len: 0 };
-    let mut digits = [0u8; 11];
-    let mut n = v.unsigned_abs();
-    let mut i = 0;
-    loop {
-        digits[i] = b'0' + (n % 10) as u8;
-        n /= 10;
-        i += 1;
-        if n == 0 {
-            break;
+/// A profile style: a cluster name or alias; anything else is logged and gives no override.
+fn lenient_theme<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<ClusterTheme>, D::Error> {
+    let name = Option::<String>::deserialize(deserializer)?;
+    Ok(name.and_then(|name| match name.parse() {
+        Ok(theme) => Some(theme),
+        Err(_) => {
+            if !name.trim().is_empty() {
+                tracing::warn!(style = %name, "car profile names no cluster; style ignored");
+            }
+            None
         }
-    }
-    if v < 0 {
-        out.buf[0] = b'-';
-        out.len = 1;
-    }
-    while i > 0 {
-        i -= 1;
-        out.buf[out.len] = digits[i];
-        out.len += 1;
-    }
-    out
+    }))
+}
+
+/// The profiles map: JSON object keys are text, parsed to ordinals once at load.
+fn ordinal_keys<'de, D: Deserializer<'de>>(deserializer: D) -> Result<BTreeMap<i32, CarProfile>, D::Error> {
+    let raw = BTreeMap::<String, CarProfile>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(key, profile)| match key.trim().parse::<i32>() {
+            Ok(ordinal) if ordinal > 0 => Some((ordinal, profile)),
+            _ => {
+                tracing::warn!(%key, "car profile key is not an ordinal; profile skipped");
+                None
+            }
+        })
+        .collect())
 }
 
 /// Shared, lock-free handle to the live profiles (see [`crate::ConfigWatcher`]).
@@ -398,7 +380,7 @@ mod tests {
         let v1 = r#"{"Version":"1.0.0","Profiles":{"4122":{"CarOrdinal":4122,"CarName":"2025 BMW M4 CS","CockpitAnchorX":1920,"CockpitAnchorY":1835,"CockpitScale":1.48,"CockpitHudStyle":"LiquidGlass","OemDashOpaquePct":100,"OemDashBinnacleOffsetY":0,"OemDashWidthScale":1.0,"CockpitOffsetY":-0.045,"NightAmbientGlowEnabled":true,"NightAmbientGlowIntensityPct":75}}}"#;
         let file = CarProfilesFile::from_json_str(v1).expect("v1 is a subset");
         let p = file.get(4122).expect("present");
-        assert_eq!(p.cockpit_hud_style.as_deref(), Some("LiquidGlass"));
+        assert_eq!(p.cockpit_hud_style, Some(ClusterTheme::LiquidGlass));
         assert_eq!(p.oem_dash_width_scale, Some(1.0));
     }
 
@@ -408,7 +390,7 @@ mod tests {
         let file = CarProfilesFile::try_load(&path).expect("data/car_profiles.json parses");
         assert!(!file.profiles.is_empty());
         for (k, p) in &file.profiles {
-            assert_eq!(k, &p.car_ordinal.to_string(), "key matches ordinal");
+            assert_eq!(*k, p.car_ordinal, "key matches ordinal");
         }
     }
 
@@ -427,9 +409,22 @@ mod tests {
     }
 
     #[test]
-    fn key_buffer_formats_like_to_string() {
-        for v in [1, 9, 10, 3595, i32::MAX, -42] {
-            assert_eq!(itoa_buf(v).as_str(), v.to_string());
-        }
+    fn a_profile_style_overrides_the_view_and_a_bad_one_is_ignored() {
+        let file = CarProfilesFile::from_json_str(
+            r#"{"Profiles":{"7":{"CarOrdinal":7,"CockpitHudStyle":"porsche","BonnetHudStyle":"NoSuchDash"},
+                "x":{"CarOrdinal":8},"-3":{"CarOrdinal":-3}}}"#,
+        )
+        .expect("one bad style or key does not fail the file");
+        assert_eq!(file.profiles.len(), 1, "keys that are not ordinals are skipped");
+        let base = AppConfig::default();
+        let eff = file.effective_config(&base, 7).expect("profile applies");
+        assert_eq!(eff.cockpit_hud_style, ClusterTheme::PorscheAnalog);
+        assert_eq!(eff.bonnet_hud_style, base.bonnet_hud_style);
+        let json = serde_json::to_string(&file).expect("serialises");
+        assert!(
+            json.contains(r#""Profiles":{"7":"#),
+            "ordinal keys are written as text: {json}"
+        );
+        assert!(json.contains(r#""CockpitHudStyle":"PorscheAnalog""#), "{json}");
     }
 }

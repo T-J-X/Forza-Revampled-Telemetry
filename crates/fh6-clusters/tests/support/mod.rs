@@ -103,7 +103,7 @@ impl Gpu {
     pub fn render_cluster(&mut self, entry: &ClusterEntry, view: View, state: &ReviewState) -> RgbaImage {
         let cfg = AppConfig::default();
         let layout = Layout::from_config(&cfg, &self.tokens, view, (W, H));
-        let palette = Palette::family(&self.tokens, entry.family);
+        let palette = Palette::family(&self.tokens, entry.family.key());
         self.kit.set_palette(palette);
         let assets = self.assets.clone();
         let mut cluster = {

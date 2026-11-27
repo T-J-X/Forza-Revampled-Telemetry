@@ -213,7 +213,7 @@ async fn run() -> Result<(), String> {
         let mut setup = kit.setup(&device, &queue, None);
         (entry.make)(&mut setup)
     };
-    let palette = Palette::family(&tokens, entry.family);
+    let palette = Palette::family(&tokens, entry.family.key());
     kit.set_palette(palette);
     status(
         &document,

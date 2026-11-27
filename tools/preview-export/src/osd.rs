@@ -3,7 +3,7 @@
 //! `OsdHost` the overlay uses, with the live dyno feeding the live cluster and the carousel.
 use crate::{rel, Result, DT, H, THUMB_FACTOR, W};
 use fh6_clusters::registry;
-use fh6_core::{AppConfig, CarDatabase, ScrimFit};
+use fh6_core::{AppConfig, CarDatabase, ClusterTheme, ColorMode, ScrimFit};
 use fh6_gpu::GpuContext;
 use fh6_kit::scrim::Wash;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
@@ -61,7 +61,7 @@ const STATES: &[OsdState] = &[
         name: "03_colour_custom_hue",
         caption: "Colour tab · custom palette, hue slider focused",
         setup: |h, c| {
-            c.color_mode = "Custom".into();
+            c.color_mode = ColorMode::Custom;
             focus(h, c, Tab::Colour, RowId::Hue);
             Duration::ZERO
         },
@@ -70,8 +70,8 @@ const STATES: &[OsdState] = &[
         name: "04_colour_random",
         caption: "Colour tab · random palette with re-roll and lock",
         setup: |h, c| {
-            c.color_mode = "Random".into();
-            c.extra.insert(model::KEY_SEED.into(), 4242.into());
+            c.color_mode = ColorMode::Random;
+            c.palette_seed = Some(4242);
             focus(h, c, Tab::Colour, RowId::Reroll);
             Duration::ZERO
         },
@@ -220,13 +220,13 @@ pub fn render_all(
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
     for state in STATES {
         let mut cfg = AppConfig {
             current_camera_index: 3,
-            cockpit_hud_style: "LiquidGlass".into(),
+            cockpit_hud_style: ClusterTheme::LiquidGlass,
             custom_driver_name: "TJX".into(),
             ..AppConfig::default()
         };
@@ -242,7 +242,7 @@ pub fn render_all(
             let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
             (entry.make)(&mut setup)
         };
-        let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family);
+        let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family.key());
         kit.set_palette(palette);
         let logo = Logo {
             image: None,
@@ -269,7 +269,7 @@ pub fn render_all(
                 fonts,
                 logo: &logo,
                 view,
-                reduced_flash: model::reduced_flash(&cfg),
+                reduced_flash: cfg.reduced_flash,
             };
             cluster.update(&input);
             if i == 44 {

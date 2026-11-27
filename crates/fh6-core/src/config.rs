@@ -1,17 +1,43 @@
-//! `AppConfig`: the serde model of `config.json`, its defaults, its location and its sanitising.
+//! `AppConfig`: the typed model of `config.json`, with its defaults, migrations, location and
+//! range checks.
 //!
 //! The file uses PascalCase keys (`CockpitAnchorX`) plus a few all-caps acronyms
-//! (`StandardCockpitFOV`, `ShowBonnetGTWidgets`) that need explicit renames. Any key missing
-//! from the file takes its value from [`AppConfig::default`], never zero, because the whole
-//! struct is `#[serde(default)]`. Unknown keys are kept in [`AppConfig::extra`] and written back.
-use crate::theme::ClusterTheme;
-use serde::{Deserialize, Serialize};
+//! (`StandardCockpitFOV`) that need explicit renames. [`AppConfig::from_json_str`] loads it in
+//! three steps:
+//!
+//! 1. **Migrate** the raw JSON object: one-time fixes for files written before
+//!    [`CONFIG_VERSION`], the old `ClusterHeightOffsetPx`, and the removal of the
+//!    [`RETIRED_KEYS`] that nothing reads any more.
+//! 2. **Type it leniently:** a value that does not fit its setting, such as text where a number
+//!    belongs or a style no cluster has, is dropped with a warning and takes its default. The rest
+//!    of the file still loads.
+//! 3. **Sanitise:** every value is brought into its range ([`AppConfig::sanitized`]).
+//!
+//! A key missing from the file takes its value from [`AppConfig::default`], never zero. Keys this
+//! version does not know (a dash's own settings, a newer build's) are kept in
+//! [`AppConfig::extra`] and written back.
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use crate::fit::FitView;
+use crate::oled_care::DEFAULT_MIN_ALPHA;
+use crate::serde_str::serde_by_name;
+use crate::theme::ClusterTheme;
 
 /// The file name the overlay looks for next to its executable.
 pub const CONFIG_FILE_NAME: &str = "config.json";
+
+/// The config format this build writes. A file with an older major version gets the one-time
+/// migrations once; the next save records this version, so they never run again.
+pub const CONFIG_VERSION: &str = "7.0.0";
+/// The major part of [`CONFIG_VERSION`].
+const CONFIG_MAJOR: u64 = 7;
 
 /// Default primary telemetry port (Forza "Data Out" target).
 pub const DEFAULT_UDP_PORT: u16 = 8000;
@@ -26,6 +52,76 @@ pub const MASK_MANUAL_LOCK: u16 = 0xF000;
 pub const OSD_HOLD_MS_MIN: u32 = 200;
 /// Longest allowed OSD hold time (ms).
 pub const OSD_HOLD_MS_MAX: u32 = 1000;
+/// Largest cluster height offset either way (px at 4K).
+pub const HEIGHT_OFFSET_MAX_PX: f32 = 240.0;
+/// Shortest allowed LB+RB resync hold (ms).
+pub const RESYNC_HOLD_MS_MIN: u32 = 500;
+/// Longest allowed LB+RB resync hold (ms).
+pub const RESYNC_HOLD_MS_MAX: u32 = 3000;
+/// Lowest OSD shift point (fraction of the limiter rpm).
+pub const SHIFT_POINT_MIN: f32 = 0.80;
+/// Highest OSD shift point (fraction of the limiter rpm).
+pub const SHIFT_POINT_MAX: f32 = 1.0;
+
+/// Default seat height (metres, DriverCam `Param.y`).
+const DEFAULT_SEAT_HEIGHT_M: f32 = -0.045;
+/// The range the old `CockpitOffsetY` seat value is clamped to when it is migrated.
+const SEAT_HEIGHT_RANGE_M: (f32, f32) = (-0.100, 0.050);
+
+/// The driver name every config defaulted to before 7.0.0. The font pack has no CJK face, so it
+/// cannot be drawn; a file from before 7.0.0 that still holds it gets an empty name.
+const OLD_DEFAULT_DRIVER_NAME: &str = "ØG『死』ŦJ乂";
+
+/// Keys earlier versions wrote that nothing reads any more. They are dropped on load, so the next
+/// save leaves them out. `docs/PROGRESS.md` (fix D) records why each one went.
+pub const RETIRED_KEYS: &[&str] = &[
+    // v1 renderer scales and styles, and the typed copies of the style names.
+    "CockpitScale",
+    "BonnetScale",
+    "CockpitStyle",
+    "BonnetStyle",
+    "HudStyle",
+    "CockpitHudStyleTyped",
+    "BonnetHudStyleTyped",
+    "ChaseHudStyleTyped",
+    "ActiveCameraView",
+    "ShowBonnetGTWidgets",
+    "ShowBonnetGtWidgets",
+    "FontPreset",
+    "FovDegrees",
+    "AmbientCowlFeather",
+    // C# port settings no v2 code reads.
+    "OsdLiveDynoPreviewWhenPaused",
+    "DriftSyncMode",
+    "DriftSyncSensitivity",
+    "DriftSyncSmoothing",
+    "DriftSyncMaxOffsetPx",
+    "LockVisibleWhileDriving",
+    "ShiftLightPattern",
+    "ShiftStartPct",
+    "RedlinePct",
+    "ControllerCameraButton",
+    "ManualShiftGuardEnabled",
+    "DriverTagGlitchFx",
+    "RedlineStrobe",
+    "NightGlowMode",
+    "NightGlowIntensity",
+    "AdasBackdropMode",
+    "CenterConsoleMapMode",
+    "CenterConsoleInfotainmentMode",
+    "RouteActive",
+    "OemDashDimmerEnabled",
+    "ModularSidePodsEnabled",
+    "SteeringHubCapEnabled",
+    "UseWidgetColorOverrides",
+    "SpeedColorHex",
+    "GearColorHex",
+    "GForceColorHex",
+    "SuspensionColorHex",
+    "PrimaryPort",
+    // Migrated into `DriverSeatHeightM` by the pre-7.0.0 migration.
+    "CockpitOffsetY",
+];
 
 /// Why a config file could not be loaded.
 #[derive(Debug, thiserror::Error)]
@@ -39,7 +135,7 @@ pub enum ConfigError {
         #[source]
         source: io::Error,
     },
-    /// The file is not valid config JSON.
+    /// The file is not a JSON object.
     #[error("parsing {path}")]
     Parse {
         /// The file that failed.
@@ -50,143 +146,273 @@ pub enum ConfigError {
     },
 }
 
+/// The error the setting enums' [`FromStr`] returns for a name that is none of their options. It
+/// holds no copy of the input, so a failed parse never allocates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct ParseSettingError {
+    setting: &'static str,
+}
+
+impl ParseSettingError {
+    /// The setting the name was for (`"speed unit"`).
+    #[must_use]
+    pub fn setting(&self) -> &'static str {
+        self.setting
+    }
+}
+
+impl fmt::Display for ParseSettingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown {}", self.setting)
+    }
+}
+
+impl std::error::Error for ParseSettingError {}
+
+/// Speed display units (`SpeedUnit`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SpeedUnit {
+    /// Miles per hour (`"MPH"`).
+    #[default]
+    Mph,
+    /// Kilometres per hour (`"KMH"`).
+    Kmh,
+}
+
+impl SpeedUnit {
+    /// The config name (`"MPH"`, `"KMH"`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            SpeedUnit::Mph => "MPH",
+            SpeedUnit::Kmh => "KMH",
+        }
+    }
+
+    /// The label a dash prints (`"MPH"`, `"KM/H"`).
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            SpeedUnit::Mph => "MPH",
+            SpeedUnit::Kmh => "KM/H",
+        }
+    }
+}
+
+impl FromStr for SpeedUnit {
+    type Err = ParseSettingError;
+
+    /// `mph`, or `kmh`, `kph` or `km/h`, in any case and with surrounding spaces ignored.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseSettingError`] for any other name.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.eq_ignore_ascii_case("mph") {
+            Ok(SpeedUnit::Mph)
+        } else if ["kmh", "kph", "km/h"].iter().any(|n| s.eq_ignore_ascii_case(n)) {
+            Ok(SpeedUnit::Kmh)
+        } else {
+            Err(ParseSettingError { setting: "speed unit" })
+        }
+    }
+}
+
+impl fmt::Display for SpeedUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+serde_by_name!(SpeedUnit, "a speed unit (MPH or KMH)");
+
+/// Engine power display units (`PowerUnit`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PowerUnit {
+    /// Mechanical horsepower (`"HP"`).
+    #[default]
+    Hp,
+    /// Kilowatts (`"kW"`).
+    Kw,
+}
+
+impl PowerUnit {
+    /// The config name (`"HP"`, `"kW"`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            PowerUnit::Hp => "HP",
+            PowerUnit::Kw => "kW",
+        }
+    }
+
+    /// The label a dash prints (`"HP"`, `"kW"`).
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        self.name()
+    }
+}
+
+impl FromStr for PowerUnit {
+    type Err = ParseSettingError;
+
+    /// `hp` or `kw`, in any case and with surrounding spaces ignored.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseSettingError`] for any other name.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.eq_ignore_ascii_case("hp") {
+            Ok(PowerUnit::Hp)
+        } else if s.eq_ignore_ascii_case("kw") {
+            Ok(PowerUnit::Kw)
+        } else {
+            Err(ParseSettingError { setting: "power unit" })
+        }
+    }
+}
+
+impl fmt::Display for PowerUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+serde_by_name!(PowerUnit, "a power unit (HP or kW)");
+
+/// Where a dash's colours come from (`ColorMode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ColorMode {
+    /// The brand palette of the car being driven, else the dash's own (`"AutoBrand"`, which the
+    /// OSD calls Factory).
+    #[default]
+    AutoBrand,
+    /// The palette of the brand in `CustomBrandKey` (`"Brand"`).
+    Brand,
+    /// The hex colours `PrimaryHex`, `SecondaryHex`, `AccentHex` and `ShiftFlashHex`
+    /// (`"Custom"`).
+    Custom,
+    /// A seeded random palette (`"Random"`, seeded by `PaletteSeed`).
+    Random,
+}
+
+impl ColorMode {
+    /// The config name (`"AutoBrand"`, `"Brand"`, `"Custom"`, `"Random"`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            ColorMode::AutoBrand => "AutoBrand",
+            ColorMode::Brand => "Brand",
+            ColorMode::Custom => "Custom",
+            ColorMode::Random => "Random",
+        }
+    }
+}
+
+impl FromStr for ColorMode {
+    type Err = ParseSettingError;
+
+    /// A mode's config name, or `factory` for [`ColorMode::AutoBrand`], in any case and with
+    /// surrounding spaces ignored.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseSettingError`] for any other name.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        [
+            ColorMode::AutoBrand,
+            ColorMode::Brand,
+            ColorMode::Custom,
+            ColorMode::Random,
+        ]
+        .into_iter()
+        .find(|m| m.name().eq_ignore_ascii_case(s))
+        .or_else(|| s.eq_ignore_ascii_case("factory").then_some(ColorMode::AutoBrand))
+        .ok_or(ParseSettingError { setting: "colour mode" })
+    }
+}
+
+impl fmt::Display for ColorMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+serde_by_name!(ColorMode, "a colour mode (AutoBrand, Brand, Custom or Random)");
+
 /// Every user setting of the overlay, as stored in `config.json`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", default)]
 pub struct AppConfig {
+    /// The config format version ([`CONFIG_VERSION`] once this build has loaded the file).
     pub version: String,
 
-    // Window & layout anchors (4K reference coordinates, 3840x2160).
+    // Cluster placement per view (4K reference px; see `docs/design/SCRIM_FIT.md`).
+    /// Cockpit `[3]` cluster anchor, x.
     pub cockpit_anchor_x: i32,
+    /// Cockpit `[3]` cluster anchor, y.
     pub cockpit_anchor_y: i32,
-    pub cockpit_scale: f32,
+    /// Hood `[4]` cluster anchor, x.
     pub bonnet_anchor_x: i32,
+    /// Hood `[4]` cluster anchor, y.
     pub bonnet_anchor_y: i32,
-    pub bonnet_scale: f32,
-
-    // Camera & styles
-    pub current_camera_index: i32,
-    pub cockpit_style: String,
-    pub bonnet_style: String,
-    pub hud_style: String,
-    pub cockpit_hud_style: String,
-    pub bonnet_hud_style: String,
-    pub oem_dash_opaque_pct: i32,
-    pub oem_dash_binnacle_offset_y: i32,
-    pub oem_dash_width_scale: f32,
-    pub osd_auto_pause_game: bool,
-    pub osd_live_dyno_preview_when_paused: bool,
-    pub drift_sync_mode: String,
-    pub drift_sync_sensitivity: f32,
-    pub drift_sync_smoothing: f32,
-    pub drift_sync_max_offset_px: f32,
-    pub lock_visible_while_driving: bool,
-
-    // CARTEK shift pod
-    pub shift_light_pattern: String,
-    pub shift_start_pct: f32,
-    pub redline_pct: f32,
-
-    // Controller
-    pub controller_camera_button: String,
-
-    // Units & features
-    pub speed_unit: String,
-    #[serde(rename = "ShowBonnetGTWidgets", alias = "ShowBonnetGtWidgets")]
-    pub show_bonnet_gt_widgets: bool,
-    pub demo_mode: bool,
-
-    // Per-car / OLED / shift guard
-    pub per_car_profile_enabled: bool,
-    pub oled_pixel_orbit_enabled: bool,
-    pub oled_idle_dimmer_enabled: bool,
-    pub oled_dimmer_min_alpha: f32,
-    pub manual_shift_guard_enabled: bool,
-    pub custom_driver_name: String,
-    pub driver_tag_glitch_fx: bool,
-    pub power_unit: String,
-    pub redline_strobe: bool,
-
-    // Night glow
-    pub night_glow_mode: String,
-    pub night_glow_intensity: f32,
-    pub night_ambient_glow_enabled: bool,
-    pub night_ambient_glow_intensity_pct: i32,
-
-    // Modular cockpit
-    pub adas_backdrop_mode: i32,
-    pub center_console_map_mode: i32,
-    pub center_console_infotainment_mode: i32,
-    pub route_active: bool,
-    pub oem_dash_dimmer_enabled: bool,
-    pub modular_side_pods_enabled: bool,
-    pub steering_hub_cap_enabled: bool,
-
-    // Telemetry ports
-    pub udp_port: i32,
-    pub fallback_port: i32,
-    pub forward_port: i32,
-    /// Listen for telemetry on all network interfaces (Forza running on another PC). Off by
-    /// default: loopback needs no firewall rule.
-    pub udp_listen_all_interfaces: bool,
-
-    // Brand & theme
-    pub color_mode: String,
-    pub custom_brand_key: String,
-    pub primary_hex: String,
-    pub secondary_hex: String,
-    pub accent_hex: String,
-    pub shift_flash_hex: String,
-
-    // Widget overrides
-    pub use_widget_color_overrides: bool,
-    pub speed_color_hex: String,
-    pub gear_color_hex: String,
-    pub g_force_color_hex: String,
-    pub suspension_color_hex: String,
-
-    // FOV & offsets
-    #[serde(rename = "WheelLessCockpitFOV", alias = "WheelLessCockpitFov")]
-    pub wheel_less_cockpit_fov: f32,
-    #[serde(rename = "StandardCockpitFOV", alias = "StandardCockpitFov")]
-    pub standard_cockpit_fov: f32,
-    #[serde(rename = "BonnetFOV", alias = "BonnetFov")]
-    pub bonnet_fov: f32,
-    #[serde(rename = "ChaseNearFOV", alias = "ChaseNearFov")]
-    pub chase_near_fov: f32,
-    #[serde(rename = "ChaseFarFOV", alias = "ChaseFarFov")]
-    pub chase_far_fov: f32,
-    #[serde(rename = "BumperFOV", alias = "BumperFov")]
-    pub bumper_fov: f32,
-    pub cockpit_offset_x: f32,
-    pub cockpit_offset_y: f32,
-    pub cockpit_offset_z: f32,
-    pub hood_offset_y: f32,
-    pub hood_offset_z: f32,
-    pub hood_pitch_offset: f32,
-
-    // Pre-05A fields
-    pub active_camera_view: CameraViewMode,
-    pub cockpit_hud_style_typed: ClusterTheme,
-    pub bonnet_hud_style_typed: ClusterTheme,
-    pub chase_hud_style_typed: ClusterTheme,
-    pub driver_seat_height_m: f32,
-    pub steering_wheel_offset_y_m: f32,
-    pub fov_degrees: i32,
+    /// Chase-camera floating HUD anchor, x.
+    pub chase_anchor_x: i32,
+    /// Chase-camera floating HUD anchor, y.
+    pub chase_anchor_y: i32,
+    /// Cockpit cluster height in px (positive raises; ±240).
+    pub cockpit_height_offset_px: f32,
+    /// Hood cluster height in px (positive raises; ±240).
+    pub bonnet_height_offset_px: f32,
+    /// Chase HUD height in px (positive raises; ±240).
+    pub chase_height_offset_px: f32,
+    /// Overall cluster scale, multiplied by the per-view scale; the product is clamped to
+    /// 0.70–1.40.
     pub cluster_scale: f32,
-    pub font_preset: FontPreset,
-    pub ambient_glow_enabled: bool,
-    pub ambient_glow_intensity: f32,
-    pub ambient_cowl_feather: f32,
+    /// Cockpit scale (0.5–2.0).
+    pub cockpit_cluster_scale: f32,
+    /// Hood scale (0.5–2.0).
+    pub bonnet_cluster_scale: f32,
+    /// Chase HUD scale (0.5–2.0).
+    pub chase_cluster_scale: f32,
+    /// Margins the cockpit cluster's envelope is clamped into.
+    pub cockpit_safe_zone: SafeZone,
+    /// Margins the hood cluster's envelope is clamped into.
+    pub bonnet_safe_zone: SafeZone,
+    /// Margins the chase HUD's envelope is clamped into.
+    pub chase_safe_zone: SafeZone,
+    /// Show a floating HUD in the chase cameras.
+    pub chase_hud_enabled: bool,
 
-    pub osd_toggle_mask: u16,
-    pub osd_hold_ms: u32,
-    pub guide_button_opens_widget: bool,
+    // Camera ring and clusters.
+    /// The camera ring index the game starts in (0..6; 3 cockpit, 4 hood).
+    pub current_camera_index: i32,
+    /// The cockpit `[3]` cluster.
+    pub cockpit_hud_style: ClusterTheme,
+    /// The hood `[4]` cluster.
+    pub bonnet_hud_style: ClusterTheme,
+    /// The chase HUD's cluster; absent follows the cockpit ([`AppConfig::theme`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chase_hud_style: Option<ClusterTheme>,
+    /// The camera index a resync (OSD item or LB+RB hold) declares the game to be in.
+    pub resync_camera_index: i32,
+    /// How long LB+RB must be held to resync (ms).
+    pub resync_hold_ms: u32,
 
-    // Phase 8: the dome scrim (4K px at user scale 1.0; see `docs/design/SCRIM_FIT.md`).
-    /// Horizontal dome offset from the steering-column line (px, + right).
+    // The dome scrim that hides the OEM dash (4K px at user scale 1.0).
+    /// Core opacity of the scrim in the cockpit (0..=100; the hood and chase force 0).
+    pub oem_dash_opaque_pct: i32,
+    /// Vertical dome offset (px, ±600).
+    pub oem_dash_binnacle_offset_y: i32,
+    /// Dome width multiplier (0.5–1.6).
+    pub oem_dash_width_scale: f32,
+    /// Horizontal dome offset from the steering-column line (px, + right, ±600).
     pub oem_dash_offset_x: i32,
-    /// Dome height multiplier (semi-axis 470 px at 1.0).
+    /// Dome height multiplier (semi-axis 470 px at 1.0; 0.5–1.6).
     pub oem_dash_height_scale: f32,
     /// Top arch: 0 = flat crown (exponent 4), 1 = round arch (exponent 2). Default 0.7 (2.6).
     pub oem_dash_top_arch: f32,
@@ -197,149 +423,147 @@ pub struct AppConfig {
     /// Width of the steering-column void cut below the cluster in px (0 = no void).
     pub oem_dash_column_void_px: f32,
 
-    // Phase 8: cluster placement per view (anchors are the `*AnchorX/Y` keys).
-    /// Chase-camera floating HUD anchor (4K px).
-    pub chase_anchor_x: i32,
-    pub chase_anchor_y: i32,
-    /// Cluster height per view in px (positive raises; ±240).
-    pub cockpit_height_offset_px: f32,
-    pub bonnet_height_offset_px: f32,
-    pub chase_height_offset_px: f32,
-    /// Per-view scale, multiplied by `ClusterScale`; the product is clamped to 0.70–1.40.
-    pub cockpit_cluster_scale: f32,
-    pub bonnet_cluster_scale: f32,
-    pub chase_cluster_scale: f32,
-    /// Per-view safe zones (px at 4K) the cluster envelope is clamped into.
-    pub cockpit_safe_zone: SafeZone,
-    pub bonnet_safe_zone: SafeZone,
-    pub chase_safe_zone: SafeZone,
-    /// Show a floating HUD in the chase cameras.
-    pub chase_hud_enabled: bool,
-    /// Chase HUD theme; empty = the cockpit theme.
-    pub chase_hud_style: String,
+    // The ambient wash on the binnacle lip.
+    /// Draw the ambient wash.
+    pub ambient_glow_enabled: bool,
+    /// Wash strength (0..=1).
+    pub ambient_glow_intensity: f32,
+    /// Raise the wash at night.
+    pub night_ambient_glow_enabled: bool,
+    /// Night wash strength (0..=100).
+    pub night_ambient_glow_intensity_pct: i32,
 
-    // Phase 8: camera ring resync and the game's camera files.
-    /// The camera index a resync (OSD item or LB+RB hold) declares the game to be in.
-    pub resync_camera_index: i32,
-    /// How long LB+RB must be held to resync (ms).
-    pub resync_hold_ms: u32,
-    /// Write the camera files automatically when seat/FOV settings change (queued while the
+    // Readouts, colours and the dash's own options.
+    /// Speed display units.
+    pub speed_unit: SpeedUnit,
+    /// Engine power display units.
+    pub power_unit: PowerUnit,
+    /// Where the dash's colours come from.
+    pub color_mode: ColorMode,
+    /// The brand whose palette [`ColorMode::Brand`] uses (`car_brands.json` key).
+    pub custom_brand_key: String,
+    /// [`ColorMode::Custom`] primary colour (`#RRGGBB`).
+    pub primary_hex: String,
+    /// [`ColorMode::Custom`] secondary colour.
+    pub secondary_hex: String,
+    /// [`ColorMode::Custom`] accent colour.
+    pub accent_hex: String,
+    /// [`ColorMode::Custom`] shift-light colour.
+    pub shift_flash_hex: String,
+    /// The [`ColorMode::Random`] seed; absent seeds by the car ordinal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub palette_seed: Option<u64>,
+    /// The driver name a dash may show; empty shows none.
+    pub custom_driver_name: String,
+    /// Show the brand logo zone.
+    pub show_logo: bool,
+    /// Show the frame-time overlay.
+    pub show_stats: bool,
+    /// The font family the dashes use; absent keeps each dash's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cluster_font: Option<String>,
+    /// The OSD's shift point (fraction of the limiter, 0.80–1.00); absent uses the tokens'.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shift_point_pct: Option<f32>,
+    /// Tame the shift-light flash (no full-field strobe).
+    pub reduced_flash: bool,
+    /// Bend the captured game frame through glass pieces (screen capture; off by default).
+    pub glass_refraction: bool,
+
+    // OSD and controller.
+    /// Pause the game while the OSD is open.
+    pub osd_auto_pause_game: bool,
+    /// The buttons that open the OSD when held (XInput bits; A/B/X/Y are never allowed).
+    pub osd_toggle_mask: u16,
+    /// How long the toggle must be held (ms).
+    pub osd_hold_ms: u32,
+    /// The Guide button opens the OSD too.
+    pub guide_button_opens_widget: bool,
+
+    // OLED care.
+    /// Move the dash by a pixel or two over time.
+    pub oled_pixel_orbit_enabled: bool,
+    /// Dim the dash while the car sits still.
+    pub oled_idle_dimmer_enabled: bool,
+    /// The idle dimmer's lowest opacity (0..=1).
+    pub oled_dimmer_min_alpha: f32,
+
+    // Per-car profiles and demo.
+    /// Overlay `car_profiles.json` on these settings for the car being driven.
+    pub per_car_profile_enabled: bool,
+    /// Drive the dash from recorded telemetry instead of the game.
+    pub demo_mode: bool,
+
+    // Telemetry ports.
+    /// The port Forza's Data Out sends to.
+    pub udp_port: i32,
+    /// A second listening port (0 = none).
+    pub fallback_port: i32,
+    /// Where each packet is re-sent on 127.0.0.1 for other tools (0 = none).
+    pub forward_port: i32,
+    /// Listen for telemetry on all network interfaces (Forza running on another PC). Off by
+    /// default: loopback needs no firewall rule.
+    pub udp_listen_all_interfaces: bool,
+
+    // The game's camera files: FOV per camera and the cockpit and hood offsets.
+    /// Wheel-less cockpit `[3]` FOV (degrees).
+    #[serde(rename = "WheelLessCockpitFOV", alias = "WheelLessCockpitFov")]
+    pub wheel_less_cockpit_fov: f32,
+    /// Standard cockpit FOV (degrees).
+    #[serde(rename = "StandardCockpitFOV", alias = "StandardCockpitFov")]
+    pub standard_cockpit_fov: f32,
+    /// Hood `[4]` FOV (degrees).
+    #[serde(rename = "BonnetFOV", alias = "BonnetFov")]
+    pub bonnet_fov: f32,
+    /// Near chase FOV (degrees).
+    #[serde(rename = "ChaseNearFOV", alias = "ChaseNearFov")]
+    pub chase_near_fov: f32,
+    /// Far chase FOV (degrees).
+    #[serde(rename = "ChaseFarFOV", alias = "ChaseFarFov")]
+    pub chase_far_fov: f32,
+    /// Bumper FOV (degrees).
+    #[serde(rename = "BumperFOV", alias = "BumperFov")]
+    pub bumper_fov: f32,
+    /// Cockpit camera offset, x (metres).
+    pub cockpit_offset_x: f32,
+    /// Cockpit camera offset, z (metres).
+    pub cockpit_offset_z: f32,
+    /// Hood camera offset, y (metres).
+    pub hood_offset_y: f32,
+    /// Hood camera offset, z (metres).
+    pub hood_offset_z: f32,
+    /// Hood camera pitch offset.
+    pub hood_pitch_offset: f32,
+    /// Seat height (metres, DriverCam `Param.y`).
+    pub driver_seat_height_m: f32,
+    /// Steering wheel height offset (metres).
+    pub steering_wheel_offset_y_m: f32,
+    /// Write the camera files automatically when seat or FOV settings change (queued while the
     /// game runs). Off by default: the OSD and configurator apply explicitly.
     pub camera_patch_auto: bool,
     /// Game install folder override; empty = find it through Steam's `libraryfolders.vdf`.
     pub game_install_dir: String,
 
-    /// Keys this version does not know, preserved on save.
+    /// Keys this version does not know, preserved on save. A dash keeps its own settings here
+    /// (`PorscheAnalogScale`).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
+    pub extra: Map<String, Value>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "6.0.0".to_string(),
+            version: CONFIG_VERSION.to_string(),
             cockpit_anchor_x: 1920,
             cockpit_anchor_y: 1835,
-            cockpit_scale: 1.45,
             bonnet_anchor_x: 1920,
             bonnet_anchor_y: 1760,
-            bonnet_scale: 1.55,
-            current_camera_index: 3,
-            cockpit_style: "Digital".to_string(),
-            bonnet_style: "Digital".to_string(),
-            hud_style: "LiquidGlass".to_string(),
-            cockpit_hud_style: "BoschDdu".to_string(),
-            bonnet_hud_style: "Gt7HoodPro".to_string(),
-            oem_dash_opaque_pct: 100,
-            oem_dash_binnacle_offset_y: 0,
-            oem_dash_width_scale: 1.0,
-            osd_auto_pause_game: true,
-            osd_live_dyno_preview_when_paused: true,
-            drift_sync_mode: "Off".to_string(),
-            drift_sync_sensitivity: 1.0,
-            drift_sync_smoothing: 0.2,
-            drift_sync_max_offset_px: 400.0,
-            lock_visible_while_driving: false,
-            shift_light_pattern: "Converging".to_string(),
-            shift_start_pct: 0.72,
-            redline_pct: 0.94,
-            controller_camera_button: "RB".to_string(),
-            speed_unit: "MPH".to_string(),
-            show_bonnet_gt_widgets: true,
-            demo_mode: false,
-            per_car_profile_enabled: true,
-            oled_pixel_orbit_enabled: true,
-            oled_idle_dimmer_enabled: true,
-            oled_dimmer_min_alpha: 0.35,
-            manual_shift_guard_enabled: true,
-            custom_driver_name: default_driver_name(),
-            driver_tag_glitch_fx: false,
-            power_unit: "kW".to_string(),
-            redline_strobe: false,
-            night_glow_mode: "Off".to_string(),
-            night_glow_intensity: 0.35,
-            night_ambient_glow_enabled: false,
-            night_ambient_glow_intensity_pct: 0,
-            adas_backdrop_mode: 0,
-            center_console_map_mode: 0,
-            center_console_infotainment_mode: 0,
-            route_active: false,
-            oem_dash_dimmer_enabled: false,
-            modular_side_pods_enabled: false,
-            steering_hub_cap_enabled: false,
-            udp_port: i32::from(DEFAULT_UDP_PORT),
-            fallback_port: i32::from(DEFAULT_FALLBACK_PORT),
-            forward_port: i32::from(DEFAULT_FORWARD_PORT),
-            udp_listen_all_interfaces: false,
-            color_mode: "AutoBrand".to_string(),
-            custom_brand_key: "DEFAULT".to_string(),
-            primary_hex: "#00D2FF".to_string(),
-            secondary_hex: "#FFB300".to_string(),
-            accent_hex: "#00E5FF".to_string(),
-            shift_flash_hex: "#FFFFFF".to_string(),
-            use_widget_color_overrides: false,
-            speed_color_hex: "#FFFFFF".to_string(),
-            gear_color_hex: "#FFFFFF".to_string(),
-            g_force_color_hex: "#00E5FF".to_string(),
-            suspension_color_hex: "#76FF03".to_string(),
-            wheel_less_cockpit_fov: 80.0,
-            standard_cockpit_fov: 80.0,
-            bonnet_fov: 95.0,
-            chase_near_fov: 62.0,
-            chase_far_fov: 68.0,
-            bumper_fov: 78.0,
-            cockpit_offset_x: 0.0,
-            cockpit_offset_y: -0.045,
-            cockpit_offset_z: -0.5,
-            hood_offset_y: 0.0,
-            hood_offset_z: 0.0,
-            hood_pitch_offset: 0.04,
-            active_camera_view: CameraViewMode::default(),
-            cockpit_hud_style_typed: ClusterTheme::default(),
-            bonnet_hud_style_typed: ClusterTheme::Gt7HoodPro,
-            chase_hud_style_typed: ClusterTheme::BoschDdu,
-            driver_seat_height_m: -0.045,
-            steering_wheel_offset_y_m: -0.035,
-            fov_degrees: 65,
-            cluster_scale: 1.0,
-            font_preset: FontPreset::default(),
-            ambient_glow_enabled: true,
-            ambient_glow_intensity: 0.25,
-            ambient_cowl_feather: 0.40,
-            osd_toggle_mask: default_osd_toggle_mask(),
-            osd_hold_ms: default_osd_hold_ms(),
-            guide_button_opens_widget: default_guide_button_osd(),
-            oem_dash_offset_x: 0,
-            oem_dash_height_scale: 1.0,
-            oem_dash_top_arch: 0.7,
-            oem_dash_corner_softness: 0.7,
-            oem_dash_feather_px: 96.0,
-            oem_dash_column_void_px: 220.0,
             chase_anchor_x: 1920,
             chase_anchor_y: 1900,
             cockpit_height_offset_px: 0.0,
             bonnet_height_offset_px: 0.0,
             chase_height_offset_px: 0.0,
+            cluster_scale: 1.0,
             cockpit_cluster_scale: 1.0,
             bonnet_cluster_scale: 1.0,
             chase_cluster_scale: 0.8,
@@ -347,12 +571,70 @@ impl Default for AppConfig {
             bonnet_safe_zone: SafeZone::default(),
             chase_safe_zone: SafeZone::default(),
             chase_hud_enabled: true,
-            chase_hud_style: String::new(),
+            current_camera_index: 3,
+            cockpit_hud_style: ClusterTheme::BoschDdu,
+            bonnet_hud_style: ClusterTheme::Gt7HoodPro,
+            chase_hud_style: None,
             resync_camera_index: 3,
             resync_hold_ms: 1000,
+            oem_dash_opaque_pct: 100,
+            oem_dash_binnacle_offset_y: 0,
+            oem_dash_width_scale: 1.0,
+            oem_dash_offset_x: 0,
+            oem_dash_height_scale: 1.0,
+            oem_dash_top_arch: 0.7,
+            oem_dash_corner_softness: 0.7,
+            oem_dash_feather_px: 96.0,
+            oem_dash_column_void_px: 220.0,
+            ambient_glow_enabled: true,
+            ambient_glow_intensity: 0.25,
+            night_ambient_glow_enabled: false,
+            night_ambient_glow_intensity_pct: 0,
+            speed_unit: SpeedUnit::Mph,
+            power_unit: PowerUnit::Hp,
+            color_mode: ColorMode::AutoBrand,
+            custom_brand_key: "DEFAULT".to_string(),
+            primary_hex: "#00D2FF".to_string(),
+            secondary_hex: "#FFB300".to_string(),
+            accent_hex: "#00E5FF".to_string(),
+            shift_flash_hex: "#FFFFFF".to_string(),
+            palette_seed: None,
+            custom_driver_name: String::new(),
+            show_logo: true,
+            show_stats: false,
+            cluster_font: None,
+            shift_point_pct: None,
+            reduced_flash: false,
+            glass_refraction: false,
+            osd_auto_pause_game: true,
+            osd_toggle_mask: default_osd_toggle_mask(),
+            osd_hold_ms: default_osd_hold_ms(),
+            guide_button_opens_widget: default_guide_button_osd(),
+            oled_pixel_orbit_enabled: true,
+            oled_idle_dimmer_enabled: true,
+            oled_dimmer_min_alpha: DEFAULT_MIN_ALPHA,
+            per_car_profile_enabled: true,
+            demo_mode: false,
+            udp_port: i32::from(DEFAULT_UDP_PORT),
+            fallback_port: i32::from(DEFAULT_FALLBACK_PORT),
+            forward_port: i32::from(DEFAULT_FORWARD_PORT),
+            udp_listen_all_interfaces: false,
+            wheel_less_cockpit_fov: 80.0,
+            standard_cockpit_fov: 80.0,
+            bonnet_fov: 95.0,
+            chase_near_fov: 62.0,
+            chase_far_fov: 68.0,
+            bumper_fov: 78.0,
+            cockpit_offset_x: 0.0,
+            cockpit_offset_z: -0.5,
+            hood_offset_y: 0.0,
+            hood_offset_z: 0.0,
+            hood_pitch_offset: 0.04,
+            driver_seat_height_m: DEFAULT_SEAT_HEIGHT_M,
+            steering_wheel_offset_y_m: -0.035,
             camera_patch_auto: false,
             game_install_dir: String::new(),
-            extra: serde_json::Map::new(),
+            extra: Map::new(),
         }
     }
 }
@@ -371,16 +653,27 @@ pub struct TelemetryPorts {
 }
 
 impl AppConfig {
-    /// The cluster theme and scrim opacity (0..=1) for the active camera view.
-    pub fn effective_cluster_and_scrim(&self) -> (ClusterTheme, f32) {
-        match self.active_camera_view {
-            CameraViewMode::Cockpit => (self.cockpit_hud_style_typed, self.oem_dash_opaque_pct as f32 / 100.0),
-            CameraViewMode::Bonnet => (self.bonnet_hud_style_typed, 0.0),
-            CameraViewMode::Chase => (self.chase_hud_style_typed, 0.0),
+    /// The cluster shown in `view`. The chase HUD follows the cockpit unless it has its own.
+    #[must_use]
+    pub fn theme(&self, view: FitView) -> ClusterTheme {
+        match view {
+            FitView::Cockpit => self.cockpit_hud_style,
+            FitView::Hood => self.bonnet_hud_style,
+            FitView::Chase => self.chase_hud_style.unwrap_or(self.cockpit_hud_style),
+        }
+    }
+
+    /// Shows `theme` in `view`. Setting the chase HUD gives it its own cluster.
+    pub fn set_theme(&mut self, view: FitView, theme: ClusterTheme) {
+        match view {
+            FitView::Cockpit => self.cockpit_hud_style = theme,
+            FitView::Hood => self.bonnet_hud_style = theme,
+            FitView::Chase => self.chase_hud_style = Some(theme),
         }
     }
 
     /// The listening and forwarding ports, with invalid values replaced by the defaults.
+    #[must_use]
     pub fn telemetry_ports(&self) -> TelemetryPorts {
         let primary = valid_port(self.udp_port).unwrap_or(DEFAULT_UDP_PORT);
         let fallback = valid_port(self.fallback_port).filter(|&p| p != primary);
@@ -393,11 +686,12 @@ impl AppConfig {
         }
     }
 
-    /// Reads and parses a config file, then applies migrations and sanitising.
+    /// Reads and parses a config file, then migrates and sanitises it.
     ///
     /// # Errors
-    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not
-    /// valid config JSON. A UTF-8 BOM at the start is tolerated.
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not a
+    /// JSON object. A UTF-8 BOM at the start is tolerated.
     pub fn try_load(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let path = path.as_ref();
         let text = fs::read_to_string(path).map_err(|source| ConfigError::Read {
@@ -410,14 +704,19 @@ impl AppConfig {
         })
     }
 
-    /// Parses config JSON (a leading BOM is ignored), then migrates and sanitises it.
+    /// Parses config JSON (a leading BOM is ignored), then migrates, types and sanitises it as the
+    /// module documentation describes. A value that does not fit its setting is logged and takes
+    /// its default.
     ///
     /// # Errors
-    /// Returns the JSON error if the text is not a valid config object.
+    ///
+    /// The JSON error if the text is not a JSON object.
     pub fn from_json_str(text: &str) -> Result<Self, serde_json::Error> {
         let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-        let mut cfg: AppConfig = serde_json::from_str(text)?;
-        cfg.apply_migrations();
+        let mut raw: Map<String, Value> = serde_json::from_str(text)?;
+        migrate_raw(&mut raw);
+        let mut cfg = deserialize_lenient(raw);
+        cfg.sanitize();
         Ok(cfg)
     }
 
@@ -436,7 +735,8 @@ impl AppConfig {
     /// Writes the config atomically (temp file, then rename), as UTF-8 without a BOM.
     ///
     /// # Errors
-    /// Returns the I/O error if the temp file cannot be written or renamed.
+    ///
+    /// The I/O error if the temp file cannot be written or renamed.
     pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
         // A/B/X/Y are stripped from every saved mask, not only on load (manual gearbox lock).
         let mut clean = self.clone();
@@ -445,127 +745,57 @@ impl AppConfig {
         crate::atomic_file::write_atomically(path.as_ref(), json.as_bytes())
     }
 
-    /// `cfg` with every migration and range check applied (for configs built in code, such as
-    /// a per-car overlay).
+    /// `cfg` with every range check applied (for configs built in code, such as a per-car
+    /// overlay). Applying it twice changes nothing more.
     #[must_use]
     pub fn sanitized(mut cfg: AppConfig) -> AppConfig {
-        cfg.apply_migrations();
+        cfg.sanitize();
         cfg
     }
 
-    fn apply_migrations(&mut self) {
-        let defaults = AppConfig::default();
+    /// Step 3 of a load: brings every value into its range. Non-finite numbers take their
+    /// default. Idempotent.
+    fn sanitize(&mut self) {
+        let d = AppConfig::default();
+        let fix = |v: &mut f32, default: f32, lo: f32, hi: f32| {
+            *v = if v.is_finite() { v.clamp(lo, hi) } else { default };
+        };
+
+        // Kept from the C# port, which reset fallback ports in 5200..=5300; the reason was not
+        // recorded.
         if (5200..=5300).contains(&self.fallback_port) {
-            self.fallback_port = i32::from(DEFAULT_FALLBACK_PORT);
+            self.fallback_port = d.fallback_port;
         }
         if valid_port(self.udp_port).is_none() {
-            self.udp_port = defaults.udp_port;
-        }
-        if self.oem_dash_width_scale <= 0.01 {
-            self.oem_dash_width_scale = 1.0;
-        }
-        if !(self.cockpit_scale.is_finite() && self.cockpit_scale > 0.05) {
-            self.cockpit_scale = defaults.cockpit_scale;
-        }
-        if !(self.bonnet_scale.is_finite() && self.bonnet_scale > 0.05) {
-            self.bonnet_scale = defaults.bonnet_scale;
-        }
-        if !(self.cluster_scale.is_finite() && self.cluster_scale > 0.05) {
-            self.cluster_scale = defaults.cluster_scale;
-        }
-        self.oem_dash_opaque_pct = self.oem_dash_opaque_pct.clamp(0, 100);
-        self.night_ambient_glow_intensity_pct = self.night_ambient_glow_intensity_pct.clamp(0, 100);
-        if !(0..=2).contains(&self.adas_backdrop_mode) {
-            self.adas_backdrop_mode = 0;
-        }
-        if !(0..=3).contains(&self.center_console_map_mode) {
-            self.center_console_map_mode = 0;
-        }
-        if !(0..=4).contains(&self.center_console_infotainment_mode) {
-            self.center_console_infotainment_mode = 0;
+            self.udp_port = d.udp_port;
         }
         if !(0..6).contains(&self.current_camera_index) {
-            self.current_camera_index = defaults.current_camera_index;
+            self.current_camera_index = d.current_camera_index;
         }
-        if self.cockpit_hud_style.trim().is_empty() {
-            self.cockpit_hud_style = if self.hud_style.trim().is_empty() {
-                "BoschDdu".to_string()
-            } else {
-                self.hud_style.clone()
-            };
+        if !(0..6).contains(&self.resync_camera_index) {
+            self.resync_camera_index = d.resync_camera_index;
         }
-        if self.bonnet_hud_style.trim().is_empty() {
-            self.bonnet_hud_style = "Gt7HoodPro".to_string();
-        }
-        if self.custom_driver_name.trim().is_empty() {
-            self.custom_driver_name = default_driver_name();
-        }
+        self.resync_hold_ms = self.resync_hold_ms.clamp(RESYNC_HOLD_MS_MIN, RESYNC_HOLD_MS_MAX);
         self.osd_toggle_mask = sanitize_toggle_mask(self.osd_toggle_mask);
         self.osd_hold_ms = self.osd_hold_ms.clamp(OSD_HOLD_MS_MIN, OSD_HOLD_MS_MAX);
-        // Migrate the legacy cockpit_offset_y (metres) into driver_seat_height_m while the
-        // latter is still at its default.
-        if (self.driver_seat_height_m - defaults.driver_seat_height_m).abs() < f32::EPSILON
-            && self.cockpit_offset_y.abs() > f32::EPSILON
-        {
-            self.driver_seat_height_m = self.cockpit_offset_y.clamp(-0.100, 0.050);
-        }
-        self.migrate_fit(&defaults);
-    }
 
-    /// Phase 8 keys: the old free-form `ClusterHeightOffsetPx` becomes the per-view heights, and
-    /// every scrim and placement value is brought into its range (non-finite → default).
-    fn migrate_fit(&mut self, defaults: &AppConfig) {
-        if let Some(old) = self.extra.remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) {
-            let old = old as f32;
-            for h in [
-                &mut self.cockpit_height_offset_px,
-                &mut self.bonnet_height_offset_px,
-                &mut self.chase_height_offset_px,
-            ] {
-                if h.abs() < f32::EPSILON {
-                    *h = old;
-                }
-            }
+        // Placement.
+        if !(self.cluster_scale.is_finite() && self.cluster_scale > 0.05) {
+            self.cluster_scale = d.cluster_scale;
         }
-        let fix = |v: &mut f32, d: f32, lo: f32, hi: f32| {
-            *v = if v.is_finite() { v.clamp(lo, hi) } else { d };
-        };
-        fix(&mut self.oem_dash_width_scale, defaults.oem_dash_width_scale, 0.5, 1.6);
-        fix(
-            &mut self.oem_dash_height_scale,
-            defaults.oem_dash_height_scale,
-            0.5,
-            1.6,
-        );
-        fix(&mut self.oem_dash_top_arch, defaults.oem_dash_top_arch, 0.0, 1.0);
-        fix(
-            &mut self.oem_dash_corner_softness,
-            defaults.oem_dash_corner_softness,
-            0.0,
-            1.0,
-        );
-        fix(&mut self.oem_dash_feather_px, defaults.oem_dash_feather_px, 8.0, 240.0);
-        fix(
-            &mut self.oem_dash_column_void_px,
-            defaults.oem_dash_column_void_px,
-            0.0,
-            600.0,
-        );
-        self.oem_dash_offset_x = self.oem_dash_offset_x.clamp(-600, 600);
-        self.oem_dash_binnacle_offset_y = self.oem_dash_binnacle_offset_y.clamp(-600, 600);
-        for (h, d) in [
-            (&mut self.cockpit_height_offset_px, defaults.cockpit_height_offset_px),
-            (&mut self.bonnet_height_offset_px, defaults.bonnet_height_offset_px),
-            (&mut self.chase_height_offset_px, defaults.chase_height_offset_px),
+        for (h, default) in [
+            (&mut self.cockpit_height_offset_px, d.cockpit_height_offset_px),
+            (&mut self.bonnet_height_offset_px, d.bonnet_height_offset_px),
+            (&mut self.chase_height_offset_px, d.chase_height_offset_px),
         ] {
-            fix(h, d, -HEIGHT_OFFSET_MAX_PX, HEIGHT_OFFSET_MAX_PX);
+            fix(h, default, -HEIGHT_OFFSET_MAX_PX, HEIGHT_OFFSET_MAX_PX);
         }
-        for (s, d) in [
-            (&mut self.cockpit_cluster_scale, defaults.cockpit_cluster_scale),
-            (&mut self.bonnet_cluster_scale, defaults.bonnet_cluster_scale),
-            (&mut self.chase_cluster_scale, defaults.chase_cluster_scale),
+        for (s, default) in [
+            (&mut self.cockpit_cluster_scale, d.cockpit_cluster_scale),
+            (&mut self.bonnet_cluster_scale, d.bonnet_cluster_scale),
+            (&mut self.chase_cluster_scale, d.chase_cluster_scale),
         ] {
-            fix(s, d, 0.5, 2.0);
+            fix(s, default, 0.5, 2.0);
         }
         for z in [
             &mut self.cockpit_safe_zone,
@@ -574,19 +804,167 @@ impl AppConfig {
         ] {
             z.sanitize();
         }
-        if !(0..6).contains(&self.resync_camera_index) {
-            self.resync_camera_index = defaults.resync_camera_index;
+
+        // Scrim. A width of (about) zero means "unset", not "as narrow as allowed".
+        if self.oem_dash_width_scale <= 0.01 {
+            self.oem_dash_width_scale = d.oem_dash_width_scale;
         }
-        self.resync_hold_ms = self.resync_hold_ms.clamp(RESYNC_HOLD_MS_MIN, RESYNC_HOLD_MS_MAX);
+        self.oem_dash_opaque_pct = self.oem_dash_opaque_pct.clamp(0, 100);
+        self.oem_dash_offset_x = self.oem_dash_offset_x.clamp(-600, 600);
+        self.oem_dash_binnacle_offset_y = self.oem_dash_binnacle_offset_y.clamp(-600, 600);
+        fix(&mut self.oem_dash_width_scale, d.oem_dash_width_scale, 0.5, 1.6);
+        fix(&mut self.oem_dash_height_scale, d.oem_dash_height_scale, 0.5, 1.6);
+        fix(&mut self.oem_dash_top_arch, d.oem_dash_top_arch, 0.0, 1.0);
+        fix(&mut self.oem_dash_corner_softness, d.oem_dash_corner_softness, 0.0, 1.0);
+        fix(&mut self.oem_dash_feather_px, d.oem_dash_feather_px, 8.0, 240.0);
+        fix(&mut self.oem_dash_column_void_px, d.oem_dash_column_void_px, 0.0, 600.0);
+
+        // Wash, OLED care and the dash options.
+        self.night_ambient_glow_intensity_pct = self.night_ambient_glow_intensity_pct.clamp(0, 100);
+        fix(&mut self.oled_dimmer_min_alpha, d.oled_dimmer_min_alpha, 0.0, 1.0);
+        self.shift_point_pct = self
+            .shift_point_pct
+            .filter(|v| v.is_finite())
+            .map(|v| v.clamp(SHIFT_POINT_MIN, SHIFT_POINT_MAX));
+        if self.cluster_font.as_deref().is_some_and(|f| f.trim().is_empty()) {
+            self.cluster_font = None;
+        }
     }
 }
 
-/// Largest cluster height offset either way (px at 4K).
-pub const HEIGHT_OFFSET_MAX_PX: f32 = 240.0;
-/// Shortest allowed LB+RB resync hold (ms).
-pub const RESYNC_HOLD_MS_MIN: u32 = 500;
-/// Longest allowed LB+RB resync hold (ms).
-pub const RESYNC_HOLD_MS_MAX: u32 = 3000;
+/// Step 1 of a load: fixes on the raw object, before any value is typed.
+fn migrate_raw(raw: &mut Map<String, Value>) {
+    let major = raw.get("Version").and_then(Value::as_str).map_or(0, version_major);
+    if major < CONFIG_MAJOR {
+        migrate_before_7(raw);
+        raw.insert("Version".to_owned(), Value::from(CONFIG_VERSION));
+    }
+    migrate_blank_styles(raw);
+    migrate_cluster_height(raw);
+    for key in RETIRED_KEYS {
+        raw.remove(*key);
+    }
+}
+
+/// The major part of a `"7.0.0"` version; 0 when it has none.
+fn version_major(version: &str) -> u64 {
+    version
+        .trim()
+        .split('.')
+        .next()
+        .and_then(|major| major.parse().ok())
+        .unwrap_or(0)
+}
+
+/// One-time fixes for a file written before 7.0.0.
+fn migrate_before_7(raw: &mut Map<String, Value>) {
+    // `PowerUnit` changed nothing before 7.0.0: the dashes showed hp with MPH and kW with km/h.
+    // Keep what the user saw, unless the file holds a choice other than the old default "kW".
+    let power_was_default = raw
+        .get("PowerUnit")
+        .and_then(Value::as_str)
+        .is_none_or(|p| p.parse() == Ok(PowerUnit::Kw));
+    if power_was_default {
+        let speed = raw
+            .get("SpeedUnit")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok());
+        let power = if speed == Some(SpeedUnit::Kmh) {
+            PowerUnit::Kw
+        } else {
+            PowerUnit::Hp
+        };
+        raw.insert("PowerUnit".to_owned(), Value::from(power.name()));
+    }
+
+    // The seat height used to live in `CockpitOffsetY`, copied into `DriverSeatHeightM` on every
+    // load while the seat was at its default, so setting the seat back to the default brought the
+    // old value back. It is copied once here, and `CockpitOffsetY` is retired.
+    if let Some(old) = raw.get("CockpitOffsetY").and_then(Value::as_f64) {
+        let old = old as f32;
+        let seat_at_default = raw
+            .get("DriverSeatHeightM")
+            .and_then(Value::as_f64)
+            .is_none_or(|seat| (seat as f32 - DEFAULT_SEAT_HEIGHT_M).abs() < f32::EPSILON);
+        if seat_at_default && old.abs() > f32::EPSILON {
+            let (lo, hi) = SEAT_HEIGHT_RANGE_M;
+            raw.insert(
+                "DriverSeatHeightM".to_owned(),
+                Value::from(f64::from(old.clamp(lo, hi))),
+            );
+        }
+    }
+
+    if raw.get("CustomDriverName").and_then(Value::as_str) == Some(OLD_DEFAULT_DRIVER_NAME) {
+        raw.insert("CustomDriverName".to_owned(), Value::from(""));
+    }
+}
+
+/// A blank style name used to mean "the default": `HudStyle` for the cockpit, and the cockpit's
+/// cluster for the chase HUD. Styles are typed now and have no blank value, so a blank name is
+/// replaced or removed before the styles are parsed.
+fn migrate_blank_styles(raw: &mut Map<String, Value>) {
+    fn non_blank(v: &Value) -> bool {
+        v.as_str().is_some_and(|s| !s.trim().is_empty())
+    }
+    let blank = |raw: &Map<String, Value>, key: &str| raw.get(key).is_some_and(|v| v.is_string() && !non_blank(v));
+    if blank(raw, "CockpitHudStyle") {
+        match raw.get("HudStyle").filter(|v| non_blank(v)).cloned() {
+            Some(style) => {
+                raw.insert("CockpitHudStyle".to_owned(), style);
+            }
+            None => {
+                raw.remove("CockpitHudStyle");
+            }
+        }
+    }
+    for key in ["BonnetHudStyle", "ChaseHudStyle"] {
+        if blank(raw, key) {
+            raw.remove(key);
+        }
+    }
+}
+
+/// Phase 8 replaced the one `ClusterHeightOffsetPx` with a height per view. A per-view height
+/// that is absent or zero takes the old value.
+fn migrate_cluster_height(raw: &mut Map<String, Value>) {
+    let Some(old) = raw.remove("ClusterHeightOffsetPx").and_then(|v| v.as_f64()) else {
+        return;
+    };
+    for key in ["CockpitHeightOffsetPx", "BonnetHeightOffsetPx", "ChaseHeightOffsetPx"] {
+        let unset = raw
+            .get(key)
+            .and_then(Value::as_f64)
+            .is_none_or(|h| (h as f32).abs() < f32::EPSILON);
+        if unset {
+            raw.insert(key.to_owned(), Value::from(old));
+        }
+    }
+}
+
+/// Step 2 of a load: types every value. A value that does not fit its setting is dropped with a
+/// warning, so that it takes its default and the rest of the file still loads.
+fn deserialize_lenient(raw: Map<String, Value>) -> AppConfig {
+    let err = match AppConfig::deserialize(&raw) {
+        Ok(cfg) => return cfg,
+        Err(err) => err,
+    };
+    tracing::warn!(error = %err, "config has values that do not fit their settings");
+    // Only for a damaged file: add the keys back one at a time and drop each one that fails.
+    let mut cfg = AppConfig::default();
+    let mut kept = Map::new();
+    for (key, value) in raw {
+        kept.insert(key.clone(), value);
+        match AppConfig::deserialize(&kept) {
+            Ok(good) => cfg = good,
+            Err(err) => {
+                let dropped = kept.remove(&key);
+                tracing::warn!(%key, value = ?dropped, error = %err, "config value dropped, using the default");
+            }
+        }
+    }
+    cfg
+}
 
 /// Margins (px at 4K) a cluster's envelope must stay inside.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -661,10 +1039,6 @@ pub fn resolve_config_path_from(exe_dir: Option<&Path>, cwd: Option<&Path>) -> P
         .unwrap_or_else(|| PathBuf::from(CONFIG_FILE_NAME))
 }
 
-fn default_driver_name() -> String {
-    "ØG『死』ŦJ乂".to_string()
-}
-
 /// Default OSD toggle button: View/Back.
 pub fn default_osd_toggle_mask() -> u16 {
     0x0020
@@ -690,42 +1064,13 @@ pub fn sanitize_toggle_mask(mask: u16) -> u16 {
     }
 }
 
-/// Which family of camera the game is in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum CameraViewMode {
-    /// Camera index 3: wheel-less cockpit.
-    #[default]
-    Cockpit,
-    /// Camera index 4: hood.
-    Bonnet,
-    /// Any other index.
-    Chase,
-}
-
-impl CameraViewMode {
-    /// Maps the game's camera ring index (0..6) to a view family.
-    pub fn from_index(index: i32) -> Self {
-        match index {
-            3 => CameraViewMode::Cockpit,
-            4 => CameraViewMode::Bonnet,
-            _ => CameraViewMode::Chase,
-        }
-    }
-}
-
-/// Typography presets offered by the OSD.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum FontPreset {
-    #[default]
-    BahnschriftLight,
-    SfPro,
-    Tabular,
-    VfdMono,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn load(json: &str) -> AppConfig {
+        AppConfig::from_json_str(json).expect("valid json")
+    }
 
     #[test]
     fn test_default_select_hold_0x0020_and_tap_ignore() {
@@ -748,13 +1093,23 @@ mod tests {
     }
 
     #[test]
+    fn the_version_constants_agree() {
+        assert_eq!(version_major(CONFIG_VERSION), CONFIG_MAJOR);
+        assert_eq!(AppConfig::default().version, CONFIG_VERSION);
+        assert_eq!(version_major(" 12.1 "), 12);
+        assert_eq!(version_major("abc"), 0);
+    }
+
+    #[test]
+    fn defaults_are_already_in_range() {
+        let d = AppConfig::default();
+        assert_eq!(AppConfig::sanitized(d.clone()), d);
+    }
+
+    #[test]
     fn empty_object_takes_defaults_not_zero() {
-        let cfg = AppConfig::from_json_str("{}").expect("empty object is valid");
-        assert_eq!(cfg, {
-            let mut d = AppConfig::default();
-            d.apply_migrations();
-            d
-        });
+        let cfg = load("{}");
+        assert_eq!(cfg, AppConfig::default());
         assert_eq!(cfg.cockpit_anchor_x, 1920);
         assert!(cfg.cluster_scale > 0.0);
         assert!(cfg.standard_cockpit_fov > 0.0);
@@ -762,42 +1117,61 @@ mod tests {
 
     #[test]
     fn acronym_keys_round_trip() {
-        let cfg =
-            AppConfig::from_json_str(r#"{"StandardCockpitFOV":71,"ShowBonnetGTWidgets":false}"#).expect("valid json");
+        let cfg = load(r#"{"StandardCockpitFOV":71,"BonnetFov":90}"#);
         assert_eq!(cfg.standard_cockpit_fov, 71.0);
-        assert!(!cfg.show_bonnet_gt_widgets);
+        assert_eq!(cfg.bonnet_fov, 90.0, "the old spelling still loads");
         let json = serde_json::to_string(&cfg).expect("serialises");
         assert!(json.contains("\"StandardCockpitFOV\":71"), "{json}");
-        assert!(json.contains("\"ShowBonnetGTWidgets\":false"), "{json}");
+        assert!(json.contains("\"BonnetFOV\":90"), "{json}");
         assert!(!json.contains("StandardCockpitFov"), "{json}");
     }
 
     #[test]
     fn unknown_keys_are_preserved() {
-        let cfg = AppConfig::from_json_str(r#"{"PrimaryPort":8000,"FutureKey":"x"}"#).expect("valid json");
-        assert_eq!(cfg.extra.get("FutureKey"), Some(&serde_json::Value::from("x")));
+        let cfg = load(r#"{"PorscheAnalogScale":"Classic","FutureKey":"x"}"#);
+        assert_eq!(cfg.extra.get("FutureKey"), Some(&Value::from("x")));
         let json = serde_json::to_string(&cfg).expect("serialises");
         assert!(json.contains("\"FutureKey\":\"x\""));
+        assert!(json.contains("\"PorscheAnalogScale\":\"Classic\""));
     }
 
     #[test]
     fn bom_is_tolerated() {
-        let cfg = AppConfig::from_json_str("\u{feff}{\"CockpitAnchorY\":1800}").expect("valid json");
-        assert_eq!(cfg.cockpit_anchor_y, 1800);
+        assert_eq!(load("\u{feff}{\"CockpitAnchorY\":1800}").cockpit_anchor_y, 1800);
+    }
+
+    #[test]
+    fn a_file_that_is_not_an_object_is_an_error() {
+        assert!(AppConfig::from_json_str("[1,2]").is_err());
+        assert!(AppConfig::from_json_str("{\"CockpitAnchorY\":").is_err());
     }
 
     #[test]
     fn zero_and_invalid_values_are_sanitised() {
-        let cfg = AppConfig::from_json_str(
-            r#"{"UdpPort":0,"CockpitScale":0,"ClusterScale":-1,"OsdToggleMask":4096,"OsdHoldMs":5,"CurrentCameraIndex":9}"#,
-        )
-        .expect("valid json");
+        let cfg = load(
+            r#"{"UdpPort":0,"ClusterScale":-1,"OsdToggleMask":4096,"OsdHoldMs":5,"CurrentCameraIndex":9,
+                "OledDimmerMinAlpha":3.5,"ShiftPointPct":0.1,"ClusterFont":"  ","OemDashWidthScale":0}"#,
+        );
         assert_eq!(cfg.udp_port, 8000);
-        assert_eq!(cfg.cockpit_scale, 1.45);
         assert_eq!(cfg.cluster_scale, 1.0);
         assert_eq!(cfg.osd_toggle_mask, 0x0020);
         assert_eq!(cfg.osd_hold_ms, OSD_HOLD_MS_MIN);
         assert_eq!(cfg.current_camera_index, 3);
+        assert_eq!(cfg.oled_dimmer_min_alpha, 1.0);
+        assert_eq!(cfg.shift_point_pct, Some(SHIFT_POINT_MIN));
+        assert_eq!(cfg.cluster_font, None);
+        assert_eq!(cfg.oem_dash_width_scale, 1.0);
+    }
+
+    #[test]
+    fn the_dimmer_floor_has_one_default_and_one_range() {
+        assert_eq!(AppConfig::default().oled_dimmer_min_alpha, DEFAULT_MIN_ALPHA);
+        assert_eq!(load(r#"{"OledDimmerMinAlpha":-0.2}"#).oled_dimmer_min_alpha, 0.0);
+        let nan = AppConfig {
+            oled_dimmer_min_alpha: f32::NAN,
+            ..AppConfig::default()
+        };
+        assert_eq!(AppConfig::sanitized(nan).oled_dimmer_min_alpha, DEFAULT_MIN_ALPHA);
     }
 
     #[test]
@@ -821,6 +1195,201 @@ mod tests {
         assert_eq!(ports.primary, 8000);
         assert_eq!(ports.fallback, Some(5500));
         assert_eq!(ports.forward, Some(5607));
+    }
+
+    #[test]
+    fn styles_load_by_name_or_alias_and_the_chase_follows_the_cockpit() {
+        let cfg = load(r#"{"CockpitHudStyle":"liquidglass","BonnetHudStyle":"hood"}"#);
+        assert_eq!(cfg.theme(FitView::Cockpit), ClusterTheme::LiquidGlass);
+        assert_eq!(cfg.theme(FitView::Hood), ClusterTheme::Gt7HoodPro);
+        assert_eq!(cfg.chase_hud_style, None);
+        assert_eq!(cfg.theme(FitView::Chase), ClusterTheme::LiquidGlass);
+        let json = serde_json::to_string(&cfg).expect("serialises");
+        assert!(json.contains("\"CockpitHudStyle\":\"LiquidGlass\""), "{json}");
+        assert!(!json.contains("ChaseHudStyle"), "absent stays absent: {json}");
+
+        let mut cfg = cfg;
+        cfg.set_theme(FitView::Chase, ClusterTheme::RetroCyber);
+        assert_eq!(cfg.theme(FitView::Chase), ClusterTheme::RetroCyber);
+        assert_eq!(cfg.theme(FitView::Cockpit), ClusterTheme::LiquidGlass);
+    }
+
+    #[test]
+    fn blank_styles_mean_the_default_and_a_blank_cockpit_takes_the_old_hud_style() {
+        let cfg = load(r#"{"CockpitHudStyle":"","HudStyle":"PorscheAnalog","BonnetHudStyle":" ","ChaseHudStyle":""}"#);
+        assert_eq!(cfg.cockpit_hud_style, ClusterTheme::PorscheAnalog);
+        assert_eq!(cfg.bonnet_hud_style, ClusterTheme::Gt7HoodPro);
+        assert_eq!(cfg.chase_hud_style, None);
+        assert!(!cfg.extra.contains_key("HudStyle"), "retired");
+
+        let no_fallback = load(r#"{"CockpitHudStyle":"","HudStyle":""}"#);
+        assert_eq!(no_fallback.cockpit_hud_style, ClusterTheme::BoschDdu);
+        let present_wins = load(r#"{"CockpitHudStyle":"RetroCyber","HudStyle":"PorscheAnalog"}"#);
+        assert_eq!(present_wins.cockpit_hud_style, ClusterTheme::RetroCyber);
+    }
+
+    #[test]
+    fn a_value_that_does_not_fit_takes_its_default_and_the_rest_still_loads() {
+        let cfg = load(
+            r#"{"CockpitHudStyle":"NoSuchDash","CockpitAnchorY":"high","SpeedUnit":"furlongs",
+                "CockpitAnchorX":1700,"BonnetHudStyle":"LiquidGlass","UdpPort":8100}"#,
+        );
+        assert_eq!(cfg.cockpit_hud_style, ClusterTheme::BoschDdu);
+        assert_eq!(cfg.cockpit_anchor_y, 1835);
+        assert_eq!(cfg.speed_unit, SpeedUnit::Mph);
+        assert_eq!(cfg.cockpit_anchor_x, 1700);
+        assert_eq!(cfg.bonnet_hud_style, ClusterTheme::LiquidGlass);
+        assert_eq!(cfg.udp_port, 8100);
+        assert!(
+            !cfg.extra.contains_key("CockpitHudStyle"),
+            "a dropped value is not kept as unknown"
+        );
+    }
+
+    #[test]
+    fn two_spellings_of_one_key_keep_the_first() {
+        let cfg = load(r#"{"BonnetFOV":91,"BonnetFov":99,"CockpitAnchorX":1700}"#);
+        assert_eq!(cfg.bonnet_fov, 91.0);
+        assert_eq!(cfg.cockpit_anchor_x, 1700);
+    }
+
+    #[test]
+    fn retired_keys_are_dropped_and_not_saved() {
+        let mut raw = Map::new();
+        for key in RETIRED_KEYS {
+            raw.insert((*key).to_owned(), Value::from(1));
+        }
+        let cfg = load(&Value::Object(raw).to_string());
+        let json = serde_json::to_string(&cfg).expect("serialises");
+        for key in RETIRED_KEYS {
+            assert!(!json.contains(&format!("\"{key}\"")), "{key} was saved");
+        }
+        assert!(cfg.extra.is_empty(), "{:?}", cfg.extra);
+    }
+
+    #[test]
+    fn no_retired_key_is_a_setting() {
+        let json = serde_json::to_value(AppConfig::default()).expect("serialises");
+        for key in RETIRED_KEYS {
+            assert!(json.get(*key).is_none(), "{key} is both retired and a setting");
+        }
+    }
+
+    #[test]
+    fn an_old_seat_height_migrates_once() {
+        let old = r#"{"Version":"6.0.0","CockpitOffsetY":-0.08}"#;
+        let cfg = load(old);
+        assert_eq!(cfg.driver_seat_height_m, -0.08);
+        assert_eq!(cfg.version, CONFIG_VERSION);
+        assert!(!cfg.extra.contains_key("CockpitOffsetY"));
+        // The old value is clamped to the seat range.
+        assert_eq!(load(r#"{"CockpitOffsetY":-0.5}"#).driver_seat_height_m, -0.100);
+        // A seat the user set is never overwritten.
+        let set = load(r#"{"Version":"6.0.0","CockpitOffsetY":-0.08,"DriverSeatHeightM":0.01}"#);
+        assert_eq!(set.driver_seat_height_m, 0.01);
+        // The bug this fixes: the user sets the seat back to the default, the file still holds
+        // the old key, and the next load brought the old value back. A 7.0.0 file is left alone.
+        let reset = load(r#"{"Version":"7.0.0","CockpitOffsetY":-0.08,"DriverSeatHeightM":-0.045}"#);
+        assert_eq!(reset.driver_seat_height_m, DEFAULT_SEAT_HEIGHT_M);
+        // After one save nothing is left to migrate.
+        let saved = serde_json::to_string(&cfg).expect("serialises");
+        assert!(!saved.contains("CockpitOffsetY"), "{saved}");
+        assert_eq!(load(&saved), cfg);
+    }
+
+    #[test]
+    fn the_old_default_driver_name_is_cleared_and_an_empty_name_stays_empty() {
+        let old = format!(r#"{{"Version":"6.0.0","CustomDriverName":"{OLD_DEFAULT_DRIVER_NAME}"}}"#);
+        assert_eq!(load(&old).custom_driver_name, "");
+        assert_eq!(load(r#"{"CustomDriverName":""}"#).custom_driver_name, "");
+        assert_eq!(AppConfig::default().custom_driver_name, "");
+        assert_eq!(load(r#"{"CustomDriverName":"TJX"}"#).custom_driver_name, "TJX");
+        let kept = format!(r#"{{"Version":"7.0.0","CustomDriverName":"{OLD_DEFAULT_DRIVER_NAME}"}}"#);
+        assert_eq!(
+            load(&kept).custom_driver_name,
+            OLD_DEFAULT_DRIVER_NAME,
+            "a name typed in a 7.0.0 file is the user's"
+        );
+    }
+
+    #[test]
+    fn an_old_file_keeps_the_power_unit_it_showed() {
+        let mph = load(r#"{"Version":"6.0.0","SpeedUnit":"MPH","PowerUnit":"kW"}"#);
+        assert_eq!(mph.power_unit, PowerUnit::Hp);
+        let kmh = load(r#"{"Version":"6.0.0","SpeedUnit":"KPH"}"#);
+        assert_eq!((kmh.speed_unit, kmh.power_unit), (SpeedUnit::Kmh, PowerUnit::Kw));
+        let chosen = load(r#"{"Version":"6.0.0","SpeedUnit":"KMH","PowerUnit":"HP"}"#);
+        assert_eq!(chosen.power_unit, PowerUnit::Hp, "a non-default choice is kept");
+        let new = load(r#"{"Version":"7.0.0","SpeedUnit":"MPH","PowerUnit":"kW"}"#);
+        assert_eq!(new.power_unit, PowerUnit::Kw, "7.0.0 files are taken as written");
+    }
+
+    #[test]
+    fn a_newer_file_keeps_its_version() {
+        assert_eq!(load(r#"{"Version":"8.1.0"}"#).version, "8.1.0");
+    }
+
+    #[test]
+    fn the_old_cluster_height_fills_the_unset_views() {
+        let cfg = load(r#"{"ClusterHeightOffsetPx":-30,"BonnetHeightOffsetPx":12}"#);
+        assert_eq!(cfg.cockpit_height_offset_px, -30.0);
+        assert_eq!(cfg.bonnet_height_offset_px, 12.0);
+        assert_eq!(cfg.chase_height_offset_px, -30.0);
+        assert!(!cfg.extra.contains_key("ClusterHeightOffsetPx"));
+    }
+
+    #[test]
+    fn the_osd_settings_are_typed_fields() {
+        let cfg = load(
+            r#"{"ReducedFlash":true,"GlassRefraction":true,"PaletteSeed":4242,"ClusterFont":"Inter",
+                "ShowLogo":false,"ShowStats":true,"ShiftPointPct":0.9,"ColorMode":"random"}"#,
+        );
+        assert!(cfg.reduced_flash && cfg.glass_refraction && cfg.show_stats && !cfg.show_logo);
+        assert_eq!(cfg.palette_seed, Some(4242));
+        assert_eq!(cfg.cluster_font.as_deref(), Some("Inter"));
+        assert_eq!(cfg.shift_point_pct, Some(0.9));
+        assert_eq!(cfg.color_mode, ColorMode::Random);
+        assert!(cfg.extra.is_empty(), "{:?}", cfg.extra);
+        let d = AppConfig::default();
+        assert!(d.show_logo && !d.show_stats && !d.reduced_flash && !d.glass_refraction);
+    }
+
+    #[test]
+    fn setting_names_parse_and_print() {
+        for u in [SpeedUnit::Mph, SpeedUnit::Kmh] {
+            assert_eq!(u.name().parse(), Ok(u));
+            assert_eq!(u.to_string(), u.name());
+        }
+        assert_eq!(" km/h ".parse(), Ok(SpeedUnit::Kmh));
+        assert_eq!(SpeedUnit::Kmh.label(), "KM/H");
+        for p in [PowerUnit::Hp, PowerUnit::Kw] {
+            assert_eq!(p.name().parse(), Ok(p));
+        }
+        assert_eq!("KW".parse(), Ok(PowerUnit::Kw));
+        for m in [
+            ColorMode::AutoBrand,
+            ColorMode::Brand,
+            ColorMode::Custom,
+            ColorMode::Random,
+        ] {
+            assert_eq!(m.name().to_lowercase().parse(), Ok(m));
+        }
+        assert_eq!("Factory".parse(), Ok(ColorMode::AutoBrand));
+        let err = "furlongs".parse::<SpeedUnit>().expect_err("not a unit");
+        assert_eq!(err.setting(), "speed unit");
+        assert_eq!(err.to_string(), "unknown speed unit");
+    }
+
+    #[test]
+    fn a_load_save_load_cycle_is_stable() {
+        let cfg = load(
+            r#"{"Version":"6.0.0","CockpitHudStyle":"bosch","ChaseHudStyle":"RetroCyber","SpeedUnit":"kmh",
+                "PaletteSeed":7,"ShiftPointPct":0.95,"CockpitOffsetY":-0.06,"PorscheAnalogScale":"Classic"}"#,
+        );
+        let saved = serde_json::to_string_pretty(&cfg).expect("serialises");
+        let again = load(&saved);
+        assert_eq!(again, cfg);
+        assert_eq!(serde_json::to_string_pretty(&again).expect("serialises"), saved);
     }
 
     #[test]

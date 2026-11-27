@@ -5,82 +5,12 @@
 //! [`Line`], so nothing here allocates per frame.
 use crate::fit::{CameraApply, CockpitFit};
 use crate::palette_edit::{ColourTarget, Hsv, PRESETS};
-use fh6_core::{AppConfig, ClusterTheme};
+use fh6_core::{AppConfig, ClusterTheme, ColorMode, PowerUnit, SpeedUnit};
 use fh6_kit::View;
-use serde_json::Value;
 use std::fmt::{self, Write as _};
 
-// ----- config keys kept in `extra` -------------------------------------------------------
-
-/// Gentle limiter pulse instead of the 10 Hz strobe.
-pub const KEY_REDUCED_FLASH: &str = "ReducedFlash";
-/// Optional world refraction behind glass.
-pub const KEY_REFRACTION: &str = "GlassRefraction";
-/// Random palette seed; present = the same palette on every car.
-pub const KEY_SEED: &str = "PaletteSeed";
-/// Display font family for the clusters (absent = the pack's default).
-pub const KEY_FONT: &str = "ClusterFont";
-/// Logo zone on or off (absent = on).
-pub const KEY_LOGO: &str = "ShowLogo";
-/// The stats overlay (absent = off; `--stats` also turns it on).
-pub const KEY_STATS: &str = "ShowStats";
-/// Shift point as a fraction of the redline (absent = the tokens' value).
-pub const KEY_SHIFT: &str = "ShiftPointPct";
-
 /// The shift point shown when `ShiftPointPct` is absent (tokens `revStages.shiftPct`).
-pub const DEFAULT_SHIFT_PCT: f64 = 0.97;
-
-fn extra_bool(cfg: &AppConfig, key: &str, default: bool) -> bool {
-    cfg.extra.get(key).and_then(Value::as_bool).unwrap_or(default)
-}
-
-fn extra_f64(cfg: &AppConfig, key: &str, default: f64) -> f64 {
-    cfg.extra.get(key).and_then(Value::as_f64).unwrap_or(default)
-}
-
-fn extra_str<'a>(cfg: &'a AppConfig, key: &str) -> Option<&'a str> {
-    cfg.extra
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-}
-
-fn set_extra(cfg: &mut AppConfig, key: &str, value: Value) {
-    cfg.extra.insert(key.to_string(), value);
-}
-
-/// `ShowLogo` (default on).
-#[must_use]
-pub fn show_logo(cfg: &AppConfig) -> bool {
-    extra_bool(cfg, KEY_LOGO, true)
-}
-
-/// `ShowStats` (default off).
-#[must_use]
-pub fn show_stats(cfg: &AppConfig) -> bool {
-    extra_bool(cfg, KEY_STATS, false)
-}
-
-/// `ReducedFlash` (default off).
-#[must_use]
-pub fn reduced_flash(cfg: &AppConfig) -> bool {
-    extra_bool(cfg, KEY_REDUCED_FLASH, false)
-}
-
-/// `ClusterFont`, when set.
-#[must_use]
-pub fn cluster_font(cfg: &AppConfig) -> Option<&str> {
-    extra_str(cfg, KEY_FONT)
-}
-
-/// `ShiftPointPct` (0.80..1.00), when set.
-#[must_use]
-pub fn shift_point(cfg: &AppConfig) -> Option<f32> {
-    cfg.extra
-        .get(KEY_SHIFT)
-        .and_then(Value::as_f64)
-        .map(|v| (v as f32).clamp(0.80, 1.0))
-}
+pub const DEFAULT_SHIFT_PCT: f32 = 0.97;
 
 // ----- a stack string ----------------------------------------------------------------------
 
@@ -376,10 +306,11 @@ impl RowList {
     }
 }
 
-/// The colour modes, in row order.
+/// The colour modes the OSD offers, in row order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColourMode {
-    /// The car's brand palette.
+    /// The car's brand palette ([`ColorMode::AutoBrand`]; a config in [`ColorMode::Brand`] shows
+    /// as Factory too).
     Factory,
     /// The four hex colours.
     Custom,
@@ -391,13 +322,10 @@ impl ColourMode {
     /// The mode `cfg` is in.
     #[must_use]
     pub fn of(cfg: &AppConfig) -> Self {
-        let m = cfg.color_mode.trim();
-        if m.eq_ignore_ascii_case("custom") {
-            ColourMode::Custom
-        } else if m.eq_ignore_ascii_case("random") {
-            ColourMode::Random
-        } else {
-            ColourMode::Factory
+        match cfg.color_mode {
+            ColorMode::Custom => ColourMode::Custom,
+            ColorMode::Random => ColourMode::Random,
+            ColorMode::AutoBrand | ColorMode::Brand => ColourMode::Factory,
         }
     }
 
@@ -409,11 +337,11 @@ impl ColourMode {
         }
     }
 
-    fn value(self) -> &'static str {
+    fn value(self) -> ColorMode {
         match self {
-            ColourMode::Factory => "AutoBrand",
-            ColourMode::Custom => "Custom",
-            ColourMode::Random => "Random",
+            ColourMode::Factory => ColorMode::AutoBrand,
+            ColourMode::Custom => ColorMode::Custom,
+            ColourMode::Random => ColorMode::Random,
         }
     }
 
@@ -704,7 +632,7 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
     }
     Some(match row {
         RowId::EditView => "The live view follows the view you edit",
-        RowId::Cluster => "Left and right browse all 29 clusters",
+        RowId::Cluster => "Left and right browse every cluster",
         RowId::ShiftPoint => "Where the shift lights reach the last stage",
         RowId::LimiterStyle => "Gentle pulse avoids the 10 Hz flash",
         RowId::FactorySwatches => "From the car's brand colours",
@@ -723,47 +651,16 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
 
 // ----- clusters per view ---------------------------------------------------------------------
 
-/// The theme `cfg` selects for `view`: hood uses `BonnetHudStyle`; chase uses `ChaseHudStyle`
-/// when set, else the cockpit cluster; cockpit uses `CockpitHudStyle`, then `HudStyle`. A name
-/// that is neither a theme's own name nor a short alias selects `BoschDdu`. Allocation-free.
+/// The theme `cfg` selects for `view`: `CockpitHudStyle`, `BonnetHudStyle`, or for the chase
+/// cameras `ChaseHudStyle` when set, else the cockpit cluster ([`AppConfig::theme`]).
 #[must_use]
 pub fn theme_for_view(cfg: &AppConfig, view: View) -> ClusterTheme {
-    let cockpit = || {
-        if !cfg.cockpit_hud_style.trim().is_empty() {
-            cfg.cockpit_hud_style.as_str()
-        } else if !cfg.hud_style.trim().is_empty() {
-            cfg.hud_style.as_str()
-        } else {
-            "LiquidGlass"
-        }
-    };
-    let style = match view {
-        View::Hood if !cfg.bonnet_hud_style.trim().is_empty() => cfg.bonnet_hud_style.as_str(),
-        View::Hood => "Gt7HoodPro",
-        View::Chase if !cfg.chase_hud_style.trim().is_empty() => cfg.chase_hud_style.as_str(),
-        View::Chase => cockpit(),
-        View::Cockpit => cockpit(),
-    };
-    style.parse().unwrap_or(ClusterTheme::BoschDdu)
+    cfg.theme(view.fit_view())
 }
 
-/// Writes `theme` as the cluster for `view` (string and typed fields).
+/// Writes `theme` as the cluster for `view`.
 pub fn set_theme_for_view(cfg: &mut AppConfig, view: View, theme: ClusterTheme) {
-    let name = theme.to_string();
-    match view {
-        View::Cockpit => {
-            cfg.cockpit_hud_style = name;
-            cfg.cockpit_hud_style_typed = theme;
-        }
-        View::Hood => {
-            cfg.bonnet_hud_style = name;
-            cfg.bonnet_hud_style_typed = theme;
-        }
-        View::Chase => {
-            cfg.chase_hud_style = name;
-            cfg.chase_hud_style_typed = theme;
-        }
-    }
+    cfg.set_theme(view.fit_view(), theme);
 }
 
 /// The theme `steps` along [`ClusterTheme::all`], wrapping.
@@ -847,21 +744,13 @@ fn view_step(view: View, d: i32) -> View {
 
 // ----- values ----------------------------------------------------------------------------------
 
-fn kmh(cfg: &AppConfig) -> bool {
-    cfg.speed_unit.eq_ignore_ascii_case("KMH") || cfg.speed_unit.eq_ignore_ascii_case("KPH")
-}
-
-fn hp(cfg: &AppConfig) -> bool {
-    cfg.power_unit.eq_ignore_ascii_case("HP")
-}
-
 /// The numeric value of a slider row.
 #[must_use]
 pub fn slider_value(row: RowId, ctx: Ctx<'_>) -> f32 {
     let cfg = ctx.cfg;
     let hsv = ctx.edit.hsv[ctx.edit.target_index()];
     match row {
-        RowId::ShiftPoint => (extra_f64(cfg, KEY_SHIFT, DEFAULT_SHIFT_PCT) * 100.0) as f32,
+        RowId::ShiftPoint => cfg.shift_point_pct.unwrap_or(DEFAULT_SHIFT_PCT) * 100.0,
         RowId::Hue => hsv.h,
         RowId::Saturation => hsv.s * 100.0,
         RowId::Brightness => hsv.v * 100.0,
@@ -886,11 +775,7 @@ pub fn slider_value(row: RowId, ctx: Ctx<'_>) -> f32 {
 fn set_slider(row: RowId, v: f32, cfg: &mut AppConfig, edit: &mut EditState, fit: &dyn CockpitFit) {
     let ti = edit.target_index();
     match row {
-        RowId::ShiftPoint => set_extra(
-            cfg,
-            KEY_SHIFT,
-            Value::from(f64::from((v / 100.0 * 1000.0).round() / 1000.0)),
-        ),
+        RowId::ShiftPoint => cfg.shift_point_pct = Some((v / 100.0 * 1000.0).round() / 1000.0),
         RowId::Hue | RowId::Saturation | RowId::Brightness => {
             let hsv = &mut edit.hsv[ti];
             match row {
@@ -954,9 +839,15 @@ pub fn format_value(row: RowId, ctx: Ctx<'_>, out: &mut Line) {
         _ => match row {
             RowId::EditView => out.write_str(view_label(edit.view)),
             RowId::Cluster => out.write_str(theme_label(theme_for_view(cfg, edit.view))),
-            RowId::SpeedUnit => out.write_str(if kmh(cfg) { "km/h" } else { "mph" }),
-            RowId::PowerUnit => out.write_str(if hp(cfg) { "hp" } else { "kW" }),
-            RowId::LimiterStyle => out.write_str(if reduced_flash(cfg) {
+            RowId::SpeedUnit => out.write_str(match cfg.speed_unit {
+                SpeedUnit::Mph => "mph",
+                SpeedUnit::Kmh => "km/h",
+            }),
+            RowId::PowerUnit => out.write_str(match cfg.power_unit {
+                PowerUnit::Hp => "hp",
+                PowerUnit::Kw => "kW",
+            }),
+            RowId::LimiterStyle => out.write_str(if cfg.reduced_flash {
                 "Gentle pulse"
             } else {
                 "10 Hz strobe"
@@ -964,7 +855,7 @@ pub fn format_value(row: RowId, ctx: Ctx<'_>, out: &mut Line) {
             RowId::ColourMode => out.write_str(ColourMode::of(cfg).label()),
             RowId::ColourRole => out.write_str(edit.colour_target.label()),
             RowId::Preset => out.write_str(PRESETS[edit.preset % PRESETS.len()].name),
-            RowId::Font => out.write_str(cluster_font(cfg).unwrap_or("Pack default")),
+            RowId::Font => out.write_str(cfg.cluster_font.as_deref().unwrap_or("Pack default")),
             RowId::CustomName => {
                 let n = cfg.custom_driver_name.trim();
                 out.write_str(if n.is_empty() { "None" } else { n })
@@ -985,12 +876,12 @@ pub fn format_value(row: RowId, ctx: Ctx<'_>, out: &mut Line) {
 #[must_use]
 pub fn toggle_value(row: RowId, cfg: &AppConfig) -> bool {
     match row {
-        RowId::PaletteLock => cfg.extra.get(KEY_SEED).is_some_and(|v| v.as_u64().is_some()),
-        RowId::GlassRefraction => extra_bool(cfg, KEY_REFRACTION, false),
-        RowId::ShowLogo => show_logo(cfg),
+        RowId::PaletteLock => cfg.palette_seed.is_some(),
+        RowId::GlassRefraction => cfg.glass_refraction,
+        RowId::ShowLogo => cfg.show_logo,
         RowId::CameraPatch => cfg.camera_patch_auto,
         RowId::AutoPause => cfg.osd_auto_pause_game,
-        RowId::Stats => show_stats(cfg),
+        RowId::Stats => cfg.show_stats,
         _ => false,
     }
 }
@@ -1064,22 +955,16 @@ pub fn adjust(
         RowKind::Toggle => {
             let on = !toggle_value(row, cfg);
             match row {
-                RowId::PaletteLock => {
-                    if on {
-                        set_extra(cfg, KEY_SEED, Value::from(new_seed(0)));
-                    } else {
-                        cfg.extra.remove(KEY_SEED);
-                    }
-                }
-                RowId::GlassRefraction => set_extra(cfg, KEY_REFRACTION, Value::Bool(on)),
-                RowId::ShowLogo => set_extra(cfg, KEY_LOGO, Value::Bool(on)),
+                RowId::PaletteLock => cfg.palette_seed = on.then(|| new_seed(0)),
+                RowId::GlassRefraction => cfg.glass_refraction = on,
+                RowId::ShowLogo => cfg.show_logo = on,
                 RowId::CameraPatch => {
                     cfg.camera_patch_auto = on;
                     // The camera rows' notice follows the patch state.
                     edit.camera = fit.camera_changed(cfg);
                 }
                 RowId::AutoPause => cfg.osd_auto_pause_game = on,
-                RowId::Stats => set_extra(cfg, KEY_STATS, Value::Bool(on)),
+                RowId::Stats => cfg.show_stats = on,
                 _ => return Effect::default(),
             }
             Effect::CHANGED
@@ -1095,8 +980,7 @@ pub fn adjust(
                 ..Effect::default()
             },
             RowId::Reroll => {
-                let old = cfg.extra.get(KEY_SEED).and_then(Value::as_u64).unwrap_or(1);
-                set_extra(cfg, KEY_SEED, Value::from(new_seed(old)));
+                cfg.palette_seed = Some(new_seed(cfg.palette_seed.unwrap_or(1)));
                 Effect::CHANGED
             }
             RowId::Resync => {
@@ -1126,21 +1010,26 @@ fn adjust_choice(row: RowId, d: i32, cfg: &mut AppConfig, edit: &mut EditState) 
             Effect::CHANGED
         }
         RowId::SpeedUnit => {
-            cfg.speed_unit = if kmh(cfg) { "MPH" } else { "KMH" }.to_string();
+            cfg.speed_unit = match cfg.speed_unit {
+                SpeedUnit::Mph => SpeedUnit::Kmh,
+                SpeedUnit::Kmh => SpeedUnit::Mph,
+            };
             Effect::CHANGED
         }
         RowId::PowerUnit => {
-            cfg.power_unit = if hp(cfg) { "kW" } else { "HP" }.to_string();
+            cfg.power_unit = match cfg.power_unit {
+                PowerUnit::Hp => PowerUnit::Kw,
+                PowerUnit::Kw => PowerUnit::Hp,
+            };
             Effect::CHANGED
         }
         RowId::LimiterStyle => {
-            let gentle = !reduced_flash(cfg);
-            set_extra(cfg, KEY_REDUCED_FLASH, Value::Bool(gentle));
+            cfg.reduced_flash = !cfg.reduced_flash;
             Effect::CHANGED
         }
         RowId::ColourMode => {
             let next = ColourMode::of(cfg).step(d);
-            cfg.color_mode = next.value().to_string();
+            cfg.color_mode = next.value();
             if next == ColourMode::Custom {
                 // Make the four hex values coherent with what the editor shows.
                 for (i, t) in ColourTarget::ALL.into_iter().enumerate() {
@@ -1170,14 +1059,16 @@ fn adjust_choice(row: RowId, d: i32, cfg: &mut AppConfig, edit: &mut EditState) 
         }
         RowId::Font => {
             let n = edit.fonts.len() as i32 + 1;
-            let cur = cluster_font(cfg)
+            let cur = cfg
+                .cluster_font
+                .as_deref()
                 .and_then(|f| edit.fonts.iter().position(|x| x.eq_ignore_ascii_case(f)))
                 .map_or(0, |i| i as i32 + 1);
             let next = (cur + d).rem_euclid(n);
             if next == 0 {
-                cfg.extra.remove(KEY_FONT);
+                cfg.cluster_font = None;
             } else if let Some(name) = edit.fonts.get((next - 1) as usize) {
-                set_extra(cfg, KEY_FONT, Value::String(name.clone()));
+                cfg.cluster_font = Some(name.clone());
             }
             Effect::CHANGED
         }
@@ -1239,10 +1130,9 @@ mod tests {
         let mut cfg = AppConfig::default();
         let mut edit = EditState::default();
         let mut fit = ConfigOnlyFit;
-        cfg.cockpit_hud_style = "LiquidGlass".into();
+        cfg.cockpit_hud_style = ClusterTheme::LiquidGlass;
         adjust(RowId::Cluster, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cfg.cockpit_hud_style, "WindshieldHud");
-        assert_eq!(cfg.cockpit_hud_style_typed, ClusterTheme::WindshieldHud);
+        assert_eq!(cfg.cockpit_hud_style, ClusterTheme::WindshieldHud);
         edit.view = View::Chase;
         assert_eq!(
             theme_for_view(&cfg, View::Chase),
@@ -1252,7 +1142,7 @@ mod tests {
         adjust(RowId::Cluster, -1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(theme_for_view(&cfg, View::Chase), ClusterTheme::LiquidGlass);
         assert_eq!(theme_for_view(&cfg, View::Cockpit), ClusterTheme::WindshieldHud);
-        // Every theme round-trips through its config name.
+        // Every theme can be set and read back.
         for t in ClusterTheme::all() {
             set_theme_for_view(&mut cfg, View::Hood, *t);
             assert_eq!(theme_for_view(&cfg, View::Hood), *t);
@@ -1299,7 +1189,7 @@ mod tests {
 
         // The chase cluster goes to the typed key the render loop reads.
         set_theme_for_view(&mut cfg, View::Chase, ClusterTheme::RetroCyber);
-        assert_eq!(cfg.chase_hud_style, "RetroCyber");
+        assert_eq!(cfg.chase_hud_style, Some(ClusterTheme::RetroCyber));
         assert!(!cfg.extra.contains_key("ChaseHudStyle"));
 
         // The camera patch switch drives the notice under the camera rows.
@@ -1349,20 +1239,25 @@ mod tests {
         let mut edit = EditState::default();
         let mut fit = ConfigOnlyFit;
         edit.load_colours(&cfg);
-        cfg.color_mode = "AutoBrand".into();
+        cfg.color_mode = ColorMode::AutoBrand;
         adjust(RowId::ColourMode, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cfg.color_mode, "Custom");
+        assert_eq!(cfg.color_mode, ColorMode::Custom);
         assert!(rows(Tab::Colour, ctx(&cfg, &edit)).as_slice().contains(&RowId::Hue));
         adjust(RowId::Preset, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(cfg.primary_hex, PRESETS[1].hex[0]);
         adjust(RowId::Hue, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert_ne!(cfg.primary_hex, PRESETS[1].hex[0]);
         adjust(RowId::ColourMode, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cfg.color_mode, "Random");
+        assert_eq!(cfg.color_mode, ColorMode::Random);
         adjust(RowId::Reroll, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert!(toggle_value(RowId::PaletteLock, &cfg));
         adjust(RowId::PaletteLock, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert!(cfg.extra.get(KEY_SEED).is_none());
+        assert_eq!(cfg.palette_seed, None);
+        // A config in Brand mode shows as Factory, and stepping from it leaves Brand.
+        cfg.color_mode = ColorMode::Brand;
+        assert_eq!(ColourMode::of(&cfg), ColourMode::Factory);
+        adjust(RowId::ColourMode, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.color_mode, ColorMode::Custom);
     }
 
     #[test]
@@ -1370,17 +1265,45 @@ mod tests {
         let mut cfg = AppConfig::default();
         let mut edit = EditState::default();
         let mut fit = ConfigOnlyFit;
-        assert!(show_logo(&cfg));
+        assert!(cfg.show_logo);
         adjust(RowId::ShowLogo, -1, 1, &mut cfg, &mut edit, &mut fit);
-        assert!(!show_logo(&cfg));
+        assert!(!cfg.show_logo);
         assert!(adjust(RowId::CustomName, 1, 1, &mut cfg, &mut edit, &mut fit).keyboard);
         assert!(!adjust(RowId::CustomName, -1, 1, &mut cfg, &mut edit, &mut fit).keyboard);
         assert!(adjust(RowId::OsdButton, 1, 1, &mut cfg, &mut edit, &mut fit).remap);
         edit.fonts = vec!["Saira Condensed".into(), "Michroma".into()];
         adjust(RowId::Font, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cluster_font(&cfg), Some("Saira Condensed"));
+        assert_eq!(cfg.cluster_font.as_deref(), Some("Saira Condensed"));
         adjust(RowId::Font, -1, 1, &mut cfg, &mut edit, &mut fit);
-        assert_eq!(cluster_font(&cfg), None);
+        assert_eq!(cfg.cluster_font, None);
+    }
+
+    #[test]
+    fn units_shift_point_and_limiter_rows_edit_typed_fields() {
+        let mut cfg = AppConfig::default();
+        let mut edit = EditState::default();
+        let mut fit = ConfigOnlyFit;
+        let mut line = Line::new();
+        adjust(RowId::SpeedUnit, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.speed_unit, SpeedUnit::Kmh);
+        format_value(RowId::SpeedUnit, ctx(&cfg, &edit), &mut line);
+        assert_eq!(line.as_str(), "km/h");
+        assert_eq!(cfg.power_unit, PowerUnit::Hp, "the power unit is its own setting");
+        adjust(RowId::PowerUnit, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.power_unit, PowerUnit::Kw);
+        adjust(RowId::LimiterStyle, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert!(cfg.reduced_flash);
+
+        assert_eq!(cfg.shift_point_pct, None);
+        assert!((slider_value(RowId::ShiftPoint, ctx(&cfg, &edit)) - 97.0).abs() < 1e-3);
+        adjust(RowId::ShiftPoint, -1, 1, &mut cfg, &mut edit, &mut fit);
+        let set = cfg.shift_point_pct.expect("the slider sets the shift point");
+        assert!((0.80..=1.0).contains(&set), "{set}");
+        assert!(
+            cfg.extra.is_empty(),
+            "nothing lands in the untyped keys: {:?}",
+            cfg.extra
+        );
     }
 
     #[test]
