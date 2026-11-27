@@ -13,3 +13,5 @@ tracing.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 fh6-gpu = { path = "../fh6-gpu" }
+wgpu = { workspace = true, features = ["noop"] }
+allocation-counter = "0.8.1"

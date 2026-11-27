@@ -341,6 +341,102 @@ impl Scene {
             0,
         ]
     }
+
+    /// A hash of everything the GPU will draw this frame: every instance, paint, clip, point,
+    /// draw run, layer segment and mesh draw, bit for bit. Two frames with the same fingerprint
+    /// draw the same picture, so a test can tell whether an input reached the frame without a
+    /// GPU readback. It is stable within one build, not across builds.
+    #[must_use]
+    pub fn fingerprint(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hasher};
+        let mut h = DefaultHasher::new();
+        self.for_each_float(|v| h.write_u32(v.to_bits()));
+        for i in &self.instances {
+            h.write(bytemuck::bytes_of(&i.ids));
+        }
+        for p in &self.paints {
+            h.write(bytemuck::bytes_of(&p.head));
+        }
+        for d in &self.draws {
+            match d {
+                DrawCmd::Shapes {
+                    instances,
+                    blend,
+                    image,
+                } => {
+                    h.write_u8(0);
+                    h.write_u32(instances.start);
+                    h.write_u32(instances.end);
+                    std::hash::Hash::hash(blend, &mut h);
+                    std::hash::Hash::hash(image, &mut h);
+                }
+                DrawCmd::Mesh(index) => {
+                    h.write_u8(1);
+                    h.write_u32(*index);
+                }
+            }
+        }
+        for s in &self.segments {
+            h.write_u32(s.draws.start);
+            h.write_u32(s.draws.end);
+            h.write_u8(u8::from(s.backdrop_px.is_some()));
+        }
+        for m in &self.meshes {
+            h.write_u32(m.draw.mesh.0);
+            h.write_u8(m.draw.shading as u8);
+            h.write_u32(m.bloom);
+        }
+        h.write_u32(self.dropped);
+        h.finish()
+    }
+
+    /// How many floats the GPU would read this frame are NaN or infinite (0 in a healthy frame).
+    /// The robustness gate (G5) drives every dash with hostile telemetry and asserts this is 0.
+    #[must_use]
+    pub fn non_finite_count(&self) -> usize {
+        let mut n = 0;
+        self.for_each_float(|v| n += usize::from(!v.is_finite()));
+        n
+    }
+
+    /// Calls `f` with every float the GPU reads: instance, paint, clip and point data, layer
+    /// blur and frost sigmas, and the mesh draws.
+    fn for_each_float(&self, mut f: impl FnMut(f32)) {
+        let mut all = |vs: &[f32]| vs.iter().copied().for_each(&mut f);
+        for i in &self.instances {
+            for v in [i.xform, i.xlate, i.bbox, i.p0, i.p1, i.p2, i.style, i.color] {
+                all(&v);
+            }
+        }
+        for p in &self.paints {
+            for v in [p.g0, p.g1, p.g2, p.g3] {
+                all(&v);
+            }
+            all(bytemuck::cast_slice(&p.colors));
+            all(bytemuck::cast_slice(&p.offsets));
+        }
+        for c in &self.clips {
+            all(&c.rect);
+            all(&c.params);
+        }
+        all(bytemuck::cast_slice(&self.points));
+        for s in &self.segments {
+            all(&[s.blur_px, s.backdrop_px.unwrap_or(0.0)]);
+        }
+        for m in &self.meshes {
+            let d = &m.draw;
+            all(bytemuck::cast_slice(&d.model.cols));
+            all(bytemuck::cast_slice(&d.view_proj.cols));
+            all(&[d.eye.x, d.eye.y, d.eye.z, d.light.x, d.light.y, d.light.z]);
+            for r in [d.viewport, m.viewport] {
+                all(&[r.min.x, r.min.y, r.max.x, r.max.y]);
+            }
+            for c in [d.color, d.rim] {
+                all(&[c.r, c.g, c.b, c.a]);
+            }
+            all(&[m.opacity]);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -353,6 +449,69 @@ mod tests {
         assert_eq!(size_of::<Instance>(), 144);
         assert_eq!(size_of::<GpuPaint>(), 240);
         assert_eq!(size_of::<GpuClip>(), 32);
+    }
+
+    fn instance(x: f32) -> Instance {
+        Instance {
+            xform: [1.0, 0.0, 0.0, 1.0],
+            xlate: [x, 0.0, 1.0, 1.0],
+            ..Instance::zeroed()
+        }
+    }
+
+    #[test]
+    fn fingerprint_follows_every_drawn_value() {
+        let mut a = Scene::new();
+        let mut b = Scene::new();
+        assert_eq!(a.fingerprint(), b.fingerprint());
+        a.instances.push(instance(10.0));
+        b.instances.push(instance(10.0));
+        assert_eq!(a.fingerprint(), b.fingerprint());
+        b.instances[0].xlate[0] = 10.5;
+        assert_ne!(a.fingerprint(), b.fingerprint(), "a moved instance");
+        b.instances[0] = instance(10.0);
+        b.instances[0].ids[1] = 3;
+        assert_ne!(a.fingerprint(), b.fingerprint(), "another paint index");
+        b.instances[0] = instance(10.0);
+        b.draws.push(DrawCmd::Shapes {
+            instances: 0..1,
+            blend: BlendMode::Add,
+            image: None,
+        });
+        assert_ne!(a.fingerprint(), b.fingerprint(), "a draw run");
+        a.draws.push(DrawCmd::Shapes {
+            instances: 0..1,
+            blend: BlendMode::Normal,
+            image: None,
+        });
+        assert_ne!(a.fingerprint(), b.fingerprint(), "another blend mode");
+        a.clear();
+        b.clear();
+        assert_eq!(a.fingerprint(), b.fingerprint(), "clear resets everything");
+    }
+
+    #[test]
+    fn non_finite_count_sees_every_float_list() {
+        let mut s = Scene::new();
+        assert_eq!(s.non_finite_count(), 0, "a cleared scene is finite");
+        s.instances.push(instance(f32::NAN));
+        assert_eq!(s.non_finite_count(), 1);
+        s.instances[0].color[3] = f32::INFINITY;
+        assert_eq!(s.non_finite_count(), 2);
+        s.paints[0].colors[7][0] = f32::NEG_INFINITY;
+        s.paints[0].offsets[1][3] = f32::NAN;
+        assert_eq!(s.non_finite_count(), 4);
+        s.clips[0].params[0] = f32::NAN;
+        s.points.push([f32::NAN, 0.0]);
+        s.segments.push(Segment {
+            draws: 0..0,
+            blur_px: f32::NAN,
+            backdrop_px: Some(f32::INFINITY),
+        });
+        assert_eq!(s.non_finite_count(), 8);
+        // Integer fields are not floats: an id whose bits read as NaN does not count.
+        s.instances[0].ids = [u32::MAX; 4];
+        assert_eq!(s.non_finite_count(), 8);
     }
 
     #[test]
