@@ -1,6 +1,6 @@
 # HANDOVER: Dash · Liquid Glass (catalog row 1)
 
-**Thread / branch:** thread 1 of the v2 rebuild plan, on `main` (shared checkout)  **Date:** 2026-11-27  **Result:** ◐ in progress. The first build is done and TJX's direction check is open.
+**Thread / branch:** thread 1 of the v2 rebuild plan, on `main` (shared checkout)  **Date:** 2026-11-27  **Result:** ◐ in progress. The second build (every piece a lens) is done; TJX's answer to it is open.
 
 This is a draft. It replaces the handover of the first pilot, which TJX rejected on 2026-11-27 (that file is in the git history). The sections marked *pending* are filled in after the direction check.
 
@@ -13,8 +13,8 @@ This is a draft. It replaces the handover of the first pilot, which TJX rejected
 | One bespoke ComfyUI asset and one bespoke Blender asset, used, with ledger rows and masters on Drive | yes | [assets/clusters/liquid_glass/ASSETS.md](../../../../../assets/clusters/liquid_glass/ASSETS.md) |
 | The module is complete, with no TODOs, and goldens pass | first build | `cargo test --workspace`: every suite ok, 49 goldens |
 | 4K renders, the 60-frame sequence and the product page | first build | `mockups/LiquidGlass/` |
-| GPU under 0.5 ms; the live bench | GPU yes; live bench *pending* | sequence p50 0.336 ms, p99 0.378 ms |
-| The direction check got a go from TJX | *pending* | posted 2026-11-27 |
+| GPU under 0.5 ms; the live bench | GPU yes; live bench *pending* | sequence p50 0.344 ms, p99 0.411 ms |
+| The direction check got a go from TJX | *pending* | first render posted 2026-11-27; TJX's reply and the second render are under "TJX's direction check" |
 | Every line of the closing review is yes | *pending* | |
 | TJX has signed off | *pending* | |
 
@@ -40,7 +40,9 @@ First build, 2026-11-27 (`preview-export --cluster LiquidGlass`, RTX 3070 Ti Lap
 The final `cargo check`, `cargo test`, `cargo clippy`, `rustfmt` and live-bench output goes here at the close.
 
 ## TJX's direction check
-Posted 2026-11-27 with the full-frame cockpit render of `02_mid_cruise`, its close-up and the Penpot board. Answer: *pending*.
+- **First render** (flat-faced pieces with thin rims), posted 2026-11-27 with the full-frame cockpit render of `02_mid_cruise`, its close-up and the Penpot board.
+- **TJX, 2026-11-27 15:18Z, in the project chat:** "exactly we want 2027 future not anything less just modern in all fairness". This thread read it as go with changes (the direction is right, the render is only modern) and asked TJX to confirm that reading.
+- **Second render**, posted 2026-11-27: every piece is a lens. The gear sits under a dome that magnifies it, an upshift sends a ripple across it, the capsules are shallow domes, the rev rod is graduated, hard braking fuses the pieces, and the studio light leans to the car's colour. Answer: *pending*.
 
 ## Before and after pair
 *Pending.* The "before" (the first pilot, rendered from `main` before the rebuild) is kept in `mockups/_before/LiquidGlass/02_mid_cruise_cockpit.png`.
@@ -55,8 +57,12 @@ See the ledger [assets/clusters/liquid_glass/ASSETS.md](../../../../../assets/cl
 
 ## My calls
 - **The liquid-light tile is ray traced, not generated.** The SDXL caustic came back as four mismatched quadrants and was not a caustic. The recipe now traces 151 million rays through a rippled water surface, which is exact and tiles by construction. ComfyUI's asset in this dash is the studio panorama.
-- **Thin edges, not pillows.** The first render used a 46 px rounded edge and read as glossy black buttons. The edges are now 20 to 26 px, and the studio has a horizon ring, so each piece shows a thin line along its whole outline.
-- **A black core under each flat face.** Smoked glass would dim the numerals as much as the picture behind them, so it gains no contrast. A core under the face keeps the numerals readable over a bright cabin or bonnet and leaves the rounded edge clear.
+- **A studio of thin lights.** The first render had one broad softbox and wide rounded edges, and read as glossy black buttons. The studio is now a horizon ring and two thin strips, so each piece shows a thin line along its whole outline.
+- **Every piece is a dome, and the gear is really magnified.** A drop of liquid is a dome, and a dome is a lens. The gear is drawn at cap 156 and seen about 1.15 times larger through 96 px of sapphire. Numerals stay where the surface tilts less than 22°, so no reflection crosses them (unit-tested from the profile).
+- **The upshift ripple is held under 5°.** The first try (26°) shredded the numeral for a third of a second. At 0.5 px over a 40 px wavelength its edges move 3 px: a wobble, and the gear never loses its shape.
+- **No colour splitting.** Sapphire this thin separates red from blue by under a pixel (optics.md §5), so the dash does not show it, and it is not faked.
+- **No pool of light under the pieces.** It turned the faces navy, which rule 7 of the design rules forbids. The studio light leans to the car's colour instead, so the rims carry it.
+- **A black core under each piece that holds numerals.** Smoked glass would dim the numerals as much as the picture behind them, so it gains no contrast. A core keeps the numerals readable over a bright cabin or bonnet and leaves the rim clear.
 - **No caustic plate under the pieces and no relief-mapped crystal.** A caustic needs a diffuse surface to land on, and the pieces sit on an emissive black display.
 - **The environment map is 8-bit sRGB with white = radiance 16**, so it stays an optimised PNG; the HDR masters are the EXR cube faces.
 

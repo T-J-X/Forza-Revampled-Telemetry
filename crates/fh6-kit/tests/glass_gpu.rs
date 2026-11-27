@@ -4,11 +4,11 @@
 
 use fh6_gpu::GpuContext;
 use fh6_kit::color::srgb_to_linear;
-use fh6_kit::optics::{fresnel_dielectric, transmittance, view_through, Dispersion, Profile};
+use fh6_kit::optics::{fresnel_dielectric, ripple_slope, transmittance, view_through, Dispersion, Profile};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    deg, vec2, Color, Environment, Gradient, Kit, LayerOptions, Layout, OpticalGlass, Painter, Piece, Rect, Shape,
-    Tokens, Vec2,
+    deg, vec2, Color, Environment, Gradient, Kit, LayerOptions, Layout, OpticalGlass, Painter, Piece, Rect, Ripple,
+    Shape, Tokens, Vec2,
 };
 
 const W: u32 = 640;
@@ -358,5 +358,66 @@ fn materialise_grows_the_lens_and_never_fades() {
         let got = at(&img, vec2(r, 0.5));
         let want = 1.0 - fresnel_dielectric(1.0, eta[1]);
         assert!((got[1] - want).abs() <= 0.02, "r = {r}: {} vs flat {want}", got[1]);
+    }
+}
+
+#[test]
+fn a_ripple_bends_only_where_it_stands() {
+    // optics.md §2, surface waves. A flat face shows the ramp under it unbent. A ring packet
+    // tilts the surface by atan(dη/dr) where it stands, so the refracted ray lands
+    // (H + b) tan(θi − θt) away, and the face is still everywhere else.
+    let (ctx, mut kit) = setup();
+    let profile = Profile {
+        thickness: 20.0,
+        bevel: 20.0,
+        base: 30.0,
+        exponent: 2.0,
+    };
+    let wave = Ripple {
+        center: Vec2::ZERO,
+        radius: 100.0,
+        amplitude: 1.5,
+        wavelength: 24.0,
+    };
+    let ramp = |x: f32| ((x - FIELD.min.x) / FIELD.width()).clamp(0.0, 1.0);
+    let mut shot = |name: &str, ripple: Ripple| {
+        render(&mut kit, &ctx, name, |p| {
+            p.fill(
+                &Shape::rect(FIELD),
+                Gradient::linear(vec2(FIELD.min.x, 0.0), vec2(FIELD.max.x, 0.0))
+                    .stop(0.0, Color::BLACK)
+                    .stop(1.0, Color::WHITE),
+            );
+            let mut glass = dark_sapphire().with_profile(profile);
+            glass.ripple = ripple;
+            p.layer(LayerOptions::glass(0.0), |p| {
+                p.fill(&Shape::circle(Vec2::ZERO, 200.0), glass);
+            });
+        })
+    };
+    let still = shot("ripple_still", Ripple::default());
+    let rippled = shot("ripple", wave);
+    let eta = Dispersion::SAPPHIRE.primaries()[1];
+    let depth = profile.thickness + profile.base;
+    // Along +x the wave's slope is dη/dx. Green shows (1 − F) ramp(x + Δ) with Snell's Δ.
+    for x in [88.5_f32, 94.5, 97.5, 103.5, 106.5, 112.5] {
+        let slope = ripple_slope(wave.amplitude, wave.wavelength, wave.radius, x);
+        let tilt = slope.atan();
+        let inside = (tilt.sin() / eta).asin();
+        // The normal leans to -slope, and the ray bends towards the normal's foot: +slope.
+        let offset = depth * (tilt - inside).tan();
+        let want = (1.0 - fresnel_dielectric(tilt.cos(), eta)) * ramp(x + offset);
+        let got = at(&rippled, vec2(x, 0.5))[1];
+        assert!(
+            (got - want).abs() <= 0.012,
+            "x = {x}: shader {got} vs traced {want} (slope {slope}, offset {offset})"
+        );
+    }
+    // The steep flanks really move the picture (so the check above is not vacuous).
+    let moved = at(&rippled, vec2(94.5, 0.5))[1] - at(&still, vec2(94.5, 0.5))[1];
+    assert!(moved.abs() > 0.008, "the flank moved the ramp by {moved}");
+    // More than three wavelengths from the ring, and with no wave, nothing changes.
+    for pos in [vec2(3.5, 0.5), vec2(-12.5, 14.5), vec2(0.5, -176.5), vec2(176.5, 0.5)] {
+        assert_eq!(at(&still, pos), at(&rippled, pos), "{pos:?}");
     }
 }

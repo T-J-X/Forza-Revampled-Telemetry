@@ -444,6 +444,22 @@ impl Profile {
     }
 }
 
+/// Height of a ring wave packet on a glass surface at distance `r` from its centre
+/// (`docs/specs/optics.md` §2): `A e^(−x²) cos(2πx)` with `x = (r − R) / λ`.
+#[must_use]
+pub fn ripple_height(amplitude: f32, wavelength: f32, radius: f32, r: f32) -> f32 {
+    let x = (r - radius) / wavelength.max(1e-6);
+    amplitude * (-x * x).exp() * (2.0 * PI * x).cos()
+}
+
+/// Radial slope of that packet, `dη/dr`: what tilts the surface normal.
+#[must_use]
+pub fn ripple_slope(amplitude: f32, wavelength: f32, radius: f32, r: f32) -> f32 {
+    let l = wavelength.max(1e-6);
+    let x = (r - radius) / l;
+    amplitude * (-x * x).exp() * (-2.0 * x * (2.0 * PI * x).cos() - 2.0 * PI * (2.0 * PI * x).sin()) / l
+}
+
 /// Variance of the pixel filter (a Gaussian of peak 1: 1 / 2π) and the clamp of the footprint
 /// filter (`docs/specs/optics.md` §7, [S22]).
 pub const FOOTPRINT_SIGMA2: f32 = 0.159_154_94;
@@ -724,6 +740,29 @@ mod tests {
             transmittance(sigma, 7.0),
             1e-6,
             "paths multiply",
+        );
+    }
+
+    #[test]
+    fn a_ripple_is_a_packet_with_the_stated_slope() {
+        let (a, l, big_r) = (3.0, 24.0, 90.0);
+        close(ripple_height(a, l, big_r, big_r), a, 1e-6, "the crest sits on the ring");
+        close(ripple_slope(a, l, big_r, big_r), 0.0, 1e-6, "a crest is level");
+        // The slope is the derivative of the height.
+        for r in [60.0_f32, 78.0, 85.0, 93.0, 101.5, 120.0] {
+            let numeric = (ripple_height(a, l, big_r, r + 0.01) - ripple_height(a, l, big_r, r - 0.01)) / 0.02;
+            close(ripple_slope(a, l, big_r, r), numeric, 2e-3, "slope");
+        }
+        // Three wavelengths away the surface is still (the shader stops there).
+        assert!(ripple_height(a, l, big_r, big_r + 3.0 * l).abs() < 1e-3 * a);
+        assert!(ripple_slope(a, l, big_r, big_r - 3.0 * l).abs() < 1e-3);
+        // The steepest slope is about 2π A / λ, which bounds how far the normal tilts.
+        let steepest = (0..2000)
+            .map(|i| ripple_slope(a, l, big_r, 30.0 + i as f32 * 0.06).abs())
+            .fold(0.0, f32::max);
+        assert!(
+            steepest <= 2.0 * PI * a / l && steepest > 0.8 * 2.0 * PI * a / l,
+            "{steepest}"
         );
     }
 

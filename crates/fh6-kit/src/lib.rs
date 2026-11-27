@@ -53,7 +53,7 @@ pub use kit::{Kit, KitError};
 pub use math::{deg, vec2, Affine, Rect, Vec2};
 pub use paint::{
     BlendMode, Environment, Glass, Gradient, GradientKind, ImageId, ImagePaint, ImageWrap, OpticalGlass, Paint,
-    Refraction, Spread, Stop, LIGHT_REST_AZIMUTH,
+    Refraction, Ripple, Spread, Stop, LIGHT_REST_AZIMUTH,
 };
 pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};

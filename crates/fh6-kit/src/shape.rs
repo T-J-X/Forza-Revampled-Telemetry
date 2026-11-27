@@ -1173,6 +1173,16 @@ mod tests {
     }
 
     #[test]
+    fn two_outlines_touch_at_the_stated_blend_length() {
+        // optics.md §2: fronts a gap g apart first meet midway at k = g / (2 ln 2).
+        let g = 82.0_f32;
+        let k = g / (2.0 * std::f32::consts::LN_2);
+        assert!(smooth_union(g * 0.5, g * 0.5, k).abs() < 1e-3);
+        assert!(smooth_union(g * 0.5, g * 0.5, k * 0.9) > 0.0, "apart below it");
+        assert!(smooth_union(g * 0.5, g * 0.5, k * 1.1) < 0.0, "fused above it");
+    }
+
+    #[test]
     fn smooth_union_properties() {
         let k = 12.0;
         for (a, b, c) in [(-30.0_f32, 5.0_f32, 40.0_f32), (3.0, 3.0, 3.0), (-8.0, -9.0, 20.0)] {

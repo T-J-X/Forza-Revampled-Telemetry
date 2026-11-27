@@ -782,10 +782,19 @@ fn gpu_paint(paint: &Paint, images: &Images) -> GpuPaint {
                 unit(gl.env_gain[2], 0.0).max(0.0),
                 env_mips,
             ];
+            // The ripple rides in the spare lanes: amplitude and wavelength beside the first two
+            // rotation rows, its centre and radius beside the materialise level.
+            let wave = gl.ripple;
+            let spare = [unit(wave.amplitude, 0.0), unit(wave.wavelength, 0.0).max(0.0), 0.0];
             for (row, v) in gl.env_rotation.iter().enumerate() {
-                g.colors[2 + row] = [unit(v.x, 0.0), unit(v.y, 0.0), unit(v.z, 0.0), 0.0];
+                g.colors[2 + row] = [unit(v.x, 0.0), unit(v.y, 0.0), unit(v.z, 0.0), spare[row]];
             }
-            g.colors[5] = [unit(gl.materialize, 1.0).clamp(0.0, 1.0), 0.0, 0.0, 0.0];
+            g.colors[5] = [
+                unit(gl.materialize, 1.0).clamp(0.0, 1.0),
+                unit(wave.center.x, 0.0),
+                unit(wave.center.y, 0.0),
+                unit(wave.radius, 0.0),
+            ];
         }
     }
     g

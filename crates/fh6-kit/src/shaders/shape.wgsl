@@ -870,8 +870,24 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     // n is proportional to (-grad h, 1) = (-grad(h^k), k h^(k-1)); the second form has no
     // division, so it reaches the horizontal rim normal without a singularity.
     let rot = in.xform / px;
-    let slope = vec2<f32>(rot.x * gq.x + rot.z * gq.y, rot.y * gq.x + rot.w * gq.y);
+    var slope = vec2<f32>(rot.x * gq.x + rot.z * gq.y, rot.y * gq.x + rot.w * gq.y);
     let up = k * pow(max(h, 1e-5), k - 1.0);
+    // Section 2, surface waves: a ring packet eta(r) = A e^(-x^2) cos(2 pi x), x = (r - R) / L,
+    // adds its own slope. With q = h^k the normal is (-grad q - U grad eta, U), U = k h^(k-1).
+    var waved = false;
+    let wave_a = pa.colors[2].w * grown;
+    let wave_l = pa.colors[3].w;
+    if (abs(wave_a) > 1e-4 && wave_l > 1e-3) {
+        let rel = p - pa.colors[5].yz;
+        let rr = max(length(rel), 1e-4);
+        let x = (rr - pa.colors[5].w) / wave_l;
+        if (abs(x) < 3.0) {
+            let d_eta = wave_a * exp(-x * x) * (-2.0 * x * cos(TAU * x) - TAU * sin(TAU * x)) / wave_l;
+            let ge = rel / rr * d_eta;
+            slope = slope + up * vec2<f32>(rot.x * ge.x + rot.z * ge.y, rot.y * ge.x + rot.w * ge.y);
+            waved = true;
+        }
+    }
     var n = vec3<f32>(0.0, 0.0, 1.0);
     let n_len = length(vec3<f32>(slope, up));
     if (n_len > 1e-12) {
@@ -893,7 +909,7 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         let theta_s = (g_s * up - big_g * u_s) / (n_len * n_len) * one_px;
         let kappa = (fxp.x + fxm.x + fyp.x + fym.x - 4.0 * f0.x) / one_px;
         let sin_t = big_g / n_len;
-        let downhill = -slope / big_g;
+        let downhill = -vec2<f32>(rot.x * gq.x + rot.z * gq.y, rot.y * gq.x + rot.w * gq.y) / big_g;
         dn_s = theta_s * vec3<f32>(downhill * n.z, -sin_t);
         dn_c = kappa * sin_t * vec3<f32>(-downhill.y, downhill.x, 0.0);
     }
@@ -923,7 +939,7 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         var sg = textureSampleLevel(backdrop, samp, ug, 0.0);
         var sr = sg;
         var sb = sg;
-        if (big_g > 1e-9) {
+        if (big_g > 1e-9 || waved) {
             // Only a sloped surface sends the three colours to different places.
             sr = textureSampleLevel(backdrop, samp, ur, 0.0);
             sb = textureSampleLevel(backdrop, samp, ub, 0.0);

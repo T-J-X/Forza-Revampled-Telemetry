@@ -1,11 +1,11 @@
 //! Liquid Glass (`ClusterTheme::LiquidGlass`), catalog row 1: the pilot of the Liquid Glass
 //! family (cockpit and hood).
 //!
-//! Separate pieces of optical glass float over the display. Each one reads as glass only
-//! because of how it bends and catches light (`fh6_kit::OpticalGlass`, `docs/specs/optics.md`):
-//! there is no painted rim, no tinted slab and no texture inside the glass. The light lives
-//! under the glass, and the glass bends it. Research: `RESEARCH.md`. Board: Penpot page
-//! `07 · LiquidGlass`.
+//! Separate drops of optical glass float over the display, and every one is a lens. Each reads
+//! as glass only because of how it bends and catches light (`fh6_kit::OpticalGlass`,
+//! `docs/specs/optics.md`): there is no painted rim, no tinted slab and no texture inside the
+//! glass. The light lives under the glass, and the glass bends it: the gear is seen through a
+//! dome that really magnifies it. Research: `RESEARCH.md`. Board: Penpot page `07 · LiquidGlass`.
 //!
 //! Zone table (local 4K px round the anchor; the hood value in brackets where it differs):
 //!
@@ -14,21 +14,24 @@
 //! | Shift cabochons | 16 pills | x −450..450 [−525..525], 34 [30] above the rod | 46 × 18 [52 × 16] | dome 9 [8] / whole / 4 | rank 1: one light under each |
 //! | Rev rod | arc band | through (±600, −214) and (0, −250) [(±760, −146), (0, −176)] | 22 [20] wide | half rod 11 [10] / whole / 5 | rank 3: the liquid-light ribbon |
 //! | Bead | disc on the rod | the head of the ribbon | r 20 [17] | dome / whole / 8 | the meniscus; hot on the limiter |
-//! | Gear puck | disc | (0, −50) [(0, −28)] | r 160 [116] | 20 / 26 / 14 [16 / 20 / 12] | rank 1: the gear, cap 176 [128]; the ring light |
-//! | Speed pill | pill | (−436, −50) [(−452, −28)] | 388 × 172 [372 × 148] | 18 / 22 / 12 [14 / 18 / 10] | rank 2: speed, cap 96 [84], and its unit |
+//! | Gear lens | disc | (0, −50) [(0, −28)] | r 160 [116] | dome 72 [52] / whole / 24 [18] | rank 1: the gear, drawn at cap 156 [112] and magnified about 1.15 times; the ring light |
+//! | Speed pill | pill | (−436, −50) [(−452, −28)] | 388 × 172 [372 × 148] | dome 30 [26] / whole / 20 [16] | rank 2: speed, cap 88 [76], and its unit |
 //! | Info pill | pill | (436, −50) [(452, −28)] | as the speed pill | as the speed pill | power and boost, cap 40 [34] |
 //! | G lens | disc | (0, 180) [(0, 138)] | r 44 [36] | dome r / 2 / whole / 12 | rank 4: the G light |
 //! | Foot row | text | y 100, under the side pills | – | – | rpm readout (left), logo zone (right) |
 //!
-//! Draw order: a black core under each flat face (so a bright cabin or bonnet never washes the
-//! numerals out), then every light, then all the glass in one layer.
+//! Draw order: a black core under each piece that holds numerals (so a bright cabin or bonnet
+//! never washes them out), then every light, then all the glass in one layer.
 //!
 //! Signature moments:
 //! - **Limiter:** only the cabochon strip strobes (10 Hz, `common::ShiftLights`), and the 16
 //!   cabochons fuse into one bar of glass. The steady cue is the bead: its light turns white
 //!   with a warning halo. The ribbon and the numerals keep their colours.
-//! - **Upshift:** the gear puck flexes (its rise grows by a quarter for 250 ms) and the ring
-//!   light runs once round it.
+//! - **Upshift:** a ripple runs across the gear lens from its middle to its rim and bends the
+//!   numeral for a moment, the lens swells (its rise grows by a seventh) and the ring light
+//!   runs once round it.
+//! - **Braking:** the side pills reach for the gear puck and, at 1 g, fuse with it through
+//!   thin necks of glass, on the tokens' slosh spring.
 //! - **Light:** one rig lights every piece. Lateral G swings it up to 25° and acceleration
 //!   leans it 6° per g, so highlights travel across all the pieces together.
 //! - **Show:** the glass grows in over 200 ms (its thickness, never its opacity) and the side
@@ -45,8 +48,8 @@ use core::f32::consts::{PI, TAU};
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
     deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Environment, FontId, FontRole, FrameInput, Glow, Gradient,
-    ImageId, ImagePaint, LayerOptions, Layout, Logo, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Shape,
-    Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, Tween, VAlign, Vec2, View,
+    ImageId, ImagePaint, LayerOptions, Layout, Logo, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Ripple,
+    Shape, Signals, Smoothed, Spring, Stroke, TextStyle, Tokens, Tween, VAlign, Vec2, View,
 };
 
 /// The 16 cabochons (catalog brief).
@@ -62,31 +65,39 @@ const PILL_BASE: f32 = 4.0;
 const ROD_BASE: f32 = 5.0;
 const BEAD_BASE: f32 = 8.0;
 const LENS_BASE: f32 = 12.0;
-/// Share by which the gear puck's rise grows at the peak of the upshift flex, and how long the
-/// flex and the ring light's lap take (s).
-const FLEX: f32 = 0.25;
-const FLEX_S: f32 = 0.25;
-/// Width of one repeat of the liquid-light tile (px): its caustic cells are then about 32 px.
-const LIGHT_TILE: f32 = 1024.0;
+/// Blend length at full braking, as a share of the gap between the gear puck and a side pill.
+/// Two outlines a gap apart first touch at gap / (2 ln 2), 0.72 of the gap; just past that the
+/// side pills fuse with the puck through thin necks of glass.
+const BRIDGE_REACH: f32 = 0.78;
+/// Braking (g) at which the pieces start to reach for each other, and at which they have fused.
+const BRIDGE_G: (f32, f32) = (0.25, 1.0);
+/// share by which the gear lens's rise grows at the peak of the upshift flex, and how long the
+/// flex, the ripple and the ring light's lap take (s).
+const FLEX: f32 = 0.15;
+const FLEX_S: f32 = 0.42;
+/// The upshift ripple on the gear lens: peak height and crest-to-crest distance (px). The
+/// steepest slope is 2π × height / wavelength, under 5°: through 96 px of glass that moves the
+/// numeral's edges by 3 px, a wobble that never costs the gear its shape.
+const RIPPLE_HEIGHT: f32 = 0.5;
+const RIPPLE_WAVE: f32 = 40.0;
+/// How far the studio's light leans to the car's primary colour (0 white, 1 the pure hue): the
+/// cabin's ambient lighting, mirrored in every rim.
+const AMBIENT_TINT: f32 = 0.4;
+/// Width of one repeat of the liquid-light tile (px): its caustic cells are then about 64 px,
+/// wider than the ribbon, so the light swells and thins along it and never looks scratched.
+const LIGHT_TILE: f32 = 2048.0;
+/// Most graduations the rod can carry (one per 1000 rpm).
+const MAX_GRADUATIONS: usize = 16;
 /// Irradiance that white stores in `liquid_light.png`, and radiance that white stores in
 /// `studio_env.png` (`assets/clusters/liquid_glass/ASSETS.md`).
 const LIGHT_WHITE: f32 = 4.0;
 const ENV_WHITE: f32 = 16.0;
 /// Speed of the liquid light along the rod at the limiter (px/s); it scales with rpm.
 const FLOW_SPEED: f32 = 90.0;
-/// Opacity (linear) of the black core under a flat face.
+/// Opacity (linear) of the black core under a piece that holds numerals.
 const CORE_ALPHA: f32 = 0.92;
 /// Lateral or longitudinal G at which the light rig and the G light reach their limits.
 const G_LIMIT: f32 = 1.5;
-
-/// The cross-section of a piece with a flat face: the rise of the face above the rim, the width
-/// of the rounded edge and the glass below the rim (`docs/specs/optics.md` §2).
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Section {
-    thickness: f32,
-    bevel: f32,
-    base: f32,
-}
 
 /// Geometry of one view (local 4K px round the anchor): the zone table above, as data.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -105,12 +116,17 @@ struct Geom {
     bead_r: f32,
     gear: Vec2,
     gear_r: f32,
+    /// Cap height the gear is drawn at; the dome shows it about a sixth larger.
     gear_cap: f32,
-    gear_section: Section,
+    /// The gear puck is a dome: its rise at the middle, and the glass under its rim.
+    gear_rise: f32,
+    gear_base: f32,
     /// Centre of the info pill; the speed pill mirrors it.
     side: Vec2,
     side_size: Vec2,
-    side_section: Section,
+    /// The side pills are shallow domes: the rise along their middle, and the glass under the rim.
+    side_rise: f32,
+    side_base: f32,
     speed_cap: f32,
     info_cap: f32,
     /// Half the distance between the two rows of the info pill.
@@ -132,20 +148,14 @@ const COCKPIT: Geom = Geom {
     bead_r: 20.0,
     gear: vec2(0.0, -50.0),
     gear_r: 160.0,
-    gear_cap: 176.0,
-    gear_section: Section {
-        thickness: 20.0,
-        bevel: 26.0,
-        base: 14.0,
-    },
+    gear_cap: 156.0,
+    gear_rise: 72.0,
+    gear_base: 24.0,
     side: vec2(436.0, -50.0),
     side_size: vec2(388.0, 172.0),
-    side_section: Section {
-        thickness: 18.0,
-        bevel: 22.0,
-        base: 12.0,
-    },
-    speed_cap: 96.0,
+    side_rise: 30.0,
+    side_base: 20.0,
+    speed_cap: 88.0,
     info_cap: 40.0,
     info_row: 30.0,
     lens: vec2(0.0, 180.0),
@@ -165,20 +175,14 @@ const HOOD: Geom = Geom {
     bead_r: 17.0,
     gear: vec2(0.0, -28.0),
     gear_r: 116.0,
-    gear_cap: 128.0,
-    gear_section: Section {
-        thickness: 16.0,
-        bevel: 20.0,
-        base: 12.0,
-    },
+    gear_cap: 112.0,
+    gear_rise: 52.0,
+    gear_base: 18.0,
     side: vec2(452.0, -28.0),
     side_size: vec2(372.0, 148.0),
-    side_section: Section {
-        thickness: 14.0,
-        bevel: 18.0,
-        base: 10.0,
-    },
-    speed_cap: 84.0,
+    side_rise: 26.0,
+    side_base: 16.0,
+    speed_cap: 76.0,
     info_cap: 34.0,
     info_row: 26.0,
     lens: vec2(0.0, 138.0),
@@ -284,6 +288,9 @@ pub struct LiquidGlass {
     flex: Tween,
     /// The materialise ramp.
     show: Tween,
+    /// How far the side pills reach for the gear puck (0 apart, 1 fused): hard braking.
+    bridge: Spring,
+    bridge_target: f32,
     spot: [Spring; 2],
     spot_target: [f32; 2],
     defocus: Smoothed<f32>,
@@ -349,6 +356,8 @@ impl LiquidGlass {
             cue: LimiterCue::new(),
             flex: Tween::new(FLEX_S),
             show,
+            bridge: Spring::new(t.springs.fluid_slosh, 0.0),
+            bridge_target: 0.0,
             spot: [Spring::new(t.springs.g_ball, 0.0), Spring::new(t.springs.g_ball, 0.0)],
             spot_target: [0.0; 2],
             defocus: Smoothed::new(0.0, 0.12),
@@ -448,10 +457,25 @@ impl Cluster for LiquidGlass {
         self.lean_target = [lean(sig.g_long), lean(sig.g_lat)];
         self.lean[0].update(self.lean_target[0], dt);
         self.lean[1].update(self.lean_target[1], dt);
+        // Liquid inertia: braking makes the side pills reach for the puck, on the slosh spring.
+        self.bridge_target = if sig.g_long.is_finite() {
+            ((-sig.g_long - BRIDGE_G.0) / (BRIDGE_G.1 - BRIDGE_G.0)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.bridge.update(self.bridge_target, dt);
         let mut glass = input.tokens.optical_glass(&self.palette);
         if let Some(env) = self.environment {
             glass.environment = Environment::Map(env);
             glass.env_gain = glass.env_gain.map(|g| g * ENV_WHITE);
+        }
+        // The studio's light leans to the car's colour, as a cabin's ambient lighting does.
+        let hue = self.palette.primary;
+        let peak = hue.r.max(hue.g).max(hue.b).max(1e-4);
+        let lean_to = [hue.r, hue.g, hue.b].map(|c| 1.0 - AMBIENT_TINT * (1.0 - c / peak));
+        for c in 0..3 {
+            glass.env_gain[c] *= lean_to[c];
+            glass.light[c] *= lean_to[c];
         }
         glass.refraction = Refraction::World;
         glass.aim(
@@ -518,6 +542,7 @@ impl Cluster for LiquidGlass {
             || self.gear.animating()
             || self.cue.animating()
             || !self.rev.settled(self.rev_target, 0.001)
+            || !self.bridge.settled(self.bridge_target, 0.002)
             || !self.lean[0].settled(self.lean_target[0], 0.001)
             || !self.lean[1].settled(self.lean_target[1], 0.001)
             || !self.spot[0].settled(self.spot_target[0], 0.05)
@@ -526,8 +551,9 @@ impl Cluster for LiquidGlass {
 }
 
 impl LiquidGlass {
-    /// A black core under each flat face and under the G lens, soft across the rounded edge:
-    /// the numerals keep their contrast over a bright cabin or bonnet, and the edge stays clear.
+    /// A black core under each piece that holds numerals (and under the G lens), soft towards
+    /// the rim: the numerals keep their contrast over a bright cabin or bonnet, and the rim
+    /// stays clear.
     fn draw_cores(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let shown = self.shown();
         let black = pal.roles.oled_black.with_alpha(CORE_ALPHA * shown);
@@ -536,17 +562,13 @@ impl LiquidGlass {
             intensity: 1.0,
             fill_inside: true,
         };
-        let gs = g.gear_section;
-        p.glow(
-            &Shape::circle(g.gear, (g.gear_r - gs.bevel).max(1.0)),
-            black,
-            soft(gs.bevel),
-        );
-        let ss = g.side_section;
+        // The dome bends every sight line inwards, so nothing within about 16 px of its rim is
+        // ever seen: the core stops there.
+        p.glow(&Shape::circle(g.gear, (g.gear_r - 14.0).max(1.0)), black, soft(12.0));
         for sign in [-1.0, 1.0] {
-            let face = g.side_rect(sign, shown).inset(ss.bevel);
+            let face = g.side_rect(sign, shown).inset(14.0);
             if face.width() > 1.0 && face.height() > 1.0 {
-                p.glow(&Shape::round_rect(face, face.height() * 0.5), black, soft(ss.bevel));
+                p.glow(&Shape::round_rect(face, face.height() * 0.5), black, soft(12.0));
             }
         }
         p.glow(&Shape::circle(g.lens, g.lens_r * 0.45), black, soft(g.lens_r * 0.5));
@@ -571,6 +593,34 @@ impl LiquidGlass {
             &Shape::arc(c, r, 2.0, start + sweep * redline, sweep * (1.0 - redline), Cap::Butt),
             roles.warning.fade(0.6),
         );
+        // Graduations every 1000 rpm, like the marks on a thermometer: light where the rod is
+        // empty, dark where the light has reached them. The rod and the bead magnify them.
+        let span = (self.sig.max_rpm - self.sig.idle_rpm).max(1.0);
+        let first = (self.sig.idle_rpm / 1000.0).floor() as i32 + 1;
+        let graduation = |p: &mut Painter<'_>, i: usize, lit: bool| {
+            let rpm = (first + i as i32) as f32 * 1000.0;
+            let f = (rpm - self.sig.idle_rpm) / span;
+            if !f.is_finite() || f <= 0.0 || f >= 1.0 || (f <= frac) != lit {
+                return;
+            }
+            let a = start + sweep * f;
+            let ink = if lit {
+                roles.oled_black.with_alpha(0.6)
+            } else {
+                roles.ink.with_alpha(0.3)
+            };
+            p.fill(
+                &Shape::line(
+                    Vec2::polar(c, r - lane * 0.5, a),
+                    Vec2::polar(c, r + lane * 0.5, a),
+                    2.0,
+                ),
+                ink,
+            );
+        };
+        for i in 0..MAX_GRADUATIONS {
+            graduation(p, i, false);
+        }
         let quiet = LayerOptions {
             bloom: Some(Bloom {
                 threshold: 0.7,
@@ -605,6 +655,9 @@ impl LiquidGlass {
                         );
                     });
                 }
+            }
+            for i in 0..MAX_GRADUATIONS {
+                graduation(p, i, true);
             }
             // The bead's light: the primary hue, turning white with a warning halo on the limiter.
             let level = self.bead_level();
@@ -647,11 +700,11 @@ impl LiquidGlass {
         });
     }
 
-    /// Rank 1: the gear under the flat face of the puck, and the ring light just inside its
-    /// rounded edge. An upshift sends a bright head once round the ring.
+    /// Rank 1: the gear under the clear middle of its dome, and the ring light further out, which
+    /// the dome bends to its rim. An upshift sends a bright head once round the ring.
     fn draw_gear(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, heat: f32) {
         let roles = pal.roles;
-        let ring_r = g.gear_r - g.gear_section.bevel - 6.0;
+        let ring_r = g.gear_r * 0.8;
         p.fill(
             &Shape::ring(g.gear, ring_r, 4.0),
             pal.primary.fade(0.6 * self.bead_level() * self.shown()),
@@ -827,13 +880,28 @@ impl LiquidGlass {
     fn draw_glass(&self, p: &mut Painter<'_>, g: &Geom, heat: f32) {
         let shown = self.shown();
         let glass = self.glass;
-        let gs = g.gear_section;
-        let ss = g.side_section;
         let body = [
-            Piece::circle(g.gear, g.gear_r).section(gs.thickness * (1.0 + FLEX * self.flexed()), gs.bevel, gs.base),
-            Piece::pill(g.side_rect(-1.0, shown)).section(ss.thickness, ss.bevel, ss.base),
-            Piece::pill(g.side_rect(1.0, shown)).section(ss.thickness, ss.bevel, ss.base),
+            Piece::circle(g.gear, g.gear_r).dome(g.gear_rise * (1.0 + FLEX * self.flexed()), g.gear_base),
+            Piece::pill(g.side_rect(-1.0, shown)).dome(g.side_rise, g.side_base),
+            Piece::pill(g.side_rect(1.0, shown)).dome(g.side_rise, g.side_base),
         ];
+        // The upshift ripple: a ring wave runs from the middle of the gear puck out past its
+        // rim and dies away as it goes. It bends the numeral for a moment, as a liquid would.
+        let mut puck_glass = glass;
+        if self.flex.running() {
+            let k = self.flex.progress();
+            let scale = g.gear_r / COCKPIT.gear_r;
+            puck_glass.ripple = Ripple {
+                center: g.gear,
+                radius: k * (g.gear_r + RIPPLE_WAVE * scale),
+                amplitude: RIPPLE_HEIGHT * scale * (1.0 - k),
+                wavelength: RIPPLE_WAVE * scale,
+            };
+        }
+        // Hard braking: the blend length grows until the side pills touch the puck.
+        let reach = self.bridge.value().clamp(0.0, 1.25);
+        let gap = (g.side.x - g.side_size.x * 0.5 - g.gear_r).max(0.0);
+        let body_smooth = BUD_SMOOTH + (gap * BRIDGE_REACH - BUD_SMOOTH).max(0.0) * reach;
         let half = g.rod_half_angle();
         let bead_r = g.bead_r * (0.72 + 0.28 * self.bead_level());
         let rod = [
@@ -867,23 +935,23 @@ impl LiquidGlass {
                 },
                 glass,
             );
-            if shown < 1.0 {
+            if shown < 1.0 || reach > 0.005 {
                 p.fill(
                     &Shape::Blob {
                         pieces: &body,
-                        smooth: BUD_SMOOTH,
+                        smooth: body_smooth,
                     },
-                    glass,
+                    puck_glass,
                 );
             } else {
                 // At rest the three are far apart: separate draws cover far fewer pixels.
-                for piece in &body {
+                for (i, piece) in body.iter().enumerate() {
                     p.fill(
                         &Shape::Blob {
                             pieces: core::slice::from_ref(piece),
                             smooth: 0.0,
                         },
-                        glass,
+                        if i == 0 { puck_glass } else { glass },
                     );
                 }
             }
@@ -906,6 +974,8 @@ pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fh6_kit::optics::{view_through, Dispersion, Profile};
+    use fh6_kit::shape::blob_distance;
 
     const VIEWS: [&Geom; 2] = [&COCKPIT, &HOOD];
 
@@ -971,6 +1041,14 @@ mod tests {
             let gap = side.min.x - g.gear_r;
             let bulge = BUD_SMOOTH * (-gap / BUD_SMOOTH).exp().ln_1p();
             assert!(bulge < 0.75, "the side pills merge at rest by {bulge} px");
+            // Under full braking the blend length passes gap / (2 ln 2) and they fuse.
+            let pieces = [Piece::circle(g.gear, g.gear_r), Piece::pill(side)];
+            let mid = vec2(g.gear_r + gap * 0.5, g.gear.y);
+            assert!(blob_distance(&pieces, BUD_SMOOTH, mid) > 0.0, "apart at rest");
+            assert!(
+                blob_distance(&pieces, gap * BRIDGE_REACH, mid) < 0.0,
+                "fused at full braking"
+            );
             assert!((g.lens.y - g.lens_r) - (g.gear.y + g.gear_r) >= 12.0);
             // The foot row sits under the side pills and above the envelope's bottom.
             assert!(g.foot_y - 22.0 >= side.max.y + 6.0);
@@ -980,23 +1058,55 @@ mod tests {
     #[test]
     fn the_numerals_sit_under_the_flat_faces() {
         for g in VIEWS {
-            // The gear glyph (Saira Condensed 700 is about 0.56 cap wide per digit) fits the
-            // flat face of the puck.
-            let flat = g.gear_r - g.gear_section.bevel;
+            // The gear sits under the clear middle of its dome. Where the dome tilts less than
+            // 22° it mirrors only the dark cone round the viewer (optics.md §7), so no
+            // reflection crosses the glyph (Saira Condensed 700 is about 0.56 cap wide).
+            let dome = Profile {
+                thickness: g.gear_rise,
+                bevel: g.gear_r,
+                base: g.gear_base,
+                exponent: 2.0,
+            };
+            let eta = Dispersion::SAPPHIRE.primaries()[1];
+            let clear = (0..g.gear_r as i32)
+                .rev()
+                .map(|r| r as f32)
+                .find(|r| dome.normal(g.gear_r - r, vec2(1.0, 0.0)).z >= deg(22.0).cos())
+                .unwrap_or(0.0);
+            // What the eye sees at the edge of the clear zone lies this far from the middle.
+            let sight = view_through(&dome, g.gear_r - clear, vec2(1.0, 0.0), eta);
+            let seen = clear + sight.offset.x;
             let half_diag = ((g.gear_cap * 0.28).powi(2) + (g.gear_cap * 0.5).powi(2)).sqrt();
             assert!(
-                half_diag <= flat,
-                "gear glyph {half_diag} in a flat face of radius {flat}"
+                half_diag <= seen,
+                "gear glyph {half_diag} under a clear zone that shows {seen} (radius {clear})"
             );
-            // The speed digits are no taller than the pill's flat face plus the gentle start
-            // of its edge.
-            let face = g.side_size.y - 2.0 * g.side_section.bevel;
+            // The dome magnifies: the glyph is seen 10% to 20% larger than it is drawn.
+            let near = view_through(&dome, g.gear_r - 40.0, vec2(1.0, 0.0), eta);
+            let magnified = 40.0 / (40.0 + near.offset.x);
+            assert!((1.10..=1.20).contains(&magnified), "magnification {magnified}");
+            // The side pills are shallow domes. Their numerals stay inside the band that
+            // tilts less than 22°, so no reflection crosses them either.
+            let half = g.side_size.y * 0.5;
+            let pillow = Profile {
+                thickness: g.side_rise,
+                bevel: half,
+                base: g.side_base,
+                exponent: 2.0,
+            };
+            let clear = (0..half as i32)
+                .rev()
+                .map(|y| y as f32)
+                .find(|y| pillow.normal(half - y, vec2(0.0, 1.0)).z >= deg(22.0).cos())
+                .unwrap_or(0.0);
+            let sight = view_through(&pillow, half - clear, vec2(0.0, 1.0), eta);
+            let seen = clear + sight.offset.y;
             assert!(
-                g.speed_cap <= face + 8.0,
-                "speed cap {} on a {face} px face",
+                g.speed_cap * 0.5 <= seen,
+                "speed cap {} under a clear band that shows {seen}",
                 g.speed_cap
             );
-            assert!(2.0 * g.info_row + g.info_cap <= face + 8.0);
+            assert!(g.info_row + g.info_cap * 0.5 <= seen);
         }
     }
 

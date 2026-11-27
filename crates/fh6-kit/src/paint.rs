@@ -284,6 +284,23 @@ pub enum Environment {
     Map(ImageId),
 }
 
+/// A ring wave on the surface of optical glass: the ripple a liquid makes
+/// (`docs/specs/optics.md` §2). At distance `r` from `center` the surface rises by
+/// `amplitude · e^(−x²) · cos(2πx)` with `x = (r − radius) / wavelength`: a packet about three
+/// wavelengths wide that sits on the circle of the given `radius`. Animate `radius` to send it
+/// outwards and `amplitude` to let it die away; an amplitude of 0 is a still surface.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Ripple {
+    /// Where the wave started (local units).
+    pub center: Vec2,
+    /// Radius of the ring the packet sits on.
+    pub radius: f32,
+    /// Peak height of the wave.
+    pub amplitude: f32,
+    /// Distance from crest to crest.
+    pub wavelength: f32,
+}
+
 /// Screen azimuth of the key light at rest: up and to the left (tokens `light.azimuthDeg`).
 pub const LIGHT_REST_AZIMUTH: f32 = -2.356_194_5;
 
@@ -327,6 +344,8 @@ pub struct OpticalGlass {
     pub materialize: f32,
     /// What the glass bends.
     pub refraction: Refraction,
+    /// A liquid ripple on the surface (still by default).
+    pub ripple: Ripple,
 }
 
 impl OpticalGlass {
@@ -353,6 +372,7 @@ impl OpticalGlass {
             env_rotation: [vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0)],
             materialize: 1.0,
             refraction: Refraction::OwnLayers,
+            ripple: Ripple::default(),
         };
         glass.aim(LIGHT_REST_AZIMUTH, crate::math::deg(40.0), Vec2::ZERO);
         glass

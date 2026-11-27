@@ -71,6 +71,14 @@ $$\mathrm{smin}_k(a, b) = \min(a, b) - k \ln\bigl(1 + e^{-|a - b|/k}\bigr) = -k 
 
 It is associative and commutative, so the result does not depend on the order of the pieces. It is smooth to every order, so normals and highlights have no crease where two pieces join. It never differs from the plain union by more than $k \ln N$ for $N$ pieces. $k$ is a length: pieces closer than a few $k$ start to bridge.
 
+Two outlines a gap $g$ apart first touch when $\mathrm{smin}_k$ reaches zero midway between them, at $k = g / (2 \ln 2) = 0.72\,g$. So raising $k$ makes two pieces reach for each other and fuse through a neck, with neither piece moving.
+
+**Surface waves.** A liquid surface carries waves. A ripple is a ring packet added to the height, at distance $r$ from where it started:
+
+$$\eta(r) = A\,e^{-x^2}\cos(2\pi x), \qquad x = \frac{r - R}{\lambda}, \qquad \frac{d\eta}{dr} = \frac{A\,e^{-x^2}}{\lambda}\,\bigl(-2x\cos 2\pi x - 2\pi \sin 2\pi x\bigr)$$
+
+with amplitude $A$, wavelength $\lambda$ and ring radius $R$ (animated outwards). The surface is $h + \eta$, so the normal becomes $\mathbf n \propto (-\nabla h - \nabla\eta,\ 1)$ and everything after it (reflection, refraction, the highlight) follows without a special case. The steepest slope is about $2\pi A/\lambda$. Through a depth $D = H + b$ of glass a slope $\theta$ moves what lies under it by $D\tan(\theta - \theta_t)$ with $\sin\theta_t = \sin\theta / n$, so a wave over a numeral is kept under 5° (tested on the CPU and against the shader).
+
 **Materialise.** A piece appears by scaling $H$ and $b$ from 0 to their values. Lensing and highlights grow in; opacity is never ramped.
 
 ## 3. Fresnel reflectance
@@ -265,7 +273,8 @@ All in `crates/fh6-kit/src/optics.rs` unless a file is named.
 | §1 materials | `sapphire_is_not_crown_glass` | $n_d$, $V_d$, $R_0$ of all three materials against their catalogues |
 | §1 Cauchy | `cauchy_from_abbe_reproduces_the_catalogue_lines` | $n_d$ and $V_d$ exactly; within 0.001 of Sellmeier |
 | §2 profile | `hemisphere_profile` | A radius-50 sphere: height 40 and normal (0.6, 0, 0.8) at 20 in |
-| §2 smooth union | `shape.rs`: `smooth_union_properties` | Order independence, never above the plain union, bounded by $k \ln N$ |
+| §2 smooth union | `shape.rs`: `smooth_union_properties`, `two_outlines_touch_at_the_stated_blend_length` | Order independence, never above the plain union, bounded by $k \ln N$; two fronts meet at $k = g / (2 \ln 2)$ |
+| §2 surface waves | `a_ripple_is_a_packet_with_the_stated_slope`; `tests/glass_gpu.rs`: `a_ripple_bends_only_where_it_stands` | The slope is the derivative of the height; still three wavelengths away; the shader's displaced ramp against Snell's law within 0.012 |
 | §3 Fresnel | `fresnel_known_values`, `fresnel_matches_the_sine_tangent_form` | 4% at $n$ = 1.5; Brewster's angle; total internal reflection; the sine-tangent form |
 | §3 Schlick | `schlick_stays_within_its_stated_error` | Within 0.04 of exact |
 | §4 Snell | `refraction_obeys_snell` | $\eta\sin\theta_t = \sin\theta_i$; reversibility; the critical angle |
