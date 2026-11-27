@@ -217,6 +217,7 @@ pub fn render_all(
     out: &Path,
     timing: bool,
     backdrop: Option<&RgbaImage>,
+    logo: &Logo,
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
@@ -244,11 +245,6 @@ pub fn render_all(
         };
         let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family);
         kit.set_palette(palette);
-        let logo = Logo {
-            image: None,
-            brand_name: String::new(),
-            custom_name: cfg.custom_driver_name.clone(),
-        };
         let fonts = kit.font_choice(None);
         let mut smoother = SignalSmoother::new();
         let mut dyno = LiveDynoGenerator::new();
@@ -267,7 +263,7 @@ pub fn render_all(
                 palette: &palette,
                 tokens,
                 fonts,
-                logo: &logo,
+                logo,
                 view,
                 reduced_flash: model::reduced_flash(&cfg),
             };

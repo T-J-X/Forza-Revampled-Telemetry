@@ -18,6 +18,9 @@
 //!
 //! `--legacy` also renders the 29 v1 tiny-skia clusters into `mockups/ModernClusters/`.
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
+//! `--car ORDINAL` picks the car whose brand logo every logo zone shows, loaded from
+//! `assets/logos/` as the app loads it (default 3667, the 2021 Porsche 911 GT3; 0 for no car,
+//! which shows the custom name).
 mod cluster;
 mod fit;
 mod gallery;
@@ -25,8 +28,9 @@ mod osd;
 mod states;
 
 use fh6_clusters::registry::REGISTRY;
-use fh6_core::{AppConfig, ClusterTheme};
+use fh6_core::{AppConfig, CarDatabase, ClusterTheme};
 use fh6_gpu::GpuContext;
+use fh6_kit::logo::LogoIndex;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
 use gallery::{Badges, Render};
@@ -41,6 +45,8 @@ const W: u32 = 3840;
 const H: u32 = 2160;
 const THUMB_FACTOR: u32 = 4;
 const DT: f32 = 1.0 / 60.0;
+/// The car whose logo the previews show unless `--car` says otherwise: the 2021 Porsche 911 GT3.
+const DEFAULT_CAR: i32 = 3667;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -52,6 +58,7 @@ struct Args {
     out: Option<PathBuf>,
     cluster: Option<String>,
     backdrop: Option<PathBuf>,
+    car: i32,
 }
 
 fn parse_args() -> Result<Args> {
@@ -62,6 +69,7 @@ fn parse_args() -> Result<Args> {
         out: None,
         cluster: None,
         backdrop: None,
+        car: DEFAULT_CAR,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -72,9 +80,11 @@ fn parse_args() -> Result<Args> {
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
             "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
+            "--car" => args.car = it.next().ok_or("--car needs an ordinal")?.parse()?,
             "-h" | "--help" => {
                 println!(
-                    "preview-export [--legacy] [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
+                    "preview-export [--legacy] [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] \
+                     [--car ORDINAL]"
                 );
                 std::process::exit(0);
             }
@@ -135,16 +145,12 @@ fn run() -> Result<()> {
         custom_driver_name: "TJX".to_string(),
         ..Default::default()
     };
-    let logo = Logo {
-        image: None,
-        brand_name: String::new(),
-        custom_name: cfg.custom_driver_name.clone(),
-    };
+    let logo = car_logo(&ctx, &mut kit, &assets, &cfg, args.car);
     if let Some(name) = args.cluster.as_deref() {
-        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing);
+        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing, &logo);
     }
     if args.fit {
-        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames)?;
+        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames, &logo)?;
         println!("Fit review written to {}", out.join("fit").display());
         return Ok(());
     }
@@ -257,7 +263,7 @@ fn run() -> Result<()> {
         }
         None => None,
     };
-    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref())?;
+    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), &logo)?;
     fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
     if args.legacy {
         legacy::clusters(&out)?;
@@ -272,6 +278,51 @@ fn run() -> Result<()> {
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())
+}
+
+/// The logo zone for `car`, as the app fills it: the brand's dial image (loaded into `kit` once,
+/// before any cluster is built), the brand name it falls back to, and the custom name. A
+/// missing index or image leaves the names, with a note on stderr.
+fn car_logo(ctx: &GpuContext, kit: &mut Kit, assets: &Path, cfg: &AppConfig, car: i32) -> Logo {
+    let custom_name = cfg.custom_driver_name.clone();
+    if car == 0 {
+        println!("logo: no car, the custom name {custom_name:?}");
+        return Logo {
+            custom_name,
+            ..Logo::default()
+        };
+    }
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
+    let index = LogoIndex::load(assets).unwrap_or_else(|e| {
+        eprintln!("logos: {e}; the logo zone shows names");
+        LogoIndex::default()
+    });
+    let brand = index.car_brand(&cars, car);
+    let model = cars
+        .get_car_entry(&car.to_string())
+        .map_or("not in car_brands.json", |c| c.model_name.as_str());
+    let image = match brand.logo {
+        Some(id) => match index.load_dial(kit.images_mut(), &ctx.device, &ctx.queue, id) {
+            Ok(image) => {
+                let path = index.dial_path(id).unwrap_or_default();
+                println!("logo: car {car} ({model}), {}", rel(assets, &path));
+                Some(image)
+            }
+            Err(e) => {
+                eprintln!("logo of car {car} ({model}): {e}; the wordmark shows {:?}", brand.name);
+                None
+            }
+        },
+        None => {
+            println!("logo: car {car} ({model}) has no brand logo; the wordmark shows the name");
+            None
+        }
+    };
+    Logo {
+        image,
+        brand_name: brand.name,
+        custom_name,
+    }
 }
 
 fn rel(root: &Path, p: &Path) -> String {

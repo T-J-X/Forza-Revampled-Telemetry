@@ -1,6 +1,8 @@
 //! Files the render kit needs at startup: design tokens, the car/brand palette database, the
-//! `assets/` folder (Phase 6 fonts and textures) and the user's `fonts/` folder beside the exe.
+//! brand logo index, the `assets/` folder (Phase 6 fonts and textures) and the user's `fonts/`
+//! folder beside the exe.
 use fh6_core::CarDatabase;
+use fh6_kit::logo::LogoIndex;
 use fh6_kit::Tokens;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +18,8 @@ pub struct KitResources {
     pub tokens: Tokens,
     /// Brand palettes by car ordinal.
     pub cars: CarDatabase,
+    /// Which brand logo each car shows (empty when `assets/logos/logos.json` is missing).
+    pub logos: LogoIndex,
     /// The `assets/` folder, when found.
     pub assets: Option<PathBuf>,
     /// The user's `fonts/` folder beside the exe, when it exists.
@@ -61,10 +65,22 @@ impl KitResources {
             .as_ref()
             .map(|a| CarDatabase::load(a.join(BRANDS_FILE)))
             .unwrap_or_default();
+        let logos = match assets.as_deref().map(LogoIndex::load) {
+            Some(Ok(index)) => {
+                tracing::info!(brands = index.len(), "brand logo index loaded");
+                index
+            }
+            Some(Err(err)) => {
+                tracing::warn!(error = %err, "brand logo index unreadable; the logo zone shows brand names");
+                LogoIndex::default()
+            }
+            None => LogoIndex::default(),
+        };
         let user_fonts = exe_dir.map(|d| d.join("fonts")).filter(|d| d.is_dir());
         Self {
             tokens,
             cars,
+            logos,
             assets,
             user_fonts,
         }
@@ -85,6 +101,7 @@ mod tests {
         let r = KitResources::resolve(&repo.join("data/config.json"));
         assert!(r.assets.is_some(), "assets/ found from data/config.json");
         assert!(!r.cars.brand_palettes.is_empty());
+        assert!(!r.logos.is_empty(), "assets/logos/logos.json loads");
         assert!(!r.tokens.family_defaults.is_empty());
     }
 }

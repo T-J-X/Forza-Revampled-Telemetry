@@ -70,6 +70,8 @@ struct Ctx<'a> {
     tokens: &'a Tokens,
     target: &'a Offscreen,
     assets: &'a Path,
+    /// The logo zone of every cluster drawn.
+    logo: &'a Logo,
 }
 
 impl Ctx<'_> {
@@ -90,11 +92,6 @@ impl Ctx<'_> {
             None => None,
         };
         if let Some(c) = built.as_mut() {
-            let logo = Logo {
-                image: None,
-                brand_name: String::new(),
-                custom_name: cfg.custom_driver_name.clone(),
-            };
             let fonts = self.kit.font_choice(None);
             let data = STATES[1].telemetry();
             let mut smoother = SignalSmoother::new();
@@ -110,7 +107,7 @@ impl Ctx<'_> {
                     palette: &palette,
                     tokens: self.tokens,
                     fonts,
-                    logo: &logo,
+                    logo: self.logo,
                     view: View::Cockpit,
                     reduced_flash: false,
                 });
@@ -165,12 +162,15 @@ fn config(pct: i32, height: f32, scale: f32) -> AppConfig {
 pub fn scrims(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, root: &Path, out: &Path) -> Result<()> {
     let target = Offscreen::new(&gpu.device, W, H);
     let assets = root.join("assets");
+    // No cluster is drawn here, so no logo either.
+    let no_logo = Logo::default();
     let mut ctx = Ctx {
         gpu,
         kit,
         tokens,
         target: &target,
         assets: &assets,
+        logo: &no_logo,
     };
     for pct in OPACITIES {
         let img = ctx.frame(&config(pct, 0.0, 1.0), None, 0)?;
@@ -216,8 +216,16 @@ fn shoot(
     Ok(())
 }
 
-/// The full fit review.
-pub fn run(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, root: &Path, out: &Path, frames: u32) -> Result<()> {
+/// The full fit review, every cluster showing `logo`.
+pub fn run(
+    gpu: &GpuContext,
+    kit: &mut Kit,
+    tokens: &Tokens,
+    root: &Path,
+    out: &Path,
+    frames: u32,
+    logo: &Logo,
+) -> Result<()> {
     let bg = background(root, "cockpit_with_wheel.jpg")?;
     let low_seat = background(root, "target_wide_cockpit_fov.jpg")?;
     let dir = out.join("fit");
@@ -230,6 +238,7 @@ pub fn run(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, root: &Path, out: &
         tokens,
         target: &target,
         assets: &assets,
+        logo,
     };
     let mut cards = String::new();
     for (name, theme, scale) in CLUSTERS {

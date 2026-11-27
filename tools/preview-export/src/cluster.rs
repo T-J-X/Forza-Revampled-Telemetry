@@ -164,6 +164,7 @@ pub fn run(
     name: &str,
     frames: u32,
     timing: bool,
+    logo: &Logo,
 ) -> Result<()> {
     let Some(cat) = catalog::find(name) else {
         let mut names = String::new();
@@ -182,11 +183,6 @@ pub fn run(
         current_camera_index: 3,
         custom_driver_name: "TJX".to_string(),
         ..Default::default()
-    };
-    let logo = Logo {
-        image: None,
-        brand_name: String::new(),
-        custom_name: cfg.custom_driver_name.clone(),
     };
     let palette = Palette::family(tokens, entry.family);
     kit.set_palette(palette);
@@ -215,7 +211,7 @@ pub fn run(
             palette: &palette,
             tokens,
             fonts,
-            logo: &logo,
+            logo,
             view,
             reduced_flash: false,
         };
@@ -285,7 +281,7 @@ pub fn run(
         palette: &palette,
         tokens,
         fonts,
-        logo: &logo,
+        logo,
         view: seq_view,
         reduced_flash: false,
     };

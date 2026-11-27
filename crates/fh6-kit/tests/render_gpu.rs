@@ -2,10 +2,12 @@
 //! errors and put pixels where they should.
 #![cfg(not(target_arch = "wasm32"))]
 
+use fh6_core::CarDatabase;
 use fh6_gpu::GpuContext;
+use fh6_kit::logo::{self, LogoIndex, LogoStyle};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    deg, vec2, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Painter, Rect, SegmentedBar, Shadow,
+    deg, vec2, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Logo, Painter, Rect, SegmentedBar, Shadow,
     Shape, Stroke, TextStyle, TickRing, Tokens, Vec2,
 };
 
@@ -345,4 +347,49 @@ fn a_file_loads_once_until_it_changes() {
     assert_ne!(changed, first);
     assert_eq!(kit.images().size(changed), Some((4, 2)));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The brand logo path the app takes on a car change: the index names the car's brand, its dial
+/// image loads once (another car of the brand gets the same image, nothing is uploaded again)
+/// and the logo zone draws that image instead of the wordmark.
+#[test]
+fn a_cars_brand_logo_loads_once_and_draws() {
+    let (ctx, mut kit) = setup();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
+    // The 2021 Porsche 911 GT3, then the 2019 911 (992).
+    let porsche = index.car_brand(&cars, 3667).logo.expect("the GT3 has a brand logo");
+    let image = index
+        .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, porsche)
+        .expect("the dial loads");
+    let count = kit.images().len();
+    let other = index.car_brand(&cars, 3123).logo.expect("the 992 has a brand logo");
+    assert_eq!(other, porsche, "one brand");
+    let again = index
+        .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, other)
+        .expect("the dial loads again");
+    assert_eq!(again, image, "the same image");
+    assert_eq!(kit.images().len(), count, "and nothing uploaded twice");
+    let size = kit.images().size(image).expect("a loaded image has a size");
+    assert!(size.0.max(size.1) <= 1024, "dial size {size:?}");
+    assert!(kit.images().mip_count(image) > 1, "mipped for small sizes");
+
+    let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(600.0, 200.0));
+    let style = LogoStyle::new(kit.font_choice(None).wide);
+    let shown = Logo {
+        image: Some(image),
+        brand_name: "Porsche".into(),
+        custom_name: "TJX".into(),
+    };
+    let mut used = Rect::from_center_size(vec2(0.0, 0.0), Vec2::ZERO);
+    let img = render_named(&mut kit, &ctx, "brand_logo", |p| {
+        used = logo::draw(p, zone, &shown, &style);
+    });
+    assert_eq!(used, logo::fit(zone, size), "the image path, not the wordmark");
+    let lit = (0..H)
+        .flat_map(|y| (0..W).map(move |x| (x, y)))
+        .filter(|&(x, y)| img.pixel(x, y).is_some_and(|px| px[3] > 128))
+        .count();
+    assert!(lit > 500, "the logo puts pixels on screen ({lit})");
 }
