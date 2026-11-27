@@ -9,6 +9,7 @@ pub mod fluid;
 pub mod glass;
 pub mod gt7_hood_pro;
 pub mod liquid_glass;
+pub mod osd;
 pub mod porsche_analog;
 pub mod retro_cyber;
 pub mod scifi;
