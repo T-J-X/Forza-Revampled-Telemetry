@@ -6,6 +6,7 @@
 //! Phase 7 rule: a cluster chat edits only `src/clusters/<snake_name>/` (and its own assets and
 //! goldens). The catalog, registry, theme enum, golden harness and `common/` are shared and are
 //! changed only by the conductor.
+#![forbid(unsafe_code)]
 
 pub mod catalog;
 pub mod clusters;

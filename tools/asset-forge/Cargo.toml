@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "Reproducible asset pipeline for FH6 WheelDash: Blender (bpy as Rust string constants), ComfyUI over HTTP, logos, fonts, ledger and contact sheet"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "asset-forge"
 path = "src/main.rs"

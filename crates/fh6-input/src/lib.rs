@@ -1,4 +1,8 @@
 //! fh6-input: XInput polling with strict manual-transmission button locks.
+#![allow(
+    unsafe_code,
+    reason = "XInput loading and calls: every `unsafe` block names its invariant in a `// SAFETY:` comment"
+)]
 
 pub mod guide;
 pub mod hold_state;

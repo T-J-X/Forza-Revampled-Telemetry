@@ -481,8 +481,12 @@ fn check_pixels(img: &RgbaImage, tokens: &Tokens, family: &str) {
         img,
         Rect::from_xywh(cruise_x + QUAD.0 + QUAD.2 + 8.0, front_y - 30.0, 192.0, 60.0),
     );
+    assert!(
+        left.is_some() && right.is_some(),
+        "{family}: both front temperatures drawn ({left:?}, {right:?})"
+    );
     let (Some((_, left_hi)), Some((right_lo, _))) = (left, right) else {
-        panic!("{family}: both front temperatures drawn ({left:?}, {right:?})");
+        return;
     };
     let (gap_l, gap_r) = (tyre_l as f32 - left_hi as f32, right_lo as f32 - tyre_r as f32);
     assert!(

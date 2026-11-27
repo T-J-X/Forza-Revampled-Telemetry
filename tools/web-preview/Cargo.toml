@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "Minimal WebGPU page rendering a kit cluster from synthetic telemetry (base for the Phase 10 configurator)"
 
+[lints]
+workspace = true
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

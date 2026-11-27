@@ -7,5 +7,8 @@ authors.workspace = true
 rust-version.workspace = true
 description = "Measures the CPU cost and frame rate of the optional Windows.Graphics.Capture window capture"
 
+[lints]
+workspace = true
+
 [dependencies]
 fh6-win = { path = "../../crates/fh6-win" }
