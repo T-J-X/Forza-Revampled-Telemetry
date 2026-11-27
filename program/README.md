@@ -24,7 +24,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 
 ```
 2 ─┬─> 3 ──────────┬─> 6 ─┐
-   └─> 4 ─> 5 ─────┼──────┼─> 7 (setup, then cluster chats ×N, 3 at a time) ─┐
+   └─> 4 ─> 5 ─────┼──────┼─> 7 (setup, then cluster chats ×N, 2 at a time) ─┐
                    ├──────┴─> 9 ───────────────────────────────────────────────┼─> 10 ─> 11
                    └─> 8 ──────────────────────────────────────────────────────┘
 ```
@@ -37,7 +37,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
    - screenshots or golden renders are present for visual work
 3. **If it passes:** merge the branch into `main` (fast-forward or a merge commit as TJX, no co-author trailer), push to `origin`, and tick the roadmap above.
 4. **If it fails:** send the chat its concrete gaps and have it continue. After 2 failed rounds, triage like an incident (the `superpowers:systematic-debugging` skill; the `engineering` plugin is not enabled): record the cause in the handover, then re-scope or split the phase.
-5. **Next:** start every phase whose dependencies are now merged. The cluster factory runs at most 6 cluster chats at once.
+5. **Next:** start every phase whose dependencies are now merged. The cluster factory runs at most 2 dash threads at once (the plan of 2026-11-27 allows two or three). They share one GPU, so their ComfyUI, Blender and render jobs take turns on the lock (`SKILLS.md` section 5).
 6. **If the chain stops by itself,** TJX types `continue` in the conductor chat.
 
 ## Pre-approved (TJX, 2026-11-20)

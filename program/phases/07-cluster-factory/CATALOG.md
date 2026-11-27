@@ -36,7 +36,7 @@ Seven Design Council directors drafted one family each (art direction, signature
 | Fluid / Generative | KineticLiquidMetal | [`docs/design/heroes/fluid-generative/`](../../../docs/design/heroes/fluid-generative/) | [`families/fluid-generative.md`](../../../docs/design/families/fluid-generative.md) |
 
 ## Build order
-One chat per cluster, at most 6 at once, in this order: the pilot, then the other six pattern-setters (so every family's language and helpers are proven before its siblings), then the remaining 22 rebuilds grouped by the helpers they reuse, then the 19 new concepts alternating families.
+One thread per cluster, at most 2 at once (they share one GPU; `SKILLS.md` section 5), in this order: the pilot, then the other six pattern-setters (so every family's language and helpers are proven before its siblings), then the remaining 22 rebuilds grouped by the helpers they reuse, then the 19 new concepts alternating families.
 
 The conductor starts the next ☐ row whenever a slot frees, marks it ◐, and marks the row after it `next`. A cluster chat sets only its own row to ✅ in its branch.
 
