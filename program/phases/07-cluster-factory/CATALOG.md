@@ -184,19 +184,19 @@ TJS, 2026-11-28: "Do this more so also for dashes not made yet", "if each has it
 
 | Build # | Dash | Note | Drive references | State |
 |---|---|---|---|---|
-| 14 | `CymaticResonanceField` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/RESEARCH.md) | `cymatic_resonance_field\references\SOURCES.md` | researching |
-| 15 | `VisionPetals` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vision_petals/RESEARCH.md) | `vision_petals\references\SOURCES.md` | researching |
-| 16 | `AmgOneF1` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_one_f1/RESEARCH.md) | `amg_one_f1\references\SOURCES.md` | researching |
-| 17 | `VernierLoupe` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vernier_loupe/RESEARCH.md) | `vernier_loupe\references\SOURCES.md` | researching |
-| 18 | `CarplayIsland` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/carplay_island/RESEARCH.md) | `carplay_island\references\SOURCES.md` | researching |
-| 19 | `ChronoEventHorizon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/RESEARCH.md) | `chrono_event_horizon\references\SOURCES.md` | queued |
-| 20 | `Gt3RsApogee` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt3_rs_apogee/RESEARCH.md) | `gt3_rs_apogee\references\SOURCES.md` | queued |
-| 21 | `GlyphDotMatrix` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/RESEARCH.md) | `glyph_dot_matrix\references\SOURCES.md` | queued |
-| 22 | `Gt7CockpitPro` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt7_cockpit_pro/RESEARCH.md) | `gt7_cockpit_pro\references\SOURCES.md` | queued |
-| 23 | `ChronoMultiverse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/RESEARCH.md) | `chrono_multiverse\references\SOURCES.md` | queued |
-| 24 | `LiquidMorph` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/liquid_morph/RESEARCH.md) | `liquid_morph\references\SOURCES.md` | queued |
-| 25 | `BugattiTourbillon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/RESEARCH.md) | `bugatti_tourbillon\references\SOURCES.md` | queued |
-| 26 | `ShibuyaChromaticPrisma` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/RESEARCH.md) | `shibuya_chromatic_prisma\references\SOURCES.md` | queued |
+| 14 | `CymaticResonanceField` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/RESEARCH.md) | [`cymatic_resonance_field\references\`](https://drive.google.com/drive/folders/1ME-yh7PTN2vhE5R4Hnf6RaG57sQy_OIS) with `SOURCES.md` | written |
+| 15 | `VisionPetals` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vision_petals/RESEARCH.md) | [`vision_petals\references\`](https://drive.google.com/drive/folders/1amdBgHG9WRPwdpXzqlIZ-6ZpEvr9vV0M) with `SOURCES.md` | written |
+| 16 | `AmgOneF1` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_one_f1/RESEARCH.md) | [`amg_one_f1\references\`](https://drive.google.com/drive/folders/151LAw2Lc-72rpH19F55mdm9YOJ25RG7c) with `SOURCES.md` | written |
+| 17 | `VernierLoupe` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vernier_loupe/RESEARCH.md) | [`vernier_loupe\references\`](https://drive.google.com/drive/folders/1RWwj7QNbNgKEKx4L15Cw2PAI_vahGkdZ) with `SOURCES.md` | written |
+| 18 | `CarplayIsland` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/carplay_island/RESEARCH.md) | [`carplay_island\references\`](https://drive.google.com/drive/folders/1FB3gSZOuDNq9G6oLS40sK_6z-x_okXvj) with `SOURCES.md` | written |
+| 19 | `ChronoEventHorizon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/RESEARCH.md) | `chrono_event_horizon\references\SOURCES.md` | researching |
+| 20 | `Gt3RsApogee` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt3_rs_apogee/RESEARCH.md) | [`gt3_rs_apogee\references\`](https://drive.google.com/drive/folders/16naZFxXDjTUBi4VoWu70HszTcB5IiYIR) with `SOURCES.md` | written |
+| 21 | `GlyphDotMatrix` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/RESEARCH.md) | `glyph_dot_matrix\references\SOURCES.md` | researching |
+| 22 | `Gt7CockpitPro` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt7_cockpit_pro/RESEARCH.md) | `gt7_cockpit_pro\references\SOURCES.md` | researching |
+| 23 | `ChronoMultiverse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/RESEARCH.md) | `chrono_multiverse\references\SOURCES.md` | researching |
+| 24 | `LiquidMorph` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/liquid_morph/RESEARCH.md) | `liquid_morph\references\SOURCES.md` | researching |
+| 25 | `BugattiTourbillon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/RESEARCH.md) | `bugatti_tourbillon\references\SOURCES.md` | researching |
+| 26 | `ShibuyaChromaticPrisma` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/RESEARCH.md) | `shibuya_chromatic_prisma\references\SOURCES.md` | researching |
 | 27 | `WindshieldHud` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/windshield_hud/RESEARCH.md) | `windshield_hud\references\SOURCES.md` | queued |
 | 28 | `F35HelmetHmd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/RESEARCH.md) | `f35_helmet_hmd\references\SOURCES.md` | queued |
 | 29 | `AmgMbuxTrackPace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_track_pace/RESEARCH.md) | `amg_mbux_track_pace\references\SOURCES.md` | queued |
