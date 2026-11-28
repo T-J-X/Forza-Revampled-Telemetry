@@ -213,21 +213,22 @@ pub fn render_all(
     ctx: &GpuContext,
     kit: &mut Kit,
     tokens: &Tokens,
-    assets: &Path,
+    assets: Option<&Path>,
+    cars: &CarDatabase,
     out: &Path,
     timing: bool,
     backdrop: Option<&RgbaImage>,
+    logo: &Logo,
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
     for state in STATES {
         let mut cfg = AppConfig {
             current_camera_index: 3,
             cockpit_hud_style: ClusterTheme::LiquidGlass,
-            custom_driver_name: "TJX".into(),
+            custom_driver_name: crate::DRIVER_NAME.into(),
             ..AppConfig::default()
         };
         let mut host = OsdHost::new(tokens, Box::new(ConfigOnlyFit));
@@ -235,20 +236,15 @@ pub fn render_all(
         host.open(&cfg, View::Cockpit, cfg.cockpit_anchor_x as f32);
         let now = (state.setup)(&mut host, &mut cfg);
         let view = host.edit_view();
-        host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
+        host.prepare(kit, &ctx.device, &ctx.queue, assets, &cfg);
         let theme = model::theme_for_view(&cfg, view);
         let entry = registry::resolve(theme);
         let mut cluster = {
-            let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
+            let mut setup = kit.setup(&ctx.device, &ctx.queue, assets);
             (entry.make)(&mut setup)
         };
-        let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family.key());
+        let palette = Palette::from_config(tokens, &cfg, cars, 0, entry.family.key());
         kit.set_palette(palette);
-        let logo = Logo {
-            image: None,
-            brand_name: String::new(),
-            custom_name: cfg.custom_driver_name.clone(),
-        };
         let fonts = kit.font_choice(None);
         let mut smoother = SignalSmoother::new();
         let mut dyno = LiveDynoGenerator::new();
@@ -267,7 +263,7 @@ pub fn render_all(
                 palette: &palette,
                 tokens,
                 fonts,
-                logo: &logo,
+                logo,
                 view,
                 reduced_flash: cfg.reduced_flash,
             };

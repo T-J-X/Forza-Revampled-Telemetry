@@ -1,6 +1,6 @@
 # Phase 7 setup: cluster factory (MASTER PROMPT, chat 07-00)
 
-You lead the setup chat for the cluster factory, running in your own chat and worktree. After you, the conductor starts **one chat per cluster** (at most 2 at once), each following `CLUSTER_PROMPT.md`. Your job is to make those chats fast, consistent and free of merge conflicts.
+You lead the setup chat for the cluster factory, running in your own chat and worktree. After you, the conductor starts **one chat per cluster** (at most 4 at once, started by the dash chain in `CATALOG.md`), each following `CLUSTER_PROMPT.md`. Your job is to make those chats fast, consistent and free of merge conflicts.
 
 ## Read first
 `ONBOARDING.md`, root `AGENTS.md` / `SKILLS.md`, this folder's `AGENTS.md`, `SKILLS.md`, `CATALOG.md` and `CLUSTER_PROMPT.md`, plus the handovers of Phases 3, 5 and 6, `docs/kit/README.md`, `docs/design/*` and `assets/ASSETS.md`.

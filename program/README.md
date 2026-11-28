@@ -24,7 +24,7 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
 
 ```
 2 ─┬─> 3 ──────────┬─> 6 ─┐
-   └─> 4 ─> 5 ─────┼──────┼─> 7 (setup, then cluster chats ×N, 2 at a time) ─┐
+   └─> 4 ─> 5 ─────┼──────┼─> 7 (setup, then cluster chats ×N, 4 at a time) ─┐
                    ├──────┴─> 9 ───────────────────────────────────────────────┼─> 10 ─> 11
                    └─> 8 ──────────────────────────────────────────────────────┘
 ```
@@ -35,9 +35,9 @@ Every phase runs in its own chat and git worktree, started from `program/phases/
    - `cargo check --workspace` and `cargo test --workspace` (known reds only, as listed in `docs/PROGRESS.md`)
    - the required artefacts exist
    - screenshots or golden renders are present for visual work
-3. **If it passes:** merge the branch into `main` (fast-forward or a merge commit as TJX, no co-author trailer), push to `origin`, and tick the roadmap above.
+3. **If it passes:** merge the branch into `main` (fast-forward or a merge commit as TJX, no co-author trailer), push to `origin`, tick the roadmap above, and tell the chat that its work is in `main`. When the chat has done its last step and reports that its branch is still on GitHub, run the checks in `docs/branch-cleanup.md` and pass TJX the delete link (AGENTS.md rule 17). At every merge, also run `git ls-remote --heads origin` and ask the chat of each other branch that has no commit `main` lacks whether it has closed; a chat that does not answer counts as closed only when TJX says so.
 4. **If it fails:** send the chat its concrete gaps and have it continue. After 2 failed rounds, triage like an incident (the `superpowers:systematic-debugging` skill; the `engineering` plugin is not enabled): record the cause in the handover, then re-scope or split the phase.
-5. **Next:** start every phase whose dependencies are now merged. The cluster factory runs at most 2 dash threads at once (the plan of 2026-11-27 allows two or three). They share the local GPU and one rented pod, so their ComfyUI, Blender and render jobs take turns on each lane's lock (`SKILLS.md` section 5).
+5. **Next:** start every phase whose dependencies are now merged. The cluster factory runs at most 4 dash threads at once (TJX, 2026-11-27), and the dash chain of `CATALOG.md` ("The auto-chain") decides which dash starts next. They share the local GPU and one rented pod, so their ComfyUI, Blender and render jobs take turns on each lane's lock (`SKILLS.md` section 5).
 6. **If the chain stops by itself,** TJX types `continue` in the conductor chat.
 
 ## Pre-approved (TJX, 2026-11-20)
