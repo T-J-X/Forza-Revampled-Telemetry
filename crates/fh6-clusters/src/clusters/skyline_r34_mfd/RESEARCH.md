@@ -24,7 +24,7 @@ The game car is the 2000 Nissan Skyline GT-R V-Spec II (BNR34). Target `inspired
 | JBS | jbskyline.net, BNR34 engine figures https://www.jbskyline.net/r34/gtr/index2.php | 2026-11-28 (web check) |
 | WEB | The catalog's web check, `/mnt/project-files/dash-research/webcheck/SkylineR34Mfd.md`, and the planning notes `nismo-skyline-clusters.json` | 2026-11-28 |
 
-No photo has been seen yet: the container's proxy refuses every image host these pages use (section 7).
+Photos: 34 reference photos were downloaded on the person's PC on 2026-11-28 (the container's proxy refuses these image hosts) into the Drive masters folder `skyline_r34_mfd\references\`, with `VISUAL_NOTES.md` (sampled colours) beside them. Small crops are in the project files at `skyline_r34_mfd/references/`. Section 8 is drawn from them; **Seen** marks a fact read off a photo.
 
 ## 2. The MFD
 
@@ -49,7 +49,7 @@ No photo has been seen yet: the container's proxy refuses every image host these
 | M17 | Top Gear (2019): "Nowadays, it looks like a cheap computer game." | Cited: TG |
 | M18 | Polyphony Digital designed the R35's display (2007), not the R34's. The maker of the R34 screens' graphics is not established. | Cited: PH, GIZ; WEB |
 
-**Not established by any text source:** the MFD's background colour, bar and graph colours, digit style and the exact page layouts. Recalled (to confirm from photos): a dark navy-to-black background, thin horizontal bar meters with white numerals and small captions, and a red end on a bar past its red zone. No tile is drawn until a photo confirms this (catalog risk).
+The MFD's colours, type and page layouts were not in any text source; they are in section 8, seen on photos.
 
 ## 3. The stock meters
 
@@ -58,8 +58,8 @@ No photo has been seen yet: the container's proxy refuses every image host these
 | C1 | "A combined 10,000rpm rev counter / oil pressure gauge was flanked by a 180mph / 300kph speedometer. Smaller read outs for water temperature and fuel were located in each corner." The binnacle surround is brushed aluminium to match the centre console. | Cited: SCN |
 | C2 | The Nür and M-Spec Nür speedometer reads to 300 km/h; the seller calls the standard JDM one 180 km/h. | Cited: NZP (seller page). Conflict with C1's 300 km/h for the standard car; **Our reading:** 180 km/h on the JDM standard car, 300 on the Nür. |
 | C3 | The engine's redline is 8,000 rpm; 280 PS at 6,800 rpm. | Cited: JBS |
-| C4 | The tachometer's red zone start, the face, numeral and needle colours and the night lighting of the stock meters. | Not established. Recalled: black faces, white numerals, red needles. |
-| C5 | A boost gauge in the stock cluster. | Not established (SAU 41240 is unclear). Recalled: a boost gauge to the right of the tachometer. |
+| C4 | Black faces, white italic numerals and ticks, orange-red needles (about #E0552E), black hub caps; the tachometer's ticks turn red-orange from 8 with a red band 8 to 10 on the outer edge. | Seen (section 8.10) |
+| C5 | No boost gauge in the stock cluster: four dials, small water temperature left, tachometer centre-left, speedometer (0 to 180 km/h) centre-right, small fuel right, on a silver panel. Boost lives on the MFD. | Seen (section 8.10); corrects the recalled layout in the first brief |
 | C6 | Nismo reproduction meters (2022): BNR34 black face with orange numerals and orange lighting, or white face with black numerals and orange lighting; 320 km/h speedometer and 11,000 rpm tachometer in two stages. The single-turbo R34's version is matte black to 300 km/h and 10,000 rpm. | Cited: NIS |
 
 **Our reading:** the dial scale follows `EngineMaxRpm` (house rule), and the stock 10,000 rpm face with its oil-pressure sub-dial is the period reference. The Nismo orange lighting is a strong second palette ("Nismo night") for the palette roles.
@@ -99,5 +99,34 @@ Ideas for the empty space round the tiles, from the car: a Wangan or Bayshore ni
 
 ## 7. Still needed
 
-- Photos of the real MFD pages (bars, line graph, torque split, red zone, boot logo) and of the stock meters at day and night. The container's proxy refuses toprankglobal.jp, blogger, github.io, thedrive, wikimedia and imgur. Candidate pictures: Toprank `picture/documents/images/4-3.jpg` (ignition screen), `15-1.jpg` and `IMG_0019` to `IMG_0047`; GTR USA "R34 Vspec screen" and "R34 MFD normal to Vspec"; PMF gallery images 37 to 42 (42 is the tachometer); The Drive's Nismo meter photos; Supercar Nostalgia's interior photo. Route: the PC's built-in browser and a canvas crop (as Gt7HoodPro did), asked of the coordinator on 2026-11-28.
+- A photo of the F-TORQUE gauge page itself (only its SELECT tile is seen). The board designs the modelled ATTESA dial in the MFD's own dial style (8.4).
+- Speedhunters' MFD photos (the PC could not reach speedhunters.com).
 - The BNR34 owner's manual pages for the MFD and the meters (the Scribd copy "BNR34 Skyline GTR Multi Function Display", 5 pages, would not render as text).
+
+## 8. Seen on the photos (2026-11-28)
+
+From the photos in the Drive folder; colours were sampled from photos of an LCD and are approximate. The full notes, with every sampled value, are `VISUAL_NOTES.md` in that folder.
+
+**8.1 Panel.** Sharp 5.8-inch, 400 × 234 px (caption of a replacement-screen kit). Soft, anti-aliased low-resolution graphics. Background very dark navy-black (#050507 on a straight close-up of the original screen; #18191A to #2A2934 in room light). Fine diagonal streaks on every photo, most likely screen wear.
+
+**8.2 Type and chrome.** Bold italic wide sans throughout (Eurostile / Helvetica Bold Oblique character); captions in caps; numerals strongly slanted with smaller units (kg/cm², mmHg, %, ℃); missing data "- - -". Thin white 1 px cell outlines. Selection: a gold rounded outline (#E3C69C, up to #FFEF99). Buttons and tiles: light cyan rounded rectangles with a vertical gradient (#C7E9FE to #CBF3FD), white bold italic text.
+
+**8.3 Seven-row page.** Rows BOOST, THROTTLE, INJECTOR, OIL-TEMP, W-TEMP, EXH-TEMP, INT-TEMP (5 rows without the V-spec's last two), each a white-outlined box, pitch 0.13 of the screen height. Columns: caption 0.03 to 0.24, a white line pictogram 0.24 to 0.36 (turbo snail, throttle butterfly, injector spray, oil can and thermometer, coolant, exhaust, intercooler), bar 0.36 to 0.69, value 0.69 to 0.96 right-aligned. Bars: flat solid green fill from the left (about #30D072, highlight #52E78B), no segments or ticks; the BOOST bar has a white zero line a quarter in, vacuum left of it.
+
+**8.4 Round dials (twin page and history page).** 270° sweep from 6 o'clock clockwise to 3 o'clock; the lower-right quadrant is cut from the ring and holds the sensor pictogram and a quarter-sector PEAK box (teal #1DA1AD to navy #105687 gradient, peak value in white italic above "PEAK"). Ring: thick bevelled grey band (#B9B8B5, highlight #E9EBEA) with white block ticks, red ticks in the red zone. Hub: a large flat pale-grey disc, a third of the radius. Needle: thin salmon-red line (#E48670 to #F08F7C); the boost dial also shows a white second needle. A flat green "locus" pie slice (#30D072) covers the span the value has swept, switchable on the DISPLAY page (ゾーンOFF). Boost scale −6 to −2 ×100 mmHg, then 0 to 1.2 kg/cm², 0 at 9 o'clock.
+
+**8.5 History page.** Left half a line graph: y-axis 70 to 150 (oil) with a tick at each label, 9 horizontal and 4 vertical thin grid lines, x labels "30 20 10 0 sec", time running right to left (now at the right); a thin green trace. Right half one round dial as 8.4.
+
+**8.6 RED ZONE page.** Five rows: a cyan caption button with its pictogram, an empty white-outlined bar with a red threshold marker, the threshold value ("1.20kg/cm²", "100.0%", "130℃", "119℃", "970℃"); END and RESET buttons.
+
+**8.7 SHIFT UP page.** A ring dial without ticks, 5 to 10 ×1000 r/min over 270°, a green sector up to the set point (about 8,000 in the photo); a cyan pill with ▲ 回転数 ▼ and lower-case "up" and "down". The housing's REV. LED (red) is the shift-up light.
+
+**8.8 MENU and SELECT.** MENU: three cyan tiles SELECT, RED ZONE, SHIFT UP (the SHIFT UP tile shows the gate "1 3 5 / 2 4 6 R"). SELECT: a 4 × 2 grid of cyan tiles with grey bevelled circle pictograms: BOOST, OIL-TEMP, F-TORQUE, VOLT / THROTTLE, INJECTOR, EXH-TEMP, INT-TEMP. Twin pages pair two of them (boost + oil temp; F-torque + oil temp; injector + exhaust temp). VOLT confirms the battery-voltage reading the web check left open.
+
+**8.9 Start logo and housing.** The GT-R emblem centred on dark navy: silver-lavender "GT" over a larger deep-red "R" (#71252A) with a light outline. (An orange version on one photo is a failing screen, not a design state.) The pod is charcoal (#1B1C20): screen in the left 70% behind a deep bezel step; on the right the "REV." LED, a TV button, "PUSH ENTER/RESET" and a chrome-ringed joystick; DISP, RETURN, MENU and MODE rocker buttons below.
+
+**8.10 Stock meters.** Four dials on a silver panel: small water temperature (left), tachometer 0 to 10 ×1000 r/min with red-orange ticks and a red outer band from 8 and an oil-pressure sub-dial (0 4 8 kg/cm²) in the bottom of its face, speedometer 0 to 180 km/h with an LCD odometer window, small fuel (right). Matte black faces, white italic numerals, orange-red needles, black hub caps.
+
+**8.11 Nismo meters.** Same layout; tachometer 0 to 11 with a red band from about 9.2; speedometer 0 to 320 km/h; "nismo" wordmark over the tach hub and the red GT-R "R" over the speedo hub. Black face with yellow numerals (#FEFB60), or white face with black upright numerals and red needles.
+
+**Our reading for the board.** The MFD's language (navy-black glass, white hairline cells, green flat fills, bevelled grey rings with a cut-away PEAK quadrant, salmon needles, cyan tiles with gold selection, bold italic type) is distinctive and owner-recognisable; the tiles take it directly, redrawn crisp at 4K with a faint 400 × 234 pixel grid as texture. The tachometer takes the stock face (black, white italic numerals, orange-red needle, oil-pressure sub-dial position reused for boost). The PEAK box is the MFD's own "stored extremes" and becomes the peak tick of the signature moment. The MFD's red zone ticks give the house `warning` its place.
