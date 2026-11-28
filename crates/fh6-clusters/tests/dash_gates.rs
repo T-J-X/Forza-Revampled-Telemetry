@@ -372,6 +372,50 @@ const DASH_SCENARIOS: &[(ClusterTheme, Scenario)] = &[
             },
         },
     ),
+    // ValkyrieLmp1's derived ABS and TC lamps (the same conditions as Bosch DDU's).
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "threshold braking, brake off",
+            packet: |_| {
+                let mut t = base_packet();
+                t.acceleration_z = -0.95 * 9.806_65;
+                t.accel = 0;
+                t
+            },
+        },
+    ),
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "power oversteer, front drive",
+            packet: |i| {
+                let mut t = base_packet();
+                t.speed_ms = 25.0;
+                t.accel = 230;
+                t.drivetrain_type = 0;
+                let (s, c) = (2.0 + 0.6 * i as f32).to_radians().sin_cos();
+                t.velocity_x = t.speed_ms * s;
+                t.velocity_z = t.speed_ms * c;
+                t
+            },
+        },
+    ),
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "power on, rear drive, straight",
+            packet: |_| {
+                let mut t = base_packet();
+                t.speed_ms = 25.0;
+                t.accel = 230;
+                t.drivetrain_type = 1;
+                t.velocity_x = 0.0;
+                t.velocity_z = t.speed_ms;
+                t
+            },
+        },
+    ),
 ];
 
 // --- Field coverage --------------------------------------------------------------------------
