@@ -47,7 +47,7 @@ use core::f32::consts::{FRAC_PI_2, PI};
 use fh6_kit::cluster::Setup;
 use fh6_kit::logo::{self, LogoStyle};
 use fh6_kit::math::Affine;
-use fh6_kit::optics::{absorption_coefficient, normal_reflectance};
+use fh6_kit::optics::absorption_coefficient;
 use fh6_kit::shape::Outline;
 use fh6_kit::{
     deg, vec2, Align, BlendMode, Cap, Cluster, Color, FontId, FontRole, FrameInput, Glow, Gradient, ImageId,
@@ -68,6 +68,9 @@ const RING_STROKE: (f32, f32) = (2.0, 6.0);
 /// Light of an unlit ring: white at 4.5% coverage, a touch under the board's 6% so the wing
 /// numerals stand clear of the rings.
 const RING_IDLE: f32 = 0.045;
+/// Share of `RING_IDLE` the nearest unlit ring loses: the unlit tunnel fades towards the driver,
+/// so its outermost ring never reads as a frame round the whole stack.
+const RING_IDLE_FADE: f32 = 0.7;
 /// Brightness of the lit tunnel (rank 3) as a share of its colour, so the gear outshines it.
 const TUNNEL_LEVEL: f32 = 0.62;
 /// The nearest lit rings lean to this pale sky blue (board: primary at the back, #C7E9FF at the
@@ -112,7 +115,7 @@ const STATIC_LUMA: f32 = 0.19;
 /// Smallest cap height of a label (px): about 16 arcmin at 1.5 m on the 55-inch panel.
 const MIN_CAP: f32 = 22.0;
 /// Cap height of the tunnel's rpm numerals on the wings (px).
-const NUMERAL_CAP: f32 = 30.0;
+const NUMERAL_CAP: f32 = 36.0;
 /// Width of the rpm backlash (as the Liquid Glass pilot): wider than the engine's bounce on the
 /// limiter, so the tunnel holds still there.
 const REV_BAND: f32 = 60.0;
@@ -742,7 +745,6 @@ impl VisionSpatialGlass {
         let fill = self.rev.value().clamp(0.0, 1.0) * RINGS as f32;
         let shift_at = rev_fraction(&self.sig, self.sig.shift_rpm) * RINGS as f32;
         let near = Color::rgb_u32(NEAR_TINT);
-        let idle = roles.ink.with_alpha(RING_IDLE);
         let mut lit: [Option<Color>; RINGS] = [None; RINGS];
         for (i, slot) in lit.iter_mut().enumerate() {
             let on = (fill - i as f32).clamp(0.0, 1.0);
@@ -759,7 +761,7 @@ impl VisionSpatialGlass {
         }
         for (i, _) in lit.iter().enumerate().filter(|(_, c)| c.is_none()) {
             if !g.ring_hidden(i) {
-                ring(p, g, v, i, idle);
+                ring(p, g, v, i, roles.ink.with_alpha(idle_ring(i)));
             }
         }
         p.layer(LayerOptions::bloom(), |p| {
@@ -953,9 +955,9 @@ impl VisionSpatialGlass {
     /// their ring, red from the shift point), the labels and the logo zone.
     fn draw_wing_text(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
-        let seen = 1.0 - normal_reflectance(self.glass.ior[1]);
-        let ink = static_ink(roles.ink, seen);
-        let red = static_ink(roles.warning, seen);
+        // Drawn over the glass, so nothing dims them on the way to the eye.
+        let ink = static_ink(roles.ink, 1.0);
+        let red = static_ink(roles.warning, 1.0);
         let dx = self.shear_px(Some(0));
         let numeral = TextStyle::new(self.faces.numeral, NUMERAL_CAP)
             .align(Align::Center, VAlign::CapMiddle)
@@ -1053,6 +1055,12 @@ impl VisionSpatialGlass {
             }
         });
     }
+}
+
+/// Coverage of unlit ring `i`: brightest at the vanishing point, fading towards the driver.
+fn idle_ring(i: usize) -> f32 {
+    let depth = i as f32 / (RINGS - 1) as f32;
+    RING_IDLE * (1.0 - RING_IDLE_FADE * depth)
 }
 
 /// How many of the puck's 3 caution arcs the brake lights: one from 10%, two from 40%, three
