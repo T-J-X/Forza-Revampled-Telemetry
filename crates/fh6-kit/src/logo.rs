@@ -452,6 +452,9 @@ struct Decoded {
 struct Uploading {
     brand: BrandId,
     chain: MipChain,
+    /// The texture the chain is going into, from the upload's first step to its last. It lives
+    /// here so that an upload which ends or is dropped can leave no texture behind.
+    texture: Option<MipUpload>,
     decode_ms: f64,
     /// The render thread's time on it so far, the longest of its steps, and the frames it took.
     upload_ms: f64,
@@ -521,8 +524,10 @@ impl Worker {
 
 /// How long one [`DialLoader::poll`] keeps uploading before it leaves the rest to the next
 /// frame, in milliseconds. A poll always takes one step, so a frame spends at most this plus one
-/// step on a dial (the app's whole frame has 1 ms). On the PC's DX12 card a step costs about
-/// 0.1 ms (0.14 ms at worst), which is more than this, so there a frame takes exactly one step.
+/// step on a dial (the app's whole frame has 1 ms). The step that finishes a dial ends the poll
+/// too: that frame also writes the dial's log line and frees its texels, and starts no other
+/// dial. On the PC's DX12 card a step costs about 0.1 ms (0.14 ms at worst), which is more than
+/// this, so there a frame takes exactly one step.
 pub const STEP_BUDGET_MS: f64 = 0.05;
 
 /// Each brand's dial in one kit, loaded the first time a car of that brand appears and kept for
@@ -532,8 +537,9 @@ pub const STEP_BUDGET_MS: f64 = 0.05;
 /// texture or copies slices of at most [`images::UPLOAD_STEP_BYTES`] until [`STEP_BUDGET_MS`]
 /// has gone, one dial at a time. So a car change never stalls a frame: the logo zone stays empty
 /// while the dial decodes (10 to 20 ms on the PC) and uploads (11 to 19 steps for the pack's
-/// dials; at the PC's one step a frame, about 0.1 s), then shows it. A brand whose dial cannot be
-/// loaded shows its name, and is never read again on that kit.
+/// dials; at the PC's one step a frame that is 0.09 to 0.16 s at 120 frames a second, and twice
+/// that at 60), then shows it. A brand whose dial cannot be loaded shows its name, and is never
+/// read again on that kit.
 ///
 /// Where threads cannot start (`wasm32`), every brand shows its name.
 #[derive(Debug)]
@@ -545,9 +551,8 @@ pub struct DialLoader {
     /// The brand the host is waiting for: the last [`DialLoader::dial`] that returned
     /// [`Dial::Loading`].
     waiting: Option<BrandId>,
-    /// The decoded dial being uploaded, and the texture it is going into.
+    /// The decoded dial being uploaded, with the texture it is going into.
     uploading: Option<Uploading>,
-    texture: Option<MipUpload>,
 }
 
 impl DialLoader {
@@ -564,18 +569,19 @@ impl DialLoader {
             worker,
             waiting: None,
             uploading: None,
-            texture: None,
         }
     }
 
     /// A new kit (after a device loss) has none of the dials: forget them all, and the one
     /// being uploaded. A decode that is still running lands on the new kit if its brand is asked
     /// for again there, and is dropped if not.
+    ///
+    /// Call it as soon as the old device is lost, too: the dial being uploaded holds a texture
+    /// of that device, and a texture keeps its device alive.
     pub fn new_kit(&mut self) {
         self.slots.clear();
         self.waiting = None;
         self.uploading = None;
-        self.texture = None;
     }
 
     /// The dial for a car of `brand` ([`LogoIndex::car_brand`]): ready, missing, or loading. The
@@ -619,30 +625,29 @@ impl DialLoader {
 
     /// One frame's share of the uploads, on this thread and without blocking: it takes the next
     /// dial the worker has decoded and copies it into `images` a step at a time until
-    /// [`STEP_BUDGET_MS`] has gone, and leaves the rest to the next call. Returns what the brand
+    /// [`STEP_BUDGET_MS`] has gone or the dial is in, and leaves the rest to the next call. Returns what the brand
     /// the host is waiting for now shows, once that is settled: its dial, or [`Dial::Missing`]
     /// when it failed. `None` while that brand is not done, and when none is awaited.
     pub fn poll(&mut self, images: &mut Images, device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Dial> {
-        // The texture being filled moves out for the call, so the step can use it beside `self`.
-        let mut texture = self.texture.take();
-        let found = self.poll_with(STEP_BUDGET_MS, |chain, _, label| {
-            images.upload_step(device, queue, &mut texture, chain, label)
-        });
-        // An upload that ended (done, failed, or dropped) leaves no texture behind.
-        self.texture = if self.uploading.is_some() { texture } else { None };
-        found
+        let started = Stamp::now();
+        self.poll_timed(
+            STEP_BUDGET_MS,
+            || started.elapsed().as_secs_f64() * 1000.0,
+            |chain, texture, _, label| images.upload_step(device, queue, texture, chain, label),
+        )
     }
 
-    /// [`DialLoader::poll`] with the upload step as a closure (the unit tests fake it). The
-    /// step is given the chain, its brand and the texture's label, and returns the image once
-    /// its last slice is in. `budget_ms` is [`STEP_BUDGET_MS`]: at 0 every call takes one step.
-    fn poll_with(
+    /// [`DialLoader::poll`] with its clock and its upload step as closures (the unit tests fake
+    /// both). `since_start_ms` is the time the poll has run. The step is given the chain, the
+    /// texture it is filling, the chain's brand and the texture's label, and returns the image
+    /// once its last slice is in. `budget_ms` is [`STEP_BUDGET_MS`]: at 0 every call takes one
+    /// step.
+    fn poll_timed(
         &mut self,
         budget_ms: f64,
-        mut step: impl FnMut(&MipChain, BrandId, &str) -> Result<Option<ImageId>, ImageError>,
+        mut since_start_ms: impl FnMut() -> f64,
+        mut step: impl FnMut(&MipChain, &mut Option<MipUpload>, BrandId, &str) -> Result<Option<ImageId>, ImageError>,
     ) -> Option<Dial> {
-        let started = Stamp::now();
-        let since_start = || started.elapsed().as_secs_f64() * 1000.0;
         let mut awaited = None;
         // An upload counts each frame it takes a step in, once.
         let mut new_frame = true;
@@ -656,9 +661,10 @@ impl DialLoader {
             let Some(up) = self.uploading.as_mut() else {
                 break;
             };
-            let before = since_start();
-            let stepped = step(&up.chain, up.brand, self.index.key(up.brand).unwrap_or("brand dial"));
-            let now = since_start();
+            let before = since_start_ms();
+            let label = self.index.key(up.brand).unwrap_or("brand dial");
+            let stepped = step(&up.chain, &mut up.texture, up.brand, label);
+            let now = since_start_ms();
             up.upload_ms += now - before;
             up.worst_step_ms = up.worst_step_ms.max(now - before);
             up.frames += u32::from(new_frame);
@@ -694,6 +700,9 @@ impl DialLoader {
                         Slot::Failed | Slot::Asked => Dial::Missing,
                     });
                 }
+                // This frame has also logged the dial and freed its texels (after `now` was
+                // read): it starts no other dial, whatever time it had left.
+                break;
             }
             if now >= budget_ms {
                 break;
@@ -734,6 +743,7 @@ impl DialLoader {
                     self.uploading = Some(Uploading {
                         brand,
                         chain,
+                        texture: None,
                         decode_ms: done.ms,
                         upload_ms: 0.0,
                         worst_step_ms: 0.0,
@@ -780,7 +790,8 @@ pub const NAME_AFTER_FRAMES: u32 = 600;
 /// The current car's logo, kept by a host across frames: the [`Logo`] its clusters draw. It owns
 /// the [`DialLoader`], so the host holds no image id of its own and makes three calls:
 /// [`CarLogo::show`] when the car or a setting changes, [`CarLogo::poll`] on each drawn frame
-/// while [`CarLogo::busy`], and [`CarLogo::new_kit`] after a device loss.
+/// while [`CarLogo::busy`], and [`CarLogo::new_kit`] when the device is lost and when its
+/// replacement's kit is made.
 #[derive(Debug)]
 pub struct CarLogo {
     dials: DialLoader,
@@ -868,7 +879,9 @@ impl CarLogo {
     }
 
     /// A new kit (after a device loss) has none of the images: nothing shows until the host
-    /// calls [`CarLogo::show`] again.
+    /// calls [`CarLogo::show`] again. A host calls this twice: when the device is lost, because a
+    /// dial that is half uploaded holds a texture of that device and would keep it alive
+    /// ([`DialLoader::new_kit`]), and again when the new kit is made.
     pub fn new_kit(&mut self) {
         self.dials.new_kit();
         self.shown = Logo::default();
@@ -940,6 +953,7 @@ pub fn draw(p: &mut Painter<'_>, zone: Rect, logo: &Logo, style: &LogoStyle) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::time::{Duration, Instant};
 
     fn repo_assets() -> PathBuf {
@@ -1239,6 +1253,18 @@ mod tests {
         awaited
     }
 
+    impl DialLoader {
+        /// One frame's poll with a fake upload step, on a clock that stands still: with a budget
+        /// of 0 it takes one step, and with no limit every step there is.
+        fn poll_with(
+            &mut self,
+            budget_ms: f64,
+            mut step: impl FnMut(&MipChain, BrandId, &str) -> Result<Option<ImageId>, ImageError>,
+        ) -> Option<Dial> {
+            self.poll_timed(budget_ms, || 0.0, |chain, _, brand, label| step(chain, brand, label))
+        }
+    }
+
     /// The image id the fakes give a brand's dial.
     fn image_of(brand: BrandId) -> ImageId {
         ImageId(brand.0 as u32)
@@ -1385,6 +1411,103 @@ mod tests {
         for brand in brands {
             assert_eq!(loader.dial(Some(brand)), Dial::Ready(image_of(brand)));
         }
+    }
+
+    #[test]
+    fn dials_decoded_before_the_first_frame_still_upload_one_at_a_time() {
+        let (ix, cars) = (repo_index(), repo_cars());
+        let (mut loader, inbox, outbox) = held_loader(&ix);
+        let brands = [3667, 4122, 3595].map(|ordinal| ix.car_brand(&cars, ordinal).logo.expect("a branded car"));
+        for brand in brands {
+            assert_eq!(loader.dial(Some(brand)), Dial::Loading);
+        }
+        // All three decodes are in before the next drawn frame, as after a hitch in the game.
+        for brand in inbox.try_iter() {
+            let decoded = Decoded {
+                brand,
+                result: ix.decode_dial(brand),
+                ms: 0.0,
+            };
+            outbox.send(decoded).expect("the loader is listening");
+        }
+        let mut fake = SteppedUpload::new(3);
+        for frame in 1..=9 {
+            assert!(loader.busy(), "still uploading before frame {frame}");
+            let _ = loader.poll_with(0.0, |_, brand, _| fake.step(brand));
+            assert_eq!(fake.calls.len(), frame, "one step in a frame with no time left");
+        }
+        let in_turn: Vec<BrandId> = brands.iter().flat_map(|&brand| [brand; 3]).collect();
+        assert_eq!(fake.calls, in_turn, "each dial is finished before the next is begun");
+        assert!(!loader.busy());
+        for brand in brands {
+            assert_eq!(loader.dial(Some(brand)), Dial::Ready(image_of(brand)));
+        }
+    }
+
+    #[test]
+    fn the_budget_is_for_the_whole_frame_not_for_each_step() {
+        let (ix, cars) = (repo_index(), repo_cars());
+        let (mut loader, inbox, outbox) = held_loader(&ix);
+        let porsche = ix.car_brand(&cars, 3667).logo;
+        assert_eq!(loader.dial(porsche), Dial::Loading);
+        let brand = inbox.try_recv().expect("the decode was asked for");
+        let decoded = Decoded {
+            brand,
+            result: ix.decode_dial(brand),
+            ms: 0.0,
+        };
+        outbox.send(decoded).expect("the loader is listening");
+        let mut fake = SteppedUpload::new(40);
+        // A clock that only the steps move. They take 1, 3 and 1 ms in turn, and a frame has
+        // 5 ms: no step is as long as that, and the third ends on it.
+        let clock = Cell::new(0.0);
+        let mut frame = |loader: &mut DialLoader| {
+            clock.set(0.0);
+            let shown = loader.poll_timed(
+                5.0,
+                || clock.get(),
+                |_, _, brand, _| {
+                    clock.set(clock.get() + [1.0, 3.0, 1.0][fake.calls.len() % 3]);
+                    fake.step(brand)
+                },
+            );
+            (shown, fake.calls.len())
+        };
+        assert_eq!(frame(&mut loader), (None, 3), "the third step ends the frame's 5 ms");
+        assert!(loader.busy(), "the rest waits for the next frame");
+        assert_eq!(frame(&mut loader), (None, 6), "and so does the next frame's third");
+        // What the "brand logo ready" log line will say: two frames, 10 ms, 3 ms at worst.
+        let up = loader.uploading.as_ref().expect("the dial is still uploading");
+        assert_eq!(up.frames, 2);
+        assert!((up.upload_ms - 10.0).abs() < 1e-9, "{} ms", up.upload_ms);
+        assert!((up.worst_step_ms - 3.0).abs() < 1e-9, "{} ms", up.worst_step_ms);
+    }
+
+    #[test]
+    fn the_frame_that_finishes_a_dial_starts_no_other() {
+        let (ix, cars) = (repo_index(), repo_cars());
+        let (mut loader, inbox, outbox) = held_loader(&ix);
+        let brands = [3667, 4122].map(|ordinal| ix.car_brand(&cars, ordinal).logo.expect("a branded car"));
+        for brand in brands {
+            assert_eq!(loader.dial(Some(brand)), Dial::Loading);
+        }
+        for brand in inbox.try_iter() {
+            let decoded = Decoded {
+                brand,
+                result: ix.decode_dial(brand),
+                ms: 0.0,
+            };
+            outbox.send(decoded).expect("the loader is listening");
+        }
+        let mut fake = SteppedUpload::new(3);
+        // Frames with all the time there is: each still ends with the dial it finishes.
+        let shown = loader.poll_with(f64::INFINITY, |_, brand, _| fake.step(brand));
+        assert_eq!(shown, None, "the Porsche's dial is not the one awaited");
+        assert_eq!(fake.calls, [brands[0]; 3], "nothing of the BMW M's dial yet");
+        let shown = loader.poll_with(f64::INFINITY, |_, brand, _| fake.step(brand));
+        assert_eq!(shown, Some(Dial::Ready(image_of(brands[1]))));
+        assert_eq!(fake.calls.len(), 6);
+        assert!(!loader.busy());
     }
 
     #[test]
@@ -1687,6 +1810,21 @@ mod tests {
         let dial = gt3.logo.map(image_of);
         logo.show(Some(gt3), "TJX");
         assert_eq!(logo.logo().image, dial);
+    }
+
+    #[test]
+    fn a_logo_zone_switched_off_while_a_read_hangs_stays_empty() {
+        let (ix, cars) = (repo_index(), repo_cars());
+        let (loader, _inbox, _outbox) = held_loader(&ix);
+        let mut logo = CarLogo::with_loader(loader);
+        logo.show(Some(ix.car_brand(&cars, 3667)), "TJX");
+        frame(&mut logo, image_of);
+        logo.show(None, "TJX");
+        // The read never comes back: the name that would have shown meanwhile must not.
+        for _ in 0..=NAME_AFTER_FRAMES {
+            frame(&mut logo, image_of);
+            assert_eq!(*logo.logo(), Logo::default(), "the zone stays off");
+        }
     }
 
     #[test]

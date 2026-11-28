@@ -1034,6 +1034,7 @@ mod tests {
             let mut copied = vec![Vec::new(); chain.len()];
             let (mut level, mut row, mut steps) = (0usize, 0u32, 0usize);
             while let Some(slice) = chain.next_slice(level, row) {
+                assert!(slice.rows > 0, "{w}x{h}: a slice with no rows would never end");
                 assert!(slice.level == level || (slice.level == level + 1 && slice.row == 0));
                 assert!(
                     slice.rows == 1 || slice.texels.len() <= UPLOAD_STEP_BYTES,

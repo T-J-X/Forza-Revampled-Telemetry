@@ -586,12 +586,16 @@ impl Loop {
         self.lost_since = None;
     }
 
-    /// Drops the device and swapchain so the window has no composition target left (it then
-    /// shows nothing), and schedules a recreation.
+    /// Drops the device, the swapchain and everything made on that device, so the window has no
+    /// composition target left (it then shows nothing), and schedules a recreation.
     fn lose_gpu(&mut self, why: &str) {
         tracing::warn!(why, "dropping the GPU device; it is recreated in 1 s");
         self.active = None;
         self.refraction = None;
+        // A dial that is half uploaded holds a texture of this device. A texture keeps its device
+        // alive, and Direct3D 12 gives an adapter no new device while a removed one still
+        // exists: the recreation would then find the adapter gone and settle on another one.
+        self.logo.new_kit();
         self.gpu = None;
         self.lost_since = Some(Instant::now());
     }

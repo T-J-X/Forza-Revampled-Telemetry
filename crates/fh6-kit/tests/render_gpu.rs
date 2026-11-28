@@ -477,8 +477,9 @@ fn a_dial_from_512_px_down_draws_the_same_pixels_as_the_full_chain() {
 }
 
 /// The live path, as the app runs it: `CarLogo` asks the worker thread for the car's dial, the
-/// zone is empty until it is in, and the upload is spread over the frames that poll it. The dial
-/// that shows is the same picture as one decoded and uploaded at once.
+/// zone is empty until it is in, and the upload is spread over the frames that poll it, each
+/// frame's writes submitted before the next. The dial that shows is the same picture as one
+/// decoded and uploaded at once.
 #[test]
 fn a_cars_logo_loads_on_the_worker_and_uploads_over_frames() {
     let (ctx, mut kit) = setup();
@@ -488,15 +489,20 @@ fn a_cars_logo_loads_on_the_worker_and_uploads_over_frames() {
     let style = LogoStyle::new(kit.font_choice(None).wide);
     let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(1000.0, 1000.0));
     let mut logo = CarLogo::start(&index);
-    // A 2015 BMW i8 (a square dial, the largest upload) and a 2025 BMW M4 CS (an odd height).
-    for ordinal in [2133, 4122] {
+    // A 2015 BMW i8 (a square dial, the largest upload), a 2025 BMW M4 CS (an odd height) and a
+    // 2017 Abarth 124 Spider (a tall dial, whose rows are not a multiple of 256 bytes).
+    for ordinal in [2133, 4122, 2740] {
         let brand = index.car_brand(&cars, ordinal);
         let id = brand.logo.expect("a branded car");
         let name = brand.name.clone();
         let before = kit.images().len();
         logo.show(Some(brand), "TJX");
         assert!(logo.busy(), "{name}: the dial is on its way");
+        // The worker is decoding. This thread does the same work before it polls, so that the
+        // polls counted below are the upload's and not the wait for the decode.
+        let chain = index.decode_dial(id).expect("the dial decodes");
         let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut polls = 0;
         while logo.busy() && std::time::Instant::now() < until {
             assert_eq!(
                 *logo.logo(),
@@ -505,9 +511,17 @@ fn a_cars_logo_loads_on_the_worker_and_uploads_over_frames() {
             );
             assert_eq!(kit.images().len(), before, "{name}: and no image is in the store");
             logo.poll(kit.images_mut(), &ctx.device, &ctx.queue);
+            // The frame ends: what this poll wrote goes to the device before the next poll.
+            ctx.queue.submit(None);
+            polls += 1;
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert!(!logo.busy(), "{name}: loaded within 30 s");
+        // No machine copies a megabyte in the 0.05 ms a poll has, so the largest dial always
+        // takes more than one frame.
+        if chain.byte_len() > 1024 * 1024 {
+            assert!(polls > 1, "{name}: the whole dial went up in one poll");
+        }
         let live = logo.logo().clone();
         let image = live.image.expect("the dial shows");
         assert_eq!(
