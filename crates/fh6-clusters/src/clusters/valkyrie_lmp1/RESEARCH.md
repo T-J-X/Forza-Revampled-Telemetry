@@ -77,3 +77,64 @@ Rank order (gear and shift lights, then speed, then the tach), OLED black outsid
 | After the renders | The PC renders `wheel_{cockpit,hood}_k{0,1,2}.png` to Drive `valkyrie_lmp1/build1` with sizes and SHA-256. This thread downloads them, checks the hashes, commits them with their `ASSETS.md`, re-renders the eight states, and runs V16 and V17 on the result. |
 
 No board change came out of this pass, so Penpot stays as v2.
+
+## Third pass, 28 Nov 10:40: how the real car behaves, motion, telemetry and edge cases
+
+### How the real car behaves (driver's view)
+| Behaviour | What the sources say | Source | What the dash does with it |
+|---|---|---|---|
+| Idle | "savagely loud at a 1000rpm idle" | Autocar (autocar.co.uk/node/125694) | At idle (1,000 of 11,100) the first tunnel ring is lit (0.63 > 0.5), so the dial is never dead with the engine running. Keep. |
+| Limiter | 11,100 rpm (Aston Martin 2019 powertrain release, Wikipedia, Top Gear: "keep looking down to ensure you don't hit the 11,100rpm limiter"); Hagerty UK's 11,200 is the outlier | astonmartin.com 2019-3-1; topgear.com | The scale top is the car's own `max_rpm` rounded up (12 for 11,100), as the sources' "numbers that go up to 12". Keep. |
+| Heat derate | the redline drops "as low as 8,000rpm" when hot (Hagerty UK); "cut its redline when the coolant got too hot" (R&T via Yahoo) | hagerty.co.uk; autos.yahoo.com | FH6 sends no temperatures and no live limiter, so nothing to show. Not faked. |
+| Power and torque | engine 1,000 bhp at 10,500 rpm, 740 Nm at 7,000 rpm; system 1,160 bhp at 10,500 rpm, 900 Nm at 6,000 rpm | Aston Martin 2019 | Power peaks just under the limiter, so the right encoder's share arc and the 4-digit readout both peak in the red band. 1,160 hp and 865 kW fit the 4-digit cap. |
+| Shift lights | "blue shift-lights"; "progressive illumination of the change-up lights"; the first light comes "well short of the limiter" | evo; R&T via Yahoo; Autocar; Hagerty UK | Matches the family stages (first light at 75% of the shift point), blue `primary`, outside-in fill. Keep. Whether the real lights change colour or flash at the shift point is *not established*; the house shift colour and the 10 Hz limiter strobe stay. |
+| Gearbox | Ricardo 7-speed single-clutch AMT: "so slow on the way up … slurs a shift"; "brutal shifts"; "won't upshift automatically"; "can change down through the gears autonomously" | Top Gear; Hagerty US; evo | The gear digit is the rank-1 element and changes the frame the packet does; no animation that could lag a slow real shift. The auto-downshift means gears can drop with no driver input: the digit just follows. |
+| Pull-away and reverse | "pulls away electrically, then bleeds the clutch in automatically around 10mph"; "backing up always done electrically" | Top Gear; Hagerty UK; evo | In FH6 the gear and rpm come from the game, so `R` and `N` show as sent. |
+| ERS boost | 1.8 kWh Rimac pack, "ERS button for a 143bhp e-boost", "you have to choose when to deploy it" | Top Gear; Hagerty UK; Car ("marked KERS") | Not in the telemetry (no battery or deploy field). Not faked. A user who wants it can read boost-like surges in the power share. |
+| Grip | road car "up to 2G of lateral acceleration on the Cup 2 tires"; AMR Pro 3.3 g lateral, 3.5 g braking | R&T via Yahoo; Wikipedia | **Finding:** the friction circle's full scale is 1.5 g (`FC_FULL_G`), so on this car the dot pins to the rim through most fast corners and the information is lost. Plan: full scale 2.5 g with faint rings at 1 g and 2 g (decided on the board after LIBRARY DONE). |
+| Speed | 220 mph limited (evo), 224 in its text; AMR Pro 250 mph | evo; Wikipedia | Three digits in either unit (402 km/h max). Fits the 3-cell readout. |
+| Wheel | "oblong", "squared-off", detachable, carbon with a screen at its centre; the licensed replica is 320 × 156 mm with a 5-inch screen, 8 buttons, 2 five-way switches, start/stop | Car; Autocar; Luxury London; TweakTown (replica) | The face keeps the oblong yoke with angled shoulders. The replica's 2:1 face proportion (320:156) is close to the yoke's 1400:512. |
+
+*Not found in any source:* rev speed from idle to the limiter, hard cut or bounce at the limiter, shift times, downshift blips, launch rpm and light pattern, the real shift-light count, colour change at the shift point, the screen's mode pages, and any ERS indicator on screen. The Forza Horizon 6 Valkyrie is class R, rear drive, semi-slicks (Dexerto's FH6 car page); no power curve was found.
+
+### Motion notes (what moves, how fast, and why)
+| Element | Motion | Timing |
+|---|---|---|
+| Shift lights | fill outside-in with rpm, all `shift` at the shift point, strobe on the limiter | per frame; 10 Hz, 3 on / 3 off (only flashing element; reduced-flash holds steady) |
+| Rev arc and tunnel | arc head follows rpm; rings light back to front up to the limiter, all `shift` on it | per frame, no smoothing (the packet is already 60 Hz) |
+| Gear | swaps on the frame the packet changes | instant (a slow real shift must not be made to look slower) |
+| Speed | tabular, no roll | per frame |
+| Power readout | hysteresis step 5 so it stands still on the limiter | per frame |
+| Power share arc | smoothed | tau 0.10 s |
+| Friction circle | dot plus a 0.5 s comet of 8 samples | per frame |
+| Trace | scrolls left | 4 s window (3 s in the hood view) |
+| Wheel face | key light swings with lateral G, the plate crossfades between the three render keys, 4 px parallax | follows the virtual light |
+| Lamps | TC and ABS fade in on their derived conditions | `AlarmColumn` timing |
+Idle with the car still: nothing moves (checked in the direction check).
+
+### Telemetry mapping
+| Field | Drives |
+|---|---|
+| rpm, max_rpm | rev arc, scale top, numerals, red band, tunnel, shift lights (with the palette's shift point) |
+| gear | the gear digit (R, N, 1-10) |
+| speed | the speed readout, unit from the config |
+| power | power readout (in `power_unit`) and the share arc against this car's peak |
+| car_ordinal | resets the power peak |
+| throttle, brake | left encoder arcs, trace |
+| steer | trace |
+| g_lat, g_long | friction circle; g_lat swings the face's light |
+| velocity, drivetrain | the derived TC lamp (with slip from `Signals`) |
+| brake, g_long | the derived ABS lamp |
+
+### Edge cases to test before the closing review
+1. **Housing off** (the new OSD switch): with the face gone, the encoder labels read much dimmer (brightest pixel 46/255 against 117/255 with the face, measured on `03_redline_strobe` crops, `/mnt/project-files/valkyrie_lmp1/housing_on_off.png`). Find why the label level depends on what is under it, and check housing-off over a bright game frame (`--backdrop`), since the encoders then float over the scene.
+2. **2 g and more:** the friction circle pins at 1.5 g (above).
+3. **Low-revving cars** (trucks, diesels): scale top clamps at 4; check the numerals and tunnel spacing at 4 and 5.
+4. **20,000 rpm cars:** scale top 20, 21 numerals; check numeral crowding on the 240° arc.
+5. **Power at 9,999 hp or kW:** clamp holds four digits; negative power on the overrun reads 0.
+6. **Car change mid-session:** power peak resets; the share arc starts from the new car's first sample.
+7. **Reverse and neutral:** `R` and `N` in the gear digit; the TC lamp stays off when not moving forward.
+8. **Packets stop (pause, menu):** the dash holds its last frame and stops animating.
+9. **Reduced flash on:** the limiter strobe holds steady `shift`.
+10. **Hood view:** every element above stays over the size floors at 0.7 scale.
+11. **Front-drive and AWD cars:** the TC lamp's drivetrain condition (no power oversteer lamp on front drive).
