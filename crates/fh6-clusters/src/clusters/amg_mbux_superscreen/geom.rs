@@ -69,6 +69,8 @@ pub(super) struct Geom {
     pub speed_cap: f32,
     /// The speed's unit, left-aligned to the right of three digits (cap middle of its start).
     pub speed_unit: Vec2,
+    /// The speed unit's cap height (larger than the other units: it sits over the sky).
+    pub speed_unit_cap: f32,
     /// The thin speed line under the speed: its y and half length.
     pub line_y: f32,
     /// See [`Geom::line_y`].
@@ -163,6 +165,7 @@ impl Geom {
         speed: Vec2 { x: 0.0, y: -190.0 },
         speed_cap: 58.0,
         speed_unit: Vec2 { x: 90.0, y: -172.0 },
+        speed_unit_cap: 24.0,
         line_y: -153.0,
         line_half: 150.0,
         rpm: Vec2 { x: 0.0, y: 56.0 },

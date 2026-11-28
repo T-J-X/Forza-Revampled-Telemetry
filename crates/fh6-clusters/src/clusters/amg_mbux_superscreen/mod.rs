@@ -16,7 +16,7 @@
 //! | Stage | ellipse round (0, −36) | 760 × 300 | a soft charcoal glow that ties the parts together, no edge |
 //! | Crescents | round (0, −36), r 300 | 84 px at 9 and 3 o'clock, pointed tips, ±48° | halftone red, at half light at low revs and full near the shift point |
 //! | Sky | the near ring's circle above the horizon y −58 | r 202 | a dusk sky with soft clouds (SDXL plate) that drift with the distance driven, warming to sunset near the shift point; it leans with lateral G (5° a g) about the horizon's centre |
-//! | Rings | from (0, −60) r 64 out to the tunnel centre r 202 | 12, spaced in perspective | rank 1: the rev counter, lighting from the far end towards the driver; the nearest three red; faint above the horizon so the sky shows through |
+//! | Rings | from (0, −60) r 64 out to the tunnel centre r 202 | 12, spaced in perspective | rank 1: the rev counter, lighting from the far end towards the driver; the nearest three red, the shift colour on the limiter; faint above the horizon so the sky shows through |
 //! | Road | trapezoid y −58 .. 200, half widths 44 .. 214 | – | the road out of the tunnel with lane dashes that run with the distance driven, a red wash under braking, the horizon line on top; the rpm readout, cap 40, at (0, 56) |
 //! | Speed | (0, −190) | cap 58 | rank 2: the speed above the thin speed line (y −153, ±150), on a soft dark halo; its unit to the right of it |
 //! | Side scales | bands r 312 .. 392 round the tunnel centre, 150° .. 216° (mirrored right) | 21 ticks inward from the rim, numerals at r 344 | rank 4: torque (left) and power (right), the live fill along the rim, each live value under its band |
@@ -31,9 +31,10 @@
 //! (`STATIC_LUMA`), dimmed by its light and never by its alpha.
 //!
 //! Signature moments:
-//! - **Limiter:** the three red rings turn the shift colour: the farthest holds steady and the
-//!   two nearest strobe at 10 Hz on their own clock, which starts lit (a still frame never reads
-//!   as "no shift"). The sky glows sunset orange. Nothing else flashes.
+//! - **Limiter:** the three red rings turn the shift colour and hold steady (a still frame never
+//!   reads as "no shift"), and the horizon line strobes in the shift colour at 10 Hz on its own
+//!   clock, which starts lit; it is a 4 px line, so the flashing area stays under the tokens'
+//!   strip height. The sky glows sunset orange. Nothing else flashes.
 //! - **Upshift:** the new gear enters on the tokens' motion (`common::HeroGear`) and a ring of
 //!   light runs once down the tunnel towards the driver, in 320 ms.
 //! - **Braking:** the horizon turns red and a red wash runs down the road, like brake lights
@@ -80,6 +81,8 @@ const NUMERAL_SLANT: f32 = 0.10;
 /// The brightest that a part which never changes may show on black, as relative luminance
 /// (tokens `motion.idle.staticLumaMaxPct`, 20%): labels, ticks, scale numerals, units, logo.
 const STATIC_LUMA: f32 = 0.19;
+/// The speed unit's light (relative luminance): over the sky it needs more than the static cap.
+const SPEED_UNIT_LUMA: f32 = 0.75;
 /// Relative luminance of the tokens' ink (#F4F7FB), to turn [`STATIC_LUMA`] into a light level.
 const INK_LUMA: f32 = 0.92;
 /// The crescents' light at rest and how it rises to full near the shift point (fill shares).
@@ -113,9 +116,9 @@ const STAGE_MID: [u8; 3] = [17, 15, 25];
 const CRESCENT_GLOW: f32 = 0.30;
 /// The lavender glow on the scale bands (alpha at the rim).
 const BAND_GLOW: f32 = 0.10;
-/// Red rings that hold steady on the limiter (the farthest of them); the nearer ones strobe.
-const STEADY_RINGS: usize = 1;
-/// Share of the shift colour's light the strobing rings keep in the strobe's dark phase.
+/// The horizon line on the limiter: its height (local px) while it strobes.
+const LIMITER_HORIZON: f32 = 4.0;
+/// Share of the shift colour's light the strobing horizon keeps in the strobe's dark phase.
 const STROBE_FLOOR: f32 = 0.2;
 /// Added to the strobe's clock (s), so a phase edge that falls on a frame lands the same way.
 const STROBE_LEAD: f32 = 1e-4;
@@ -176,9 +179,6 @@ struct Readouts {
     torque_shown: i64,
     power_shown: i64,
     boost_shown: i64,
-    /// The live torque and power (display units), for the scale fills.
-    torque_now: f32,
-    power_now: f32,
     /// The scales' full values (display units); they grow, never shrink, in one drive.
     torque_full: f32,
     power_full: f32,
@@ -198,8 +198,6 @@ impl Readouts {
             torque_shown: 0,
             power_shown: 0,
             boost_shown: 0,
-            torque_now: 0.0,
-            power_now: 0.0,
             torque_full: SCALE_STEP * 2.0,
             power_full: SCALE_STEP,
             boost_bar: 0.0,
@@ -350,8 +348,6 @@ impl AmgMbuxSuperscreen {
             PowerUnit::Kw => (watts / 1000.0, nm),
             PowerUnit::Hp => (watts / WATTS_PER_HP, nm * LBFT_PER_NM),
         };
-        r.power_now = power;
-        r.torque_now = torque;
         r.power_shown = r.power.update(power).clamp(0, 9999);
         r.torque_shown = r.torque.update(torque).clamp(0, 9999);
         r.power_full = grown(r.power_full, power);
@@ -598,9 +594,9 @@ impl AmgMbuxSuperscreen {
             .stop(1.0, color)
     }
 
-    /// The rev counter: the rings light from the far end towards the
-    /// driver as the revs climb, the nearest [`RED_RINGS`] red; on the limiter they turn the
-    /// shift colour, the farthest of them steady and the nearer ones strobing.
+    /// The rev counter: the rings light from the far end towards the driver as the revs climb,
+    /// the nearest [`RED_RINGS`] red; on the limiter they hold steady in the shift colour (the
+    /// horizon line is the strobe).
     fn draw_rings(&self, p: &mut Painter<'_>, pal: &Palette) {
         let d = &self.drive;
         let lit = d.fill * RINGS as f32;
@@ -609,12 +605,7 @@ impl AmgMbuxSuperscreen {
             let share = (lit - k as f32 + 0.5).clamp(0.0, 1.0);
             let u = (k as f32 + 1.0) / RINGS as f32;
             let color = if d.over_shift && red {
-                let light = if k < RINGS - RED_RINGS + STEADY_RINGS {
-                    1.0
-                } else {
-                    d.strobe_light
-                };
-                pal.shift.intensity(light)
+                pal.shift
             } else if share > 1e-3 {
                 if red {
                     pal.primary_text.intensity(share)
@@ -685,13 +676,20 @@ impl AmgMbuxSuperscreen {
         let g = &self.geom;
         let d = &self.drive;
         let half = g.ring(RINGS - 1).1 - 4.0;
-        let color = Color::srgb8(242, 248, 255, 255).lerp(pal.primary_text.lerp(pal.roles.ink, 0.35), d.brake);
+        // On the limiter the horizon is the strobe: a thin line, so the flashing area stays
+        // under the tokens' strip height (the rings hold steady in the shift colour).
+        let (color, h) = if d.over_shift {
+            (pal.shift.intensity(d.strobe_light), LIMITER_HORIZON)
+        } else {
+            let calm = Color::srgb8(242, 248, 255, 255);
+            (calm.lerp(pal.primary_text.lerp(pal.roles.ink, 0.35), d.brake), 2.5)
+        };
         p.scoped(|p| {
             p.rotate_about(d.tilt, g.horizon_pivot());
             p.fill(
                 &Shape::rect(Rect::from_points(
-                    vec2(-half, g.horizon - 1.25),
-                    vec2(half, g.horizon + 1.25),
+                    vec2(-half, g.horizon - h * 0.5),
+                    vec2(half, g.horizon + h * 0.5),
                 )),
                 Gradient::linear(vec2(-half, 0.0), vec2(half, 0.0))
                     .stop(0.0, Color::TRANSPARENT)
@@ -778,9 +776,7 @@ impl AmgMbuxSuperscreen {
                 let value = (full * f).round() as i64;
                 p.number(pos, value, digits(value), &num_style, None);
             }
-            let mut value_style = TextStyle::new(numerals, g.value_cap)
-                .paint(pal.roles.ink.intensity(0.86))
-                .tabular();
+            let mut value_style = TextStyle::new(numerals, g.value_cap).paint(pal.roles.ink).tabular();
             value_style.slant = NUMERAL_SLANT;
             let pos = if side < 0.0 { g.torque_value } else { g.power_value };
             let unit = if side < 0.0 {
@@ -798,8 +794,8 @@ impl AmgMbuxSuperscreen {
         let g = &self.geom;
         let r = &self.readouts;
         for (side, full, now) in [
-            (-1.0_f32, r.torque_full, r.torque_now),
-            (1.0, r.power_full, r.power_now),
+            (-1.0_f32, r.torque_full, r.torque_shown as f32),
+            (1.0, r.power_full, r.power_shown as f32),
         ] {
             let v = (now / full).clamp(0.0, 1.0);
             if v <= 1e-3 {
@@ -865,9 +861,7 @@ impl AmgMbuxSuperscreen {
             SpeedUnit::Mph => (self.readouts.boost_shown, "psi", 1),
             SpeedUnit::Kmh => (self.readouts.boost_shown, "bar", 2),
         };
-        let mut style = TextStyle::new(numerals, g.value_cap)
-            .paint(pal.roles.ink.intensity(0.86))
-            .tabular();
+        let mut style = TextStyle::new(numerals, g.value_cap).paint(pal.roles.ink).tabular();
         style.slant = NUMERAL_SLANT;
         draw_fixed(p, c + vec2(0.0, -3.0), value, decimals, &style);
         p.text(c + vec2(0.0, 27.0), unit, &small);
@@ -909,12 +903,12 @@ impl AmgMbuxSuperscreen {
         // A soft dark halo behind the digits keeps them clear of the rings and the sky.
         p.scoped(|p| {
             p.translate(g.speed);
-            p.transform(&Affine::scale_xy(g.speed_cap * 3.3, g.speed_cap * 1.15));
+            p.transform(&Affine::scale_xy(g.speed_cap * 3.6, g.speed_cap * 1.2));
             p.fill(
                 &Shape::circle(Vec2::ZERO, 1.0),
                 Gradient::radial(Vec2::ZERO, 1.0)
-                    .stop(0.0, Color::srgb8(0, 0, 0, 230))
-                    .stop(0.55, Color::srgb8(0, 0, 0, 170))
+                    .stop(0.0, Color::srgb8(0, 0, 0, 240))
+                    .stop(0.62, Color::srgb8(0, 0, 0, 215))
                     .stop(1.0, Color::TRANSPARENT),
             );
         });
@@ -922,8 +916,10 @@ impl AmgMbuxSuperscreen {
         style.slant = NUMERAL_SLANT;
         let v = self.readouts.speed_shown;
         p.number(g.speed, v, digits(v), &style, None);
-        let unit = TextStyle::new(self.faces.labels, g.unit_cap)
-            .paint(static_ink(pal.roles.ink, STATIC_LUMA))
+        // The unit sits over the sky and the rings, so it is brighter than the other static
+        // labels (the glance gate's 4.5:1 for a data label; a small area, named in the handover).
+        let unit = TextStyle::new(self.faces.labels, g.speed_unit_cap)
+            .paint(static_ink(pal.roles.ink, SPEED_UNIT_LUMA))
             .tracking(0.04)
             .align(Align::Left, VAlign::CapMiddle);
         p.text(g.speed_unit, speed_unit(self.drive.speed_unit), &unit);
@@ -932,9 +928,7 @@ impl AmgMbuxSuperscreen {
     /// The rpm readout in the tunnel floor.
     fn draw_rpm(&self, p: &mut Painter<'_>, pal: &Palette, numerals: FontId) {
         let g = &self.geom;
-        let mut style = TextStyle::new(numerals, g.rpm_cap)
-            .paint(pal.roles.ink.intensity(0.9))
-            .tabular();
+        let mut style = TextStyle::new(numerals, g.rpm_cap).paint(pal.roles.ink).tabular();
         style.slant = NUMERAL_SLANT;
         let v = (self.readouts.rpm_shown / 10) * 10;
         let cells = if v >= 10_000 { 5 } else { 4 };
