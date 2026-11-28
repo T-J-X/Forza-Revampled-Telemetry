@@ -110,68 +110,68 @@ One thread per dash, at most 4 at once (TJX, 2026-11-27; they share the GPU lane
 | 8 | 4 | [`AmgMbuxSuperscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) (wide glass panel) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
 | 9 | 13 | [`ValkyrieLmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | Hypercar | recreation | Race Dash | cockpit+hood | ☐ |
 | 10 | 2 | [`VisionSpatialGlass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | Apple Vision | concept | Liquid Glass | cockpit | ☐ |
-| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ⧖ |
-| 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ⧖ |
+| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
+| 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ☐ |
 | 13 | 5 | [`DriftGlass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | Motorsport | concept | Modern Digital 2027 | cockpit | ☐ |
 | 14 | 28 | [`CymaticResonanceField`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |
-| 15 | 51 | `VisionPetals` | Abstract | concept | Liquid Glass | cockpit | ⧖ |
-| 16 | 52 | `AmgOneF1` (F1 shift lights) | Hypercar | recreation | Race Dash | cockpit | ⧖ |
+| 15 | 51 | `VisionPetals` | Abstract | concept | Liquid Glass | cockpit | ☐ |
+| 16 | 52 | `AmgOneF1` (F1 shift lights) | Hypercar | recreation | Race Dash | cockpit | ☐ |
 | 17 | 31 | [`VernierLoupe`](../../../crates/fh6-clusters/src/clusters/vernier_loupe/) | Liquid Glass | concept | Liquid Glass | cockpit+hood | ☐ |
-| 18 | 53 | `CarplayIsland` | Apple Vision | inspired | Liquid Glass | cockpit | ⧖ |
+| 18 | 53 | `CarplayIsland` | Apple Vision | inspired | Liquid Glass | cockpit | ☐ |
 | 19 | 22 | [`ChronoEventHorizon`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 20 | 54 | `Gt3RsApogee` | Supercar | inspired | Classic Analog | cockpit | ⧖ |
+| 20 | 54 | `Gt3RsApogee` | Supercar | inspired | Classic Analog | cockpit | ☐ |
 | 21 | 6 | [`GlyphDotMatrix`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/) | Retro | concept | Modern Digital 2027 | cockpit | ☐ |
-| 22 | 55 | `Gt7CockpitPro` | Motorsport | inspired | Modern Digital 2027 | cockpit | ⧖ |
+| 22 | 55 | `Gt7CockpitPro` | Motorsport | inspired | Modern Digital 2027 | cockpit | ☐ |
 | 23 | 29 | [`ChronoMultiverse`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |
-| 24 | 56 | `LiquidMorph` | Abstract | concept | Liquid Glass | cockpit | ⧖ |
+| 24 | 56 | `LiquidMorph` | Abstract | concept | Liquid Glass | cockpit | ☐ |
 | 25 | 9 | [`BugattiTourbillon`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 26 | 26 | [`ShibuyaChromaticPrisma`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/) | Liquid Glass | concept | Sci-Fi | cockpit | ☐ |
 | 27 | 16 | [`WindshieldHud`](../../../crates/fh6-clusters/src/clusters/windshield_hud/) | Apple Vision | concept | ADAS & HUD | raised HUD | ☐ |
 | 28 | 18 | [`F35HelmetHmd`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/) | Sci-Fi | recreation | ADAS & HUD | cockpit+hood | ☐ |
-| 29 | 57 | `AmgMbuxTrackPace` (lap timer) | Supercar | recreation | Modern Digital 2027 | cockpit+hood | ⧖ |
-| 30 | 58 | `GtrNismoMfd` | Retro | inspired | Modern Digital 2027 | cockpit | ⧖ |
-| 31 | 59 | `SimInputTrace` | Motorsport | concept | Race Dash | cockpit+hood | ⧖ |
+| 29 | 57 | `AmgMbuxTrackPace` (lap timer) | Supercar | recreation | Modern Digital 2027 | cockpit+hood | ☐ |
+| 30 | 58 | `GtrNismoMfd` | Retro | inspired | Modern Digital 2027 | cockpit | ☐ |
+| 31 | 59 | `SimInputTrace` | Motorsport | concept | Race Dash | cockpit+hood | ☐ |
 | 32 | 45 | [`AuroraVeil`](../../../crates/fh6-clusters/src/clusters/aurora_veil/) | Psychedelic | concept | Sci-Fi | cockpit | ☐ |
-| 33 | 60 | `LorenzButterfly` | Abstract | concept | Fluid / Generative | cockpit+hood | ⧖ |
+| 33 | 60 | `LorenzButterfly` | Abstract | concept | Fluid / Generative | cockpit+hood | ☐ |
 | 34 | 8 | [`PaganiHorologerie`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 35 | 37 | [`SapphireMystery`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/) | Liquid Glass | concept | Classic Analog | cockpit | ☐ |
 | 36 | 17 | [`ArNavWayfinder`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 37 | 23 | [`NeuralCyberSynapse`](../../../crates/fh6-clusters/src/clusters/neural_cyber_synapse/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 38 | 61 | `AmgMbuxClassic` (two tube dials) | Supercar | recreation | Modern Digital 2027 | cockpit | ⧖ |
+| 38 | 61 | `AmgMbuxClassic` (two tube dials) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
 | 39 | 20 | [`SynthwaveOutrun`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/) | Retro | concept | Sci-Fi | cockpit+hood | ☐ |
 | 40 | 14 | [`Gt7ModularTripod`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/) | Motorsport | recreation | Race Dash | cockpit+hood | ☐ |
 | 41 | 48 | [`HarmonographDrive`](../../../crates/fh6-clusters/src/clusters/harmonograph_drive/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 42 | 62 | `SuminagashiMarble` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
-| 43 | 63 | `T50Floodlit` | Hypercar | inspired | Classic Analog | cockpit | ⧖ |
+| 42 | 62 | `SuminagashiMarble` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
+| 43 | 63 | `T50Floodlit` | Hypercar | inspired | Classic Analog | cockpit | ☐ |
 | 44 | 32 | [`DichroicLouvre`](../../../crates/fh6-clusters/src/clusters/dichroic_louvre/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 45 | 40 | [`GeodesicWell`](../../../crates/fh6-clusters/src/clusters/geodesic_well/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 46 | 24 | [`SolarisWarpCore`](../../../crates/fh6-clusters/src/clusters/solaris_warp_core/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
 | 47 | 10 | [`LfaV10Nurburgring`](../../../crates/fh6-clusters/src/clusters/lfa_v10_nurburgring/) | Supercar | recreation | Classic Analog | cockpit | ☐ |
-| 48 | 64 | `HakosukaS20` | Retro | inspired | Classic Analog | cockpit | ⧖ |
-| 49 | 65 | `SimPitWall` | Motorsport | concept | Race Dash | cockpit | ⧖ |
+| 48 | 64 | `HakosukaS20` | Retro | inspired | Classic Analog | cockpit | ☐ |
+| 49 | 65 | `SimPitWall` | Motorsport | concept | Race Dash | cockpit | ☐ |
 | 50 | 46 | [`IsochromaticLoadPath`](../../../crates/fh6-clusters/src/clusters/isochromatic_load_path/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 51 | 66 | `KaleidoscopeMirror` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 51 | 66 | `KaleidoscopeMirror` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 | 52 | 11 | [`KoenigseggGyro`](../../../crates/fh6-clusters/src/clusters/koenigsegg_gyro/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 53 | 34 | [`ApertureNine`](../../../crates/fh6-clusters/src/clusters/aperture_nine/) | Liquid Glass | concept | Modern Digital 2027 | cockpit | ☐ |
 | 54 | 41 | [`Lightpainter`](../../../crates/fh6-clusters/src/clusters/lightpainter/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 55 | 25 | [`AeroPlasmaBlade`](../../../crates/fh6-clusters/src/clusters/aero_plasma_blade/) | Sci-Fi | concept | Sci-Fi | hood | ☐ |
-| 56 | 67 | `RevueltoCorsa` | Supercar | inspired | Modern Digital 2027 | cockpit | ⧖ |
-| 57 | 68 | `ZNismoSport` | Retro | inspired | Modern Digital 2027 | cockpit | ⧖ |
+| 56 | 67 | `RevueltoCorsa` | Supercar | inspired | Modern Digital 2027 | cockpit | ☐ |
+| 57 | 68 | `ZNismoSport` | Retro | inspired | Modern Digital 2027 | cockpit | ☐ |
 | 58 | 38 | [`RackFocus`](../../../crates/fh6-clusters/src/clusters/rack_focus/) | Motorsport | concept | Race Dash | cockpit+hood | ☐ |
 | 59 | 35 | [`AeroSmokeTunnel`](../../../crates/fh6-clusters/src/clusters/aero_smoke_tunnel/) | Psychedelic | concept | Modern Digital 2027 | cockpit | ☐ |
-| 60 | 69 | `GoldenAngle` | Abstract | concept | Fluid / Generative | cockpit+hood | ⧖ |
+| 60 | 69 | `GoldenAngle` | Abstract | concept | Fluid / Generative | cockpit+hood | ☐ |
 | 61 | 36 | [`RattrapanteSector`](../../../crates/fh6-clusters/src/clusters/rattrapante_sector/) | Hypercar | concept | Classic Analog | cockpit+hood | ☐ |
 | 62 | 30 | [`LumenEtch`](../../../crates/fh6-clusters/src/clusters/lumen_etch/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 63 | 42 | [`TreadSeismograph`](../../../crates/fh6-clusters/src/clusters/tread_seismograph/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 64 | 21 | [`EvaBioSync`](../../../crates/fh6-clusters/src/clusters/eva_bio_sync/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 65 | 70 | `MclarenSlimDisplay` | Supercar | inspired | Modern Digital 2027 | cockpit+hood | ⧖ |
+| 65 | 70 | `MclarenSlimDisplay` | Supercar | inspired | Modern Digital 2027 | cockpit+hood | ☐ |
 | 66 | 47 | [`AbyssalShearBloom`](../../../crates/fh6-clusters/src/clusters/abyssal_shear_bloom/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 67 | 71 | `HopfFibration` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 67 | 71 | `HopfFibration` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 | 68 | 39 | [`BionicSpaceframe`](../../../crates/fh6-clusters/src/clusters/bionic_spaceframe/) | Hypercar | inspired | Race Dash | cockpit | ☐ |
 | 69 | 33 | [`FibreOpticCorona`](../../../crates/fh6-clusters/src/clusters/fibre_optic_corona/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 70 | 43 | [`StarSailOrigami`](../../../crates/fh6-clusters/src/clusters/star_sail_origami/) | Apple Vision | concept | Sci-Fi | cockpit+hood | ☐ |
 | 71 | 44 | [`ArcLadderCascade`](../../../crates/fh6-clusters/src/clusters/arc_ladder_cascade/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 
 ## The auto-chain
 TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 4 dashes are built at once (TJX, 2026-11-27), and a free slot is never left idle.
