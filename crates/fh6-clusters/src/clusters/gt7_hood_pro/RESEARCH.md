@@ -56,7 +56,7 @@ Measured in the Bonnet View picture of the manual (1920x1080) at 2.56x in the br
 | 10, 11 | All-at-once alert colour, blink at the limiter | From the warning stage (93% of the shift point, GT7's `MinAlertRPM` analogue) the whole lit run takes the `shift` colour; from the shift point the run strobes at 10 Hz, starting lit, keeping a fifth of its light in the dark phase. The box never strobes (the tokens keep the strobe on the shift strip) | rpm, shift point |
 | 12 | White, grey, red | `ink` for digits and lit LEDs (body at 78%, head at full), `shift` for the alert run, `warning` red for the box, the plate's smoked lenses for unlit LEDs, static parts held at the tokens' cap | palette roles |
 | 13 | Squared digits | Michroma (speed and trip: wide squared digits with a plain zero), Orbitron 600 (gear and the box's digit), Titillium Web 600 (units and labels); a user display font replaces the numerals | fonts |
-| 14 | No panel | No panel; black keylines round every glyph and feathered dimming pads behind the centre stack, the boost label and the logo keep them readable over bright road and sky | none |
+| 14 | No panel | No panel and no box behind anything: a black keyline round every glyph, the divider and the logo keeps them readable over bright road and sky, as GT7's digits carry a dark edge | none |
 
 ## Deliberate changes and why
 
