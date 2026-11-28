@@ -106,9 +106,10 @@ const HOP_S: f32 = 2.0 * HOP_STEP + GLINT_S;
 const GLINT_LEVEL: f32 = 0.6;
 const RECEDE_PX: f32 = 6.0;
 const RECEDE_S: f32 = 0.2;
-/// Opacity (linear) of the black core under a piece that holds numerals: the rings behind the
-/// pane must not read as a frame inside it.
-const CORE_ALPHA: f32 = 0.97;
+/// Opacity (linear) of the black core under the pane: the lit rings behind it still glow
+/// faintly through, so the tunnel's vanishing point and its first rings stay readable (board
+/// 02), while the digits keep their contrast.
+const CORE_ALPHA: f32 = 0.86;
 /// The brightest a part that never changes may show on black (tokens
 /// `motion.idle.staticLumaMaxPct` is 20%): labels, units, numerals and the logo.
 const STATIC_LUMA: f32 = 0.19;
@@ -221,7 +222,7 @@ impl Geom {
         self.pane.inset(self.core_inset)
     }
 
-    /// True when ring `i` lies wholly behind the pane's core, so it is not drawn.
+    /// True when ring `i` lies wholly behind the pane's core, so it is not drawn while unlit.
     fn ring_hidden(&self, i: usize) -> bool {
         let (half, _) = self.ring(i as f32);
         let w = Self::ring_stroke(i) * 0.5;
@@ -766,10 +767,9 @@ impl VisionSpatialGlass {
         }
         p.layer(LayerOptions::bloom(), |p| {
             for (i, color) in lit.iter().enumerate() {
+                // Lit rings behind the pane are drawn too: they glow through its core.
                 if let Some(c) = color {
-                    if !g.ring_hidden(i) {
-                        ring(p, g, v, i, *c);
-                    }
+                    ring(p, g, v, i, *c);
                 }
             }
         });
