@@ -46,17 +46,18 @@
 //! | Zone | Element | Cockpit | Hood |
 //! |---|---|---|---|
 //! | Z5 | lens (surround 12 / 10 px outside) | (−700, −304)..(700, 210), r 36 | (−866, −208)..(866, 150), r 30 |
+//! | Z5 | stepped outline: strip top, raised part | y −172; x −550..340 | y −140; x −722..442 |
 //! | Z4 | pedal window | (−680, −150)..(−548, 160) | (−850, −120)..(−720, 106) |
 //! | Z3 | centre window | (−528, −294)..(318, 160) | (−700, −200)..(420, 106) |
-//! | Z3 | tach scale | x −490..290, baseline −96 → −130, bars 12 → 84 | x −660..380, baseline −60 → −84, bars 10 → 54 |
-//! | Z1 | shift bracket | 22 px above the numerals | 16 px above the numerals |
+//! | Z3 | tach scale | x −490..290, baseline −96 → −130, bars 12 → 80 | x −660..380, baseline −60 → −84, bars 10 → 48 |
+//! | Z1 | shift bracket | 6 pods, 30 px tall, over the numerals | 6 pods, 20 px tall, over the numerals |
 //! | Z2 | speed | (−150, 40), cap 128 | (−330, 20), cap 96 |
 //! | Z1 | gear | (175, 20), cap 190 | (250, 26), cap 150 |
-//! | Z4 | G readout | (−420, 70), cap 44 | (−590, 40), cap 36 |
+//! | Z4 | G readout | (−420, 70), cap 62 | (−590, 40), cap 66 |
 //! | Z4 | slip window | (338, −150)..(418, 160) | (440, −120)..(520, 106) |
-//! | Z4 | gauge window | (436, −150)..(690, 160) | (540, −120)..(850, 106) |
+//! | Z4 | gauge window | (436, −150)..(678, 160) | (540, −120)..(838, 106) |
 //! | Z5 | logo zone | (−490, −233)..(−310, −197) | (−660, −150)..(−510, −120) |
-//! | Z5 | printed labels | cap 16 at y 176 | cap 14 at y 120 |
+//! | Z5 | printed labels | cap 18 at y 176 | cap 16 at y 120 |
 use crate::common::bezel::{lit_rim, on_screen};
 use crate::common::seg7::{
     draw_scanlines, Emission, Phosphor, Reveal, Seg7Digit, Seg7Geometry, Seg7Number, Segments, Separator, DIAGONAL,
