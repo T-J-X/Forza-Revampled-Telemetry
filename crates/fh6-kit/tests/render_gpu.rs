@@ -8,6 +8,9 @@
 )]
 
 use fh6_gpu::GpuContext;
+use fh6_kit::math::{vec3, Mat4};
+use fh6_kit::mesh::{MeshData, MeshDraw, MeshShading};
+use fh6_kit::perspective::Camera25;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
     deg, vec2, Affine, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Painter, Pool, Rect, SegmentedBar,
@@ -253,6 +256,41 @@ fn a_blurred_layer_looks_the_same_when_far_draws_widen_the_work_rectangle() {
         "blur still spreads the layer"
     );
     assert!(at(&widened, vec2(-850.0, -450.0))[3] > 200, "the far dot is drawn");
+}
+
+#[test]
+fn a_mesh_in_a_blurred_layer_spreads_the_bounds_as_a_shape_does() {
+    // The renderer blurs and composites a layer only inside the bounds its draws recorded, so a
+    // mesh has to record the same three sigma of spread a shape does.
+    let (ctx, mut kit) = setup();
+    let car = kit.upload_mesh(&ctx.device, &ctx.queue, &MeshData::car_proxy(4.6, 1.9, 1.3));
+    let layout = Layout::centered(vec2(W as f32 * 0.5, H as f32 * 0.5), 0.5, (W, H));
+    let viewport = Rect::from_xywh(-200.0, -100.0, 400.0, 200.0);
+    let cam = Camera25::adas(900.0, 900.0, 0.0, 0.0);
+    let car = MeshDraw {
+        mesh: car,
+        model: Mat4::translation(vec3(0.0, 0.0, 3.2)),
+        view_proj: cam.view_proj(&viewport),
+        eye: cam.eye,
+        viewport,
+        color: Color::WHITE,
+        rim: Color::WHITE,
+        light: vec3(0.3, 1.0, -0.4),
+        shading: MeshShading::Matcap,
+    };
+    let mut bounds_in = |layer: LayerOptions| {
+        {
+            let mut p = kit.begin_frame(&layout);
+            p.layer(layer, |p| p.mesh(&car));
+        }
+        kit.scene().bounds()
+    };
+    let plain = bounds_in(LayerOptions::default());
+    let blurred = bounds_in(LayerOptions::blurred(20.0));
+    // The viewport at this layout's half scale, round the centre of the target.
+    assert_eq!(plain, Rect::from_xywh(380.0, 220.0, 200.0, 100.0));
+    // Sigma 20 in local units is 10 px here: 30 px of spread on every side.
+    assert_eq!(blurred, plain.expand(30.0));
 }
 
 /// Two pools that overlap a little, as `Kit::set_pools` takes them (target pixels).

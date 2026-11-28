@@ -370,10 +370,7 @@ impl<'f> Painter<'f> {
             return;
         }
         let viewport = self.state.xf.apply_rect(&draw.viewport);
-        self.scene.bounds = self.scene.bounds.union(&viewport);
-        if let Some(seg) = self.scene.segments.last_mut() {
-            seg.bounds = seg.bounds.union(&viewport);
-        }
+        self.mark_drawn(&viewport);
         self.scene.meshes.push(MeshCmd {
             draw: *draw,
             viewport,
@@ -559,6 +556,18 @@ impl<'f> Painter<'f> {
         true
     }
 
+    /// Adds what a draw over `world` (target pixels) reaches to the bounds of the frame and of
+    /// the open segment: the draw itself and, in a blurred layer, the three sigma its light
+    /// spreads to. The renderer blurs and composites a layer only inside these bounds
+    /// (`blur_region`), so every kind of draw must come through here.
+    fn mark_drawn(&mut self, world: &Rect) {
+        let drawn = world.expand(self.state.segment.blur_px * 3.0);
+        self.scene.bounds = self.scene.bounds.union(&drawn);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&drawn);
+        }
+    }
+
     fn push(&mut self, enc: Encoded, bbox: Rect, paint: &Paint, coverage_mode: u32, style: [f32; 4]) {
         if self.scene.instances.len() >= MAX_INSTANCES {
             self.scene.dropped += 1;
@@ -603,13 +612,7 @@ impl<'f> Painter<'f> {
                 }
             }
         }
-        let world = xf.apply_rect(&bbox);
-        let blur_margin = self.state.segment.blur_px * 3.0;
-        let drawn = world.expand(blur_margin);
-        self.scene.bounds = self.scene.bounds.union(&drawn);
-        if let Some(seg) = self.scene.segments.last_mut() {
-            seg.bounds = seg.bounds.union(&drawn);
-        }
+        self.mark_drawn(&xf.apply_rect(&bbox));
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };
         if bloom != 0 {
             self.scene.bloom_used = true;
