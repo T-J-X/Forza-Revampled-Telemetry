@@ -1024,8 +1024,8 @@ impl BoschDdu {
         let text = setup.fonts.role(FontRole::Text);
         let figures = setup
             .fonts
-            .find("Saira Semi Condensed", 500, false)
-            .or_else(|| setup.fonts.find("Saira Condensed", 500, false))
+            .find("Saira Semi Condensed", 600, false)
+            .or_else(|| setup.fonts.find("Saira Condensed", 600, false))
             .unwrap_or(display);
         let faces = Faces {
             gear: setup.fonts.find("Saira Condensed", 700, false).unwrap_or(display),
@@ -2790,11 +2790,11 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
         fonts.load_dir(&dir).expect("assets/fonts");
         let label = fonts.find("Titillium Web", 600, false).expect("label face");
-        let figures = fonts.find("Saira Semi Condensed", 500, false).expect("figures face");
+        let figures = fonts.find("Saira Semi Condensed", 600, false).expect("figures face");
         assert_eq!(
             fonts.desc(figures).map(|d| d.weight),
-            Some(500),
-            "the Medium face is in the pack"
+            Some(600),
+            "the SemiBold face is in the pack"
         );
         // Pack faces load their glyphs lazily; measure the real advances.
         let gear_face = fonts.find("Saira Condensed", 700, false).expect("gear face");

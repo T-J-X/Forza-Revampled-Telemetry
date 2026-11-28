@@ -57,7 +57,7 @@ Both Bosch press images, the DDU 10 above and the DDU 11 ([image](https://www.bo
 | 13 | Side columns show driver aids, 1 green up to 5 red | Left column: brake pressure in fifths (`warning`), on the brake bar's side; right column: body slip (derived, like a TC column) in `caution`; one colour per column (E) | matched, sources changed (E) |
 | 14 | Opaque alarm boxes in fixed areas | Not drawn: no alarm source is decoded (F) | changed (F) |
 | 15 | Bosch logo at start-up | Not drawn (A) | changed |
-| 16 | Plain geometric sans, medium weight, caps labels, lower-case units | Saira Semi Condensed 500 for figures (L), Saira Condensed 700 for the gear, Titillium Web caps for labels, lower-case units | matched |
+| 16 | Plain geometric sans, medium weight, caps labels, lower-case units | Saira Semi Condensed 600 for figures (L), Saira Condensed 700 for the gear, Titillium Web caps for labels, lower-case units | matched |
 
 ## Deliberate changes and why
 - **A. No Bosch marks.** The chin's two print zones become the dash's logo zone (the car's logo, bottom right, where Bosch prints its logo) and the name zone (the custom name or the dash's name, bottom left, where "Motorsport" is printed). Every dash shows its car's logo (CLUSTER_PROMPT, "Personalisation"), and the overlay carries no supplier trademarks.
@@ -71,7 +71,7 @@ Both Bosch press images, the DDU 10 above and the DDU 11 ([image](https://www.bo
 - **I. Red zone.** A thin red band from the shift point to the scale's end and a longer, thicker limiter tick, which the demo page does not show; the page's arc has no limit, and the band tells where the shift lights will fire.
 - **J. Static print at the cap.** Labels, units, scale numerals and rules are static, and the tokens hold static parts under 20 % relative luminance on the OLED (`motion.idle.staticLumaMaxPct`), so they stay grey where the page prints them nearly white; they still clear 4.5:1 on black (0.192 relative luminance, 4.8:1).
 - **K. Strobe from the shift point.** The middle six strobe from the shift point, as the shared shift strip and the sibling dashes do; the outer pairs hold the shift lamp steady, so the shift state also reads by count and position, not only by colour. Reduced flash breathes instead of strobing.
-- **L. Figure face.** Saira Semi Condensed 500: the page's figures are slightly condensed and of medium weight; regular-width Saira would not fit three speed digits in the panel at cap 58, and the family's Saira Condensed 700/800 is heavier than the page.
+- **L. Figure face.** Saira Semi Condensed 600 (SemiBold): the page's figures are slightly condensed and of medium-to-semibold weight. 500 was tried first, but at the glance gate's blur its thin strokes left the G figure at 4.4:1 inside its ring in `04_drift_braking`; 600 lifts every figure (G 4.9:1, speed 8.3:1 or more); regular-width Saira would not fit three speed digits in the panel at cap 58, and the family's Saira Condensed 700/800 is heavier than the page.
 
 ## Gaps
 - Housing material and finish, glass type and bonding, screen brightness and colour depth: not stated in the DDU 10 or DDU 11 sources; the satin grey edge is read from the press image.
