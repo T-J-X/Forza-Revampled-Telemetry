@@ -229,6 +229,7 @@ Re-measured on lavapipe at `b3f3039` (`hood_<state>.png`, the moved zones): gear
 2. **ComfyUI master copy (RC-2):** the Drive master of a ComfyUI texture is not copied under its ledger name; it should be, so the ledger and the masters folder agree.
 3. **Review telemetry steering:** `steer` is 0 in every review state and sequence frame, so a steering indicator (this dash's dot) can never be checked from renders. A small steer value in `04_drift_braking` and a sweep in the sequence would let siblings check it.
 4. **`common::VirtualLight` settled check:** a `settled()` accessor would let a dash's `animating()` keep the render loop drawing while the light's spring settles after a corner (rust-review finding 5).
+5. **Golden metric near black (shared `fh6_kit::testing::compare`):** a one-step difference at sRGB 0 to 2 counts as dE up to 6.7 in OKLab, so a dash with a wide faint glow passes on one backend only (here 0.54% and 0.62% between the card and lavapipe). A floor on the luminance before the comparison, or a looser threshold below a few levels of 255, would let the goldens pass on both.
 
 ## What sibling dashes must know
 - **A flat polished face in a top-down ortho render mirrors only the zenith.** A bright overhead sky turns every flat black-glass face uniform grey; keep the zenith dark and light the faces from low angles.
@@ -339,7 +340,7 @@ Renders on lavapipe in the cloud container at `b3f3039` (identical to `dae1263` 
 | V23 | yes | `review/spacing_handover.png` (frames 40 to 48): "4" from frame 42, never blank or doubled; the tile's slide and fade end within 6 frames |
 | V24 | yes | the `motion` spikes at frames 1 (the start-up), 10 (the pull begins), 25 (the alert run) and 27 (the strobe starts lit) are each the data's; idle frames 6 to 9 are still |
 | V25 | yes | `review/final_before_after.png`: the before's named failure (gull-wing ribbons that look nothing like GT7's meter) is gone; nothing the before did better is lost (checked on the sheet's crop pairs; TJX on the sheet: "the two befores are so bad") |
-| V26 | yes | the four goldens were rewritten on lavapipe at `b3f3039`, opened and compared with the previous ones (`review/final_goldens.png`): every difference is the rebuild (the old goldens showed the gull-wing design); they passed twice without the update variable (commit `dae1263`) |
+| V26 | yes | the four goldens were first written on lavapipe at `b3f3039` and compared with the old ones (`review/final_goldens.png`: every difference is the rebuild). The workspace gate on the PC then failed them on the card in `02` and `04` (0.54% and 0.62% of pixels over dE 3, max 6.7): a one-step difference in the faint glow round the lit run, at values 0 to 2 of 255, which the golden metric's OKLab cube root turns into dE 6.7. AGENTS.md rule 15 gives the goldens to the local card (TeslaAdas did the same), so they were rewritten on the card at `51f24a7` (`FH6_UPDATE_GOLDEN=1`, then twice without it, both pass), brought to the cloud through Drive (`gt7_hood_pro/goldens_card/`, SHA-256 checked: 23375efb…, badd2b6f…, 3c303fe6…, fbdb9838…) and each opened before commit. On lavapipe they differ by the same 0.54% and 0.62%, so the cloud check of this dash's goldens fails by that near-black step (request 5 below) |
 
 ### What the review set could not show (fh6-visual-review section 8)
 - The steering dot off centre: the review telemetry holds `steer` at 0 (tested in code; request 3 above).
@@ -377,6 +378,8 @@ rustfmt --edition 2021 --check (module and recipe)                 exit 0
 FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images gt7_hood_pro, then twice without it (lavapipe)   ok, ok
 ```
 After merging `origin/main` (`c03f6ae`, then `f1f02a3` and `7a57273`; CATALOG.md kept as main has it): `cargo check -p fh6-clusters -p asset-forge` exit 0; `cargo test -p fh6-clusters --lib` 279 passed at the last merge (273 at the first); `cargo test -p fh6-kit --lib` 177 passed; asset-forge gt7_hood_pro 6 passed; `dash_gates` 10 passed (53.40 s); `cargo test -p fh6-osd` 64 passed; the Gt7HoodPro golden on lavapipe passed.
+
+**Workspace gate** (AGENTS.md rule 16 step 3), on the PC at `51f24a7`: `cargo fmt --all -- --check`, `cargo check --workspace --all-targets` and `cargo clippy --workspace --all-targets -- -D warnings` exit 0; `cargo test --workspace` (through `gpu-lock`, `-j 2` after the PC's paging file ran out on the first build): 1171 passed, 2 ignored, 1 failed, this dash's goldens (lavapipe-made, see V26). With the goldens rewritten on the card, `cargo test -p fh6-clusters --test golden_images gt7_hood_pro` passed twice on the card; no other file changed.
 
 On the PC at `b3f3039` (rustc 1.100): lib tests, asset-forge tests, dash gates, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and fmt pass.
 
