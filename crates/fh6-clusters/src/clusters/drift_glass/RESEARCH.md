@@ -41,6 +41,18 @@ Photos saved 2026-11-28 to the Drive masters folder `drift_glass\references\` (1
 | P4 | `07_fd_rdl_udsm_gauge_closeup.jpg` (Formula Drift 2026, Race Data Labs review tool) | A round gauge: a speed arc 0 to 150 mph with one bar per driver in their colour (blue, magenta), each driver's speed large (`43 mph`) with the angle under it (`50°`), an acceleration-delta bar each (`+1.2 ft/s`), and a green PROX bar (`PROX 5.2 ft`) along the bottom. Thin white ticks, translucent dark centre panel. | The modern benchmark pairs speed with angle in one stack and compares two runs side by side. That is the ghost-lead idea (§7): the live slide in the palette's primary, the ghost in a dimmer secondary, and a match bar in place of PROX. |
 | P5 | `10`, `11`, `12_visor_bell_panovision_*.jpg`, `08_visor_stilo_st5_dark_smoke.jpg` | Visor cutouts at three-quarter view: a constant-thickness shell, a curved top edge with a slight lip, flanks that wrap back to round pivot bosses, a pull tab low on one side. The flank seen obliquely is visibly darker than the face seen square-on, in light smoke and dark smoke alike; the iridium one adds a bright mirror sheen across the upper half. | Confirms V3: the darkening toward the flanks is path length (Beer-Lambert), not a painted gradient. The pivot bosses and the pull tab are the visor's recognisable hardware and are candidates for the Blender part (§9). |
 
+### 2.2 Shift lights that behave like the real hardware
+
+The Motorsport category asks for shift lights that behave like real hardware. MoTeC's shift light modules, common in pro drift and race cars, are the reference read.
+
+| # | Finding | Source | In DriftGlass |
+|---|---|---|---|
+| L1 | The SLM has 8 full-colour LEDs, each with its own colour, intensity and purpose; the SLM-C has 8 fixed-colour LEDs as a 3-stage shift light plus warning lights. | Cited: MoTeC SLM and SLM-C datasheets [S28, S29] | The brief's 15 pills keep the stage logic; the count is the brief's. |
+| L2 | **Stage thresholds are engine speeds, optionally per gear**, and once a stage is lit it stays lit until the engine speed drops below that stage's speed (hysteresis). | Cited: MoTeC CTN0030, CTN0031 [S30, S31] | Matched: stages from the kit's shift stages, held until rpm falls below the stage's own threshold, so a bouncing limiter does not flicker the stage lamps. |
+| L3 | **Warnings override shift lights** on the same LEDs ("a warning light can override a shift light"; MoTeC advises giving warning lights priority). On the SLM-C, LEDs 1 and 8, the two ends, are the warning lights and LEDs 2 to 7 the shift lights. | Cited [S28, S30, S31] | Matched: the two end pills double as warning lamps in the `caution` role for SPIN and the over-rotation warning, and win over the shift stages while lit. Red stays reserved for the limiter. |
+| L4 | Brightness is set by the driver, not by an ambient sensor. | Cited [S30, S31] | The pills follow the app's brightness; no auto-dimming of their own. |
+| L5 | No source read gives the flash rate at the shift point or the limiter behaviour. | Cited [S28 to S31] | The flash rate follows the house flash rules (WCAG 2.3.1 audit) and the kit's strobe; the outer pills stay steady while the middle ones strobe (lesson from the BoschDdu rebuild). |
+
 ## 3. The visor: what a smoked race visor is
 
 | # | Finding | Source |
@@ -172,7 +184,7 @@ Every input the dash reads, what it drives, and how it is held. "Verified" follo
 |---|---|---|---|---|---|
 | Gear | `gear` | `Gear::from_raw` (0 = R, 1 to 10, else N) | glyph change on the `fast` spring plus the family's rim light sweep | none: it changes on the frame the gear does | yes |
 | Speed | `signals.speed` in the driver's unit | as sent | none (AGENTS 7) | `Hysteresis` of 1 unit, on the raw value | yes |
-| Shift pills | `shift_fraction`, `rpm`, `max_rpm` | the kit's `ShiftLights` stages from the tokens | lamps step; the strobe runs on the strip's own clock (time since the shift point) | stage edges only | yes |
+| Shift pills | `shift_fraction`, `rpm`, `max_rpm` | the kit's `ShiftLights` stages from the tokens; the two end pills are warning lamps for SPIN and over-rotation and win while lit (§2.2 L3) | lamps step; the strobe runs on the strip's own clock (time since the shift point) | each stage held until rpm falls below its own threshold (§2.2 L2) | yes |
 | Light pipe and meniscus | `rpm_fraction` (idle to limiter), `throttle`, rpm steadiness | meniscus position from rpm, its brightness from throttle, its ripple from the RMS of rpm about its 0.5 s running mean (§7) | `ribbon` with `rpm_rate` feed-forward | peak-held rpm above the shift point (lesson: limiter flicker) | yes |
 | Drift-angle readout | `velocity_x`, `velocity_z` | β of §6.1, computed here from the raw velocity and unwrapped across ±180° (edge case E3) | none: the digits are the live value | whole degrees, `Hysteresis` of 1° (B8: the real meter is accurate to 1°) | yes |
 | Slip wedge | β, `angular_velocity_y` | opening = β; target led by r·dt (feed-forward) | `snap` | opens above 8° (brief); closes after 300 ms under 4°, so it never blinks in a transition (§6.7 F2); hidden below 5 m/s | β yes; r raw |
@@ -252,6 +264,10 @@ Read 2026-11-28.
 - [S21] IEEE Spectrum, augmented-reality car HUDs: https://spectrum.ieee.org/augmented-reality-car-hud
 - [S22] Mercedes-Benz, "Augmented reality": https://www.mercedes-benz.co.nz/passengercars/brand/mercedes-me-magazine/innovation/articles/augmented-reality.html
 - [S23] Forza, "Forza Horizon 6 Data Out Documentation": https://support.forza.net/hc/en-us/articles/51744149102611-Forza-Horizon-6-Data-Out-Documentation
+- [S28] MoTeC, SLM datasheet CDS18120: https://cdn.shopify.com/s/files/1/0798/0249/files/CDS18120_SLM_Shift_Light_Module_2.pdf
+- [S29] MoTeC, SLM-C datasheet CDS18122: https://cdn.shopify.com/s/files/1/0332/8881/4637/files/CDS18122_SLM-C_Club_Shift_Light_Module.pdf
+- [S30] MoTeC, CTN0030 "Configuring an SLM-C in M1 Tune": https://cdn.shopify.com/s/files/1/0798/0249/files/CTN0030_Configuring_an_SLM-C_in_M1_Tune.pdf
+- [S31] MoTeC, CTN0031 "Configuring an SLM in M1 Tune": https://cdn.shopify.com/s/files/1/0798/0249/files/CTN0031_Configuring_an_SLM_in_M1_Tune_2.pdf
 - [S24] Werner et al., "Drifting in the Future" (ICRA 2026; Mercedes-AMG GT 63 S, with MARTY's figures in its Table II): https://arxiv.org/pdf/2606.27914
 - [S25] Meijer, Bertipaglia, Shyrokau, NMPC drifting of a BMW M3 Competition (2024): https://arxiv.org/pdf/2405.10859
 - [S26] Righetti et al., phase-plane analysis of MARTY drift data: https://www.iris.unina.it/retrieve/4f72239f-ac09-49e0-9d9d-f219bc8842a1/paper_062.pdf
