@@ -107,8 +107,8 @@ impl Shooter<'_> {
     }
 
     /// A fresh cluster for `entry`.
-    fn build(&mut self, entry: &fh6_kit::cluster::ClusterEntry, assets: &Path) -> Box<dyn Cluster> {
-        let mut setup = self.kit.setup(&self.gpu.device, &self.gpu.queue, Some(assets));
+    fn build(&mut self, entry: &fh6_kit::cluster::ClusterEntry, assets: Option<&Path>) -> Box<dyn Cluster> {
+        let mut setup = self.kit.setup(&self.gpu.device, &self.gpu.queue, assets);
         (entry.make)(&mut setup)
     }
 }
@@ -170,6 +170,7 @@ pub fn run(
     kit: &mut Kit,
     tokens: &Tokens,
     root: &Path,
+    assets: Option<&Path>,
     out: &Path,
     name: &str,
     frames: u32,
@@ -188,7 +189,6 @@ pub fn run(
     let dir = out.join(&theme);
     fs::create_dir_all(dir.join("_thumbs"))?;
     fs::create_dir_all(dir.join("sequence"))?;
-    let assets = root.join("assets");
     let cfg = AppConfig {
         current_camera_index: 3,
         custom_driver_name: crate::DRIVER_NAME.to_string(),
@@ -227,7 +227,7 @@ pub fn run(
         };
         for state in &STATES {
             let started = Instant::now();
-            let mut cluster = sh.build(entry, &assets);
+            let mut cluster = sh.build(entry, assets);
             Driver::new().settle(cluster.as_mut(), state, &ctx, frames, DT);
             let shot = sh.render(&layout, |p| cluster.draw(p, &layout))?;
             let stem = format!("{prefix}{}", state.name);
@@ -296,7 +296,7 @@ pub fn run(
         view: seq_view,
         reduced_flash: false,
     };
-    let mut cluster = sh.build(entry, &assets);
+    let mut cluster = sh.build(entry, assets);
     let mut driver = Driver::new();
     let mut gpu_times = Vec::with_capacity(SEQUENCE_FRAMES as usize);
     for i in 0..SEQUENCE_FRAMES {

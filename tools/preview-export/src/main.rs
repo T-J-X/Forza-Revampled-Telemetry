@@ -21,6 +21,11 @@
 //! `assets/logos/` in one call (`LogoIndex::load_dial`; the app loads the same dial on a worker
 //! thread) (default 3667, the 2021 Porsche 911 GT3; 0 for no car,
 //! which shows the custom name).
+//! `--no-assets` renders what a player without the asset folder sees: every dash and the OSD are
+//! built with no assets (`assets: None`, as `fh6-app` does when `assets/` is missing), no pack
+//! fonts are loaded, the OSD gets an empty car database and the logo zone shows only the custom
+//! name. The reference backdrops still load. Its output goes to `mockups/no-assets/` unless
+//! `--out` says otherwise, so the normal renders are not overwritten.
 mod cluster;
 mod fit;
 mod gallery;
@@ -61,6 +66,7 @@ struct Args {
     cluster: Option<String>,
     backdrop: Option<PathBuf>,
     car: i32,
+    no_assets: bool,
 }
 
 /// Reads the arguments after the program's name.
@@ -72,10 +78,12 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args> {
         cluster: None,
         backdrop: None,
         car: DEFAULT_CAR,
+        no_assets: false,
     };
     while let Some(a) = it.next() {
         match a.as_str() {
             "--fit" => args.fit = true,
+            "--no-assets" => args.no_assets = true,
             "--frames" => args.frames = it.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
@@ -86,7 +94,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "preview-export [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] [--car ORDINAL]"
+                    "preview-export [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] [--car ORDINAL] [--no-assets]"
                 );
                 std::process::exit(0);
             }
@@ -127,7 +135,8 @@ fn run() -> Result<()> {
         .try_init();
     let args = parse_args(std::env::args().skip(1))?;
     let root = workspace_root();
-    let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));
+    let default_out = if args.no_assets { "mockups/no-assets" } else { "mockups" };
+    let out = args.out.clone().unwrap_or_else(|| root.join(default_out));
     fs::create_dir_all(&out)?;
 
     let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_else(|e| {
@@ -138,9 +147,13 @@ fn run() -> Result<()> {
     println!("GPU: {}", ctx.adapter_summary());
     let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
     let timing = kit.set_gpu_timing(true);
-    let assets = root.join("assets");
-    if assets.join("fonts").is_dir() {
-        let faces = kit.fonts_mut().load_dir(&assets.join("fonts"))?;
+    let asset_dir = root.join("assets");
+    // What the dashes and the OSD are built with: the asset folder, or nothing (`--no-assets`).
+    let assets = (!args.no_assets).then_some(asset_dir.as_path());
+    if args.no_assets {
+        println!("assets: none (--no-assets): no pack fonts, no images, no logos");
+    } else if asset_dir.join("fonts").is_dir() {
+        let faces = kit.fonts_mut().load_dir(&asset_dir.join("fonts"))?;
         println!(
             "fonts: {} faces from assets/fonts, {} roles bound",
             faces.len(),
@@ -155,17 +168,32 @@ fn run() -> Result<()> {
     // The whole run draws the OSD states, which need the car database; `--cluster` and `--fit`
     // use it only to name the car's brand.
     let whole_run = args.cluster.is_none() && !args.fit;
-    let cars = if whole_run || args.car != 0 {
-        load_cars(&assets, whole_run)?
+    let cars = if args.no_assets {
+        // The app's no-asset path: an empty database, so no brand palettes and no car names.
+        whole_run.then(CarDatabase::default)
+    } else if whole_run || args.car != 0 {
+        load_cars(&asset_dir, whole_run)?
     } else {
         None
     };
-    let logo = car_logo(&ctx, &mut kit, &assets, cars.as_ref(), args.car);
+    let car = if args.no_assets { 0 } else { args.car };
+    let logo = car_logo(&ctx, &mut kit, &asset_dir, cars.as_ref(), car);
     if let Some(name) = args.cluster.as_deref() {
-        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing, &logo);
+        return cluster::run(
+            &ctx,
+            &mut kit,
+            &tokens,
+            &root,
+            assets,
+            &out,
+            name,
+            args.frames,
+            timing,
+            &logo,
+        );
     }
     if args.fit {
-        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames, &logo)?;
+        fit::run(&ctx, &mut kit, &tokens, &root, assets, &out, args.frames, &logo)?;
         println!("Fit review written to {}", out.join("fit").display());
         return Ok(());
     }
@@ -182,7 +210,7 @@ fn run() -> Result<()> {
         for state in &STATES {
             let started = Instant::now();
             let mut cluster = {
-                let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(&assets));
+                let mut setup = kit.setup(&ctx.device, &ctx.queue, assets);
                 (entry.make)(&mut setup)
             };
             kit.set_palette(palette);
@@ -286,14 +314,14 @@ fn run() -> Result<()> {
         &ctx,
         &mut kit,
         &tokens,
-        &assets,
+        assets,
         cars,
         &out,
         timing,
         backdrop.as_ref(),
         &logo,
     )?;
-    fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
+    fit::scrims(&ctx, &mut kit, &tokens, assets, &out)?;
     gallery::write_index(&out, &renders, &osd_renders, ctx.adapter_summary().to_string().as_str())?;
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
@@ -483,6 +511,15 @@ mod tests {
         assert!(bad.starts_with("--car \"abc\": "), "{bad}");
         let none = args(&["--cluster", "PorscheAnalog", "--car"]).expect_err("no value");
         assert_eq!(none.to_string(), "--car needs an ordinal");
+    }
+
+    #[test]
+    fn no_assets_is_off_unless_asked_and_combines_with_the_other_modes() {
+        assert!(!args(&[]).expect("no arguments").no_assets);
+        let a = args(&["--no-assets", "--cluster", "PorscheAnalog"]).expect("--no-assets --cluster");
+        assert!(a.no_assets);
+        assert_eq!(a.cluster.as_deref(), Some("PorscheAnalog"));
+        assert!(args(&["--fit", "--no-assets"]).expect("--fit --no-assets").no_assets);
     }
 
     /// The shipped car database and logo index, and the assets folder.
