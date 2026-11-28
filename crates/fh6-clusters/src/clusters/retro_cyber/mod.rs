@@ -54,6 +54,7 @@
 //! | Z4 | G readout | (−420, 70), cap 44 | (−590, 40), cap 36 |
 //! | Z4 | slip window | (338, −150)..(418, 160) | (440, −120)..(520, 106) |
 //! | Z4 | gauge window | (436, −150)..(690, 160) | (540, −120)..(850, 106) |
+//! | Z5 | logo zone | (−490, −233)..(−310, −197) | (−660, −150)..(−510, −120) |
 //! | Z5 | printed labels | cap 16 at y 176 | cap 14 at y 120 |
 use crate::common::bezel::{lit_rim, on_screen};
 use crate::common::seg7::{
@@ -63,10 +64,11 @@ use crate::common::shift::LimiterCue;
 use crate::common::{ShiftLights, SpeedReadout, VirtualLight};
 use fh6_kit::cluster::Setup;
 use fh6_kit::color::{linear_to_srgb, srgb_to_linear};
+use fh6_kit::logo::LogoStyle;
 use fh6_kit::{
     vec2, Align, BlendMode, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, Hysteresis, ImageId,
-    ImagePaint, ImageWrap, LayerOptions, Layout, OpticalGlass, Paint, Painter, Palette, Piece, PowerUnit, Rect, Shape,
-    Signals, Smoothed, TextStyle, Tokens, VAlign, Vec2, View,
+    ImagePaint, ImageWrap, LayerOptions, Layout, Logo, OpticalGlass, Paint, Painter, Palette, Piece, PowerUnit, Rect,
+    Shape, Signals, Smoothed, TextStyle, Tokens, VAlign, Vec2, View,
 };
 
 /// Tach bars per 1,000 rpm (one per 250 rpm).
@@ -203,6 +205,8 @@ struct Geom {
     label_y: f32,
     label_cap: f32,
     figure_cap: f32,
+    /// The logo zone: printed under the tach legend at the window's top left.
+    logo: Rect,
     /// Inset of the bar gauges inside their windows (top, bottom).
     bar_inset: (f32, f32),
 }
@@ -237,6 +241,7 @@ const COCKPIT: Geom = Geom {
     label_y: 176.0,
     label_cap: 16.0,
     figure_cap: 15.0,
+    logo: rect(-490.0, -233.0, -310.0, -197.0),
     bar_inset: (30.0, 10.0),
 };
 
@@ -264,6 +269,7 @@ const HOOD: Geom = Geom {
     label_y: 120.0,
     label_cap: 14.0,
     figure_cap: 13.0,
+    logo: rect(-660.0, -150.0, -510.0, -120.0),
     bar_inset: (24.0, 8.0),
 };
 
@@ -596,8 +602,13 @@ impl SlowReadout {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Faces {
     label: FontId,
+    wide: FontId,
     role_display: FontId,
 }
+
+/// The maker whose wordmark (`assets/logos/toyota_dial.png`) the panel carries when the car is
+/// one of theirs and the host sends no logo image (compared in `update`, never in `draw`).
+const MAKER: &str = "Toyota";
 
 /// The Retro Cyber cluster.
 #[derive(Debug, Clone)]
@@ -632,6 +643,11 @@ pub struct RetroCyber {
     phosphor: Option<ImageId>,
     /// The Blender surround per view (cockpit, hood), two key lights each.
     surround: [Option<[ImageId; 2]>; 2],
+    /// The maker's wordmark, and whether this car is the maker's.
+    maker: Option<ImageId>,
+    maker_car: bool,
+    /// The host's logo (copied only when it changes).
+    logo: Logo,
 }
 
 impl RetroCyber {
@@ -644,6 +660,7 @@ impl RetroCyber {
         let text = setup.fonts.role(FontRole::Text);
         let faces = Faces {
             label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
+            wide: setup.fonts.role(FontRole::Wide),
             role_display: setup.fonts.role(FontRole::Display),
         };
         let mut load = |rel: &str| -> Option<ImageId> {
@@ -660,6 +677,7 @@ impl RetroCyber {
             Some([a, b])
         };
         let surround = [pair("cockpit"), pair("hood")];
+        let maker = load("logos/toyota_dial.png");
         let gear = Seg7Digit::new(t, Reveal::Instant)
             .with_segments(Segments::Diagonal)
             .with_phosphor(Phosphor::Ink)
@@ -705,6 +723,9 @@ impl RetroCyber {
             mesh,
             phosphor,
             surround,
+            maker,
+            maker_car: false,
+            logo: Logo::default(),
         }
     }
 
@@ -743,6 +764,11 @@ impl Cluster for RetroCyber {
         if input.fonts.display != self.faces.role_display {
             self.faces.label = input.fonts.display;
             self.faces.role_display = input.fonts.display;
+        }
+        self.faces.wide = input.fonts.wide;
+        if self.logo != *input.logo {
+            self.logo.clone_from(input.logo);
+            self.maker_car = self.logo.brand_name.trim().eq_ignore_ascii_case(MAKER);
         }
         self.boot.observe(input.telemetry.is_race_on != 0, dt);
 
@@ -1157,6 +1183,8 @@ impl RetroCyber {
         let legend_y = g.centre.min.y + g.figure_cap * 1.4;
         p.text(vec2(g.tach_x.0, legend_y), "TACH \u{d7}1000r/min", &small);
 
+        self.draw_logo(p, g, ink);
+
         // The speed unit, right of the digits at their foot.
         let sg = Seg7Geometry::new(g.speed_cap);
         let unit = TextStyle::new(self.faces.label, g.figure_cap * 1.3)
@@ -1230,6 +1258,36 @@ impl RetroCyber {
         };
         p.text(vec2(g.gauges.min.x + 6.0, y), "POWER", &left);
         p.text(vec2(g.gauges.max.x - 6.0, y), "BOOST", &right);
+    }
+
+    /// The logo zone, printed like the labels: the host's logo image, else the maker's wordmark
+    /// on the maker's own cars, else the brand or custom name; nothing when the logo is off.
+    fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, ink: Color) {
+        let off = self.logo.image.is_none()
+            && self.logo.brand_name.trim().is_empty()
+            && self.logo.custom_name.trim().is_empty();
+        if off {
+            return;
+        }
+        let maker = if self.maker_car { self.maker } else { None };
+        let style = LogoStyle {
+            tint: ink,
+            text: ink.into(),
+            cap: g.logo.height() * 0.5,
+            ..LogoStyle::new(self.faces.wide)
+        };
+        match self.logo.image.or(maker) {
+            Some(image) => {
+                let only = Logo {
+                    image: Some(image),
+                    ..Logo::default()
+                };
+                fh6_kit::logo::draw(p, g.logo, &only, &style);
+            }
+            None => {
+                fh6_kit::logo::draw(p, g.logo, &self.logo, &style);
+            }
+        }
     }
 
     /// The boot self-test: every segment lit.
@@ -1370,6 +1428,20 @@ mod tests {
             // Rank: the gear is the largest figure, then the speed.
             assert!(g.gear_cap > g.speed_cap && g.speed_cap > 2.5 * g.numeral_cap);
             assert!(g.gear_cap >= 150.0, "tokens: hero gear cap");
+        }
+    }
+
+    #[test]
+    fn the_logo_zone_clears_the_legend_and_the_numerals() {
+        for g in [&COCKPIT, &HOOD] {
+            assert!(inside(g.centre.inset(4.0), g.logo));
+            let legend_bottom = g.centre.min.y + g.figure_cap * 2.4;
+            assert!(g.logo.min.y > legend_bottom + 4.0, "under the legend");
+            let u = (g.logo.max.x - g.tach_x.0) / (g.tach_x.1 - g.tach_x.0);
+            assert!(
+                g.logo.max.y + 12.0 < g.numeral_at(u) - g.numeral_cap * 0.5,
+                "over the numerals"
+            );
         }
     }
 
