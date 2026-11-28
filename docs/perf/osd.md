@@ -20,7 +20,7 @@ The OSD only shows while the game is paused, so a p99 over 1 ms never costs a ra
 
 ### Final check (195452b and the final code)
 
-The same machine and conditions, after the closing-review fixes. At 195452b: two timed runs (a, b), `cargo test --workspace` 1065 passed, clippy `-D warnings` clean, kit GPU tests pass, `--no-assets` clean. At 81856ae (the code after merging main's 72-dash re-cut, the same OSD code as the final head): one timed run (c). Every state has 6 passes and 3 segments (02: 27 and 8); there are 2 more draws than at 4bbe604 (5 more on the carousel), from the scroll bar and the remap card's held-buttons line. No wgpu validation error or warning in any run. Median / minimum in ms:
+The same machine and conditions, after the closing-review fixes. At 195452b: two timed runs (a, b), `cargo test --workspace` 1065 passed, clippy `-D warnings` clean, kit GPU tests pass, `--no-assets` clean. At 81856ae (the code after merging main's 72-dash re-cut, the same OSD code as the final head): one timed run (c). Every state has 6 passes and 3 segments (02: 27 and 8); there are 2 more draws than at 4bbe604 (5 more on the carousel), from the closing-review fixes. No wgpu validation error or warning in any run. Median / minimum in ms:
 
 | State | Run a | Run b | Run c (final code) | Draws |
 |---|---|---|---|---|
