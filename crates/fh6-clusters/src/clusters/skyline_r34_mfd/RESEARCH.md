@@ -130,3 +130,19 @@ From the photos in the Drive folder; colours were sampled from photos of an LCD 
 **8.11 Nismo meters.** Same layout; tachometer 0 to 11 with a red band from about 9.2; speedometer 0 to 320 km/h; "nismo" wordmark over the tach hub and the red GT-R "R" over the speedo hub. Black face with yellow numerals (#FEFB60), or white face with black upright numerals and red needles.
 
 **Our reading for the board.** The MFD's language (navy-black glass, white hairline cells, green flat fills, bevelled grey rings with a cut-away PEAK quadrant, salmon needles, cyan tiles with gold selection, bold italic type) is distinctive and owner-recognisable; the tiles take it directly, redrawn crisp at 4K with a faint 400 × 234 pixel grid as texture. The tachometer takes the stock face (black, white italic numerals, orange-red needle, oil-pressure sub-dial position reused for boost). The PEAK box is the MFD's own "stored extremes" and becomes the peak tick of the signature moment. The MFD's red zone ticks give the house `warning` its place.
+
+## 9. ATTESA E-TS Pro, for the modelled torque-split idea (2026-11-28)
+
+Sources: Wikipedia "ATTESA"; DSPORT, "ATTESA Explained" pages 2 and 3 (2018); Haltech, "Nissan ATTESA Control"; Full-Race ETS-Pro install guide. None is a Nissan service manual; no OEM control law, response time or MFD gauge scale is published in them.
+
+| # | Fact | Source |
+|---|---|---|
+| A1 | Front share runs from 0:100 under acceleration to at most 50:50. | Cited: Wikipedia, Haltech |
+| A2 | R33 and R34 hold a base pressure of about 25 to 30 psi through a failsafe solenoid, "about 10-percent" front bias, which also lets the clutch reach peak pressure faster. | Cited: DSPORT p.2 |
+| A3 | Mechanism: a chain-driven multi-plate wet clutch in the transfer case, ATF at 0 to about 300 psi from an on/off pump, a PWM duty solenoid at 200 Hz; front torque follows actuator pressure. | Cited: Wikipedia, DSPORT p.3, Haltech |
+| A4 | Inputs: wheel speeds from the ABS sensors (front torque when a rear wheel turns 5% or more faster than the fronts), a three-axis G sensor under the console (lateral and longitudinal), throttle, engine speed, reverse and brake. More wheelspin means more front torque. | Cited: Wikipedia, DSPORT p.2 |
+| A5 | The harder the car is cornered, the less the front wheels are engaged (factory oversteer bias); the G sensors reduce output in braking and turning; the handbrake sets the target to zero. | Cited: Wikipedia; Full-Race (aftermarket Auto mode); Haltech |
+| A6 | The R34 samples the rear wheel speeds 1,000 times a second (R33: 100). | Cited: Wikipedia, DSPORT p.2 |
+| A7 | Tuner controllers structure it as a base duty table plus corrections from wheel slip, G and steering angle (8 × 8 tables). | Cited: Haltech |
+
+**Our reading, a model the game can drive.** The game sends no wheel speeds, only slip angles per tyre, G, throttle, brake, handbrake and speed (section 4). A faithful, honest model: front share `f = clamp(0.10 + k_s·max(0, s_r − s_f) + k_a·max(0, a_long)·throttle − k_y·|a_lat|, 0, 0.5)`, forced to 0 with the handbrake, where `s_r` and `s_f` are the mean rear and front slip angles (rear stepping out is the R34's typical cue for torque forward), then a first-order lag to stand in for the clutch's pressure ramp. The gains are ours (no OEM values exist) and are listed as such; the model, the 0.10 floor, the 0.5 ceiling, the handbrake rule and the lateral-G reduction come from A1, A2, A4 and A5, and unit tests can assert them without a GPU. Display as "F-TORQUE" in the MFD's own dial style (8.4), 0 to 50 %, since no photo shows the real page.
