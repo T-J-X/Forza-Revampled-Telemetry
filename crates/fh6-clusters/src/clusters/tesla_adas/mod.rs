@@ -26,11 +26,17 @@
 //! from the outside in. The glow under the ego car follows the same stages and holds the shift
 //! colour, steady, at the shift point.
 //!
-//! Telemetry (verified fields only): rpm, idle and limiter → shift line, rev fill, rpm figure;
-//! gear → gear and the R · N · D row; speed → figure, road scroll, parked view; brake and
-//! longitudinal acceleration → brake light, slow-down dashes, stop bar and 止まれ; lateral
-//! acceleration → the path's bend and the G-meter; velocity (body slip) → the ego car's yaw;
-//! power → power line and figure. The traffic is a seeded ambient simulation.
+//! Telemetry: rpm, idle and limiter → shift line, rev fill, rpm figure; gear → gear and the
+//! R · N · D row; speed → figure, road scroll, parked view; brake and longitudinal acceleration →
+//! brake light, slow-down dashes, stop bar and 止まれ; lateral acceleration → the path's bend and
+//! the G-meter; velocity (body slip) → the ego car's yaw; power → power line and figure.
+//!
+//! From the full FH6 Data Out list (offsets and units confirmed at real-game check C): the
+//! driving line and the AI brake difference → where the path leads and its braking colour; the
+//! rumble-strip flags → the lane departure line; the puddle flags → wet patches on the road;
+//! combined tyre slip → a grip glow under each wheel; the lap data → Track Mode's lap timer,
+//! which replaces the card's label while a race runs. The traffic is a seeded ambient simulation:
+//! the game sends nothing about other cars.
 mod scene;
 
 use crate::common::gball::{GBall, RINGS_G};
@@ -42,12 +48,14 @@ use crate::common::speed::TabularSpeed;
 use crate::common::ShiftLights;
 use fh6_kit::cluster::Setup;
 use fh6_kit::math::{finite_or, smoothstep};
+use fh6_kit::StackStr;
 use fh6_kit::{
     vec2, Align, Cap, Cluster, FontId, FontRole, FrameInput, Gear, Hysteresis, Layout, Logo, Painter, Palette,
     PowerUnit, Rect, Shape, Spring, TextStyle, Tokens, VAlign, Vec2, View,
 };
 use scene::{Scene, SceneGeom, SceneInput};
 use std::f32::consts::TAU;
+use std::fmt::Write as _;
 
 /// Standard gravity (m/s²).
 const G: f32 = 9.80665;
@@ -74,6 +82,8 @@ const RPM_HOLD: f32 = 1.5;
 const POWER_HOLD: f32 = 4.0;
 /// Directions the G-meter's peak history keeps.
 const PEAK_BINS: usize = 24;
+/// The lap timer's cap height: a little over the label it replaces.
+const LAP_CAP: f32 = 20.0;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -328,6 +338,37 @@ impl PeakTrace {
     }
 }
 
+/// Track Mode's lap timer, shown in the card while a race runs: the current lap's time, and the
+/// lap with the race position under it.
+#[derive(Debug, Clone, Copy)]
+struct LapTimer {
+    time: StackStr<12>,
+    line: StackStr<24>,
+}
+
+impl LapTimer {
+    /// The timer for this packet, or none outside a race (every race field at zero). Times are
+    /// in seconds; the lap number counts from 0 on the first lap, as Forza's has (check C).
+    fn read(t: &fh6_core::FH6TelemetryData) -> Option<Self> {
+        let racing = t.current_race_time > 0.0 || t.current_lap > 0.0 || t.lap_number > 0;
+        if !racing {
+            return None;
+        }
+        let mut timer = Self {
+            time: StackStr::new(),
+            line: StackStr::new(),
+        };
+        let tenths = (finite_or(t.current_lap, 0.0).clamp(0.0, 5999.9) * 10.0).floor() as u32;
+        // Every piece fits its buffer, so the writes cannot fail.
+        let _ = write!(timer.time, "{}:{:02}.{}", tenths / 600, tenths / 10 % 60, tenths % 10);
+        let _ = write!(timer.line, "LAP {}", u32::from(t.lap_number) + 1);
+        if t.race_position > 0 {
+            let _ = write!(timer.line, " \u{b7} P{}", t.race_position);
+        }
+        Some(timer)
+    }
+}
+
 /// The Tesla ADAS cluster.
 #[derive(Debug, Clone)]
 pub struct TeslaAdas {
@@ -359,6 +400,8 @@ pub struct TeslaAdas {
     engine: (f32, f32),
     unit: &'static str,
     tracking: f32,
+    /// Track Mode's lap timer while a race runs.
+    lap: Option<LapTimer>,
     started: bool,
 }
 
@@ -403,6 +446,7 @@ impl TeslaAdas {
             engine: (0.0, 0.0),
             unit: "MPH",
             tracking: t.type_scale.label_tracking,
+            lap: None,
             started: false,
         }
     }
@@ -463,6 +507,8 @@ impl Cluster for TeslaAdas {
             self.started = true;
         }
 
+        let tm = input.telemetry;
+        self.lap = LapTimer::read(tm);
         self.scene.update(
             &SceneInput {
                 speed_ms: sig.speed_ms,
@@ -472,6 +518,24 @@ impl Cluster for TeslaAdas {
                 brake: sig.brake,
                 shift_level: self.shift.level(),
                 over_shift: self.shift.over_shift(),
+                line_m: scene::driving_line_offset(tm.normalized_driving_line),
+                brake_cue: scene::brake_cue(tm.normalized_ai_brake_difference),
+                rumble: [
+                    tm.wheel_on_rumble_strip_fl != 0 || tm.wheel_on_rumble_strip_rl != 0,
+                    tm.wheel_on_rumble_strip_fr != 0 || tm.wheel_on_rumble_strip_rr != 0,
+                ],
+                puddle: [
+                    tm.wheel_in_puddle_fl != 0,
+                    tm.wheel_in_puddle_fr != 0,
+                    tm.wheel_in_puddle_rl != 0,
+                    tm.wheel_in_puddle_rr != 0,
+                ],
+                grip: [
+                    tm.tire_combined_slip_fl,
+                    tm.tire_combined_slip_fr,
+                    tm.tire_combined_slip_rl,
+                    tm.tire_combined_slip_rr,
+                ],
             },
             dt,
         );
@@ -576,7 +640,10 @@ impl TeslaAdas {
     /// The left card: the logo zone, the Track Mode label and the G-meter over its peak history.
     fn draw_card(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         logo_zone(p, g.logo, &self.logo, self.faces.wide, LogoVariant::Full, pal);
-        self.sign(p, g.card, "トラックモード", "TRACK MODE", g.card_stack, pal);
+        match &self.lap {
+            Some(lap) => self.draw_lap(p, g, lap, pal),
+            None => self.sign(p, g.card, "トラックモード", "TRACK MODE", g.card_stack, pal),
+        }
         let mut outline = [Vec2::ZERO; PEAK_BINS];
         if self.peaks.outline(g.meter, g.meter_r / RINGS_G[2], &mut outline) {
             p.fill(&Shape::Polygon { points: &outline }, pal.primary.with_alpha(0.16));
@@ -590,6 +657,21 @@ impl TeslaAdas {
         figures.roles.ink_muted = pal.roles.ink;
         self.ball
             .draw_readout(p, baseline, &figures, self.faces.figure, self.faces.label);
+    }
+
+    /// Track Mode's lap timer in the label's place: the lap time in the figures' ink, the lap
+    /// and the position under it in the label's.
+    fn draw_lap(&self, p: &mut Painter<'_>, g: &Geom, lap: &LapTimer, pal: &Palette) {
+        let time = TextStyle::new(self.faces.figure, LAP_CAP)
+            .paint(pal.roles.ink)
+            .align(Align::Center, VAlign::CapMiddle)
+            .tabular();
+        p.text(g.card, lap.time.as_str(), &time);
+        let line = TextStyle::new(self.faces.label, LATIN_CAP)
+            .paint(pal.roles.ink_label)
+            .tracking(self.tracking)
+            .align(Align::Center, VAlign::CapMiddle);
+        p.text(g.card + vec2(0.0, g.card_stack), lap.line.as_str(), &line);
     }
 
     /// The status row: rpm and power, each under its two-language label.
@@ -695,6 +777,12 @@ mod tests {
             // The left column, top to bottom: logo, label, meter (a ball at the limit reaches
             // 1.18 r), the G readout, then the status rows down to the envelope.
             assert!(g.card.y - JP_CAP * 0.5 >= g.logo.max.y + 8.0);
+            // The lap timer in the label's place still clears the logo and its own second line.
+            assert!(
+                g.card.y - LAP_CAP * 0.5 >= g.logo.max.y + 4.0,
+                "lap timer under the logo"
+            );
+            assert!(g.card_stack - (LAP_CAP + LATIN_CAP) * 0.5 >= 4.0, "lap lines apart");
             let label_foot = g.card.y + g.card_stack + LATIN_CAP * 0.5;
             assert!(
                 g.meter.y - g.meter_r * 1.06 >= label_foot + 8.0,
@@ -755,6 +843,33 @@ mod tests {
         peaks.record(vec2(f32::NAN, 0.0));
         peaks.record(vec2(9.0, 0.0));
         assert!(peaks.peak[0] <= RINGS_G[2], "held at the outer ring");
+    }
+
+    #[test]
+    fn the_lap_timer_shows_only_in_a_race_and_reads_the_lap_data() {
+        let mut t = fh6_core::FH6TelemetryData::default();
+        assert!(LapTimer::read(&t).is_none(), "free roam: no race fields");
+        t.current_lap = 83.47;
+        t.lap_number = 2;
+        t.race_position = 4;
+        let lap = LapTimer::read(&t).expect("racing");
+        assert_eq!(lap.time.as_str(), "1:23.4");
+        assert_eq!(lap.line.as_str(), "LAP 3 \u{b7} P4");
+        t.race_position = 0;
+        t.current_lap = 1.0e7;
+        let lap = LapTimer::read(&t).expect("racing");
+        assert_eq!(lap.time.as_str(), "99:59.9", "held at the buffer's width");
+        assert_eq!(lap.line.as_str(), "LAP 3");
+        t = fh6_core::FH6TelemetryData {
+            current_race_time: 4.0,
+            lap_number: u16::MAX,
+            race_position: u8::MAX,
+            ..Default::default()
+        };
+        assert_eq!(
+            LapTimer::read(&t).expect("racing").line.as_str(),
+            "LAP 65536 \u{b7} P255"
+        );
     }
 
     #[test]
