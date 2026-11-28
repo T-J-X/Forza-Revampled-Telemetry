@@ -81,7 +81,7 @@ const MIN_THOUSANDS: usize = 4;
 /// Bar width as a share of the bar pitch.
 const BAR_FILL: f32 = 0.56;
 /// Shift-bracket pods.
-const PODS: usize = 10;
+const PODS: usize = 6;
 /// Gap between bracket pods as a share of the pod pitch.
 const POD_GAP: f32 = 0.22;
 /// Pedal segments per column.
@@ -146,10 +146,16 @@ const RANK4_LEVEL: f32 = 0.62;
 const PRINT_LEVEL: f32 = 0.46;
 /// Red-zone numerals as seen on screen (the warning role, dimmed like print).
 const RED_PRINT_LEVEL: f32 = 0.72;
+/// The red-zone line sits this far under the tach's baseline (local px).
+const RED_LINE_DROP: f32 = 6.0;
+/// Straight pieces of the red-zone line along the curved baseline.
+const RED_LINE_PARTS: usize = 6;
 /// The unlit bracket rail (the printed red line under the pods) as seen on screen.
 const RAIL_LEVEL: f32 = 0.18;
-/// VFD tube-package rims (the glass envelope seen edge-on) as seen on screen.
-const ENVELOPE_LEVEL: f32 = 0.09;
+/// The printed divider line as seen on screen (dimmer than the labels it sits over).
+const DIVIDER_LEVEL: f32 = 0.3;
+/// Height of the divider's risers between two windows (local px).
+const DIVIDER_RISE: f32 = 26.0;
 /// The ComfyUI phosphor plate's tile (local px).
 const PLATE_TILE: f32 = 80.0;
 /// Gain on lit phosphor under the grain plate.
@@ -230,13 +236,13 @@ const COCKPIT: Geom = Geom {
     pedal: rect(-680.0, -150.0, -548.0, 160.0),
     centre: rect(-528.0, -294.0, 318.0, 160.0),
     slip: rect(338.0, -150.0, 418.0, 160.0),
-    gauges: rect(436.0, -150.0, 690.0, 160.0),
+    gauges: rect(436.0, -150.0, 678.0, 160.0),
     tach_x: (-490.0, 290.0),
     tach_base: -96.0,
     tach_rise: 34.0,
-    bar_h: (12.0, 84.0),
+    bar_h: (12.0, 80.0),
     numeral_cap: 26.0,
-    pod_h: 22.0,
+    pod_h: 30.0,
     speed: vec2(-150.0, 40.0),
     speed_cap: 128.0,
     gear: vec2(175.0, 20.0),
@@ -244,7 +250,7 @@ const COCKPIT: Geom = Geom {
     readout: vec2(-420.0, 70.0),
     readout_cap: 62.0,
     label_y: 176.0,
-    label_cap: 16.0,
+    label_cap: 18.0,
     figure_cap: 15.0,
     logo: rect(-490.0, -233.0, -310.0, -197.0),
     bar_inset: (30.0, 10.0),
@@ -258,13 +264,13 @@ const HOOD: Geom = Geom {
     pedal: rect(-850.0, -120.0, -720.0, 106.0),
     centre: rect(-700.0, -200.0, 420.0, 106.0),
     slip: rect(440.0, -120.0, 520.0, 106.0),
-    gauges: rect(540.0, -120.0, 850.0, 106.0),
+    gauges: rect(540.0, -120.0, 838.0, 106.0),
     tach_x: (-660.0, 380.0),
     tach_base: -60.0,
     tach_rise: 24.0,
-    bar_h: (10.0, 54.0),
+    bar_h: (10.0, 48.0),
     numeral_cap: 22.0,
-    pod_h: 16.0,
+    pod_h: 20.0,
     speed: vec2(-330.0, 20.0),
     speed_cap: 96.0,
     gear: vec2(250.0, 26.0),
@@ -272,7 +278,7 @@ const HOOD: Geom = Geom {
     readout: vec2(-590.0, 40.0),
     readout_cap: 66.0,
     label_y: 120.0,
-    label_cap: 14.0,
+    label_cap: 16.0,
     figure_cap: 13.0,
     logo: rect(-660.0, -150.0, -510.0, -120.0),
     bar_inset: (24.0, 8.0),
@@ -294,6 +300,8 @@ struct Scale {
     red_from: usize,
     /// Where the bracket starts and ends (0..1 along the scale).
     bracket: (f32, f32),
+    /// The limiter (0..1 along the scale).
+    limit: f32,
 }
 
 impl Scale {
@@ -321,6 +329,7 @@ impl Scale {
             top,
             red_from,
             bracket: (a, b),
+            limit: (max_rpm / span).clamp(0.0, 1.0),
         }
     }
 
@@ -695,7 +704,7 @@ impl RetroCyber {
         let gear = Seg7Digit::new(t, Reveal::Instant)
             .with_segments(Segments::Diagonal)
             .with_phosphor(Phosphor::Ink)
-            .with_ghost(Phosphor::Primary);
+            .with_ghost(Phosphor::Ink);
         let mut test_gear = gear;
         test_gear.update(0x7F | DIAGONAL, 0.0);
         let mut test_speed = Seg7Number::<3>::new(t, Reveal::Instant);
@@ -863,8 +872,6 @@ impl Cluster for RetroCyber {
         self.draw_pedals(p, g, &pal, false);
         self.draw_slip(p, g, &pal, false);
         self.draw_slants(p, g, &pal, false);
-        self.g_readout
-            .draw(p, g.readout, &Seg7Geometry::new(g.readout_cap), &pal, Emission::Matte);
         self.draw_print(p, g, &pal);
 
         // 3. Boot: sectors not yet ignited are cold glass (black).
@@ -945,6 +952,15 @@ impl Cluster for RetroCyber {
                     }
                 });
             }
+        }
+
+        // The G readout sits in front of the grid mesh: its strokes are as thin as a mesh cell, so
+        // under the mesh they read as outlines. It waits for its boot sector like the rest.
+        let g_sector =
+            ((g.readout.x - g.lens.min.x) / g.lens.width() * SECTORS as f32).clamp(0.0, SECTORS as f32 - 1.0) as usize;
+        if boot_t.is_none_or(|t| t >= sector_start(g_sector) + SECTOR_S) {
+            self.g_readout
+                .draw(p, g.readout, &Seg7Geometry::new(g.readout_cap), &pal, Emission::Matte);
         }
 
         // 7. The lens: one piece of optical glass over the whole panel.
@@ -1040,12 +1056,17 @@ impl RetroCyber {
         );
     }
 
-    /// The four VFD tube packages: black, with the glass envelope's edge seen as a faint rim.
+    /// The printed divider of the A70's lens: one line under the windows, with a short riser in
+    /// each gap between two windows (the windows themselves are bare segments on black).
     fn draw_windows(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let rim = dimmed(pal.roles.ink, ENVELOPE_LEVEL);
-        let px = p.device_px();
-        for w in g.windows() {
-            p.stroke(&Shape::round_rect(w, 10.0), rim, fh6_kit::Stroke::new(px));
+        let line = dimmed(pal.roles.ink_label, DIVIDER_LEVEL);
+        let w = p.device_px() * 2.0;
+        let y = g.centre.max.y + (g.label_y - g.centre.max.y) * 0.45;
+        let ws = g.windows();
+        p.fill(&Shape::line(vec2(ws[0].min.x, y), vec2(ws[3].max.x, y), w), line);
+        for pair in ws.windows(2) {
+            let x = (pair[0].max.x + pair[1].min.x) * 0.5;
+            p.fill(&Shape::line(vec2(x, y), vec2(x, y - DIVIDER_RISE), w), line);
         }
     }
 
@@ -1201,6 +1222,22 @@ impl RetroCyber {
             let cells = if k >= 10 { 2 } else { 1 };
             p.number(vec2(g.x_at(u), g.numeral_at(u)), k as i64, cells, &style, None);
         }
+        // The red zone on the scale itself: a printed red line under the baseline from the first
+        // red thousand to the scale's end, and a tick at the limiter.
+        let px = p.device_px();
+        let from = self.scale.red_from as f32 / top as f32;
+        let under = |u: f32| vec2(g.x_at(u), g.base_at(u) + RED_LINE_DROP);
+        for k in 0..RED_LINE_PARTS {
+            let u0 = from + (1.0 - from) * k as f32 / RED_LINE_PARTS as f32;
+            let u1 = from + (1.0 - from) * (k + 1) as f32 / RED_LINE_PARTS as f32;
+            p.fill(&Shape::line(under(u0), under(u1), px * 3.0), red);
+        }
+        let limit = under(self.scale.limit);
+        p.fill(
+            &Shape::line(limit, vec2(limit.x, limit.y + RED_LINE_DROP * 2.0), px * 4.0),
+            red,
+        );
+
         let small = TextStyle::new(self.faces.label, g.figure_cap)
             .paint(ink)
             .tracking(0.08)
@@ -1255,6 +1292,17 @@ impl RetroCyber {
             p.number(vec2(x + 2.0, fy), value, 3, &figure_r, None);
             p.text(vec2(x + 6.0, fy), unit, &unit_l);
         }
+        // Boost's zero: a tick and a 0 left of the bar, at the top of the last vacuum segment.
+        let zero_steps = -BOOST_MIN_PSI / (BOOST_MAX_PSI - BOOST_MIN_PSI) * SLANT_STEPS as f32;
+        let zy = a.max.y - a.height() / SLANT_STEPS as f32 * zero_steps;
+        let zx = g.slant_base(1).0 + (a.max.y - zy) * SLANT_DEG.to_radians().tan();
+        p.fill(&Shape::line(vec2(zx - 10.0, zy), vec2(zx - 3.0, zy), px * 2.0), ink);
+        let zero = TextStyle {
+            align: Align::Right,
+            valign: VAlign::CapMiddle,
+            ..figure
+        };
+        p.text(vec2(zx - 14.0, zy), "0", &zero);
 
         // Labels along the lens's lower band.
         let label = TextStyle::new(self.faces.label, g.label_cap)
@@ -1262,7 +1310,10 @@ impl RetroCyber {
             .tracking(0.08)
             .align(Align::Center, VAlign::CapTop);
         let y = g.label_y;
-        let tight = label.tracking(0.04);
+        let tight = TextStyle::new(self.faces.label, g.label_cap - 2.0)
+            .paint(ink)
+            .tracking(0.04)
+            .align(Align::Center, VAlign::CapTop);
         for col in 0..2 {
             let x = g.pedal_cell(col, 0).center().x;
             p.text(vec2(x, y), ["THR", "BRK"][col], &tight);
@@ -1282,7 +1333,7 @@ impl RetroCyber {
             ..label
         };
         p.text(vec2(g.gauges.min.x + 6.0, y), "POWER", &left);
-        p.text(vec2(g.gauges.max.x - 6.0, y), "BOOST", &right);
+        p.text(vec2(g.gauges.max.x - 4.0, y), "BOOST", &right);
     }
 
     /// The logo zone, printed like the labels: the host's logo image, else the maker's wordmark
