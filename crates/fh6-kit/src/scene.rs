@@ -600,6 +600,7 @@ mod tests {
             draws: 0..2,
             blur_px: 0.0,
             backdrop_px: None,
+            bounds: Rect::EMPTY,
         });
         s.meshes.push(mesh(7));
         s
@@ -700,6 +701,7 @@ mod tests {
             draws: 0..0,
             blur_px: f32::NAN,
             backdrop_px: Some(f32::INFINITY),
+            bounds: Rect::EMPTY,
         });
         assert_eq!(s.non_finite_count(), 8);
         let mut m = mesh(0);
