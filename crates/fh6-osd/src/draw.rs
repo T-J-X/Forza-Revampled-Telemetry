@@ -236,7 +236,7 @@ pub fn targets(ctl: &OsdController, cfg: &AppConfig, fit: &dyn CockpitFit, fonts
         key: [key.min.x, key.min.y, key.max.x, key.max.y],
         scroll,
         echo_lift: if camera { 1.0 } else { 0.0 },
-        calm: model::reduced_flash(cfg),
+        calm: cfg.reduced_flash,
     }
 }
 

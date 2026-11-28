@@ -388,11 +388,12 @@ mod tests {
 
     #[test]
     fn the_fan_stays_under_the_echo_at_the_widest_fov_and_highest_seat() {
-        // The FOV rows reach 110° and the seat +50 mm. Even then the fan's tip ends less than
-        // 80 px above the view's top edge: the OSD puts the lifted echo's help line 120 px above
-        // that edge (draw.rs, ECHO_LIFT and DRIVE_TOP), so the two never touch.
+        // The FOV rows reach the top of FOV_RANGE (110°) and the seat +50 mm (the top of the
+        // config's seat range). Even then the fan's tip ends less than 80 px above the view's
+        // top edge: the OSD puts the lifted echo's help line 120 px above that edge (draw.rs,
+        // ECHO_LIFT and DRIVE_TOP), so the two never touch.
         let eye = eye_at(50.0);
-        let half = 55.0_f32.to_radians();
+        let half = (fh6_core::config::FOV_RANGE.1 * 0.5).to_radians();
         let top = eye + view_vec([half.cos() * FAN_R / PX_PER_M, 0.0, half.sin() * FAN_R / PX_PER_M]);
         assert!(top.y > -80.0, "fan top {} px above the view", -top.y);
         // The legend sits under the wheel at its lowest offset (-80 mm); the const block under
