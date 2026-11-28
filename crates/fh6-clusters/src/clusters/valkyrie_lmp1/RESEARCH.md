@@ -138,3 +138,18 @@ Idle with the car still: nothing moves (checked in the direction check).
 9. **Reduced flash on:** the limiter strobe holds steady `shift`.
 10. **Hood view:** every element above stays over the size floors at 0.7 scale.
 11. **Front-drive and AWD cars:** the TC lamp's drivetrain condition (no power oversteer lamp on front drive).
+
+## Fourth pass, 28 Nov 10:55: the full FH6 packet (main 60c99c9)
+
+The decoder now reads all 88 fields, including `tyre_slip_ratio`, `tyre_temp`, `torque`, `fuel`, `boost` and `race_progress` (laps, best and last lap, race time, position). Real-game check C still has to confirm their offsets and units, so nothing here ships before it. What the dash should do with them, in order of value:
+
+| New field | Plan | Board change? |
+|---|---|---|
+| `tyre_slip_ratio` | **The TC and ABS lamps stop being derived.** TC lights when a driven wheel's slip ratio passes about +0.15 under throttle; ABS when any wheel's passes about -0.15 under brake. This is what the real systems react to, so the "derived" label goes and the body-slip and g thresholds go with it. The DASH_SCENARIOS and the matrix row change to `tyre_slip_ratio` (with `drivetrain` for which wheels are driven). | No: same lamps, same place. |
+| `tyre_temp` | The brief's tyre tags came back as data: four small corner pips round the friction circle (front left, front right, rear left, rear right), coloured cold / working / hot on the palette's go and warning roles, so the circle shows grip used and the state of the tyres in one place. | Yes, a small one, in Penpot after LIBRARY DONE. |
+| `race_progress` | A lap-delta line (current lap against best, in tabular digits) under the trace, shown only while a lap is timed (`current_lap` > 0); in free roam it stays off and the trace keeps the space. The real Valkyrie screen shows no lap timing, so this is a race-mode extra, not a recreation feature. | Yes, in Penpot. |
+| `torque` | Not used: power already sits on the right encoder and readout, and two engine-output readouts would compete. | No. |
+| `boost` | Not used: the car is naturally aspirated, so it would read zero. | No. |
+| `fuel` | Not used: FH6 has no fuel strategy in free roam, and the real screen shows none. | No. |
+
+The rev tunnel and the friction circle (the board v2 replacements for the dropped parts) stay: they are data-driven and they are on the board. The plan above adds to them; it does not bring back the lap-delta crown or the sector strip.
