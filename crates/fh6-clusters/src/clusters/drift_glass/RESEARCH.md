@@ -76,6 +76,24 @@ Saved 2026-11-28 to the same Drive folder (files 13 to 21; sources in its `sourc
 
 The brief's "alpha 56 to 64, glassTint" tint is a flat alpha. [optics.md §11](../../../../../docs/specs/optics.md#11-what-this-corrects) replaces such tints with Beer-Lambert over the path length, and the category note says the same ("built by absorption on the kit's glass and not by a flat alpha"). DriftGlass follows the category note (§8).
 
+### 3.1 Study: how much light a smoked visor passes, and why its flanks are darker
+
+**The material is polycarbonate, not the kit's sapphire.** Helmet visors are polycarbonate (Lexan: "visors in sporting helmets") [S33]; a Bell car-racing shield is sold as 3 mm (`09_visor_bell_se06_smoke.webp`, its product name). Polycarbonate's catalogue line is n_d 1.585, n_F 1.600, n_C 1.580, V_d 30 [S32]. optics.md §1 has no polycarbonate; it is added there with this source before use, through the same Cauchy fit the doc already uses for borosilicate (`Dispersion::from_abbe(1.585, 30.0)`). Its normal reflectance is R_0 = ((n − 1)/(n + 1))² = 0.051.
+
+**The trace** (`/mnt/project-files/drift_glass/research/study_visor_transmission.png`, from a script kept outside the repo): the light reaching the eye through a 3 mm visor is (1 − R(θ))² · T_ref^(1/cos θ_t), with R the unpolarised Fresnel reflectance at each face (optics.md §3), θ_t the refracted angle inside the shell, and T_ref the internal transmittance square-on (optics.md §6).
+
+| T_ref (square-on, internal) | Seen square-on | At 60° | At 75° |
+|---|---|---|---|
+| 0.64 (Shark IRID clear, lightest [S14]) | 0.58 | 0.47 | 0.30 |
+| **0.50 (light smoke, the target)** | **0.45** | **0.35** | **0.22** |
+| 0.38 (Shark dark smoke, measured [S14]) | 0.34 | 0.25 | 0.16 |
+
+| Finding | What changes |
+|---|---|
+| V5: at 75° the light smoke passes half what it passes square-on; **Fresnel reflection does most of that** (a factor of 0.59), the longer path less (0.83). At 60° the two are equal. | The flanks darken by Fresnel first and absorption second, both from optics.md; nothing is painted. The flanks also mirror more (R reaches 0.27 at 75°), so the virtual light's reflection is brightest on the wrapped flanks, which is where the brief's G-driven facet swap shows. |
+| V6: square-on, the light smoke shows 45% of the game behind it. | Over a bright sky that is still a visible grey: the visor's lower part is kept clear (P9's dyed top band) so the darkening sits behind the pills and light pipe, where it lifts their contrast, and never behind the road. |
+| V7: polycarbonate's V_d of 30 is high dispersion (sapphire's is 72), so a rim seen at a grazing angle splits colour more. | The 1 px rim may show a faint colour fringe by optics.md §5, at the kit's existing cost. |
+
 ## 4. Tinted Liquid Glass
 
 | # | Finding | Source |
@@ -303,6 +321,8 @@ Read 2026-11-28.
 - [S29] MoTeC, SLM-C datasheet CDS18122: https://cdn.shopify.com/s/files/1/0332/8881/4637/files/CDS18122_SLM-C_Club_Shift_Light_Module.pdf
 - [S30] MoTeC, CTN0030 "Configuring an SLM-C in M1 Tune": https://cdn.shopify.com/s/files/1/0798/0249/files/CTN0030_Configuring_an_SLM-C_in_M1_Tune.pdf
 - [S31] MoTeC, CTN0031 "Configuring an SLM in M1 Tune": https://cdn.shopify.com/s/files/1/0798/0249/files/CTN0031_Configuring_an_SLM_in_M1_Tune_2.pdf
+- [S32] J. Greivenkamp, OPTI 502 "Materials" (University of Arizona), glass table row for polycarbonate: https://wp.optics.arizona.edu/jgreivenkamp/wp-content/uploads/sites/11/2019/08/502-17-Materials.pdf
+- [S33] Wikipedia, "Polycarbonate" (Lexan): https://en.wikipedia.org/wiki/Lexan
 - [S24] Werner et al., "Drifting in the Future" (ICRA 2026; Mercedes-AMG GT 63 S, with MARTY's figures in its Table II): https://arxiv.org/pdf/2606.27914
 - [S25] Meijer, Bertipaglia, Shyrokau, NMPC drifting of a BMW M3 Competition (2024): https://arxiv.org/pdf/2405.10859
 - [S26] Righetti et al., phase-plane analysis of MARTY drift data: https://www.iris.unina.it/retrieve/4f72239f-ac09-49e0-9d9d-f219bc8842a1/paper_062.pdf
