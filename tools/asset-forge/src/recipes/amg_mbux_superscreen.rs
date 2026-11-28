@@ -176,8 +176,9 @@ for i, (cx, cy, r, z) in enumerate(RINGS):
     bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=1.6, major_segments=256, minor_segments=12, location=(cx, -cy, z + 0.4))
     tor = bpy.context.active_object
     lm, LNT = new_mat('line%d' % i)
-    emission_out(LNT, node(LNT, 'ShaderNodeRGB').outputs[0], strength=6.0 * (1.0 - 0.6 * i / n))
-    LNT.nodes['RGB'].outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    rgb = node(LNT, 'ShaderNodeRGB')
+    rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    emission_out(LNT, rgb.outputs[0], strength=6.0 * (1.0 - 0.6 * i / n))
     tor.data.materials.append(lm)
 
 # The halftone inside each crescent: an annular sector fading inwards from the crescent's inner
@@ -241,8 +242,9 @@ for side in (-1.0, 1.0):
 # 3 o'clock round the disc, echoing the crescents.
 icx, icy, ir, iz = RINGS[3]
 am, ANT = new_mat('inner_arc')
-emission_out(ANT, node(ANT, 'ShaderNodeRGB').outputs[0], strength=4.0)
-ANT.nodes['RGB'].outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+arc_rgb = node(ANT, 'ShaderNodeRGB')
+arc_rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+emission_out(ANT, arc_rgb.outputs[0], strength=4.0)
 for side in (-1.0, 1.0):
     bm = bmesh.new()
     NA = 64
@@ -267,8 +269,15 @@ for side in (-1.0, 1.0):
 
 w = bpy.data.worlds.new('black')
 sc.world = w
-w.use_nodes = True
-w.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.0
+try:
+    w.use_nodes = True
+except Exception:
+    pass
+bg = [nd for nd in w.node_tree.nodes if nd.bl_idname == 'ShaderNodeBackground']
+if bg:
+    bg[0].inputs['Strength'].default_value = 0.0
+else:
+    w.color = (0.0, 0.0, 0.0)
 span_x, span_y = X1 - X0, Y1 - Y0
 resolution(sc, round(span_x * S), round(span_y * S))
 ortho_cam(sc, span_x, center=((X0 + X1) * 0.5, -(Y0 + Y1) * 0.5), z=60.0, clip_end=800.0)
