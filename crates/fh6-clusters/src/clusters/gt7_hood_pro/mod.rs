@@ -31,7 +31,8 @@
 //! 78% with the head LED at full, the side groups sit below them, and the parts that never
 //! change (labels, the divider, the logo) are held at the tokens' cap for static parts
 //! ([`STATIC_LUMA`]), dimmed by their light and never by their coverage. Over a bright bonnet or
-//! sky every glyph has a black keyline and the centre stack a feathered dimming pad.
+//! sky every glyph, the divider and the logo carry a black keyline, as GT7's digits carry a dark
+//! edge; nothing sits on a box. The live fills run in the plate's black-glass channels.
 //!
 //! Signature moments:
 //! - **Shift point and limiter (GT7's rev alert):** from the warning stage the whole lit run takes
@@ -63,8 +64,8 @@ use fh6_kit::cluster::Setup;
 use fh6_kit::logo::{self, LogoStyle};
 use fh6_kit::{
     vec2, Affine, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, LayerOptions, Layout, Logo,
-    Paint, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, SpeedUnit, Spring, Strobe, Stroke, TextStyle,
-    Tokens, VAlign, Vec2,
+    Paint, Painter, Palette, Shape, Signals, Smoothed, SpeedUnit, Spring, Strobe, Stroke, TextStyle, Tokens, VAlign,
+    Vec2,
 };
 use geom::{rect, Geom, HOOD};
 use hardware::Sprites;
@@ -94,8 +95,8 @@ const BOOST_LIGHT: f32 = 0.9;
 const TRIP_LIGHT: f32 = 0.72;
 /// Tyre load per g of felt force on each axis, round the rest load of a half.
 const LOAD_PER_G: f32 = 0.35;
-/// A tyre lens's light at no load and at full load.
-const PILL_LIGHT: [f32; 2] = [0.3, 1.0];
+/// A tyre lens's light at no load and at full load (below the speed's full ink: rank 4).
+const PILL_LIGHT: [f32; 2] = [0.15, 0.6];
 /// The lit tyre fill's inset inside its lens.
 const PILL_INSET: f32 = 3.0;
 /// Pounds per square inch to bar (x100 kPa).
@@ -124,14 +125,12 @@ const FADE_TAU: f32 = 0.01;
 const POP: f32 = 0.08;
 /// The tile's face flash on the frame the driver takes the gear.
 const FLASH_ALPHA: f32 = 0.85;
-/// Hood keylines: offset per cap height and coverage (tokens `type.keyline`, alpha 230).
-const KEYLINE_PER_CAP: f32 = 0.075;
+/// Hood keylines (tokens `type.keyline`: a black ring round the strokes, never a box, alpha
+/// 230): the ring's width per cap height, its narrowest and widest, and its coverage.
+const KEYLINE_PER_CAP: f32 = 0.08;
+const KEYLINE_MIN: f32 = 3.0;
+const KEYLINE_MAX: f32 = 8.0;
 const KEYLINE_ALPHA: f32 = 0.9;
-/// The dimming pads: growth round their text, feather and black (at most 0.55, as
-/// `common::glass_plate::legibility_halo`).
-const PAD_GROW: f32 = 18.0;
-const PAD_SIGMA: f32 = 16.0;
-const PAD_ALPHA: f32 = 0.5;
 /// Labels' tracking (em) and the logo zone's wordmark cap.
 const LABEL_TRACKING: f32 = 0.08;
 const LOGO_CAP: f32 = 28.0;
@@ -463,12 +462,9 @@ impl Cluster for Gt7HoodPro {
         let g = &HOOD;
         let pal = *p.palette();
         let (k, off) = geom::fit(g, layout.envelope);
-        let inv = 1.0 / k;
-        let clip = Rect::from_points((layout.envelope.min - off) * inv, (layout.envelope.max - off) * inv);
         p.scoped(|p| {
             p.translate(off);
             p.scale(k);
-            self.draw_pads(p, g, clip, &pal);
             let w = hardware::light_weights(self.light.angle());
             if !self.sprites.draw_plate(p, g, w) {
                 hardware::fallback_plate(p, g, &pal);
@@ -496,22 +492,6 @@ impl Cluster for Gt7HoodPro {
 }
 
 impl Gt7HoodPro {
-    /// Feathered black pads under the text that sits on nothing (the speed and gear stack, the
-    /// boost label, the logo zone), clipped to the envelope, so it reads over a bright bonnet.
-    fn draw_pads(&self, p: &mut Painter<'_>, g: &Geom, clip: Rect, pal: &Palette) {
-        let stack = Rect::from_points(
-            vec2(g.speed_right - 3.0 * g.speed_cap * 1.28, g.speed_top),
-            vec2(g.sug_outer_rect().max.x, g.unit_top + g.unit_cap),
-        );
-        let label = Rect::from_center_size(
-            vec2(g.boost_c.x, g.boost_label_top + g.boost_label_cap * 0.5),
-            vec2(4.6 * g.boost_label_cap, g.boost_label_cap),
-        );
-        for r in [stack, label, rect(g.logo).inset(10.0)] {
-            soft_pad(p, r, clip, pal);
-        }
-    }
-
     /// The lit LEDs over the plate's lenses (the unlit lenses are the plate's).
     fn draw_rev(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let n = self.rev.count(g.ticks);
@@ -559,7 +539,7 @@ impl Gt7HoodPro {
         }
     }
 
-    /// The boost fill from zero along the scale's inner track, the zero mark and the label.
+    /// The boost fill from zero along the plate's groove, the zero mark and the label.
     fn draw_boost(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let [track_r, track_w] = g.boost_track;
         let zero = g.boost_angle(0.0);
@@ -570,13 +550,15 @@ impl Gt7HoodPro {
                 pal.roles.ink.intensity(BOOST_LIGHT),
             );
         }
+        // The zero mark across the groove, over the fill.
         let ink = static_ink(pal.roles.ink);
         let (s, c) = zero.sin_cos();
         let dir = vec2(c, s);
+        let half = g.boost_groove * 0.5 - 1.0;
         p.fill(
             &Shape::line(
-                g.boost_c + dir * (track_r - track_w),
-                g.boost_c + dir * (track_r + track_w),
+                g.boost_c + dir * (track_r - half),
+                g.boost_c + dir * (track_r + half),
                 2.0,
             ),
             ink,
@@ -667,7 +649,12 @@ impl Gt7HoodPro {
         let unit_pos = vec2(g.speed_field(cell).center().x, g.unit_top);
         keyline_text(p, unit_pos, unit, &unit_style, black);
         p.text(unit_pos, unit, &unit_style);
-        p.fill(&Shape::rect(rect(g.divider)), ink);
+        let divider = rect(g.divider);
+        p.fill(
+            &Shape::round_rect(divider.expand(KEYLINE_MIN), KEYLINE_MIN),
+            black.with_alpha(KEYLINE_ALPHA),
+        );
+        p.fill(&Shape::rect(divider), ink);
 
         // The gear: a two-digit gear is set smaller to keep clear of the tile.
         let label = self.gear.gear().label();
@@ -736,17 +723,23 @@ impl Gt7HoodPro {
         });
     }
 
-    /// The car's logo, or the custom name, at the band's right end (static, so it is dimmed).
+    /// The car's logo, or the custom name, at the band's right end (static, so it is dimmed),
+    /// with a keyline like the glyphs.
     fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let ink = static_ink(pal.roles.ink);
-        let style = LogoStyle {
-            tint: ink,
-            text: Paint::Solid(ink),
+        let style = |c: Color| LogoStyle {
+            tint: c,
+            text: Paint::Solid(c),
             font: self.faces.wide,
             cap: LOGO_CAP,
             tracking: 0.3,
         };
-        logo::draw(p, rect(g.logo), &self.logo, &style);
+        let zone = rect(g.logo);
+        let key = style(pal.roles.oled_black.with_alpha(KEYLINE_ALPHA));
+        let r = keyline_width(LOGO_CAP);
+        for i in 0..8 {
+            logo::draw(p, zone.translate(keyline_offset(i, r)), &self.logo, &key);
+        }
+        logo::draw(p, zone, &self.logo, &style(static_ink(pal.roles.ink)));
     }
 }
 
@@ -826,45 +819,32 @@ fn trip_text(tenths: i64, buf: &mut [u8; 7]) -> &str {
     core::str::from_utf8(buf).unwrap_or("00000.0")
 }
 
-/// A feathered black pad round `r` (no visible rim), clipped to `clip`.
-fn soft_pad(p: &mut Painter<'_>, r: Rect, clip: Rect, pal: &Palette) {
-    let r = r.expand(PAD_GROW);
-    p.scoped(|p| {
-        p.clip(clip, 0.0);
-        p.shadow(
-            &Shape::round_rect(r, r.height().min(r.width()) * 0.5),
-            Shadow {
-                offset: Vec2::ZERO,
-                sigma: PAD_SIGMA,
-                spread: 0.0,
-                color: pal.roles.oled_black.with_alpha(PAD_ALPHA),
-            },
-        );
-    });
+/// The keyline's width for a cap height.
+fn keyline_width(cap: f32) -> f32 {
+    (cap * KEYLINE_PER_CAP).clamp(KEYLINE_MIN, KEYLINE_MAX)
+}
+
+/// Offset `i` of the eight keyline copies.
+fn keyline_offset(i: usize, r: f32) -> Vec2 {
+    Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0)
 }
 
 /// Hood keyline: eight black copies of a text run round `pos`, so it reads over a bright road
-/// or sky. The offset follows the cap height.
+/// or sky. The width follows the cap height.
 fn keyline_text(p: &mut Painter<'_>, pos: Vec2, text: &str, style: &TextStyle, black: Color) {
     let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
+    let r = keyline_width(style.cap);
     for i in 0..8 {
-        p.text(pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0), text, &key);
+        p.text(pos + keyline_offset(i, r), text, &key);
     }
 }
 
 /// [`keyline_text`] for a tabular number.
 fn keyline_number(p: &mut Painter<'_>, pos: Vec2, value: i64, cells: u8, style: &TextStyle, black: Color) {
     let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
+    let r = keyline_width(style.cap);
     for i in 0..8 {
-        p.number(
-            pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0),
-            value,
-            cells,
-            &key,
-            None,
-        );
+        p.number(pos + keyline_offset(i, r), value, cells, &key, None);
     }
 }
 

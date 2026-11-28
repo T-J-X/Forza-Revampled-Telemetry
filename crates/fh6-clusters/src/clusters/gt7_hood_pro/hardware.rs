@@ -121,7 +121,7 @@ pub(super) fn fallback_plate(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
     let car = g.car_rect();
     p.fill(
         &Shape::round_rect(car, car.width() * 0.32),
-        hw(pal, FALLBACK_FACE * 2.0),
+        hw(pal, FALLBACK_FACE * 1.4),
     );
     p.stroke(&Shape::round_rect(car, car.width() * 0.32), rim, rim_px);
     for i in 0..4 {
@@ -130,12 +130,16 @@ pub(super) fn fallback_plate(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         p.stroke(&Shape::round_rect(r, r.width() * 0.36), rim, rim_px);
     }
 
-    // The boost gauge's scale.
+    // The boost gauge's scale and the black-glass groove its fill runs in.
     let a0 = g.boost_sweep[0].to_radians();
     let sweep = (g.boost_sweep[1] - g.boost_sweep[0]).to_radians();
     p.fill(
         &Shape::arc(g.boost_c, g.boost_r, g.boost_band, a0, sweep, Cap::Round),
         hw(pal, FALLBACK_RIM),
+    );
+    p.fill(
+        &Shape::arc(g.boost_c, g.boost_track[0], g.boost_groove, a0, sweep, Cap::Round),
+        core,
     );
 
     // The pedal slots.

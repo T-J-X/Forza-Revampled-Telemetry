@@ -11,8 +11,8 @@
 //! - **The hardware plate (Blender, Cycles):** every static part of the band in one plate
 //!   registered to the hood envelope: the rev bar's black-glass light bar on its polished plinth
 //!   with 95 smoked LED lenses, the car chip with its canopy and four tyre lenses, the boost
-//!   gauge's polished arc, the two pedal slots, the two telltale rings (slide and limiter) and
-//!   the trip tile.
+//!   gauge's polished arc and the black-glass groove of its fill, the two pedal slots, the two
+//!   telltale rings (slide and limiter) and the trip tile.
 //!   Rendered orthographic at 2 px per 4K px at the virtual light's rest azimuth and its ±25°
 //!   swing, then box-filtered to 1 px per 4K px.
 //! - **The suggested-gear tile (Blender):** the red enamel tile the cluster shows at the shift
@@ -81,6 +81,8 @@ const BOOST_C: [f32; 2] = [-600.0, 6.0];
 const BOOST_R: f32 = 60.0;
 const BOOST_BAND: f32 = 5.0;
 const BOOST_SWEEP: [f32; 2] = [160.0, 380.0];
+/// The black-glass groove the live boost fill runs in: radius and width.
+const BOOST_GROOVE: [f32; 2] = [51.0, 9.0];
 
 /// The pedal slots: centre x of each, centre y, outer size, slot size.
 const SLOTS_X: [f32; 2] = [-442.0, 442.0];
@@ -164,7 +166,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         (
             plate(&carbon),
             "plate",
-            "the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140",
+            "the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc and its black-glass groove, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140",
         ),
         (
             suggest(),
@@ -372,7 +374,7 @@ fn plate(carbon: &Path) -> Scene {
         ));
     }
 
-    // The boost gauge's polished arc.
+    // The boost gauge's polished arc, and inside it the black-glass groove the fill runs in.
     s.add(Part::extrude(
         "boost_arc",
         arc_band(BOOST_C, BOOST_R, BOOST_BAND, BOOST_SWEEP[0], BOOST_SWEEP[1], 72),
@@ -380,6 +382,21 @@ fn plate(carbon: &Path) -> Scene {
         3.0,
         1.5,
         mat::polished(metal::ALUMINIUM).named("gt_polished_alu"),
+    ));
+    s.add(Part::extrude(
+        "boost_groove",
+        arc_band(
+            BOOST_C,
+            BOOST_GROOVE[0],
+            BOOST_GROOVE[1],
+            BOOST_SWEEP[0],
+            BOOST_SWEEP[1],
+            72,
+        ),
+        0.0,
+        2.0,
+        1.0,
+        black_glass(),
     ));
 
     // The pedal slots.

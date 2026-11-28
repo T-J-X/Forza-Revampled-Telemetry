@@ -73,8 +73,10 @@ pub(super) struct Geom {
     pub boost_band: f32,
     pub boost_sweep: [f32; 2],
     pub boost_bar: [f32; 2],
-    /// The boost fill's track inside the scale: radius and width.
+    /// The boost fill's track inside the scale: radius and width, and the width of the plate's
+    /// black-glass groove it runs in.
     pub boost_track: [f32; 2],
+    pub boost_groove: f32,
     /// The boost label: cap top and cap height.
     pub boost_label_top: f32,
     pub boost_label_cap: f32,
@@ -143,6 +145,7 @@ pub(super) const HOOD: Geom = Geom {
     boost_sweep: [160.0, 380.0],
     boost_bar: [-1.0, 2.0],
     boost_track: [51.0, 6.0],
+    boost_groove: 9.0,
     boost_label_top: 28.0,
     boost_label_cap: 22.0,
     trip_c: vec2(-600.0, 108.0),
@@ -432,8 +435,9 @@ mod tests {
         let zero = g.boost_angle(0.0).to_degrees();
         assert!(zero > 180.0 && zero < 270.0, "zero at {zero}°");
         assert!(g.boost_angle(f32::NAN).is_finite());
-        // The fill's track lies inside the polished scale.
-        assert!(g.boost_track[0] + g.boost_track[1] * 0.5 < g.boost_r - g.boost_band * 0.5);
+        // The fill runs inside its groove, and the groove keeps clear of the polished scale.
+        assert!(g.boost_track[1] + 2.0 <= g.boost_groove);
+        assert!(g.boost_track[0] + g.boost_groove * 0.5 + 1.5 <= g.boost_r - g.boost_band * 0.5);
     }
 
     /// The asset recipe, which renders the plate and the tile from its own copy of these numbers.
@@ -468,7 +472,7 @@ mod tests {
     #[test]
     fn the_recipe_renders_the_same_band() {
         let g = &HOOD;
-        let pairs: [(&str, Vec<f32>); 26] = [
+        let pairs: [(&str, Vec<f32>); 27] = [
             ("PLATE", g.plate.to_vec()),
             ("REV_X", g.rev_x.to_vec()),
             ("TICK_Y", g.tick_y.to_vec()),
@@ -484,6 +488,7 @@ mod tests {
             ("BOOST_R", vec![g.boost_r]),
             ("BOOST_BAND", vec![g.boost_band]),
             ("BOOST_SWEEP", g.boost_sweep.to_vec()),
+            ("BOOST_GROOVE", vec![g.boost_track[0], g.boost_groove]),
             ("SLOTS_X", g.slots_x.to_vec()),
             ("SLOT_CY", vec![g.slot_cy]),
             ("SLOT_OUTER", flat(&[g.slot_outer])),
