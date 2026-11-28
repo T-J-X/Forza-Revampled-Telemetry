@@ -97,7 +97,7 @@ Ideas the research suggests for the telemetry (for the board to pick from, not a
 **Sources added.** Mercury beating heart: a mercury drop in an acid electrolyte with an oxidiser; an iron nail almost touching it makes it oscillate, because oxidation near the nail lowers the tension locally while reduction restores it over the whole drop (Wikipedia, [Mercury beating heart](https://en.wikipedia.org/wiki/Mercury_beating_heart); first seen by Volta and Henry in 1800). The gallium version "continuously oscillates between a dull flat puddle and a shiny sphere" for about 30 minutes ([Indiana University chemistry demos](https://www.chem.indiana.edu/faculty-research/faculty-resources/chemistry-demos/demo/the-gallium-beating-heart)). Viscous decay of drop modes, Lamb (1932) §355 as given by Padrino, Funada and Joseph, "Purely irrotational theories for the viscous effects on the oscillations of drops and bubbles", eqs. 2.24, 3.12, 3.16 ([umn.edu](https://dept.aem.umn.edu/people/faculty/joseph/archive/docs/946-sphere-short.pdf)): the decay rate of mode ℓ is (ℓ − 1)(2ℓ + 1)ν ÷ a², so τ = a² ÷ ((ℓ − 1)(2ℓ + 1)ν). The beating-heart pages give no shape counts or beat rates; those come from Dong et al. above.
 
 **The numbers for a galinstan drop** (σ 0.535 N/m, ρ 6440 kg/m³, μ 2.4 mPa·s, so ν = 3.73 × 10⁻⁷ m²/s; worked here):
-- The drive. An engine's firing frequency is proportional to rpm. A drop answers at half its drive. For a four-cylinder car the half-frequency is rpm ÷ 60 Hz, 15 Hz at a 900 rpm idle. The packet carries no cylinder count (the decoder's fields were checked), so the dash folds that constant into the drop's size.
+- The drive. An engine's firing frequency is proportional to rpm. A drop answers at half its drive. For a four-cylinder car the half-frequency is rpm ÷ 60 Hz, 15 Hz at a 900 rpm idle. The packet carried no cylinder count when this was written, so the dash folded that constant into the drop's size. Superseded: the decoder now reads `num_cylinders`, see "The cylinder count arrives" below.
 - The size. Setting the n = 3 mode at 15 Hz with Rayleigh's 2D relation gives R = 6.08 mm. That is a puddle (ℓ_c = 2.91 mm, so R ≈ 2 ℓ_c, the same ratio Dong et al. used for water), which is the shape that shows star modes from above.
 - The modes. n is the mode whose frequency is nearest the half-drive, so n(n² − 1) = 24 (rpm ÷ idle)². For idle 900 and limiter 8700, n runs 3 → 13: 3 at 900, 4 at 1500, 5 at 2200, 6 at 3000, 8 at 3900, 9 at 4900, 10 at 5900, 11 at 7000, 13 at 8200–8700 (figure `star_modes_study.png` in the project files). A car with a narrower band tops out lower (idle 1000, limiter 7000: n ≈ 11), which is real and fine.
 - Frequencies and ring-down: n = 3 at 15 Hz rings for τ = 7.1 s; n = 6 at 44 Hz for 1.5 s; n = 8 at 69 Hz for 0.83 s; n = 10 at 96 Hz for 0.52 s; n = 13 at 143 Hz for 0.31 s.
@@ -135,7 +135,7 @@ Ideas the research suggests for the telemetry (for the board to pick from, not a
 **Deliberate changes, liquid-metal version:**
 - The drop is drawn stroboscopically (see above), not at its real 15–143 Hz.
 - Mode changes are capped at about 0.25 s, against Lamb's 0.3–7 s, so the gauge stays instant. The real τ is kept for the upshift's ring-down at high n.
-- The cylinder count is folded into the drop's size, because the packet does not carry it.
+- ~~The cylinder count is folded into the drop's size.~~ Superseded by "The cylinder count arrives" below.
 
 ## The sheen and the ring-down, computed (research figure 02)
 
@@ -155,3 +155,37 @@ Figure `film_and_ringdown.png` in the project files. Worked here with the Airy s
 - Lean and slide. The U-tube swing at ζ 0.35 overshoots once by about 30% and settles in about a second, which reads as weight.
 - Film drainage. Mysels h ∼ √(z ÷ t): after a brake the thick film runs towards the deceleration side, so the colour bands slide forward and thin out over a few seconds. This is the one slow motion in the dash, and it is ambient: it carries no reading the driver needs.
 - Idle. Stroboscopic sampling holds the n = 3 star still. Only the film's slow drainage moves, under the house rule for idle motion.
+
+## The cylinder count arrives (decoder main 60c99c9)
+
+The decoder now reads all 88 FH6 fields, including `num_cylinders` (matrix key `cylinders`). That removes the one fudge in the mapping, and it gives the drop the engine's character for free. Real-game check C still has to confirm the offset and units, so the code keeps a fallback.
+
+**The model, now complete.** A four-stroke engine fires cyl ÷ 2 times per revolution, so the firing frequency is rpm × cyl ÷ 120 Hz, and the drop answers at half of it: f = rpm × cyl ÷ 240 Hz. The drop keeps one fixed, real size (R 6.08 mm, the galinstan puddle above), so with Rayleigh's 2D relation n(n² − 1) = 0.1067 f² (f in Hz). For a four-cylinder at 900 rpm that is 15 Hz and n = 3, the same as before.
+
+**What each engine layout draws** (worked here, nearest mode):
+
+| Engine | Idle → n | Limiter → n |
+|---|---|---|
+| I3, idle 900, limiter 6500 | 11.2 Hz → 2 (a rocking oval) | 81 Hz → 9 |
+| I4, 900 / 8700 | 15.0 Hz → 3 | 145 Hz → 13 |
+| flat-6, 950 / 9000 | 23.8 Hz → 4 | 225 Hz → 18 |
+| V8 cross-plane, 750 / 7000 | 25.0 Hz → 4 | 233 Hz → 18 |
+| V8 flat-plane, 900 / 8500 | 30.0 Hz → 5 | 283 Hz → 20 |
+| V10, 1000 / 8700 | 41.7 Hz → 6 | 363 Hz → 24 |
+| V12, 900 / 9000 | 45.0 Hz → 6 | 450 Hz → 28, capped at 24 |
+
+A small three-cylinder idles as a slow oval and never gets past nine points. A V12 sits at six points at idle and blooms into a fine crown. The driver can tell the engine from the drop before the car moves, and every one of those shapes is the mode a real drop would pick.
+
+**Design consequences.**
+- Legibility cap: n ≤ 24. On a drop about 400 px across that leaves about 50 px per point, which still reads at 2 m. Only V12s above about 7700 rpm hit it. This is a deliberate change.
+- Lamb ring-down at the new top: n 18 lasts 0.15 s, n 24 lasts 0.084 s. A high-revving big engine settles almost instantly after an upshift, while a small engine wobbles. That is real, and it fits the car.
+- The gear void must stay readable at n 24: its radius stays under the inner radius of the crests (R × (1 − a)), the same rule as before.
+- The tach's meniscus is unchanged. It shows the exact rpm whatever n is.
+
+**Edge cases this adds.**
+- `num_cylinders` 0: an electric car (no firing) or a missing value. Fall back to the old normalised ladder n(n² − 1) = 24 (rpm ÷ idle)², a "virtual four" at the car's own idle, so an EV still gets a living drop.
+- Out-of-range values (over 16, or still unconfirmed before check C): clamp to 1–16. A one-cylinder engine is valid (f = rpm ÷ 240) and gives a calm drop.
+- Rotary engines: what FH6 reports for them is unknown until check C. Whatever count it sends, the model holds, because a rotor fires once per rotor revolution.
+- A car change mid-session: cyl, idle and max all change together, and the drop re-forms with one ring.
+
+**Code-phase notes.** Add `cylinders` to the KineticLiquidMetal row of `docs/TELEMETRY_USAGE_MATRIX.md` in the same commit as the code that reads it, because the G2 gate fails on a listed input the dash does not read. Unit tests will cover: I4 at 900 → 3; V12 at 9000 → capped 24; cyl 0 → the fallback; cyl 40 → clamped; idle ≥ max → no panic.
