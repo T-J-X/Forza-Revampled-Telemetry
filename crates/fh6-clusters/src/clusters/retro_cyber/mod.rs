@@ -52,8 +52,8 @@
 //! | Z2 | speed | (−150, 40), cap 128 | (−330, 20), cap 96 |
 //! | Z1 | gear | (175, 20), cap 190 | (250, 26), cap 150 |
 //! | Z4 | G readout | (−420, 70), cap 44 | (−590, 40), cap 36 |
-//! | Z4 | slip window | (338, −150)..(428, 160) | (440, −120)..(520, 106) |
-//! | Z4 | gauge window | (448, −150)..(682, 160) | (540, −120)..(850, 106) |
+//! | Z4 | slip window | (338, −150)..(418, 160) | (440, −120)..(520, 106) |
+//! | Z4 | gauge window | (436, −150)..(690, 160) | (540, −120)..(850, 106) |
 //! | Z5 | printed labels | cap 16 at y 176 | cap 14 at y 120 |
 use crate::common::bezel::{lit_rim, on_screen};
 use crate::common::seg7::{
@@ -218,8 +218,8 @@ const COCKPIT: Geom = Geom {
     surround: 12.0,
     pedal: rect(-680.0, -150.0, -548.0, 160.0),
     centre: rect(-528.0, -294.0, 318.0, 160.0),
-    slip: rect(338.0, -150.0, 428.0, 160.0),
-    gauges: rect(448.0, -150.0, 682.0, 160.0),
+    slip: rect(338.0, -150.0, 418.0, 160.0),
+    gauges: rect(436.0, -150.0, 690.0, 160.0),
     tach_x: (-490.0, 290.0),
     tach_base: -96.0,
     tach_rise: 34.0,
