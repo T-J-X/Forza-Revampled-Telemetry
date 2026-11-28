@@ -120,9 +120,10 @@ impl Lock {
             tool_err(
                 lane.name(),
                 format!(
-                    "the {} lane is not locked. Take {} first (SKILLS.md, section 5), and release it when the job ends",
+                    "the {} lane is not locked: no {} is held. Queue the job with gpu-lock, which holds the lock while it runs: `gpu-lock run --lane {} --thread <name> --job <what> -- <this command>` (SKILLS.md, section 5)",
                     lane.name(),
-                    files.join(" or ")
+                    files.join(" or "),
+                    lane.name()
                 ),
             )
         })

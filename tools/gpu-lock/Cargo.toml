@@ -1,0 +1,17 @@
+[package]
+name = "gpu-lock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "The first-come-first-served queue for the GPU lock files the threads share (SKILLS.md section 5)"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "gpu-lock"
+path = "src/main.rs"
+
+[dependencies]

@@ -19,6 +19,7 @@ members = [
     "tools/wgc-bench",
     "tools/asset-forge",
     "tools/visual-review",
+    "tools/gpu-lock",
 ]
 
 [workspace.package]
