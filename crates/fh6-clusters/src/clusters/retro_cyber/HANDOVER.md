@@ -13,7 +13,7 @@ Findings and yes/no answers only; there are no scores in this file. TJX is hands
 | A bespoke ComfyUI asset and a bespoke Blender asset are used, with ledger rows and 4K masters on Drive; the before and after pair is here | yes | [assets/clusters/retro_cyber/ASSETS.md](../../../../../assets/clusters/retro_cyber/ASSETS.md); "Assets and masters"; "Before and after pair" |
 | The module is complete, with no TODOs, and goldens pass | *pending* | 15 unit tests pass; goldens are a PC job |
 | 4K renders, the 60-frame sequence and the product page are in `mockups/RetroCyber/` | *pending* | the final `preview-export` run |
-| The live bench report and the GPU time under 0.5 ms are recorded | *pending* | "GPU budget"; the re-time after the mesh zones runs on the PC |
+| The live bench report and the GPU time under 0.5 ms are recorded | yes | "GPU budget": every state 0.423 to 0.487 ms at a1fd67c; live CPU share +0.032 ms |
 | The direction check was posted and self-reviewed, with its findings here | yes | "Direction check" (posted 28 Nov 04:20 UTC) |
 | Every line of the closing review is yes, or a line that could not be fixed afterwards is reported | *pending* | "Closing review" |
 | The visual review (V1 to V26) is here, each line with its evidence | *pending* | "Visual review" |
@@ -40,7 +40,11 @@ Measured on the PC's RTX 3070 Ti Laptop GPU (median of three interleaved rounds 
 | 7930b12 (first build after the direction check) | 0.66 to 0.74 ms | | 0.729 / 0.737 ms | |
 | 1b3ce71 (ring cover, no bloom, limiter hold, new surround art) | 0.518 to 0.536 ms | 0.471 to 0.484 ms | 0.529 / 0.845 ms | 0.392 ms |
 | 9447c0f (mesh zones; preview-export now also draws a logo in the zone, +2 draws) | 0.482 / 0.489 / 0.501 / 0.490 ms | 0.433 / 0.438 / 0.447 / 0.439 ms | 0.492 / 0.501 ms | 0.391 ms |
-| (next) side-window zones on their segments | *pending* | *pending* | *pending* | *pending* |
+| a1fd67c (side-window zones on their segments) | 0.471 / 0.477 / 0.487 / 0.477 ms | 0.423 / 0.428 / 0.437 / 0.428 ms | 0.480 / 0.486 ms | 0.391 ms |
+
+Every state is under 0.5 ms from a1fd67c (the redline cockpit state, the highest, at 0.487 ms). ecf889e (the rust review's fixes) changes no draw.
+
+**Live bench (CPU share, directive 7):** the PC, 28 Nov 06:42 to 06:48 UTC, mock-udp `bmw_m4_cs` at 60 Hz, `FH6_WheelDash --demo --cluster <Name> --stats --bench-seconds 60`, A B A B against the scaffold dash LfaV10Nurburgring, built at a1fd67c. CPU per frame p50 / p99: RetroCyber 0.725 / 1.266 and 0.657 / 0.965 ms, scaffold 0.625 / 0.944 and 1.059 / 1.427 ms. The clean pair (no other build running in either run) gives a share of +0.032 ms, under 0.3 ms; the other pairings were loaded by other threads' builds (+0.100 and -0.402 ms) and are under it too. The dash's own draw part is 0.053 to 0.059 ms p50 (scaffold 0.031 to 0.050), 18.6 draw calls against 11.0. Receive to present stayed under one 300 Hz frame at p99 in every run. ecf889e only removes work from `draw` (cached mesh zones, hoisted colours), so the share at the close is at most this.
 
 What the cuts were, from the per-layer timing at e003c20 (surround 0.221, glass 0.205, mesh and scanlines 0.128, speed bloom 0.094 ms): the surround's art, face, rims and lens black are drawn on twelve rectangles over its ring only (about 17% of the panel); the speed and gear glow with local halos and no frame blooms; the grid mesh and the scanlines go only where phosphor can light. Drawing the lens glass on its rim band alone was tried and dropped: the kit never trims a glass draw under a clip, so twelve clipped glass draws were twice as slow on lavapipe. The p99 spikes (single frames about 0.3 ms slower, seen only in variants with a glass layer) are the kit thread "Speed up the kit's glass layer"'s to explain.
 
