@@ -409,6 +409,32 @@ struct Faces {
     role_display: FontId,
 }
 
+/// What the logo zone shows ([`zone_art`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ZoneArt<I> {
+    /// Nothing: the logo is turned off, or the car's dial is still loading.
+    Nothing,
+    /// An image, engraved on the dial: the car's logo, else this dash's maker wordmark.
+    Image(I),
+    /// The brand or custom name ([`logo_zone`]).
+    Names,
+}
+
+/// What the logo zone shows: `image` (the car's logo, [`Logo::image`]), else `maker` (the
+/// maker's wordmark when the car is one of theirs), else the names in `logo`. While the car's
+/// dial is loading the zone stays empty, so neither the maker's wordmark nor a name shows first
+/// and the car's dial a moment later. The images are any handle, so tests need no kit.
+fn zone_art<I>(image: Option<I>, maker: Option<I>, logo: &Logo) -> ZoneArt<I> {
+    let off = image.is_none() && logo.brand_name.trim().is_empty() && logo.custom_name.trim().is_empty();
+    if off || logo.loading {
+        return ZoneArt::Nothing;
+    }
+    match image.or(maker) {
+        Some(image) => ZoneArt::Image(image),
+        None => ZoneArt::Names,
+    }
+}
+
 /// The maker whose wordmark (`assets/logos/porsche_dial.png`) this dial carries when the car is
 /// one of theirs (compared with the car's brand name in `update`, never in `draw`).
 const MAKER: &str = "Porsche";
@@ -991,18 +1017,16 @@ impl PorscheAnalog {
     }
 
     /// The logo zone (the host's logo image, else this dash's maker wordmark on the maker's own
-    /// cars, else the brand or custom name; nothing when the logo is turned off) and
+    /// cars, else the brand or custom name; nothing when the logo is turned off or while the
+    /// car's dial is loading, [`zone_art`]) and
     /// "1/min × 1000" under it. Its side of the hub follows the car's scale, not the turning
     /// one, so it never jumps in the middle of a turn.
     fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let zone = g.logo_zone(&self.scale);
-        let off = self.logo.image.is_none()
-            && self.logo.brand_name.trim().is_empty()
-            && self.logo.custom_name.trim().is_empty();
         let maker = if self.maker_car { self.maker } else { None };
-        match self.logo.image.or(maker) {
-            _ if off => {}
-            Some(image) => {
+        match zone_art(self.logo.image, maker, &self.logo) {
+            ZoneArt::Nothing => {}
+            ZoneArt::Image(image) => {
                 // An image, printed on the dial: engraved (a dark copy 1 px below-right first).
                 let ink = pal.roles.ink.with_alpha(215.0 / 255.0);
                 let shadow = fh6_kit::logo::LogoStyle {
@@ -1021,7 +1045,7 @@ impl PorscheAnalog {
                 };
                 fh6_kit::logo::draw(p, zone, &only, &style);
             }
-            None => logo_zone(p, zone, &self.logo, self.faces.wide, LogoVariant::Dial, pal),
+            ZoneArt::Names => logo_zone(p, zone, &self.logo, self.faces.wide, LogoVariant::Dial, pal),
         }
         let legend = TextStyle::new(self.faces.label, self.nano_cap)
             .paint(pal.roles.ink_label)

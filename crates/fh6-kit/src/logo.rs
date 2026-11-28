@@ -795,10 +795,12 @@ pub const NAME_AFTER_FRAMES: u32 = 600;
 #[derive(Debug)]
 pub struct CarLogo {
     dials: DialLoader,
+    /// What the clusters get. It has the car's names from the moment the car shows, and is
+    /// marked [`Logo::loading`] while the dial is on its way, so the zone does not show the
+    /// name first.
     shown: Logo,
-    /// What to show once the car's dial arrives. Until then `shown` is empty, so the name does
-    /// not flash first.
-    waiting: Option<Logo>,
+    /// Whether the shown car's dial is still on its way.
+    awaiting: bool,
     /// Drawn frames spent waiting for it.
     waited: u32,
 }
@@ -814,7 +816,7 @@ impl CarLogo {
         Self {
             dials,
             shown: Logo::default(),
-            waiting: None,
+            awaiting: false,
             waited: 0,
         }
     }
@@ -831,37 +833,27 @@ impl CarLogo {
     /// per frame. A car of the brand that is already awaited keeps the frames it has waited, so
     /// a setting changed while a read hangs neither restarts the wait nor takes the name away.
     pub fn show(&mut self, brand: Option<CarBrand>, custom_name: &str) {
-        let awaited = self.waiting.take().and(self.dials.waiting);
+        let awaited = if self.awaiting { self.dials.waiting } else { None };
+        self.awaiting = false;
         let Some(brand) = brand else {
             self.waited = 0;
             self.dials.waiting = None;
             self.shown = Logo::default();
             return;
         };
-        let named = Logo {
-            image: None,
-            brand_name: brand.name,
-            custom_name: custom_name.to_string(),
-        };
         let dial = self.dials.dial(brand.logo);
         if dial != Dial::Loading || awaited != brand.logo {
             self.waited = 0;
         }
-        self.shown = match dial {
-            Dial::Ready(image) => Logo {
-                image: Some(image),
-                ..named
+        self.awaiting = dial == Dial::Loading;
+        self.shown = Logo {
+            image: match dial {
+                Dial::Ready(image) => Some(image),
+                Dial::Missing | Dial::Loading => None,
             },
-            Dial::Missing => named,
-            Dial::Loading => {
-                let meanwhile = if self.waited >= NAME_AFTER_FRAMES {
-                    named.clone()
-                } else {
-                    Logo::default()
-                };
-                self.waiting = Some(named);
-                meanwhile
-            }
+            brand_name: brand.name,
+            custom_name: custom_name.to_string(),
+            loading: self.awaiting && self.waited < NAME_AFTER_FRAMES,
         };
     }
 
@@ -885,27 +877,27 @@ impl CarLogo {
     pub fn new_kit(&mut self) {
         self.dials.new_kit();
         self.shown = Logo::default();
-        self.waiting = None;
+        self.awaiting = false;
         self.waited = 0;
     }
 
     /// What one poll found for the car that is waiting: its dial or its failure, or nothing yet.
     fn landed(&mut self, dial: Option<Dial>) {
+        if !self.awaiting {
+            return;
+        }
         match dial {
             Some(dial) => {
-                if let Some(mut logo) = self.waiting.take() {
-                    if let Dial::Ready(image) = dial {
-                        logo.image = Some(image);
-                    }
-                    self.shown = logo;
+                self.awaiting = false;
+                self.shown.loading = false;
+                if let Dial::Ready(image) = dial {
+                    self.shown.image = Some(image);
                 }
             }
             None => {
-                if let Some(named) = &self.waiting {
-                    self.waited = self.waited.saturating_add(1);
-                    if self.waited == NAME_AFTER_FRAMES {
-                        self.shown.clone_from(named);
-                    }
+                self.waited = self.waited.saturating_add(1);
+                if self.waited == NAME_AFTER_FRAMES {
+                    self.shown.loading = false;
                 }
             }
         }
@@ -922,8 +914,13 @@ fn plain_relative(dial: &str) -> Option<PathBuf> {
     (inside && names_a_file).then(|| path.to_path_buf())
 }
 
-/// Draws the logo zone. Returns the rectangle actually used.
+/// Draws the logo zone: the image, else the wordmark ([`wordmark`]), and nothing while the
+/// image is on its way ([`Logo::loading`]). Returns the rectangle actually used.
 pub fn draw(p: &mut Painter<'_>, zone: Rect, logo: &Logo, style: &LogoStyle) -> Rect {
+    if logo.loading {
+        // The image is on its way: nothing yet, not even the name.
+        return Rect::from_center_size(zone.center(), Vec2::ZERO);
+    }
     if let Some(image) = logo.image {
         // The picture's size, not the texture's: a dial uploaded from 512 px down keeps its shape.
         if let Some(size) = p.images().source_size(image) {
@@ -1706,6 +1703,15 @@ mod tests {
             image: None,
             brand_name: brand.into(),
             custom_name: custom.into(),
+            loading: false,
+        }
+    }
+
+    /// The names of a car whose dial is on its way: the zone draws nothing yet.
+    fn loading(brand: &str, custom: &str) -> Logo {
+        Logo {
+            loading: true,
+            ..named(brand, custom)
         }
     }
 
@@ -1734,12 +1740,12 @@ mod tests {
         assert!(logo.busy());
         assert_eq!(
             *logo.logo(),
-            Logo::default(),
-            "empty while the dial loads, not the name"
+            loading("Porsche", "TJX"),
+            "the names, marked loading so the zone stays empty, not the name"
         );
         frames_until_idle(&mut logo, image_of, |shown| {
             assert!(
-                *shown == Logo::default() || shown.image == dial,
+                *shown == loading("Porsche", "TJX") || shown.image == dial,
                 "nothing, then the dial: {shown:?}"
             );
         });
@@ -1778,7 +1784,7 @@ mod tests {
         // The Porsche dial lands first, while the Ferrari is the car on screen.
         frames_until_idle(&mut logo, image_of, |shown| {
             assert!(
-                *shown == Logo::default() || shown.image == ferrari,
+                *shown == loading("Ferrari", "TJX") || shown.image == ferrari,
                 "the Ferrari shows nothing or its own dial: {shown:?}"
             );
         });
@@ -1839,7 +1845,7 @@ mod tests {
         logo.new_kit();
         assert_eq!(*logo.logo(), Logo::default(), "no image of the old kit is left to draw");
         logo.show(Some(gt3), "TJX");
-        assert_eq!(*logo.logo(), Logo::default(), "the brand loads again");
+        assert_eq!(*logo.logo(), loading("Porsche", "TJX"), "the brand loads again");
         let in_new_kit = |brand: BrandId| ImageId(brand.0 as u32 + 1000);
         frames_until_idle(&mut logo, in_new_kit, |shown| {
             assert!(shown.image != old, "never the old kit's image");
@@ -1856,7 +1862,7 @@ mod tests {
         for _ in 1..NAME_AFTER_FRAMES {
             frame(&mut logo, image_of);
         }
-        assert_eq!(*logo.logo(), Logo::default(), "still empty a frame before");
+        assert_eq!(*logo.logo(), loading("Porsche", "TJX"), "still empty a frame before");
         frame(&mut logo, image_of);
         assert_eq!(*logo.logo(), named("Porsche", "TJX"), "the name, while the read hangs");
         frame(&mut logo, image_of);
@@ -1893,7 +1899,7 @@ mod tests {
         }
         // A setting changes a frame before the name is due: the host shows the same car again.
         logo.show(Some(gt3.clone()), "TJX");
-        assert_eq!(*logo.logo(), Logo::default(), "still empty");
+        assert_eq!(*logo.logo(), loading("Porsche", "TJX"), "still empty");
         frame(&mut logo, image_of);
         assert_eq!(*logo.logo(), named("Porsche", "TJX"), "the wait did not start again");
         // With the name up, another change (here the custom name) keeps it up.
@@ -1905,13 +1911,17 @@ mod tests {
         );
         // A car of another brand starts its own wait, and so does the first car after it.
         logo.show(Some(ix.car_brand(&cars, 3595)), "ACE");
-        assert_eq!(*logo.logo(), Logo::default());
+        assert_eq!(*logo.logo(), loading("Ferrari", "ACE"));
         logo.show(Some(gt3), "ACE");
-        assert_eq!(*logo.logo(), Logo::default(), "a car change starts the wait again");
+        assert_eq!(
+            *logo.logo(),
+            loading("Porsche", "ACE"),
+            "a car change starts the wait again"
+        );
         for _ in 1..NAME_AFTER_FRAMES {
             frame(&mut logo, image_of);
         }
-        assert_eq!(*logo.logo(), Logo::default());
+        assert_eq!(*logo.logo(), loading("Porsche", "ACE"));
         frame(&mut logo, image_of);
         assert_eq!(*logo.logo(), named("Porsche", "ACE"));
     }
@@ -1933,6 +1943,7 @@ mod tests {
             image: None,
             brand_name: "Porsche".into(),
             custom_name: "TJX".into(),
+            loading: false,
         };
         assert_eq!(wordmark(&logo, &mut buf), "PORSCHE");
         let logo = Logo {

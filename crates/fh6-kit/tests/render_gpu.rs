@@ -388,6 +388,7 @@ fn a_cars_brand_logo_decodes_uploads_and_draws() {
         image: Some(image),
         brand_name: "Porsche".into(),
         custom_name: "TJX".into(),
+        loading: false,
     };
     let mut used = Rect::from_center_size(vec2(0.0, 0.0), Vec2::ZERO);
     let img = render_named(&mut kit, &ctx, "brand_logo", |p| {
@@ -477,7 +478,7 @@ fn a_dial_from_512_px_down_draws_the_same_pixels_as_the_full_chain() {
 }
 
 /// The live path, as the app runs it: `CarLogo` asks the worker thread for the car's dial, the
-/// zone is empty until it is in, and the upload is spread over the frames that poll it, each
+/// zone is empty until it is in (the names are set, marked loading, and draw nothing), and the upload is spread over the frames that poll it, each
 /// frame's writes submitted before the next. The dial that shows is the same picture as one
 /// decoded and uploaded at once.
 #[test]
@@ -501,14 +502,23 @@ fn a_cars_logo_loads_on_the_worker_and_uploads_over_frames() {
         // The worker is decoding. This thread does the same work before it polls, so that the
         // polls counted below are the upload's and not the wait for the decode.
         let chain = index.decode_dial(id).expect("the dial decodes");
+        let waiting = Logo {
+            image: None,
+            brand_name: name.clone(),
+            custom_name: "TJX".into(),
+            loading: true,
+        };
+        assert_eq!(*logo.logo(), waiting, "{name}: the names, marked loading");
+        // With the names set and the dial on its way, the zone draws nothing: not the name
+        // first and the dial a moment later.
+        let empty = render_named(&mut kit, &ctx, &format!("car_logo_loading_{ordinal}"), |p| {
+            logo::draw(p, zone, &waiting, &style);
+        });
+        assert_eq!(empty.covered(), 0, "{name}: nothing in the zone while the dial loads");
         let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
         let mut polls = 0;
         while logo.busy() && std::time::Instant::now() < until {
-            assert_eq!(
-                *logo.logo(),
-                Logo::default(),
-                "{name}: the zone is empty until the dial is in"
-            );
+            assert_eq!(*logo.logo(), waiting, "{name}: the zone is empty until the dial is in");
             assert_eq!(kit.images().len(), before, "{name}: and no image is in the store");
             logo.poll(kit.images_mut(), &ctx.device, &ctx.queue);
             // The frame ends: what this poll wrote goes to the device before the next poll.

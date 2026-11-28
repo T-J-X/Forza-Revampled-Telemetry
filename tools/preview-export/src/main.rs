@@ -418,6 +418,7 @@ fn car_logo(ctx: &GpuContext, kit: &mut Kit, assets: &Path, cars: Option<&CarDat
         image,
         brand_name: choice.brand_name,
         custom_name,
+        loading: false,
     };
     if let Some(why) = why_not {
         println!("{}", no_logo_line(&choice.car, why, &logo));
@@ -521,6 +522,7 @@ mod tests {
             image: None,
             brand_name: choice.brand_name.clone(),
             custom_name: DRIVER_NAME.to_string(),
+            loading: false,
         };
         no_logo_line(&choice.car, why, &names)
     }
