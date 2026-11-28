@@ -108,7 +108,7 @@ One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they sha
 | 6 | 19 | ★ [`RetroCyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | Retro | recreation | Sci-Fi | cockpit+hood | ◐ |
 | 7 | 27 | ★ [`KineticLiquidMetal`](../../../crates/fh6-clusters/src/clusters/kinetic_liquid_metal/) | Psychedelic | concept | Fluid / Generative | cockpit | ◐ |
 | 8 | 4 | [`AmgMbuxSuperscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) (wide glass panel) | Supercar | recreation | Modern Digital 2027 | cockpit | ◐ |
-| 9 | 13 | [`ValkyrieLmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | Hypercar | recreation | Race Dash | cockpit+hood | ☐ |
+| 9 | 13 | [`ValkyrieLmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | Hypercar | recreation | Race Dash | cockpit+hood | ◐ |
 | 10 | 2 | [`VisionSpatialGlass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | Apple Vision | concept | Liquid Glass | cockpit | ☐ |
 | 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
 | 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ☐ |
