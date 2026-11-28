@@ -11,12 +11,12 @@ Findings and yes/no answers only; there are no scores in this file. TJX is hands
 | `RESEARCH.md` is written, with sources | yes | [RESEARCH.md](RESEARCH.md): the A70 Panoramic Digital Meter, its features with sources, the match table, deliberate changes A to G, the gaps |
 | The design board is the Penpot page `07 · RetroCyber`, 4 states per view, its IDs here and in the README | *pending* | the eight state boards and the motion notes are drawn from `Geom` (outlined text); the import waits for the Penpot queue |
 | A bespoke ComfyUI asset and a bespoke Blender asset are used, with ledger rows and 4K masters on Drive; the before and after pair is here | yes | [assets/clusters/retro_cyber/ASSETS.md](../../../../../assets/clusters/retro_cyber/ASSETS.md); "Assets and masters"; "Before and after pair" |
-| The module is complete, with no TODOs, and goldens pass | *pending* | 15 unit tests pass; goldens are a PC job |
-| 4K renders, the 60-frame sequence and the product page are in `mockups/RetroCyber/` | *pending* | the final `preview-export` run |
+| The module is complete, with no TODOs, and goldens pass | yes | 17 unit tests and dash_gates pass; the 8 goldens pass (rendered and checked in the cloud, f5a33f2) |
+| 4K renders, the 60-frame sequence and the product page are in `mockups/RetroCyber/` | yes | `preview-export --cluster RetroCyber` on the PC at 43f7d8a (product page with the PC's GPU timings) and in the cloud at f5a33f2 |
 | The live bench report and the GPU time under 0.5 ms are recorded | yes | "GPU budget": every state 0.423 to 0.487 ms at a1fd67c; live CPU share +0.032 ms |
 | The direction check was posted and self-reviewed, with its findings here | yes | "Direction check" (posted 28 Nov 04:20 UTC) |
-| Every line of the closing review is yes, or a line that could not be fixed afterwards is reported | *pending* | "Closing review" |
-| The visual review (V1 to V26) is here, each line with its evidence | *pending* | "Visual review" |
+| Every line of the closing review is yes, or a line that could not be fixed afterwards is reported | yes | V5, V13 and V15 reported under "Visual review" |
+| The visual review (V1 to V26) is here, each line with its evidence | yes, V16 pending the Penpot import | "Visual review" |
 | The handover is written, the job is reported for the merge | *pending* | this file |
 
 ## What was built
@@ -124,7 +124,61 @@ Rejection patterns against named crops: (a) not like the real car: the layout fo
 V1 yes, V2 yes, V3 yes (findings above), V4 yes (the gear first), V6 yes after the fixes, V10 yes, V13 no (stays no), V14 yes for layout, geometry and colour, V15 yes against R1, no against R2 (another car's panel), V16 NOT ASSESSED at the direction check (the board came later, out of order: Penpot was held by other threads), V17 partly (the surround's material at 1× only after the stepped re-render), V19 yes after e003c20, V20 yes after e003c20.
 
 ## Visual review
-*Pending: the closing round.* Re-checked on the cloud render at 9447c0f with the new surround art: glance all yes (cockpit gear 8.7 / 9.9 / 11.6 / 10.7:1, speed 8.4 / 9.3 / 9.3 / 8.7:1, G 6.6 / 6.6 / 6.6 / 6.1:1); static yes; stretch 0 px not off outside the envelope; flash, frames 30 to 41: one area, 10 Hz, 3 on / 3 off, worst field 4,834 of 21,526 px², tallest 38 px (yes); motion: no stalls.
+Closing round on 28 Nov, on cloud renders (lavapipe) of a1fd67c, ecf889e and f5a33f2; the PC rendered the cold reviewer's packet at 43f7d8a. Working notes are in `mockups/RetroCyber/review/direction_check.md` and `expectations.md` (gitignored).
+
+### Closing cold look (written before the notes, the spec, the board or the references were opened)
+A long low black panel sits in the steering-column gap; its outline steps up in the middle into a raised strip with rounded shoulders, inside a thin graphite ring with a light top edge. The eye goes to the white "4", then the teal "118", then the teal tach bars rising left to right, then the amber "0.2 G", the yellow slants and the green column. At 1:1 the lit segments carry a fine dot mesh and a soft glow and read as lit phosphor; the ring reads as a rounded dark metal edge; the labels, the divider and its risers read as flat print. Wide true black sits above the tach's left half and above the slip and power windows. In the luminance view the gear and the speed are brightest, then the lit bars, then the G digits and the slants. Premortem: "a clean 2D display in a thin ring, with the shift pods looking added on." Rejection patterns: (a) the cold reviewer's question; (b) no (the mesh is VFD detail at 1:1; the ring shows a highlight at 1x); (c) no (one panel behind one lens, as the A70; no window boxes); (d) partly (the unlit pods read as dark tinted boxes: their ghost state, kept); (e) no (the lens face is 0/255).
+
+### Cold reviewer (one run on the PC at 07:00 UTC, seed 1929, packet rendered at 43f7d8a, logo zone masked; R1 the frontal bench photo, R2 the angled right-hand-drive photo)
+- Five-second test: the white "4" first, the teal "118 MPH" second, the tach with the red 8 and 9 third.
+- Recognition: "Don't know."
+- Blind read against `blind_key_1929`: gear right 8 of 8, speed within 1 mph 8 of 8, shift lights as the frame shows them 8 of 8 (checked on 1:1 crops), rpm zone right on 5 of 8 and not given on 3 (frames 28 and 29 at the limiter, "high or limiter, don't know"; frame 17 at 51%, "right on the low/mid line"). It took the scale's end (9) as the limiter, because the limiter tick was too small to find at glance size.
+- R1 and R2: "Different" in both orders. Shared with R1: the TACH legend over a tach across the top with red at the high end, the large speed under it with its unit and SPEED label, a small labelled readout left of the speed, a vertical bar at the far left and one right of centre, two slanted bars with a zero on the right, labels along a bottom line. Different: the gear digit and the shift strip (changes C and D), the straight rising tach against R1's curved arc (change A's proportions), the closed stepped housing against R1's longer strip.
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | The shift lights look dark at the top of the rev range (frames 28 and 29) | fixed in f5a33f2: the strobe was on the wall clock and opened with its off phase as the limiter arrived; it is now timed from the limiter, so frames 27 to 29 are lit, then 3 off and 3 on (flash audit below) |
+| 2 | The shift strip is small, crowded on the 7 and 8, with a red outline only on its top and left | not fixed: six pods at 30 px (changed after the direction check); the rail and its turned-down ends are the A70 bracket's print (the right end sits behind the 9) |
+| 3 | No colour change in the red zone on the bars | not fixed: the A70's bars stay one colour; the red zone is print (F6) |
+| 4 | The redline mark is tiny | fixed in f5a33f2: the red-zone line at 5 px and the limiter tick at 6 px, half as tall again |
+| 5 | The gear (white, matte) and the speed (teal, glowing) look like two displays | not fixed: deliberate rank, the gear is the hero and white for 7:1 (DC fix) |
+| 6 | The speed's glow softens its digits | not fixed: the phosphor halo; the speed read on every glance |
+| 7 | The boost "0–" mark is unclear, and boost shows three lit segments at idle | not fixed: the vacuum part of the A70's turbo scale, under its zero tick |
+| 8 | Small grey labels | not fixed: print at the static cap (V11); labels at cap 18 and 16 |
+| 9 | The housing is lopsided and its frame plain | not fixed: the raised part sits over the tach, as on the A70 panel; the ring's material reads at 1:1 |
+| 10 | G-LOAD reads 0.1 at rest | the review telemetry's 0.12 g lateral input, not the dash |
+
+### V1 to V26
+| Line | Answer | Evidence |
+|---|---|---|
+| V1 | yes | closing expectations appended at 06:38 UTC before the closing cold look (renders of a1fd67c had been opened for pixel diffs and the 1:1 surround check, said in the note) |
+| V2 | yes | the closing cold look above, with patterns a to e against named crops |
+| V3 | yes | one cold-reviewer run, each finding recorded above as fixed or not fixed |
+| V4 | yes | the gear first, the speed second |
+| V5 | no, stays no | gear, speed and lights right on 8 of 8; the rpm zone not given on 3 of 8. Fixed in the dash where it can be: the limiter tick and red-zone line made bolder (f5a33f2) |
+| V6 | yes | glance after the blur: cockpit gear 8.7 / 9.9 / 11.6 / 10.7:1, speed 8.4 / 9.3 / 9.3 / 8.7:1, G 6.6 / 6.6 / 6.6 / 6.1:1; hood gear 9.1 to 10.7:1, speed 7.5 to 8.1:1, G 4.6 to 5.1:1 |
+| V7 | yes | squint views per state: bracket dark, partly lit green and amber, all magenta (on phase), and dark (off phase) are each distinct |
+| V8 | yes | dynamic readouts: gear cap 190 / 150, speed 128 / 96, G 62 / 66 (cockpit / hood), all at least 17.7 and the gear at least 40 and 36; the scale figures (cap 15 / 13) are print that re-ranges only per car, like a dial's numerals |
+| V9 | yes | the limiter-hold flash map marks only the bracket; the tach tip holds (LimiterHold) |
+| V10 | yes | glance to squint: labels and ring fade first, then the slants and pedals, then the tach, gear and speed last |
+| V11 | yes | `static` over 4 states and the sequence: static p95 0.157, live p95 0.646. Areas over the cap are live readouts the review data never changes: the first tach bars lit at idle rpm, the G readout's "0." (lateral G held at 0.12 g), and boost's vacuum segments |
+| V12 | yes | product page badges: red 0 to 1%, white 1%; red only on the red-zone print, the brake column and the reverse gear; in protanopia and deuteranopia the red zone reads by position (the right end, the line and tick), throttle and brake by column and label, shift stages by count |
+| V13 | no, stays no | "Don't know." (the direction check's answer was the same) |
+| V14 | yes | F1 windows 20 / 20 / 18 px apart (cockpit) and 20 px (hood), stepped outline; F2 order by test; F4 4 bars per 1000 rpm, last bar 6.5x (cockpit) and 4.7x (hood) the first; F5 numerals at their bars' x; F6 red from the shift thousand plus the bracket, line and tick (logged change); F7 speed 4.9x and 4.4x the numeral cap; F8 G 0.48x and 0.69x the speed (logged change); F9 2 columns of 10; F10 slip window 0.26 and 0.35 of its height; F11 lean 12 deg with figures; F12 hues as at the direction check (palette unchanged); F13 ghosts 7%, lens face 0/255; F15 the boot runs only on the first race start, idle frames settled |
+| V15 | no | the cold reviewer's blurred-mass comparison gave "Different" against R1 and R2 in both orders this round (the direction check gave "Same" against R1); the differences it names are the logged changes A, C and D. The reference photos stay on the PC, so this thread's own blurred sheet was not made |
+| V16 | *pending* | the Penpot import runs now |
+| V17 | yes | full frame: graphite ring with one highlight, clear lens over black, lit phosphor with mesh |
+| V18 | yes | the materials checks that apply (lens black level, rim highlight, phosphor plate, surround at 1:1 with no seams); dropped: metal dials, needles, glass drops |
+| V19 | yes | one OpticalGlass lens over the whole panel: clear over black (0/255), rims crisp, its key light swings with lateral G between 02 and 04, never over other glass |
+| V20 | yes | `stretch`: 0 px not off outside the envelope plus 40 in every state; frame corners off |
+| V21 | yes | gear changes on frame 42, the strobe opens on frame 27 where the limiter is reached, bars switch whole with the next one at its duty, `motion` 0 stalls |
+| V22 | yes | `flash --frames 30-41` at f5a33f2: one area (the bracket), 10 Hz, 3 on / 3 off, worst field 4,840 of 21,526 px2, tallest 38 px; 3 to 4.3 Hz and the one-second count NOT ASSESSED (12 frames) |
+| V23 | yes | frames 39 to 50 at 1:1: "3" to "4" on frame 42, no blank or doubled frame, no morph (VFD switch) |
+| V24 | yes | `motion`: one spike at frame 10, the first pull frame after idle (rpm and speed jump in the data) |
+| V25 | yes | the before's octagon tube that copied no car is gone; the before's DRIFT/SLIP lamps are not kept (the A70 has none; slip stays as a bar) |
+| V26 | yes | the 8 goldens opened and checked at 676d428 and f5a33f2 (the second changes only the red-zone line) |
+
+Lines that could not be fixed afterwards: V5 (the zone on 3 of 8 glances), V13 (the car not named), V15 (different arrangement in both orders, from logged changes).
 
 ## Before and after pair
 - Before: `mockups/_before/RetroCyber/02_mid_cruise.png` (the octagon tube on `main`); copied to `docs/handover-shots/` at the close.
@@ -165,4 +219,7 @@ From `RESEARCH.md`, "Deliberate changes and why":
 - **Penpot swaps lettering for a stand-in serif**: outline the text from `assets/fonts/` before importing an SVG board; the board generator reads the dash's own `Geom` (dumped by a local test), so the board and the code cannot drift.
 
 ## Review findings
-*Pending: the closing review's skills and agents.*
+- design:design-critique (once): one colour role per data family, states distinct at a glance; the hood view's G readout is nearly as loud as the speed at 0.39x (within the logged F8 tolerance, kept); the empty black over the tach's left end is the A70's panel shape. No changes.
+- design:accessibility-review (once, limited to 1.4.3, 1.4.11, 1.4.1, 2.3.1 and undriven motion): contrast yes, labels about 7:1, use of colour yes, flashing yes, reduced-flash mode from the code (`ShiftLights` holds the pods lit with a 2 Hz breath; RetroCyber's own strobe defers to it), no undriven motion. No changes.
+- rust-review (once, a fresh-context agent): fixed in ecf889e: the power scale never grew past its first value (now the pull's peak per car, re-ranged on the lift, with a test), the scale figure truncated at 1000 or more, mesh zones rebuilt every frame (now cached per view and scale), per-cell colour maths (hoisted), the halo reach copied token constants (now seg7's glow scale, with a token test). Not fixed: the SDXL cache fingerprint leaves out steps and cfg (changing it would invalidate the committed plate's key; a follow-up for the recipe), the recipe's hand-copied geometry (asset-forge cannot depend on fh6-clusters; the 1:1 surround check confirms they agree), the display font revert (a pattern shared with LiquidGlass and Gt7HoodPro; a request for shared code), the boot self-test's per-sector redraw (0.47 s once per launch), pedantic clippy nits.
+- cold-reviewer (once): see "Visual review".
