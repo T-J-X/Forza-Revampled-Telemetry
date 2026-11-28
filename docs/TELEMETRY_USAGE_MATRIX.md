@@ -128,7 +128,7 @@ limiter, gear and speed.
 | `SolarisWarpCore` | Solaris Warp Core | `rpm`, `max_rpm`, `gear`, `speed` |
 | `AeroPlasmaBlade` | Aero Plasma Blade | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ShibuyaChromaticPrisma` | Shibuya Chromatic Prisma | `rpm`, `max_rpm`, `gear`, `speed` |
-| `KineticLiquidMetal` | Kinetic Liquid Metal | `rpm`, `max_rpm`, `gear`, `speed` |
+| `KineticLiquidMetal` | Kinetic Liquid Metal | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `g_vert`, `velocity` |
 | `CymaticResonanceField` | Cymatic Resonance Field | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ChronoMultiverse` | Chrono Multiverse | `rpm`, `max_rpm`, `gear`, `speed` |
 | `LumenEtch` | Lumen Etch | `rpm`, `max_rpm`, `gear`, `speed` |
