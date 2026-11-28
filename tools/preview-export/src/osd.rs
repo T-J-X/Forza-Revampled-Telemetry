@@ -213,7 +213,7 @@ pub fn render_all(
     ctx: &GpuContext,
     kit: &mut Kit,
     tokens: &Tokens,
-    assets: &Path,
+    assets: Option<&Path>,
     cars: &CarDatabase,
     out: &Path,
     timing: bool,
@@ -236,11 +236,11 @@ pub fn render_all(
         host.open(&cfg, View::Cockpit, cfg.cockpit_anchor_x as f32);
         let now = (state.setup)(&mut host, &mut cfg);
         let view = host.edit_view();
-        host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
+        host.prepare(kit, &ctx.device, &ctx.queue, assets, &cfg);
         let theme = model::theme_for_view(&cfg, view);
         let entry = registry::resolve(theme);
         let mut cluster = {
-            let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
+            let mut setup = kit.setup(&ctx.device, &ctx.queue, assets);
             (entry.make)(&mut setup)
         };
         let palette = Palette::from_config(tokens, &cfg, cars, 0, entry.family.key());
