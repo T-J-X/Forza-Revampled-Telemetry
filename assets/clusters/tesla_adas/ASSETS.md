@@ -1,6 +1,6 @@
 # TeslaAdas assets
 
-These files are built by `cargo run --release -p asset-forge -- --lane cloud build --set tesla_adas` from `tools/asset-forge/src/recipes/tesla_adas.rs`. Don't edit them by hand: change the recipe and rebuild. The committed set is two runs on the cloud lane's RTX 4090: `tunnel_lights.png` from the first (28 Nov 2026, 04:55 to 05:04 UTC), the seven car images from the second (28 Nov 2026, about 05:55 to 06:04 UTC, jobs `ego`, `parked` and `traffic` after the shut lines were added).
+These files are built by `cargo run --release -p asset-forge -- --lane cloud build --set tesla_adas` from `tools/asset-forge/src/recipes/tesla_adas.rs`. Don't edit them by hand: change the recipe and rebuild. The committed set is two runs on the cloud lane's RTX 4090: `tunnel_lights.png` from the first (28 Nov 2026, 04:55 to 05:04 UTC), the seven car images from the third (28 Nov 2026, about 06:22 to 06:31 UTC, jobs `ego`, `parked` and `traffic` with the shut lines and the light card at saturation 0.15). The second run (05:55 to 06:04 UTC, the shut lines with the card's full orange) was replaced after the closing cold review read its orange glass streaks as wood grain.
 
 The ledger rows are also in `assets/ASSETS.md`. The dash draws a plain fallback for each image, used when `setup.assets` is `None` or the file is missing.
 
@@ -13,7 +13,7 @@ Blender's camera is right-handed and the kit's isn't, so every Blender render is
 | `ego_brake.png` | Blender 5.3 (64 spp) | The same shots at half size. Only the tail bar is emissive, with its spill on the bumper and the road. Luminance becomes alpha, gamma 0.8. | 2048 × 960 | The brake light, added in warning red while braking | A red bar on the drawn body |
 | `ego_parked.png` | Blender 5.3 (Cycles 256 spp) | The same car from the front left through a 64 mm lens, with a strip light over the centre line and one on each side, running lights on. | 2048 × 1152 | The parked view: the car alone while it stands still | The drawn body block |
 | `traffic_sedan.png`, `traffic_sport.png`, `traffic_kei.png` | Blender 5.3 (Cycles 96 spp) | `tesla_adas::CAR_LIB` + `SHOTS`, seed 152, in grey paint. The sedan and the sport body are fastbacks (the sport one with a taller ducktail); the kei is a one-box 3.40 × 1.48 × 1.78 m with upright corner lamps and a yellow plate. Rows are view elevations 3 / 6 / 10 / 16°; columns are headings relative to the view ray, 0..40° in steps of 10 (mirrored live for negative angles). Cells are 336 × 232 at 64 px/m, anchored at (0.5, 0.70). | 1680 × 928 each | The seeded ambient traffic, picked by each car's elevation and heading on screen | A grey block |
-| `tunnel_lights.png` | ComfyUI (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras, 32 steps, cfg 6.5, 1536 × 640) | Seed 6006, prompt `NIGHT_PROMPT` and negative `NIGHT_NEGATIVE` in the recipe. The prompt asks for a flat view of the ceiling; SDXL drew the tunnel in one-point perspective instead: rows of orange sodium tubes running to a vanishing point low in the frame, lit wall panels and a white service doorway on the left. Post: the 6144 × 2560 upscale at 4096 × 1706, its median luminance taken to black and its 99.9th percentile to full, each pixel keeping its hue, so the lamps, the doorway and the lit walls are left and the dark ceiling and road are gone. | 4096 × 1706 | A build input, not loaded by the dash: every lit car shot hangs it 6 m over the road as a light card (long side along the road, emission × 2.5). It is what the glass roofs and rear windows reflect (the orange streaks in every car image) and it warms the paint. | The cars are lit by the studio alone |
+| `tunnel_lights.png` | ComfyUI (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras, 32 steps, cfg 6.5, 1536 × 640) | Seed 6006, prompt `NIGHT_PROMPT` and negative `NIGHT_NEGATIVE` in the recipe. The prompt asks for a flat view of the ceiling; SDXL drew the tunnel in one-point perspective instead: rows of orange sodium tubes running to a vanishing point low in the frame, lit wall panels and a white service doorway on the left. Post: the 6144 × 2560 upscale at 4096 × 1706, its median luminance taken to black and its 99.9th percentile to full, each pixel keeping its hue, so the lamps, the doorway and the lit walls are left and the dark ceiling and road are gone. | 4096 × 1706 | A build input, not loaded by the dash: every lit car shot hangs it 6 m over the road as a light card (long side along the road, emission × 2.5, saturation × 0.15). It is what the glass roofs and rear windows reflect: soft grey and white streaks, with the sodium orange taken out. | The cars are lit by the studio alone |
 | `NotoSansJP-Medium-subset.ttf` | fontTools 4.69 | See "The Japanese label face" below. | 160,696 bytes, 700 glyphs | The Japanese line of each two-language label and the road text | The kit's embedded Noto Sans (the Japanese line is then left out) |
 | `NotoSansJP-OFL.txt` | — | The font's licence, copied from the same commit. | — | — | — |
 
@@ -37,7 +37,8 @@ Copied from the build's scratch folders after the cloud run (the run was started
 | `tesla_adas_ego/` | `beauty_0.png` to `beauty_10.png`, `glow_0.exr` to `glow_10.exr`, `brake_0.exr` to `brake_10.exr` | The 11 yaw renders of the ego car, one per atlas cell, and the linear glow and brake passes. Masters of `ego.png`, `ego_glow.png`, `ego_brake.png`. |
 | `tesla_adas_parked/` | `parked.png` | The parked view as Blender wrote it, before the recipe's post. Master of `ego_parked.png`. |
 | `tesla_adas_traffic/` | `sedan_<e>_<h>.png`, `sport_<e>_<h>.png`, `kei_<e>_<h>.png` (elevation 0 to 3, heading 0 to 4; 60 files) | One render per atlas cell. Masters of the three traffic atlases. |
-| `runtime/`, `runtime_v3/` | the runtime PNGs of each run | Byte-identical copies of the runtime files (the route the cloud thread used to fetch them); `runtime_v3/` holds the seven car images committed now. |
+| `runtime/`, `runtime_v3/`, `runtime_v4/` | the runtime PNGs of each run | Byte-identical copies of the runtime files (the route the cloud thread used to fetch them); `runtime_v4/` holds the seven car images committed now. |
+| `goldens_v4/`, `renders_v4/` | the dash's eight goldens and two 4K renders | Made on the PC's card from the `runtime_v4` images (the golden test passes there). |
 | `boards/` | `cockpit_1_idle.png` to `hood_4_drift-braking.png` (8 files) | The Penpot boards of page `07 · TeslaAdas`, exported at 3840 × 2160. |
 | `before/` | the old build's review set | The dash on `main` before this rebuild (`preview-export --cluster TeslaAdas` at the start of the thread). |
 
@@ -45,13 +46,13 @@ SHA-256 of the runtime files as committed:
 
 | File | SHA-256 |
 |---|---|
-| `ego.png` | `d2477b8032cb39b784f4b0e742e187c385175cd2960e6d2ab27b355e5e583b30` |
-| `ego_glow.png` | `56cacd310fb1a8d82654ee747c3681667e58da2dd9d2b1f4667640b5a4542823` |
-| `ego_brake.png` | `5ac94f00e0de20d03dc21046820d724fdc6197c83444fc36018f5404cade750b` |
-| `ego_parked.png` | `c81608ab4d89df51ab082bded039d68e89685aae27fc5dd1365b35f66a9b4de6` |
-| `traffic_sedan.png` | `727cbc7bbd15c323428b7fefaaa506d19353a8a1160350ec75cf023bcc0d45d8` |
-| `traffic_kei.png` | `6c5964224c5512b141383f00df8f1d06f1b950b0cbfabab453cd7f35106733a9` |
-| `traffic_sport.png` | `07d0f3b05938686abdd240384d1aafef72f45bcb21801fdeba2126c1e7e184ca` |
+| `ego.png` | `9240ded482be42c92838feb2cb9d972aff4d883557e4648402f2fae05820233b` |
+| `ego_glow.png` | `98ba1da5ededb8700ebda4419f705b874d71cb41107aba58660226d27eda00ef` |
+| `ego_brake.png` | `adbfffdcecbb9d3cf802d2060a2346d26648e000b0f4195e41afc1fb58bddcbf` |
+| `ego_parked.png` | `93b278a42cc25bea6388012c3d80dd20c448885b3e1736ebee9156667a5c028e` |
+| `traffic_sedan.png` | `b46b8cecf2b2048b4643b567ea9e1071b134c8f6f583347e47e5cdef23a7dcf6` |
+| `traffic_kei.png` | `9526ac32a0dc66db321ee56a4b553b5728b94bee7b20465990af7b3c2a340053` |
+| `traffic_sport.png` | `5ca620545279a14826e74d1302a4ae02a55162925bac789a08c833af69ebe0e3` |
 | `tunnel_lights.png` | `5e9f2db1fe01bc12dcdfaa10cad0c842297ea34b76f5b26e823b5f86f27ef4a6` |
 
 ## The Japanese label face
