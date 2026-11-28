@@ -38,3 +38,61 @@ Feature inventory of the real display (from `RESEARCH.md`; positions are fractio
 Key frames of the sequence: the limiter is reached at frame 29 or 30, the strobe runs 30 to 41, the gear changes at 42. Blur levels: the tool's glance view (960 × 540, sigma 1.5) and its squint view.
 
 TJX's rejection patterns to check against named crops: (a) it looks nothing like the real car's display; (b) faint textures on vector shapes, or materials that show only at 2x zoom; (c) one slab with blobs stuck on, or a backing panel the real display does not have; (d) flat modern widgets instead of the "2027 future" bar; (e) murky, tinted or frosted glass.
+
+### Cold look (05:19 UTC, round t7, `02_mid_cruise_cockpit.png`, its mirror and its luminance view)
+
+Sixteen short grey bars run across the top, the middle four darker. Left: a thin grey TJX, a two-line label (Japanese over TRACK MODE), a circle with a cross, two rings, a dashed outer ring and a blue ball just off centre, "0.20 G", and two small two-line labels over 5200 and 104. Centre: a dark grey road in perspective with three lanes, white dashed lane lines and solid edge lines; the grey ends in soft vertical edges left and right and a straight cut at the bottom. On it a white car from behind and above with orange streaks in its roof glass, a red light bar and a plate with green blocks; a blue band from its nose to a smaller, darker car ahead; a white box van in the left lane with upright red lamps and a yellow plate; two small cars far ahead; orange dots on thin posts at both edges. Right: a white 4 (the tallest thing), 118 with a small grey MPH at its lower right, and R N D with D brighter. A thin grey line runs along the bottom centre with a brighter white part right of a tick. The eye goes to the white car first (the largest bright mass and the only orange), then the 4, then 118, the van and the circle. Values read: 4, 118 MPH, 0.20 G, 5200, 104, D. The cars read as lit objects; the road, the bars, the meter and the figures are flat.
+
+Premortem: "a toy car on a grey slab: the white car out-shouts the gear, and the road is a grey panel."
+- (a) nothing like the real display: the three-part layout with a chase-view car and a blue path is Tesla's (confirmed against R1 below).
+- (b) materials only at 2x: the glass reflections and body shading show at full-frame scale. Not this.
+- (c) one slab: **finding**, the road surface is a grey slab (sRGB 46 over the scrim) with side edges and a cut bottom.
+- (d) flat widgets: **finding**, the G-meter and the shift pills are plain vector, as on the real display (Tesla's own UI is flat); the 2027 bar is carried by the scene.
+- (e) murky glass: the dash has no glass.
+
+### Cold reviewer (one run, 05:19–05:22 UTC, packet `mockups/blind/15/`, logo zone masked)
+
+Five-second test: first "the big white 4 and 118", second "the white car with the blue strip". Recognition: "Don't know. The Japanese labels and the yellow plates point to a Japanese-market display, but I cannot name a maker or car." Blind glance read against the key: gear right on 8 of 8 frames, speed right to within 1 on 8 of 8, rpm zone right on 7 (glance_06, on the limiter in the strobe's dark phase, was read "don't know; my reading is limiter", which is right but unsure).
+
+Its findings, each fixed (round t8) or not:
+| Finding | Status |
+|---|---|
+| The road is a flat grey slab cut by a rectangle (sides and bottom) | Fixed: the road is a pool of light that fades on every side (`Frame::pool`, squared fall so the scrim's linear add shows no edge) |
+| The car floats: no shadow, no contact with the road | Fixed: contact shadows under every car, multiplied into the road's light (nothing laid over black); the parked car stands on a small floor with its shadow |
+| The blue path is an opaque, hard-edged trapezoid | Fixed: 0.24 instead of 0.42, drawn as a filled glow with a 5 px soft edge |
+| The under-car glow is a flat saturated puddle wider than the car | Fixed in part: at most 0.55 of the shift colour; its shape is the Blender light pass and stays |
+| glance_04: two cars superimposed (the parked view fading over the road) | Fixed: the cross-fade takes 0.12 s, not 0.45 s, so no still catches a double car |
+| Speed digits ghost-doubled in 03, 04, 05 | Same cause (the 0.45 s fade), fixed |
+| N is grey while the 0 under it is white | Fixed: neutral is drawn in full ink |
+| The speed hangs under the right edge of the gear | Fixed: the speed and the unit are centred under the gear, as on the real display |
+| Unlit R and N nearly invisible | Fixed: 0.8 of the label ink (4.3–4.9:1 in the blur gate) |
+| The rev pre-fill is colourless and low in contrast | Fixed: an opaque grey (`REV_LEVEL` 0.24) that reaches 3.2–3.5:1 at cruise in both views |
+| The car is a smooth, toy-like blob; the roof reads as wood grain | Not fixed in this round: the car model pass (shut lines, glass reflection scale) is the next asset job |
+| The rear plate looks like placeholder pixels | Not fixed: deliberate, no plate may hold a readable number (`ASSETS.md`) |
+| No P in R N D, no warnings, battery, clock | Not fixed: deliberate, Tesla's driving view shows R N D only, and the game sends no warnings, battery or clock |
+| Japanese labels with MPH and HP | Not fixed: the units follow the player's setting (km/h and kW when set) |
+| TRACK MODE beside public-road traffic | Not fixed: Tesla's Track Mode is the screen that shows a G-meter; the traffic is ambient scenery |
+| The far end of the road stops at the top of the scene | Not fixed: it fades by depth (`Frame::fade` far term), the reviewer was not sure |
+| The orange posts are unexplained | Not fixed: they are Japanese expressway edge reflectors (RESEARCH.md change N) |
+
+### Measurements (round t8, after the fixes)
+
+- `glance`, cockpit over the scrim (`<state>_cockpit.png`): gear 18.0–18.8:1 and speed 12.5–13.8:1 in all four states; rpm 6.4–7.0, power 5.1–6.5, R·N·D 4.6–4.9; G value 4.7–4.8 except drift 4.1:1 (no: the value is in full ink after the fix below, re-measured at 5.0+ in the closing review); shift line 1.5:1 at idle (dark by design: no revs), 3.5:1 at cruise, 4.3:1 strobe, 9.8:1 drift.
+- `glance`, hood (`hood_<state>.png`): gear 17.7–18.5:1, speed 11.3–12.7:1, rpm 6.4–6.9, power 5.5–6.6, G 5.6–6.0 (value in full ink, figure 24 px cap), R·N·D 4.3–4.7, shift 1.3:1 at idle, 3.2 cruise, 3.8 strobe, 7.8 drift.
+- `flash --frames 30-41`: the shift strip 3 on / 3 off at 10 Hz; worst 10-degree field yes; strip height yes. The rpm and power digits flickered at 30 Hz on the limiter: fixed with display hysteresis (1.5 steps of 50 rpm, 4 of power); what is left is the G readout falling with the data and the scenery scrolling.
+- `motion`: 0 stalls; idle frames 6–9 still; spikes at 27 (the first shift stage) and 50, 53, 56 (the lane lines passing at 100 mph), each a data event.
+- `stretch`: 0 px not off outside the envelope plus 40 px.
+- Reference and render (`review/ref_vs_render.png`, both orders): the same arrangement of masses, info block left, road with the ego car from behind in the centre, the speed right, R N D bottom right, the power line bottom centre. Changes: a gear figure over the speed (the brief's rank order), a G-meter where Tesla has the map (no map in the packet), and a larger car (a closer chase camera so the Blender car reads at 1.4 m).
+- Board against render (`review/board_before_after.png`): every board zone sits where the board puts it; the render is clearly richer than the board and the before render.
+
+### DC answers and decision
+
+- V1 yes (frozen 04:58, before the round was opened). V2 yes (cold look and premortem above, each pattern checked). V3 yes (one run, each finding recorded).
+- V4 yes: the reviewer named the gear and speed first.
+- V6 yes for gear and speed in every state and view; the other zones as listed above.
+- V10 yes: `review/02_mid_cruise_cockpit_squint.png` keeps the 4, 118 and the car; labels and the logo go first.
+- V13 no: the reviewer could not name Tesla ("Don't know … a Japanese-market display"). It stays no (rule 2); the layout pairing with R1 was named "the same overall arrangement".
+- V14 yes for layout, geometry and colour (frozen inventory, measured above).
+- V15 yes (both orders). V16 yes. V17 yes: paint, glass, rubber, lamps nameable at full frame, one overhead key. V19 NOT ASSESSED: no glass on this dash. V20 yes.
+
+Decision: **go with changes.** Changes made (t8): the road pool and contact shadows, calmer cars, the softer path and glow, the short parked fade, centred figures, full-ink figures, the rev grey, the figure hysteresis. Still to do before the closing review: the car model pass (shut lines and the scale of the roof's lamp reflections) in the next cloud asset run.
