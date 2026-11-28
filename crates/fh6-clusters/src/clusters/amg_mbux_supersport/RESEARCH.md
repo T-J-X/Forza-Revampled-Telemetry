@@ -64,6 +64,17 @@ From `sl55_r232_supersport_sportplus_red_idle_730rpm_01.jpg` (SL 55, [CarBuzz](h
 - Dotted halftone on every lit surface, and a horizon with a glow at the vanishing point.
 - The real screen sits in a visor with a bezel; our dash drops it (change 6).
 
+## Telling it apart from AmgMbuxSuperscreen
+
+Its sibling's v4 board (Penpot, 2026-11-28; `amg_mbux_superscreen/board_v4/states_v4.png` in the project files) is a red-on-black sky tunnel: two tall red halftone crescents, grey round rings that light back to front, a road floor, a round G-Force widget left and a round boost gauge right, grey scale bands with numerals. At thumbnail size Supersport must read differently. What the real Supersport gives us that the sibling lacks:
+
+- **Horizontal, mirrored rev scales** crossing the tunnel at the horizon, numbered outwards, instead of round rings.
+- **Two orange fire walls** that travel along those scales, warm amber and yellow-white instead of a red fill.
+- **A wide, lit lane floor** (blue in the real default colourway) instead of a dark road.
+- **Thin outer torque and power arcs** instead of heavy grey bands, and no side widgets in the default page (the G-Force page replaces the outer arcs only when chosen).
+
+So the board's lead should be the real default colourway: a cool, dark-blue tunnel with fire walls, which no sibling uses. The red Sport+ look (crescents round a horizon sun, big rpm figure) is close to the sibling's red; if the dash carries it at all, it is the second look the driver picks, with the sun as its own mark. This weighs against the shared red `amgMbux` default (TJS chose red for the Sporty style on 2026-11-28, and the family note allows red "where the real display is red"): Supersport's real default is blue with orange, so the board proposes its own family default for this dash and logs the reason.
+
 ## Behaviour the manuals document
 
 - **Refused shift.** "If the engine speed is too high or too low, you will not be able to change gear using the steering wheel paddle shifters", and segments "light up red on the driver's display" (CLE p. 13; C-Class p. 21).
