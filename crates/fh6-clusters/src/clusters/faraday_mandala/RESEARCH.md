@@ -152,7 +152,7 @@ A pre-shaded texture scaled by k stays the fallback only (exact for the periodic
 5. The viscous decay (10 s at idle) is far slower than a dash may be; the decay used on screen is a design time, named in the handover.
 6. Mercury's optics stand in for galinstan's (§5).
 
-## 8. The cylinder count is in the packet
+## 7. The cylinder count is in the packet
 
 **Cited:** the official Forza Horizon 6 Data Out documentation lists `NumCylinders` (S32, "Number of cylinders in the engine") right after `DrivetrainType`, which puts it at bytes 228–231 by the field list (the page gives no offsets; its fields add to 323 bytes against a stated 324). It also lists `CarClass`, `CarPerformanceIndex`, `CarGroup` and `Torque`, and says nothing of what `NumCylinders` holds for electric or rotary cars. [support.forza.net, Forza Horizon 6 Data Out Documentation](https://support.forza.net/hc/en-us/articles/51744149102611-Forza-Horizon-6-Data-Out-Documentation)
 
@@ -160,7 +160,7 @@ A pre-shaded texture scaled by k stays the fallback only (exact for the periodic
 
 **So:** the brief's premise ("the packet has no cylinder count") is wrong for FH6. The dash should take the engine's own cylinder count when the packet gives one in 1..=16, and the OSD setting `FaradayMandalaCylinders` stays as the fallback and the override. This needs one field added to the shared decoder and a check against a real capture (the pending real-game check C). It is a shared-code request for the coordinator, not this dash's to make; until it lands, the OSD setting drives the dash.
 
-## 9. Telemetry mapping (verified fields only, `fh6_kit::Signals`)
+## 8. Telemetry mapping (verified fields only, `fh6_kit::Signals`)
 
 | Input | Drives | Range and guard |
 |---|---|---|
@@ -175,7 +175,7 @@ A pre-shaded texture scaled by k stays the fallback only (exact for the periodic
 
 Not used: slip, suspension, tyre temperatures, fuel, laps and `Torque` (not verified against golden packets; `Torque` is not decoded).
 
-## 10. Real behaviour and motion notes
+## 9. Real behaviour and motion notes
 
 - **Strobed, never animated at the wave's own rate.** 13 to 150 Hz responses (4 cylinders, 800 to 9,000 rpm) are 0.2 to 2.5 times the display rate, so drawing the real oscillation would alias into flicker. The surface is drawn at its crest (B3), so on screen only the wavelength, the amplitude and the phases move.
 - **Growth and decay.** From A1, τ dA/dt = εA − …: the pattern grows at a rate ε ÷ τ and decays at about 1 ÷ τ once ε < 0. Real τ (viscous, §2.2) runs 10 s at idle to 0.28 s at 9,000 rpm, too slow for a dash at low revs. On screen: growth over about 120 ms and decay over about 250 ms, both faster at high revs, in the same direction as the physics. Named as a departure (§6, item 5).
@@ -184,21 +184,21 @@ Not used: slip, suspension, tyre temperatures, fuel, laps and `Torque` (not veri
 - **Inversion (G1) is a crossfade of sign,** A → −A over about 80 ms, not a cut, so the mean luminance does not jump.
 - **The still zone** round the post (the brief's 1.6 × the numeral's cap) uses the kit's `still(r, w)` ease, so the gear always sits on a flat mirror (blur gate).
 
-## 11. Edge cases
+## 10. Edge cases
 
 | Case | What happens | Why |
 |---|---|---|
 | `max_rpm` = 0 or `idle_rpm` ≥ `max_rpm` | ring and lamps hidden, surface flat, gear and speed still shown | the decoder passes these as sent |
 | rpm above `max_rpm` | treated as the limiter; k clamped at the max-rpm wavenumber | k must not exceed the 36 px cap |
 | Electric car (cylinders 0 from the packet, once decoded) | idea E1: the forcing becomes the motor's own: f = rpm ÷ 60 × pole pairs (an OSD setting, default 4), so the same physics runs on the motor | an EV has no firing pulses; a motor's torque ripple comes at multiples of its electrical frequency (to source before use) |
-| Rotary engine | one power stroke per rotor per eccentric-shaft turn: f = rpm ÷ 60 × rotors; the cylinder field's value for a rotary is unknown (§8), so the OSD setting covers it | to confirm against a real capture |
+| Rotary engine | one power stroke per rotor per eccentric-shaft turn: f = rpm ÷ 60 × rotors; the cylinder field's value for a rotary is unknown (§7), so the OSD setting covers it | to confirm against a real capture |
 | Very many cylinders (V12, W16) | idea M3's zoom keeps the climb; without it the pattern freezes from 3,000 rpm (V12) | §3 |
 | Throttle feathering at 1–5% | ε ≤ 0: a flat mirror, no flicker at the threshold (hysteresis of 2% on ε) | A2 says the onset itself is not hysteretic; the 2% is a design guard, named |
 | Neutral, reverse, paused, stale stream | flat mirror; the app hides the dash as for every dash | closing review line 8 |
 | Reduced flash | the limiter's phase drift halves and the lamp strobe follows the kit's reduced-flash rule | house rule |
 | No assets (`setup.assets` is `None`) | the kit's studio environment (`Environment::Studio`) instead of the kit map; the metal still reads | closing review line 16 |
 
-## 12. Not yet checked
+## 11. Not yet checked
 
 - Faraday 1831, paras 106–110, were not readable verbatim; nothing from them is cited.
 - Edwards and Fauve eq. 23 and their §5.1 (order above p = 0.01) were read from a summary of the PDF, not verbatim.
