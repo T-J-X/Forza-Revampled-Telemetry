@@ -162,6 +162,8 @@ V13 stays no for this review point: GT7's bonnet band has few cues of its own, a
 
 TJX answered in the thread, on `dc_board_before_after.png`: "i like what you made". Pinned on the old gull-wing render (the before row's gear pod): "shit". Pinned on the new rev bar (the lit LED run in the black-glass bar) and on the run's head: "nrautiful" (beautiful) and "amazing". So the lit run and its bloom stay as they were; the cold reviewer's "bloom haze" finding does not outrank TJX's words, and only the alert run's bloom changed (below).
 
+TJX on the closing before-and-after sheet (06:36Z, a pin on the new redline state's lit run): "this design is clean the two befores are so bad".
+
 ## After the direction check
 
 ### The changes (commit `9b0a5e4`, rendered on lavapipe 05:24Z)
