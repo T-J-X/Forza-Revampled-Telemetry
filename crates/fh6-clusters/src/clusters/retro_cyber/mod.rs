@@ -168,13 +168,17 @@ const SURROUND_LIT: f32 = 0.2;
 const SURROUND_DARK: f32 = 0.07;
 /// The lens mirrors the studio at this share of the tokens' environment gain: the car's cabin
 /// is dark, and a flat face mirroring the full studio greys the VFD windows' black (rejection
-/// pattern e). The key light's highlight and the rims keep their full strength.
-const LENS_ENV: f32 = 0.04;
+/// pattern e). The rims, at grazing incidence, still mirror it.
+const LENS_ENV: f32 = 0.012;
+/// The key light on the lens at this share of the tokens' irradiance: at full strength the far
+/// tail of its lobe lifted the whole flat face to 1 to 4 of 255; the rims, whose normals turn
+/// towards the light, keep a crisp highlight.
+const LENS_KEY: f32 = 0.3;
 /// Margin round the Blender surround render (local px; the recipe's `MARGIN`).
 const SURROUND_MARGIN: f32 = 4.0;
 /// The lens is polished: a broad satin lobe lit the whole flat face grey; a polished face keeps
 /// the key light's highlight to the rims, whose normals turn towards it.
-const LENS_ROUGHNESS: f32 = 0.04;
+const LENS_ROUGHNESS: f32 = 0.015;
 /// The lens's cross-section: thickness, rounded edge, glass below the rim (local px).
 const LENS_SECTION: (f32, f32, f32) = (7.0, 10.0, 5.0);
 
@@ -790,6 +794,7 @@ impl Cluster for RetroCyber {
         glass.aim(self.light.angle(), op.key_elevation, Vec2::ZERO);
         glass.env_gain = glass.env_gain.map(|e| e * LENS_ENV);
         glass.roughness = glass.roughness.min(LENS_ROUGHNESS);
+        glass.light = glass.light.map(|e| e * LENS_KEY);
         self.glass = glass;
         let felt = felt_g(&sig) * (1.0 / PARALLAX_G);
         let len = felt.length();
