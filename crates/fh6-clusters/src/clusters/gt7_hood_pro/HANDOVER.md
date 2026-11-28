@@ -225,3 +225,61 @@ The third pass (commit `248cc98`) adds two thin strip lights straight up and str
 - **Bake nothing that a setting can move.** A red zone baked at a fixed LED ignores the driver's OSD shift point; draw it live from the shift point.
 - **Cross-fade the light swing so coverage sums to one:** draw the rest render at `1 - swing` and add each swing render with `BlendMode::Add`, or anti-aliased edges pop.
 - **A user-facing name must not name another game.** Keep the identifier, change only what the user reads.
+
+## Visual review (closing round)
+
+### Frozen expectations of the closing round (written 06:35Z on 2026-11-28; before it, of this round's renders only the 1:1 crops of `hood_02_mid_cruise` posted with the third materials pass and a 3x crop of the trip tile had been opened, and no full frame, state sheet or sequence frame)
+
+The direction check's expectations stand, with these changes, each logged before re-checking:
+- **New parts:** the steering rail (`rail` [350, -94, 6]) with its dot on the centre in every state (the review telemetry holds `steer` at 0, so F6's "off-centre in 04" cannot show: NOT ASSESSED by render, tested in code); thousand-rpm marks under the plinth, 8 of them for the 8700 rpm limiter; BRK and THR under the pedal bars; the trip tile reading "0.0 mi" (the view starts fresh); the speed unit right-aligned to the speed.
+- **F5 changed:** the tile carries a chevron over its digit and a label under it. **F11 changed:** the lenses from the alert stage to the limiter carry a dim red zone in every state with a known limiter (drawn live from the shift point, about 0.22 of the warning colour), and in `03` the alert cores light in the shift colour; red elsewhere still only on a lit limiter lamp.
+- **Key frames changed:** the tile no longer folds into the gear; from frame 42 it slides left, shrinks and fades over 6 to 8 frames, keeping its digit, and no frame shows it blank.
+- **Glance:** the trip digits (a readout) reach 4.5:1 now that the window is dark glass; the unit and BOOST label remain static labels under the cap and under 4.5:1 (the same rule question as at the direction check).
+- **Materials:** the bar's long top and bottom edges carry a highlight band; the trip window reads as dark glass; every lens is smoked.
+- **Static:** p95 at or under 0.20 including the thousand marks (0.8 of the static ink).
+- **Budget:** under 0.5 ms GPU at 4K on the PC (the second pass measured 0.24 ms p99).
+
+### Closing-round cold look (06:38Z, `hood_02_mid_cruise_road.png` at full frame, its mirror `review/final_02_mirrored.png` and `review/hood_02_mid_cruise_luminance.png`, before the notes, spec, board or references)
+
+A low band of separate black parts sits on the bonnet below the road, centred under the vanishing point. The eye goes first to the white run of the bar and the "4" right of a thin divider, then "118" with "mph" under it, then the cyan dot on a thin rail above the bar, then the red cells at the bar's right end. The bar reads as a glossy black capsule with a light rim along its top and bottom and a row of dark cells, the left half lit white. Under the bar sit eight short ticks. Left of the bar, from the edge in: a carbon car seen from above with four grey lenses, a round gauge labelled BOOST over a dark window reading "0.0 mi", a domed lamp, and a tall empty slot labelled BRK; right of the bar a slot labelled THR with a short white fill, a domed lamp, and a grey PORSCHE wordmark. Over the bright bonnet every glyph carries a black keyline, so "118", "4", "mph", BOOST, BRK and THR stay legible. In the luminance view the red zone is only a few cells slightly lighter than the unlit ones, and the white run, the gear and the speed are the three brightest masses; the labels, wordmark and rims are mid grey. The mirror reads the same way round. The domes, the slots' rims and the bar's capsule look like lit objects; the rail and the thousand ticks look flat (thin printed lines).
+
+**Failure first.** Likeliest rejection: (b) the car chip's carbon and the lens domes are small, so materials show only at 1:1 (check on `review/p3_left.png`: the carbon flakes, the dome glints and the trip window's rim read at 1:1, and at full frame the chip reads as a textured car, not flat grey: holds). (a) Against GT7's meter (the reference), the band, the bar of dense ticks, the speed-divider-gear group and the side groups are where they are on the real meter: holds. (c) No backing panel: every part sits on true black with gaps (stretch: 0 px outside the envelope). (d) The capsule bar, domes and enamel tile are rendered hardware, not flat widgets; the rail and ticks are flat by design (printed scale). (e) The black glass is opaque hardware, not frosted: holds (V19 NOT ASSESSED).
+
+### The cold reviewer, closing round (one `cold-reviewer` run at 06:41Z; packet `mockups/blind/47/`: A.png, glance_01 to 08 at seed 47, R1.jpg; logo zone masked)
+
+- **Five-second test:** noticed first "the white lit part of the segmented bar", second "118" and the gear "4", third the car shape; it named the display's purpose as revs, speed, gear, pedals, boost and distance.
+- **Unprompted recognition:** "Don't know."
+- **Blind glance read** (key `review/blind_key_47.txt`): the gear right on 8 of 8 frames; the speed within 1 on 8 of 8 (75 / 75.4, 90 / 90.3, 118, 63 / 62.9, 95, 92 / 92.5, 0, 98); the zone right on 7 of 8: on glance_02 (frame 27, 8492 rpm, 98%: the limiter zone by the key's 97% line) it wrote "high or limiter; don't know which, because a sliver of red still shows at the bar's right end". That sliver is true data: at 98% the run has not reached the bar's end. The shift lights it read as all lit on 02 and 06 (the run in the shift colour) and dark elsewhere, matching each frame's crop.
+- **Layout against R1:** "Same" in both orders, with the differences it named: R1 has about four small icons each side where ours has one (deliberate, F10), R1's bar is red where ours is white below the alert, and R1's gear shows a second red digit (our tile).
+
+| # | Finding | Fixed? | Evidence or reason |
+|---|---|---|---|
+| 1 | The trip reads "0.0 mi" in every frame, even at 118 mph | not fixed | the view starts fresh and the review set covers one second; the counter is tested in code (`the_trip_counts_tenths_and_holds_at_its_limit`) |
+| 2 | BOOST shows no number and no scale; the arc fill is faint | not fixed | GT7's round gauge is a thin scale with an icon and no digits (RESEARCH point 2); the fill sits at 0.7 of the ink to stay under the lit run (rank 4) |
+| 3 | The car chip's mottled grey texture looks cheap and noisy | not fixed | forged carbon is the brief's material for the chip (the direction check's cold reviewer named it as carbon); recorded for the closing critique to weigh |
+| 4 | The two small round lamps are too small to tell what they show; the right one turns red on 06 | not fixed | the slide and limiter telltales, 56 px; the limiter lamp lights red on the limiter by design (F11) |
+| 5 | The cyan dot on the line above the bar has no label | not fixed | GT7's steering indicator has none either (RESEARCH point 6) |
+| 6 | The ticks under the bar have no rpm numbers | not fixed | GT7's bar has none (RESEARCH point 5); the thousand marks are the scale |
+| 7 | The white-to-shift-colour change is small in brightness and the bar's only shift cue; the tile is easier to see | not fixed | the strobe (10 Hz) is the bar's cue and a still shows one phase only; V7 settles the squint order |
+| 8 | On glance_02 a sliver of red at the bar's end leaves it unclear whether the limiter is reached | not fixed | true data at 98% (see the blind read) |
+| 9 | A soft grey haze lifts the black round the bar | not fixed | the lit run's bloom, which TJX praised on the direction-check sheet ("beautiful", "amazing"); stretch shows it is the glow only |
+| 10 | The left side carries four items, the right two | not fixed | the logo zone at the right end was masked for the reviewer, as at the direction check |
+| 11 | BRK, THR, BOOST and "mph" are small grey text, weak at glance size though readable | not fixed | static labels held under the 0.20 static cap; the rule question the pilot and PorscheAnalog reported |
+
+### `design:design-critique` (closing round, findings only)
+
+- **First impression:** the white lit run and the "118 | 4" block lead, then the tile when it shows; the band reads as one low instrument floating on the bonnet, recognisably GT7's layout (the cold reviewer called the layout the same as R1 in both orders). Correct order.
+- **Hierarchy:** the squint sheet (`review/final_squint_sheet.png`) fades the labels, logo and side groups first and keeps the gear, the run and the tile; the strobe's on and off phases (frames 33 and 30) and each state differ plainly. The speed and gear keep their keylines over the bright bonnet (`hood_02_mid_cruise_road.png`).
+- **Usability finding:** the shift state on the bar is a colour change plus the strobe; in a still the tile carries it. It reads by count (the run is full) and by the tile in the luminance and every colour-vision panel (`review/hood_03_redline_strobe_cvd_sheet.png`), so no change.
+- **Consistency finding:** the rail and the thousand marks are flat printed lines beside rendered hardware. They are the scale and the steering track, printed on the plate like the real meter's; no change.
+- **Consistency finding:** the labels (BOOST, BRK, THR, mph) and the wordmark share one grey under the static cap; the trip digits now use the speed's face at a heavier weight. Consistent with the family.
+- **Material finding:** at 1:1 the bar's long edges now carry a highlight band, the domes and slots glint, the trip window is dark glass, and the car chip shows carbon flakes; at full frame the chip reads as textured rather than as named carbon (the cold reviewer's "mottled, grainy"). Recorded; the brief's material is kept.
+- **What works:** the strobe and tile pairing; the tile's slide into the gear with no blank frame (`review/final_gear_change.png`); true black between every part; static parts under the cap.
+- **Priority, if more time:** a finer carbon weave on the chip so it reads as carbon at glance size; nothing else rises above the recorded findings.
+
+### `design:accessibility-review` (closing round; contrast, use of colour and flashing only)
+
+- **1.4.3 / 1.4.11:** gear 14.1 to 16.1:1, speed 9.5 to 10.4:1, the rev bar 5.0 to 8.5:1, the tile 10.0:1, the trip 4.5:1 in all four states (glance gate, `review/closing_measure.txt` and the re-run after the trip change). The unit (2.3 to 2.5:1) and the BOOST label (2.0:1) are static labels under 4.5:1, held under the static cap: the open rule question.
+- **1.4.1:** the shift state reads by count and the tile's presence, not by colour alone (cvd sheet).
+- **2.3.1:** one flashing area, the LED run (758 x 26 px), 10 Hz at 3 on / 3 off; the worst 10-degree field holds 7950 of 21526 px2 (under 25%); no red flash. The reduced-flash mode, from the code (`RevBar::level`): the strobe keeps `STROBE_FLOOR` of the light in its off phase, and with `FrameInput::reduced_flash` set the run breathes slowly (`Strobe::breath`, never under the floor) instead of flashing at 10 Hz.
+- No motion without data: the idle frames 6 to 9 are still.
