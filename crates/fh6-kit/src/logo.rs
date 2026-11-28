@@ -1264,6 +1264,34 @@ mod tests {
     }
 
     #[test]
+    fn a_broken_dial_is_an_image_error_and_its_car_shows_the_name() {
+        let tmp = TempDir::new("broken");
+        // A 64 x 64 PNG cut off just after its header: small enough to pass the size check, and
+        // impossible to decode.
+        let mut cut = png_bytes(64, 64);
+        cut.truncate(40);
+        std::fs::write(tmp.0.join("broken_dial.png"), &cut).expect("write the cut PNG");
+        let ix = LogoIndex::from_json(
+            r#"{"logos":{"BROKEN":{"name":"Broken","dial":"broken_dial.png"}}}"#,
+            &tmp.0,
+        )
+        .expect("index");
+        let broken = ix.by_key("BROKEN").expect("BROKEN");
+        assert!(
+            matches!(ix.decode_dial(broken), Err(LogoError::Image(_))),
+            "a decode error, not an I/O or size error"
+        );
+        // Through the worker, the loader fails the brand and uploads nothing.
+        let mut loader = DialLoader::start(&ix);
+        assert_eq!(loader.dial(Some(broken)), Dial::Loading);
+        let mut uploads = Vec::new();
+        let shown = settle(&mut loader, &mut uploads, |b| Ok(image_of(b)));
+        assert_eq!(shown, Some(Dial::Missing));
+        assert!(uploads.is_empty(), "nothing to upload");
+        assert_eq!(loader.dial(Some(broken)), Dial::Missing, "and it is never read again");
+    }
+
+    #[test]
     fn a_missing_dial_file_is_an_io_error() {
         let tmp = TempDir::new("missing");
         let ix = LogoIndex::from_json(r#"{"logos":{"GONE":{"name":"Gone","dial":"gone_dial.png"}}}"#, &tmp.0)
