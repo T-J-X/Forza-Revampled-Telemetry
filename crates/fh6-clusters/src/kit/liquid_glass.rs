@@ -236,6 +236,7 @@ impl Cluster for LiquidGlassSample {
             Rect::from_xywh(-500.0, 140.0, 220.0, 44.0),
             &self.logo,
             &fh6_kit::logo::LogoStyle {
+                tint: roles.ink_label,
                 text: roles.ink_label.into(),
                 ..fh6_kit::logo::LogoStyle::new(self.fonts.wide)
             },

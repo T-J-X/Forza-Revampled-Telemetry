@@ -356,3 +356,47 @@ fn the_needle_reaches_from_the_hub_into_the_ticks() {
     // The crystal's flat top covers every tick, so the scale is never bent by its edge.
     assert!(g.tach_open - g.tach_crystal.1 >= g.tick_out);
 }
+
+#[test]
+fn a_parked_car_greets_its_brand_while_the_dial_loads_never_driver_1() {
+    let loading = Logo {
+        brand_name: "Porsche".into(),
+        custom_name: "TJX".into(),
+        loading: true,
+        ..Logo::default()
+    };
+    assert_eq!(tubes::greeting_name("", &loading), "Porsche");
+    assert_eq!(
+        tubes::greeting_name("  ", &loading),
+        "Porsche",
+        "a blank name is no name"
+    );
+    assert_eq!(
+        tubes::greeting_name(" Ace ", &loading),
+        "Ace",
+        "the driver's name comes first"
+    );
+    assert_eq!(tubes::greeting_name("", &Logo::default()), "DRIVER 1");
+}
+
+#[test]
+fn the_logo_zone_shows_no_name_while_the_cars_dial_loads() {
+    let (car, maker) = (Some(7_u32), Some(1_u32));
+    let names = Logo {
+        brand_name: "Porsche".into(),
+        custom_name: "TJX".into(),
+        ..Logo::default()
+    };
+    let loading = Logo {
+        loading: true,
+        ..names.clone()
+    };
+    // While the car's own dial is on its way: a maker car shows the maker's wordmark at once,
+    // any other car nothing, and never the name.
+    assert_eq!(zone_art(None, maker, &loading), ZoneArt::Image(1));
+    assert_eq!(zone_art::<u32>(None, None, &loading), ZoneArt::Nothing);
+    assert_eq!(zone_art(car, maker, &names), ZoneArt::Image(7), "the car's dial wins");
+    assert_eq!(zone_art(None, maker, &names), ZoneArt::Image(1), "else the maker's");
+    assert_eq!(zone_art::<u32>(None, None, &names), ZoneArt::Names, "else the name");
+    assert_eq!(zone_art(None, maker, &Logo::default()), ZoneArt::Nothing, "off");
+}
