@@ -90,6 +90,25 @@ So the dash reads only verified fields and two quantities derived from them, and
 - **The kit has no quadrilateral glass outline** (`fh6_kit::shape::Outline` is circle, capsule and arc). A wing pane seen through a homography is a trapezoid with rounded corners. Proposed: build it as the smooth union of a few rounded slices whose heights follow the homography (the union of neighbouring slices is smooth to every order, optics.md §2), and project its ribbon and labels with the same homography on the CPU. If that shows steps or costs too much, the handover asks the coordinator for a convex-polygon outline in the kit.
 - **Muddy grey stack** (the brief's own risk): overlap ≤ 12%, no glass on glass, and digits only under the untilted front pane.
 
+## 9. After the Penpot board: what was dropped and what replaced it
+
+TJS rejected the first flat outline sheet ("This is ass") and set the rule now in CLUSTER_PROMPT "The bar": parts the game cannot drive are dropped, and the space goes to bold, telemetry-driven ideas. Board v2 (Penpot page `07 · VisionSpatialGlass`) and the code follow it.
+
+| Brief | Board v2 and the code | Why |
+|---|---|---|
+| A 10 px light ribbon crossing both wings, refracted behind the pane | **Rev tunnel:** 16 rounded rings receding to a vanishing point (0, −45) behind the pane; they fill back to front with rpm, so the limiter is the ring nearest the driver. Rings past the shift point take the shift colour, and on the limiter the whole lit tunnel holds it. The wings are glass over the tunnel, so they bend it, as the brief wanted the ribbon bent | TJS's own idea ("the tunnel from the back to front being the rev limiter"); depth is the category's whole subject |
+| No background | **Dim visionOS sky:** a horizon through the vanishing point that tilts 4° per g of felt lateral force, a floor glow under it and faint clouds over it | TJS ("subtle clouds and horizon tunnel background"); the horizon is an attitude cue from verified G |
+| Pitch and roll → puck tilt | Puck tilt from felt G (a gimbal ring rolled by lateral force and foreshortened by longitudinal force) | Pitch and roll are unverified in the golden packets (section 6) |
+| Yaw rate → wing toe ±2° | Yaw derived as lateral G over speed (a = vω), from 3 m/s | `angular_velocity_y` is unverified |
+| Tyre combined slip → bead halo | Body slip (`Signals::slip_deg`) | Per-tyre slip is unverified |
+| Front pane 480 × 330, gear cap 180, speed cap 96 | Pane 560 × 396, gear cap 200, speed cap 88 (Saira 400, no ghost 8s) | The board's proportions; the pane carries every digit, untilted |
+| Wings 420 × 200 by homography | Tapered glass capsules from x ±250 to ±700, half height 95 inside and 120 outside | The kit has no quad glass outline; a tapered capsule is one SDF piece |
+| Parallax 0/2/4/6 px per g | 0/6/12/18 px per g (wings, pane, puck, blade), tunnel and sky −6 | Section 5: 2 px is below a glance |
+| Wings carry only nano labels | The tunnel's rpm numerals (one per 1000 rpm, just inside their ring, red from the shift point) sit on both wings over the glass, with "RPM ×1000", the speed unit and the logo zone | The numerals name the rings; drawn over the glass, no rim bends them |
+| Tint 36, 1.5 px chromatic split | Clear sapphire, dispersion sub-pixel | `docs/specs/optics.md` |
+
+Board and code coordinates: the zone table in `mod.rs`.
+
 ## 8. Sources
 
 Apple:

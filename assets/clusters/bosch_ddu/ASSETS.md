@@ -1,9 +1,26 @@
 # BoschDdu assets
 
-Built by `cargo run --release -p asset-forge -- build --set bosch_ddu` (recipe `tools/asset-forge/src/recipes/bosch_ddu.rs`). The cluster draws its procedural housing when the files are missing. The housing renders cover x ±706, y −312 .. 234 in local 4K px at 2 px per px.
+Built by `cargo run --release -p asset-forge -- --lane cloud --masters bosch_ddu build --set bosch_ddu` (recipe `tools/asset-forge/src/recipes/bosch_ddu.rs`, hero library `tools/asset-forge/src/hero/`). The cluster draws its procedural housing when the files are missing. The housing renders cover the runtime's `HOUSING_FRAME`, x −440..440, y −320..240 in local 4K px, at 1 px per px; `housing_1` is the key at the smaller azimuth, as the runtime blends it.
+
+## Runtime files (in git)
 
 | File | Kind | Size | Bytes | Generator (recipe + seed) | Licence | Used for |
 |---|---|---|---|---|---|---|
-| `carbon_weave.png` | grey height, tileable | 1024x1024 | 198 KB | comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5) seed=1203 prompt="extreme macro photograph of a raw carbon fibre tow, thousands of fine glossy black filaments with tiny specular glints and slight waviness, filling the whole frame, flat even studio lighting, seamless surface texture, monochrome black and grey, ultra detailed, sharp focus" → grey, seamless, high-pass, laid into a 2×2 twill of 16 tows per tile with the filaments streaked along each tow, tile seam score 11.99 | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the carbon material of the Blender housing (tow colour and the bump under the clear coat) |
-| `housing_l160.png` | colour, straight alpha | 2824x1092 | 748 KB | blender:bosch_ddu::HOUSING open-bottom U 1400x540 r=96 face=14 chamfer=28 45° light=-160° scale=2 samples=128 seed=1204, carbon from `carbon_weave.png` tiled at 192 px | MIT (asset-forge) | the housing; blended with the other light by lateral G |
-| `housing_l110.png` | colour, straight alpha | 2824x1092 | 710 KB | blender:bosch_ddu::HOUSING open-bottom U 1400x540 r=96 face=14 chamfer=28 45° light=-110° scale=2 samples=128 seed=1204, carbon from `carbon_weave.png` tiled at 192 px | MIT (asset-forge) | the housing; blended with the other light by lateral G |
+| (no runtime file: rendered into the housing) | seamless bead-blast texture | 4096x4096 | master | comfyui:bosch_ddu::BEAD_BLAST (SDXL base 1.0 + refiner when installed, 1024², dpmpp_2m karras, half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=71207 prompt="extreme macro photograph of bead blasted anodised aluminium, fine uniform matte satin grain of tiny glass bead impact pits, a completely flat metal surface filling the whole frame, top-down, even soft diffuse light, seamless tileable texture, physically based material scan, neutral grey", then neutral (luminance, mean 0.5, deviation 0.08 over a 48 px window) | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the anodised body's colour and roughness variation and its faint bump (one repeat per 80 px). Master `bosch_ddu_bead_blast_neutral_a443e36f330a.png` |
+| `housing_0.png` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at -135° (sRGB, straight alpha) | 880x560 | 61 KB | blender:hero (bosch_ddu::housing_scene, Cycles 384 samples, ortho at 2 px per 4K px over x -440..440, y -320..240, box-filtered to 1:1; the housing's rig (no softbox over the face, no HDRI) at 0.6 power; body sheared 3 px for the driver's eye) seed=0; luminance p95 0.018, screen p99 0.0011 | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/beauty_0.png` |
+| `housing_1.png` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at -160° (sRGB, straight alpha) | 880x560 | 65 KB | blender:hero (bosch_ddu::housing_scene, Cycles 384 samples, ortho at 2 px per 4K px over x -440..440, y -320..240, box-filtered to 1:1; the housing's rig (no softbox over the face, no HDRI) at 0.6 power; body sheared 3 px for the driver's eye) seed=0; luminance p95 0.015, screen p99 0.0016 | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/beauty_1.png` |
+| `housing_2.png` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at -110° (sRGB, straight alpha) | 880x560 | 60 KB | blender:hero (bosch_ddu::housing_scene, Cycles 384 samples, ortho at 2 px per 4K px over x -440..440, y -320..240, box-filtered to 1:1; the housing's rig (no softbox over the face, no HDRI) at 0.6 power; body sheared 3 px for the driver's eye) seed=0; luminance p95 0.023, screen p99 0.0009 | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/beauty_2.png` |
+
+## 4K masters (Google Drive, `FH6 WheelDash v2 - 4K Masters/bosch_ddu/`)
+
+Copied by `--masters bosch_ddu`: the Blender outputs into `hero_bosch_ddu_housing/`, the ComfyUI textures into `comfyui/`, and a `*_preview.png` beside them for the tracker.
+
+| Master | What it is |
+|---|---|
+| `bosch_ddu_bead_blast.png` | bead-blast macro (ComfyUI, seamless 4096 px) |
+| `bosch_ddu_bead_blast_neutral_a443e36f330a.png` | bead-blast macro made neutral (luminance only, mid-grey mean, fixed spread): the file Blender reads |
+| `beauty_0.png` | housing, key -135° |
+| `beauty_1.png` | housing, key -160° |
+| `beauty_2.png` | housing, key -110° |
+
+5 preview(s) written.

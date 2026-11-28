@@ -676,7 +676,7 @@ impl VisionSpatialGlass {
         let v = g.vanish + vec2(self.shear_px(None), 0.0);
         let tilt = deg(self.shear.value() * G_LIMIT * HORIZON_TILT);
         let env = g.envelope;
-        let floor = pal.primary.lerp(roles.oled_black, 0.55);
+        let floor = pal.primary;
         p.scoped(|p| {
             p.transform(&Affine::rotate_about(tilt, v));
             // The floor glow: brightest at the horizon under the vanishing point, fading out
@@ -694,8 +694,8 @@ impl VisionSpatialGlass {
                         max: vec2(env.max.x, v.y + (env.max.y - v.y) / squash),
                     }),
                     Gradient::radial(v, env.max.x)
-                        .stop(0.0, floor.intensity(SKY_LEVEL * 2.0))
-                        .stop(0.4, floor.intensity(SKY_LEVEL * 0.7))
+                        .stop(0.0, floor.intensity(SKY_LEVEL * 1.6))
+                        .stop(0.45, floor.intensity(SKY_LEVEL * 0.5))
                         .stop(1.0, floor.with_alpha(0.0)),
                 );
             });

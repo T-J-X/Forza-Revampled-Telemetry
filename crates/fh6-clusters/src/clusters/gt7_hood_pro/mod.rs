@@ -1,1357 +1,1132 @@
-//! GT7 Hood Pro (`ClusterTheme::Gt7HoodPro`), catalog row 3: the Modern Digital 2027 family's
+//! Bonnet Line (`ClusterTheme::Gt7HoodPro`), catalog row 3: the Modern Digital 2027 family's
 //! pattern-setter and the default hood theme (hood, build #2).
 //!
-//! A frameless "gull-wing horizon" hung from one 1 px hairline. Two mirrored light ribbons
-//! (7 → 24 px, power 1.6, primary → white core) climb from the wingtips to a crest above the
-//! gear. Each wing is a circular arc whose tangent is level at the tip, so the pair reads as a
-//! gull wing: flat outboard, rising steeply into a kinked crest. Idle sits at the tips and the
-//! car's shift rpm at the crest.
-//! - Rank 1: 11 converging diamonds (28 px, the centre 34–36 px) above the crest, and the gear
-//!   (Saira Condensed 800) in an OLED-black squircle pod with a light-driven 1 px rim.
-//! - Rank 2: the 3-cell tabular speed (Saira Condensed 600, no ghost 8s: see HANDOVER) under the pod.
-//! - Rank 3: the twin ribbons, each led by a comet orb (the meniscus bead of
-//!   `common::ribbon`, sized by the orb intensity law 0.35 + 0.65 × rpm / shift rpm). The left
-//!   wing carries the rpm scale (Titillium Web 600, every 1000 rpm, ticks every 500); the right
-//!   wing runs at 70% with ticks only, so the two never read as duplicate tachs.
-//! - Rank 4: four slip capsules on the pod's corners (the pod reads as the car from above), the
-//!   G puck on the right (`common::GBall`) and the THR / BRK capsules on the left.
+//! Gran Turismo 7's Bonnet View meter (`RESEARCH.md`): one low band across the bottom of the
+//! screen, floating over the bonnet with no panel behind it, rebuilt as 2027 production
+//! hardware. The static parts are one Blender plate (`hardware`, recipe
+//! `tools/asset-forge/src/recipes/gt7_hood_pro.rs`): a black-glass light bar on a polished plinth
+//! with 95 smoked LED lenses, a forged-carbon car chip (the ComfyUI texture) with four tyre
+//! lenses, the boost gauge's polished scale, the pedal slots, the telltale rings and the trip
+//! tile. The live data is drawn on top of it. Board: Penpot page `07 · Gt7HoodPro`.
+//!
+//! Zone table (local 4K px round the hood anchor; the numbers are [`geom::HOOD`]):
+//!
+//! | Zone | Element | Place | Rank |
+//! |---|---|---|---|
+//! | Rev bar | 95 LEDs in a black-glass light bar, lit from the left with the revs | x −380..380, LEDs y −60..−34, bar 788 × 46 at y −47 | 1 (shift light) and 3 (tach) |
+//! | Steering dot | a dot that slides with the steering | y −94, r 8, ±340 | 4 |
+//! | Speed · gear | the tabular speed right-aligned to a thin divider on the centre line, the gear right of it | speed cap 58 ending at x −62, divider x 0, gear cap 88 from x 44 | 2 · 1 |
+//! | Unit | `mph` / `km/h` under the speed | cap 22 at y 82 | 5 |
+//! | Suggested gear | a red key tile naming the next gear at the shift point | 94 × 86 at (280, 49), digit cap 42 | 1 |
+//! | Pedals | brake (left) and throttle (right) fills in black-glass slots | x ∓442, 16 × 150 | 4 |
+//! | Tyre diagram | carbon car chip, four tyre lenses lit by tyre load | chip (−795, 18) 70 × 160 | 4 |
+//! | Boost gauge | polished scale, a fill from 0 (−1..2 bar) and its label | (−600, 6), r 60 | 4 |
+//! | Trip tile | distance since the view was entered, GT7's odometer box | (−600, 108), 200 × 36, cap 22 | 4 |
+//! | Telltales | slide (left) and limiter (right) lamps | (∓497, −36), r 24 | 4 |
+//! | Logo zone | the car's logo or the custom name | x 540..860, y −40..60 | 5 |
+//!
+//! The cockpit and chase views draw the same band scaled to fit the cockpit envelope.
+//!
+//! Brightness follows the rank: the gear and the speed are the full ink, the lit LEDs burn at
+//! 78% with the head LED at full, the side groups sit below them, and the parts that never
+//! change (labels, the divider, the logo) are held at the tokens' cap for static parts
+//! ([`STATIC_LUMA`]), dimmed by their light and never by their coverage. Over a bright bonnet or
+//! sky every glyph, the divider and the logo carry a black keyline, as GT7's digits carry a dark
+//! edge; nothing sits on a box. The live fills run in the plate's black-glass channels.
 //!
 //! Signature moments:
-//! - **Apex fuse:** as the revs build the two comet orbs race inward. When they come within
-//!   2 r + 10 px a neck grows between them (the look of a k 10 px smooth union). At the car's
-//!   shift rpm they meet on the crest and a steady 6 px blade in `shift` rises from the crest to
-//!   the centre diamond, timed with the outside-in diamond fill.
-//! - **Limiter:** only the diamonds strobe (10 Hz, 50% duty, `common::ShiftLights`); the blade,
-//!   the fused orb and the pod rim hold a steady `shift`.
-//! - **Gear change:** the blade splits and both comets drop back outward on the `ribbon` spring
-//!   with feed-forward; the glyph does the tokens' 1.12 → 1.0 entry and a light sweeps across the
-//!   pod rim (left to right on an upshift, right to left on a downshift).
-//! - **Light:** lateral G swings the virtual light on every rim and shifts the three depth
-//!   planes by 0 / 2 / 4 px (parallax).
+//! - **Shift point and limiter (GT7's rev alert):** from the warning stage the whole lit run takes
+//!   the `shift` colour at once; at the shift point the run strobes (10 Hz on the strip's own
+//!   clock, so it starts lit, with a fifth of the light kept in the dark phase) and the red
+//!   suggested-gear tile pops up naming the next gear. The tile itself never strobes.
+//! - **Gear change, the hand-over:** when the driver takes the suggested gear, the tile brightens
+//!   for one frame and folds shut towards the gear in 100 ms, while the new gear rises into
+//!   place with the tokens' gear motion (`common::hero_gear`). The tile stays away until the
+//!   revs have fallen below the shift point.
+//! - **Light:** lateral G swings the virtual light, and the plate's three renders cross-fade with
+//!   it, so the chamfers and lenses catch the light as the car turns.
+//! - **Reduced flash:** the strobe becomes the 2 Hz breath.
 //!
-//! Brief: `spec.md`. Telemetry is native: rpm (current, idle, limiter), the shift rpm (limiter ×
-//! the shift point, the OSD's `ShiftPointPct` when set), gear, speed, throttle, brake, smoothed
-//! acceleration (G puck, light) and body slip (from velocity). Tyre temperatures, slip ratios
-//! and lap data are not decoded by `fh6-core` (and not in `tests/golden/packets`), so the slip
-//! capsules are driven by body slip (rears β, fronts β / 2) and the lap line is omitted.
-//!
-//! # Zone table (local 4K px around the anchor; hood anchor (1920, 1760))
-//!
-//! | Zone | Element | Hood | Cockpit |
-//! |---|---|---|---|
-//! | Z1 | 11 diamonds | y −200, 28 px (centre 34), pitch 72 | y −262, 28 px (centre 36), pitch 72 |
-//! | Z1 | gear pod (squircle n 4) | 232 × 184 at (0, −22), gear cap 140 | 250 × 210 at (0, −50), cap 150 |
-//! | Z2 | speed (3 cells) | cap 80 at (0, 124) | cap 96 at (0, 128) |
-//! | Z3 | gull-wing ribbons | tips (±820, −60), crest (0, −146), 7 → 24 px | tips (±680, −80), crest (0, −206) |
-//! | Z3 | apex blade | 6 px, crest → centre diamond | same |
-//! | Z4 | slip capsules | 18 × 48 at (±131, −22 ± 46) | 20 × 56 at (±142, −50 ± 56) |
-//! | Z4 | G puck · THR/BRK | r 58 at (620, 72) · x −656 / −584, y 14..130 | r 66 at (540, 70), readout under it · x −576 / −504 |
-//! | Z5 | rpm numerals | Titillium 600 cap 22 under the left wing | cap 24 |
-use crate::common::gball::GBall;
-use crate::common::glass_plate::{squircle, squircle_point};
+//! Telemetry is native: rpm (current, limiter), the tokens' shift point, gear, speed, throttle,
+//! brake, steer, acceleration (tyre loads by weight transfer, and the light), body slip from
+//! velocity (the slide lamp) and boost. The trip integrates the speed. Tyre heat, wear, fuel,
+//! assists and the driving-line suggestion are not in the verified telemetry, so they are left
+//! out or replaced by the nearest verified quantity (`RESEARCH.md`, "Deliberate changes").
+mod geom;
+mod hardware;
+
+use crate::common::gball::felt_force;
 use crate::common::hero_gear::HeroGear;
-use crate::common::ribbon::{PathRibbon, RibbonStyle};
-use crate::common::shift::LimiterCue;
 use crate::common::speed::TabularSpeed;
-use crate::common::tyre_slip::{Corner, SlipOutline, TyreSlipQuad, TyreStep};
-use crate::common::{ShiftLights, VirtualLight};
+use crate::common::VirtualLight;
 use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
+use fh6_kit::logo::{self, LogoStyle};
 use fh6_kit::{
-    deg, vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gradient, ImageId,
-    ImagePaint, ImageWrap, LayerOptions, Layout, Painter, Palette, Rect, Shadow, Shape, Signals, Smoothed, Spring,
-    Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, LayerOptions,
+    Layout, Logo, Paint, Painter, Palette, Rect, Shape, Signals, Smoothed, SpeedUnit, Spring, Strobe, Stroke,
+    TextStyle, Tokens, VAlign, Vec2,
 };
+use geom::{rect, Geom, HOOD};
+use hardware::Sprites;
 
-/// The diamond strip (`modern11`).
-const DIAMONDS: u32 = 11;
-/// Pod exponent (squircle, Apple's continuous curvature).
-const POD_N: f32 = 4.0;
-/// Reach of the apex fuse's "smooth union" (px past the two orb radii).
-const FUSE_K: f32 = 10.0;
-/// The ribbons stop just short of the crest, so the head colour never reaches the ribbon's
-/// redline stop (the fused crest is drawn by the blade instead).
-const FILL_MAX: f32 = 0.999;
-/// Hairline alpha (46 of 255).
-const HAIRLINE_ALPHA: f32 = 46.0 / 255.0;
-/// The right wing runs at this brightness (ticks, no numerals).
-const RIGHT_GAIN: f32 = 0.7;
-/// The blade rises over this ramp once the shift rpm is reached (s).
-const LOCK_RAMP_S: f32 = 0.06;
-/// The pod-rim light sweep on a gear change (s).
-const SWEEP_S: f32 = 0.2;
-/// Half width of the sweeping highlight on the pod rim.
-const SWEEP_HALF: f32 = 0.524; // 30°, a 60° streak
-/// The diamonds' strobe off phase keeps 25% of the shift colour.
-const STROBE_FLOOR: f32 = 0.25;
-/// The diamonds hold full `shift` this long at the shift point before the strobe starts (s).
-const STROBE_HOLD_S: f32 = 0.1;
-/// Share of each wing (from the tip) that keeps its own colour under the lock; the rest turns
-/// `shift`.
-const LOCK_FROM: f32 = 0.55;
-/// The Blender pod lens covers the pod plus a 2% margin on each side.
-const POD_LENS_MARGIN: f32 = 1.04;
-/// The ribbon grain tile in local px (stretched along the wing, so several filaments cross the
-/// ribbon's width).
-const GRAIN_TILE: Vec2 = vec2(640.0, 240.0);
-/// Grain flow speed (local px/s): at idle, plus this much more at the shift rpm.
-const GRAIN_FLOW: [f32; 2] = [80.0, 900.0];
-/// Peak opacity of the additive grain at the ribbon head.
-const GRAIN_ALPHA: f32 = 0.9;
-/// How much the grain dims the ribbon body before adding its filaments (at the head).
-const GRAIN_DIM: f32 = 0.38;
-/// Opacity of the soft pads under the text groups (speed; on the hood also G and pedals).
-const TEXT_PAD: f32 = 0.2;
-/// Hood wing channel under the unlit span.
-const CHANNEL_UNLIT: f32 = 0.1;
-/// How far the full channel runs ahead of the comet (local px; longer leaves a dark knot ahead
-/// of the orb where the two blurred layers meet).
-const CHANNEL_LEAD: f32 = 10.0;
-/// Hood: the unlit diamond lens, and the dark lens behind a lit diamond.
-const DIAMOND_LENS: f32 = 0.2;
-const LIT_LENS: f32 = 0.5;
-/// Hood wing channel: extra width over the ribbon, blur and opacity.
-const CHANNEL_PAD: f32 = 8.0;
-const CHANNEL_BLUR: f32 = 4.0;
-const CHANNEL_ALPHA: f32 = 0.38;
-/// Hood keyline: opacity of the black copies, and their offset per unit of cap height (tokens
-/// `type.keyline` 6 px at an 84 px cap).
-const KEYLINE_ALPHA: f32 = 0.85;
-const KEYLINE_PER_CAP: f32 = 0.07;
-/// Hood: the slip capsules sit on a dark lens.
-const HOOD_LENS: f32 = 0.5;
-/// Width of the apex blade (px).
-const BLADE_W: f32 = 8.0;
-/// Smallest cap of the micro-labels (MPH, THR, BRK): the hood has no scrim behind them.
-const MICRO_MIN_CAP: f32 = 18.0;
-/// Most scale ticks kept (every 500 rpm from idle to the shift rpm).
-const MAX_TICKS: usize = 48;
-/// Parallax of the mid (pod, tyres, G) and front (gear, speed) planes at 1.5 g (px).
-const PARALLAX_PX: [f32; 2] = [2.0, 4.0];
-/// Samples of each wing hairline.
-const HAIR_POINTS: usize = 65;
-/// Segments per hairline polyline chunk (keeps each bounding box small).
-const HAIR_CHUNK: usize = 8;
-
-/// Geometry of one view (local 4K px around the anchor).
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Geom {
-    /// The left wingtip (the right one mirrors it).
-    tip: Vec2,
-    /// The crest, where the wings meet (x = 0).
-    crest: Vec2,
-    /// Ribbon width at the tip and at the crest.
-    wing_w: [f32; 2],
-    /// Comet orb radius at the shift rpm.
-    bead_r: f32,
-    diamond_y: f32,
-    diamond_pitch: f32,
-    diamond: f32,
-    diamond_centre: f32,
-    pod: Vec2,
-    pod_size: Vec2,
-    gear_cap: f32,
-    speed: Vec2,
-    speed_cap: f32,
-    /// Slip capsule size, the |x| of its centre and the half distance between the front and
-    /// rear centres.
-    tyre: Vec2,
-    tyre_dx: f32,
-    tyre_dy: f32,
-    gball: Vec2,
-    gball_r: f32,
-    /// The G readout's baseline centre (beside the puck on the hood, under it in the cockpit).
-    gread: Vec2,
-    /// THR and BRK capsule centre x, the capsules' top and bottom y and their width.
-    pedal_x: [f32; 2],
-    pedal_y: [f32; 2],
-    pedal_w: f32,
-    numeral_cap: f32,
-    /// Hood: black keylines on the speed digits (no scrim behind the cluster).
-    keyline: bool,
-}
-
-const HOOD: Geom = Geom {
-    tip: vec2(-820.0, -60.0),
-    crest: vec2(0.0, -146.0),
-    wing_w: [7.0, 24.0],
-    bead_r: 13.0,
-    diamond_y: -200.0,
-    diamond_pitch: 72.0,
-    diamond: 28.0,
-    diamond_centre: 34.0,
-    pod: vec2(0.0, -22.0),
-    pod_size: vec2(232.0, 184.0),
-    gear_cap: 140.0,
-    speed: vec2(0.0, 124.0),
-    speed_cap: 80.0,
-    tyre: vec2(18.0, 48.0),
-    tyre_dx: 131.0,
-    tyre_dy: 46.0,
-    gball: vec2(620.0, 72.0),
-    gball_r: 58.0,
-    gread: vec2(752.0, 87.0),
-    pedal_x: [-656.0, -584.0],
-    pedal_y: [14.0, 130.0],
-    pedal_w: 12.0,
-    numeral_cap: 22.0,
-    keyline: true,
+/// Michroma's digits are 0.95 to 1.0 em wide and the kit's tabular cell is 0.60 em, so the
+/// speed and trip cells add this much tracking (em) to hold them.
+const MICHROMA_TRACKING: f32 = 0.36;
+/// The lit LEDs' share of the light below the head LED, so the bar never outshines the gear.
+const TICK_BODY: f32 = 0.78;
+/// Release time constant of the LED run (tokens `motion.shiftLights`: release within 50 ms).
+const TICK_RELEASE_TAU: f32 = 0.025;
+/// Width of the LED run's backlash (rpm): wider than the engine's bounce on the limiter (about
+/// 50 rpm from one frame to the next), so the head LED holds still there; a pull is drawn at
+/// most 30 rpm behind, a third of one LED at the review car's span.
+const REV_BAND: f32 = 60.0;
+/// Off-hysteresis of the shift point and of the alert (tokens' shift hysteresis, rpm, as
+/// PorscheAnalog): an rpm hovering on a threshold neither flashes the tile nor restarts the
+/// strobe's clock.
+const SHIFT_HYSTERESIS_RPM: f32 = 120.0;
+/// Below this limiter (rpm) the telemetry has not named the car's limiter (a zero packet gives
+/// 1 rpm): the bar stays dark and no alert runs.
+const MIN_LIMITER_RPM: f32 = 1000.0;
+/// The kit's tabular cell (em): a user face's tracking is its widest digit less this.
+const TABULAR_CELL_EM: f32 = 0.6;
+/// Keeps a strobe phase edge that falls on a frame from rounding either way (the pilot's).
+const STROBE_LEAD: f32 = 1e-4;
+/// Share of the shift colour's light the LEDs keep in the strobe's dark phase.
+const STROBE_FLOOR: f32 = 0.2;
+/// Luminance cap of the parts that never change (labels, divider, scale mark, logo).
+const STATIC_LUMA: f32 = 0.19;
+/// The alert run's bloom: the shift colour is under the tokens' bloom threshold and would not
+/// bloom at all, so the alert run glowed less than the white run it replaces. The white run
+/// keeps the tokens' bloom.
+const ALERT_BLOOM: Bloom = Bloom {
+    threshold: 0.2,
+    intensity: 0.8,
 };
+/// An alert LED's hot core: its inset inside the LED (x, y) and its share of the ink. The core
+/// makes the alert run brighter than the white run it replaces, as an LED driven harder is.
+const CORE_INSET: [f32; 2] = [1.5, 4.0];
+const CORE_LIGHT: f32 = 0.9;
+/// The alert zone: the unlit lenses from where the run takes the shift colour are tinted the
+/// warning red at this share of its light (a static part, under the tokens' cap). The zone
+/// follows the driver's shift point, so it is drawn live, not baked into the plate.
+const ZONE_LIGHT: f32 = 0.22;
+/// The thousand-rpm marks: their width, and the limiter range they are drawn for.
+const MARK_W: f32 = 2.0;
+/// The thousand marks' light as a share of [`static_ink`]: at full static ink they measured 0.21
+/// on the PC (the plate under them adds its own light), just over the 0.20 static cap.
+const MARK_LIGHT: f32 = 0.8;
+const MARK_RPM: [f32; 2] = [1000.0, 20_000.0];
+/// The pedal fills' share of the ink (under the speed, so a full bar never outlasts it).
+const PEDAL_LIGHT: f32 = 0.7;
+/// The boost fill's share of the ink (under the lit run's, rank 4 below rank 3).
+const BOOST_LIGHT: f32 = 0.7;
+/// The trip digits' share of the ink (GT7's odometer is light grey, under the speed).
+const TRIP_LIGHT: f32 = 0.77;
+/// The trip digits' synthetic weight: at 22 px cap the regular strokes fell to 3.6:1 in the
+/// 960 x 540 blur gate once the window went dark, under the 4.5:1 a readout needs.
+const TRIP_WEIGHT: f32 = 0.45;
+/// Tyre load per g of felt force on each axis, round the rest load of a half.
+const LOAD_PER_G: f32 = 0.35;
+/// A tyre lens's light at no load and at full load (below the speed's full ink: rank 4), and
+/// the share of it left at the lens's ends: the light sits inside the lens, hot in the middle.
+const PILL_LIGHT: [f32; 2] = [0.1, 0.5];
+const PILL_EDGE: f32 = 0.2;
+/// The lit tyre fill's inset inside its lens.
+const PILL_INSET: f32 = 3.0;
+/// Pounds per square inch to bar (x100 kPa).
+const PSI_TO_BAR: f32 = 0.068_947_6;
+/// The steering byte at full lock.
+const STEER_FULL: f32 = 127.0;
+/// Time constant of the steering dot (s): it rides out one packet's jitter.
+const STEER_TAU: f32 = 0.03;
+/// The slide lamp lights at this body slip (degrees) from 8 m/s (29 km/h), and goes out below
+/// the lower slip or under three quarters of that speed.
+const SLIDE_ON_DEG: f32 = 8.0;
+const SLIDE_OFF_DEG: f32 = 5.0;
+const SLIDE_MIN_MS: f32 = 8.0;
+/// The limiter lamp lights at this share of the limiter and goes out below the lower one.
+const LIM_ON: f32 = 0.985;
+const LIM_OFF: f32 = 0.975;
+/// A lit lamp's glow behind its icon (alpha at the centre).
+const LAMP_GLOW: f32 = 0.32;
+/// The highest gear the telemetry can name.
+const TOP_GEAR: u8 = 10;
+/// The suggested-gear tile: how long its hand-over runs after the driver takes the gear, how
+/// fast it fades when the revs drop without a shift (time constant: five of them, 50 ms, take it
+/// out), and how much larger it pops up.
+const FOLD_S: f32 = 0.1;
+const FADE_TAU: f32 = 0.01;
+const POP: f32 = 0.08;
+/// The hand-over: the tile slides this far towards the gear and loses this share of its size
+/// while it fades, whole, with its digit (it lands where it did when the tile sat at x 211).
+const HAND_SLIDE: f32 = 159.0;
+const HAND_SHRINK: f32 = 0.45;
+/// The tile's digit keeps this far from the face's sides.
+const TILE_MARGIN: f32 = 10.0;
+/// The tile's face brightens on the frame the driver takes the gear (a click of light, kept
+/// below the gear's own light so the new gear leads).
+const FLASH_ALPHA: f32 = 0.4;
+/// Hood keylines (tokens `type.keyline`: a black ring round the strokes, never a box, alpha
+/// 230): the ring's width per cap height, its narrowest and widest, and its coverage.
+const KEYLINE_PER_CAP: f32 = 0.1;
+const KEYLINE_MIN: f32 = 3.0;
+const KEYLINE_MAX: f32 = 8.0;
+const KEYLINE_ALPHA: f32 = 0.9;
+/// The rings of a keyline: copies, radius in keyline widths and coverage, the outermost first.
+/// The gear and the speed add a wider, soft ring, so their edge holds over a sunlit road.
+const KEYLINE_HARD: [(usize, f32, f32); 1] = [(8, 1.0, KEYLINE_ALPHA)];
+const KEYLINE_SOFT: [(usize, f32, f32); 2] = [(12, 1.7, 0.25), (8, 1.0, KEYLINE_ALPHA)];
+/// The speed's synthetic weight: Michroma has one weight, and its thin strokes faded before
+/// the side groups in the squint view.
+const SPEED_WEIGHT: f32 = 0.3;
+/// Labels' tracking (em) and the logo zone's wordmark cap and tracking. A wordmark that would
+/// shrink under the label floor to fit is set in the label face at that floor instead.
+const LABEL_TRACKING: f32 = 0.08;
+const LOGO_CAP: f32 = 28.0;
+const LOGO_TRACKING: f32 = 0.3;
+const LOGO_MIN_CAP: f32 = 22.0;
+/// Metres per mile and per kilometre.
+const M_PER_MILE: f64 = 1609.344;
+const M_PER_KM: f64 = 1000.0;
+/// The trip tile shows three whole digits, tenths and the unit.
+const TRIP_MAX_TENTHS: i64 = 9_999;
+/// The trip tile: the text's inset from the face's right edge, the gap between the number and
+/// its unit, and the decimal point's size.
+const TRIP_PAD: f32 = 12.0;
+const TRIP_GAP: f32 = 8.0;
+const TRIP_POINT: f32 = 5.0;
 
-const COCKPIT: Geom = Geom {
-    tip: vec2(-680.0, -80.0),
-    crest: vec2(0.0, -206.0),
-    wing_w: [7.0, 24.0],
-    bead_r: 15.0,
-    diamond_y: -262.0,
-    diamond_pitch: 72.0,
-    diamond: 28.0,
-    diamond_centre: 36.0,
-    pod: vec2(0.0, -50.0),
-    pod_size: vec2(250.0, 210.0),
-    gear_cap: 150.0,
-    speed: vec2(0.0, 128.0),
-    speed_cap: 96.0,
-    tyre: vec2(20.0, 56.0),
-    tyre_dx: 142.0,
-    tyre_dy: 46.0,
-    gball: vec2(540.0, 70.0),
-    gball_r: 66.0,
-    gread: vec2(540.0, 194.0),
-    pedal_x: [-576.0, -504.0],
-    pedal_y: [10.0, 136.0],
-    pedal_w: 14.0,
-    numeral_cap: 24.0,
-    keyline: false,
-};
-
-/// One wing as a circular arc: centre, radius, start angle and sweep (radians, clockwise from
-/// 3 o'clock), running from the tip to the crest.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct WingArc {
-    center: Vec2,
-    radius: f32,
-    start: f32,
-    sweep: f32,
-}
-
-impl Geom {
-    /// The wing arc on the `side` (-1 left, +1 right): level at the tip, through the crest.
-    fn wing(&self, side: f32) -> WingArc {
-        let tip = vec2(self.tip.x.abs() * side, self.tip.y);
-        let dx = (self.crest.x - tip.x).abs();
-        let h = (tip.y - self.crest.y).max(1.0);
-        let radius = (dx * dx + h * h) / (2.0 * h);
-        let center = vec2(tip.x, tip.y - radius);
-        let start = deg(90.0);
-        let end = (self.crest.y - center.y).atan2(self.crest.x - center.x);
-        WingArc {
-            center,
-            radius,
-            start,
-            sweep: end - start,
-        }
-    }
-
-    /// The wing centre line's y at `x` (either side).
-    #[cfg(test)]
-    fn wing_y(&self, x: f32) -> f32 {
-        let a = self.wing(if x < 0.0 { -1.0 } else { 1.0 });
-        let dx = (x - a.center.x).abs().min(a.radius);
-        a.center.y + (a.radius * a.radius - dx * dx).sqrt()
-    }
-
-    /// The ribbon width at `x` (the fill's width curve, by the share of the wing's span).
-    #[cfg(test)]
-    fn wing_width(&self, x: f32) -> f32 {
-        let t = (1.0 - x.abs() / self.tip.x.abs().max(1.0)).clamp(0.0, 1.0);
-        self.wing_w[0] + (self.wing_w[1] - self.wing_w[0]) * t.powf(1.6)
-    }
-
-    /// Diamond `i`'s centre and size (outermost first, left to right).
-    fn diamond_rect(&self, i: usize) -> Rect {
-        let mid = (DIAMONDS as usize - 1) / 2;
-        let x = (i as f32 - mid as f32) * self.diamond_pitch;
-        let s = if i == mid { self.diamond_centre } else { self.diamond };
-        Rect::from_center_size(vec2(x, self.diamond_y), vec2(s, s))
-    }
-
-    /// The slip capsule of `corner`.
-    fn tyre_rect(&self, corner: Corner) -> Rect {
-        let left = matches!(corner, Corner::FrontLeft | Corner::RearLeft);
-        let front = matches!(corner, Corner::FrontLeft | Corner::FrontRight);
-        let x = if left { -self.tyre_dx } else { self.tyre_dx };
-        let y = if front {
-            self.pod.y - self.tyre_dy
-        } else {
-            self.pod.y + self.tyre_dy
-        };
-        Rect::from_center_size(vec2(x, y), self.tyre)
-    }
-
-    /// Numerals and ticks stay off the pod and its capsules (|x| below this).
-    fn scale_clear_x(&self) -> f32 {
-        self.tyre_dx + self.tyre.x * 0.5 + 24.0
-    }
-
-    /// The pod's outline y (top half) at `x`, for the clearance tests.
-    #[cfg(test)]
-    fn pod_top(&self, x: f32) -> f32 {
-        let a = self.pod_size.x * 0.5;
-        let b = self.pod_size.y * 0.5;
-        let u = ((x - self.pod.x).abs() / a).min(1.0).powf(POD_N);
-        self.pod.y - b * (1.0 - u).max(0.0).powf(1.0 / POD_N)
-    }
-}
-
-fn geom(view: View) -> &'static Geom {
-    match view {
-        View::Hood => &HOOD,
-        View::Cockpit | View::Chase => &COCKPIT,
-    }
-}
-
-/// The faces this cluster sets (resolved once; a user display font replaces gear and speed).
+/// The faces, resolved once in `new()`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Faces {
-    gear: FontId,
+    /// Speed and trip digits (Michroma: GT7's squared digits, with a plain zero).
     speed: FontId,
-    metric: FontId,
-    numeral: FontId,
+    /// Gear and the tile's digit (Orbitron 600).
+    gear: FontId,
+    /// Units and labels (Titillium Web 600).
     label: FontId,
-    role_display: FontId,
+    /// The logo zone's wordmark.
+    wide: FontId,
+    /// Extra tabular tracking (em) for the speed face; `None` for a user face, whose tracking
+    /// is measured from its digits when it is drawn.
+    tracking: Option<f32>,
 }
 
-/// One view's two wing ribbons (left, right).
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Wings {
-    side: [PathRibbon; 2],
-    /// The hairline under each wing, sampled once (drawn in short chunks: one arc of a
-    /// 4000 px circle is evaluated over a full-screen quad).
-    hair: [[Vec2; HAIR_POINTS]; 2],
+/// The rev bar's state: the LED run, GT7's alert and the strobe's clock.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct RevBar {
+    /// The rpm the run shows: the raw rpm through a [`REV_BAND`] backlash.
+    rpm: f32,
+    /// LEDs lit (fractional while a release runs) and where the run is going.
+    lit: f32,
+    target: f32,
+    /// From the warning stage the whole run takes the shift colour.
+    alert: bool,
+    /// At the shift point the run strobes.
+    over: bool,
+    /// Seconds since the shift point (wrapped at 1 s, a whole number of strobe and breath
+    /// periods); `None` below it.
+    since: Option<f32>,
+    /// The first LED of the alert zone (the LED the head is on when the run takes the shift
+    /// colour); `None` while the limiter is unknown.
+    zone: Option<usize>,
 }
 
-impl Wings {
-    fn new(tokens: &Tokens, g: &Geom) -> Self {
-        let make = |side: f32, gain: f32| {
-            let a = g.wing(side);
-            PathRibbon::arch(
-                tokens,
-                a.center,
-                a.radius,
-                a.start,
-                a.sweep,
-                RibbonStyle {
-                    width_start: g.wing_w[0],
-                    width_end: g.wing_w[1],
-                    power: 1.6,
-                    redline: 0.0,
-                    track_width: 0.0,
-                    gain,
-                },
-            )
+impl RevBar {
+    /// Advances one frame. The frame that reaches the shift point reads 0 on the strip's clock,
+    /// so the strobe starts on its lit phase whatever the app's clock reads.
+    fn update(&mut self, sig: &Signals, palette: &Palette, ticks: usize, dt: f32, fresh: bool) {
+        self.rpm = if fresh {
+            finite(sig.rpm)
+        } else {
+            backlash(self.rpm, sig.rpm, REV_BAND)
         };
-        let side = [make(-1.0, 1.0), make(1.0, RIGHT_GAIN)];
-        let mut hair = [[Vec2::ZERO; HAIR_POINTS]; 2];
-        for (h, w) in hair.iter_mut().zip(side.iter()) {
-            for (i, q) in h.iter_mut().enumerate() {
-                *q = w.point_at(i as f32 / (HAIR_POINTS - 1) as f32);
-            }
+        let known = finite(sig.max_rpm) >= MIN_LIMITER_RPM;
+        self.target = if known {
+            fraction(self.rpm, sig.max_rpm) * ticks as f32
+        } else {
+            0.0
+        };
+        if fresh || self.target >= self.lit {
+            self.lit = self.target;
+        } else {
+            let k = 1.0 - (-dt / TICK_RELEASE_TAU).exp();
+            self.lit += (self.target - self.lit) * k;
         }
-        Self { side, hair }
+        let shift = finite(sig.shift_fraction);
+        // Same-frame attack; a crossing back releases only 120 rpm below the threshold.
+        let h = if known && !fresh {
+            SHIFT_HYSTERESIS_RPM / finite(sig.shift_rpm).max(MIN_LIMITER_RPM)
+        } else {
+            0.0
+        };
+        self.over = known && shift >= if self.over { 1.0 - h } else { 1.0 };
+        let stage = palette.stages[2];
+        self.alert = known && (self.over || shift >= if self.alert { stage - h } else { stage });
+        self.zone = known.then(|| alert_zone(stage, sig.shift_rpm, sig.max_rpm, ticks));
+        self.since = match (self.over, self.since) {
+            (false, _) => None,
+            (true, None) => Some(0.0),
+            (true, Some(t)) => Some((t + dt).rem_euclid(1.0)),
+        };
+    }
+
+    /// LEDs lit this frame.
+    fn count(&self, ticks: usize) -> usize {
+        let n = (self.lit + 0.5).floor();
+        if n.is_finite() && n > 0.0 {
+            (n as usize).min(ticks)
+        } else {
+            0
+        }
+    }
+
+    /// The time the strobe and the breath read.
+    fn clock(&self) -> f32 {
+        self.since.map_or(0.0, |t| t + STROBE_LEAD)
+    }
+
+    /// The strobe's share of the light this frame (1 below the shift point).
+    fn level(&self, calm: bool) -> f32 {
+        if !self.over {
+            1.0
+        } else if calm {
+            Strobe::breath(self.clock()).max(STROBE_FLOOR)
+        } else if Strobe::LIMITER.on(self.clock()) {
+            1.0
+        } else {
+            STROBE_FLOOR
+        }
+    }
+
+    /// The colours of the lit run's body and its head LED.
+    fn colors(&self, pal: &Palette, calm: bool) -> (Color, Color) {
+        if self.over {
+            let c = pal.shift.intensity(self.level(calm));
+            return (c, c);
+        }
+        let base = if self.alert { pal.shift } else { pal.roles.ink };
+        (base.intensity(TICK_BODY), base)
+    }
+
+    /// The hot core of every lit LED while the alert runs (`None` below it).
+    fn core(&self, pal: &Palette, calm: bool) -> Option<Color> {
+        (self.alert || self.over).then(|| pal.roles.ink.intensity(CORE_LIGHT * self.level(calm)))
+    }
+
+    fn animating(&self) -> bool {
+        self.over || (self.lit - self.target).abs() > 0.01
     }
 }
 
-/// One scale tick: its fraction along a wing and its numeral (0 for a 500 rpm minor tick).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-struct Tick {
-    frac: f32,
-    label: u8,
+/// The suggested-gear tile: GT7's red gear box, here naming the next gear at the shift point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Tile {
+    /// The gear the tile names (`None` while it is hidden).
+    digit: Option<u8>,
+    /// How much of the tile shows (0..=1).
+    level: f32,
+    /// The pop as it appears: 1 falling to 0 on the `snap` spring (the tile starts 8% larger).
+    pop: Spring,
+    /// The hand-over after the driver takes the gear (0..1), `None` when it is not running.
+    fold: Option<f32>,
+    /// True on the frame the hand-over starts: the face brightens.
+    flash: bool,
+    /// The tile may show: false from a gear change until the revs fall below the shift point.
+    armed: bool,
 }
 
-/// The GT7 Hood Pro cluster.
+impl Tile {
+    fn new(tokens: &Tokens) -> Self {
+        Self {
+            digit: None,
+            level: 0.0,
+            pop: Spring::new(tokens.springs.snap, 0.0),
+            fold: None,
+            flash: false,
+            armed: true,
+        }
+    }
+
+    /// Advances one frame: `changed` is true on the frame the gear changes, `over` while the
+    /// revs are past the shift point.
+    fn update(&mut self, gear: Gear, changed: bool, over: bool, dt: f32) {
+        self.flash = false;
+        if changed {
+            let took = self.level > 0.5 && matches!((gear, self.digit), (Gear::Forward(n), Some(d)) if n == d);
+            self.armed = false;
+            if took {
+                self.fold = Some(0.0);
+                self.flash = true;
+            }
+        }
+        if !over {
+            self.armed = true;
+        }
+        let target = match gear {
+            Gear::Forward(n) if over && self.armed && n < TOP_GEAR => Some(n + 1),
+            _ => None,
+        };
+        if let Some(d) = target {
+            if self.digit.is_none() || self.level < 0.5 {
+                self.pop.reset(1.0);
+            }
+            self.digit = Some(d);
+            self.level = 1.0;
+            self.fold = None;
+            self.flash = false;
+        } else if let Some(f) = self.fold {
+            // The flash frame shows the tile where it stood; the hand-over runs from the next.
+            let f = if self.flash { f } else { f + dt / FOLD_S };
+            if f >= 1.0 {
+                self.fold = None;
+                self.level = 0.0;
+                self.digit = None;
+            } else {
+                self.fold = Some(f);
+            }
+        } else if self.level > 0.0 {
+            let k = 1.0 - (-dt / FADE_TAU).exp();
+            self.level -= self.level * k;
+            if self.level < 0.01 {
+                self.level = 0.0;
+                self.digit = None;
+            }
+        }
+        self.pop.update(0.0, dt);
+    }
+
+    fn shown(&self) -> bool {
+        self.level > 0.0 || self.fold.is_some()
+    }
+
+    fn animating(&self) -> bool {
+        self.fold.is_some() || (self.level > 0.0 && self.level < 1.0) || !self.pop.settled(0.0, 1e-3)
+    }
+}
+
+/// The Bonnet Line cluster (`Gt7HoodPro`).
 #[derive(Debug, Clone)]
 pub struct Gt7HoodPro {
     faces: Faces,
+    /// The faces resolved in `new()`, brought back when the user clears their display font.
+    own: Faces,
+    /// The display role at creation, and the display font last seen, to notice a user font.
+    role_display: FontId,
+    seen_display: FontId,
+    sprites: Sprites,
     sig: Signals,
-    palette: Palette,
-    view: View,
-    hood: Wings,
-    cockpit: Wings,
-    ticks: [Tick; MAX_TICKS],
-    n_ticks: usize,
-    /// The (idle, shift) rpm the ticks were laid out for.
-    tick_key: (f32, f32),
+    calm: bool,
+    /// True until the first frame: a cluster built mid-race shows what it finds, with no gear
+    /// change, pop or sweep played.
+    fresh: bool,
+    logo: Logo,
     light: VirtualLight,
-    /// Smoothed felt lateral force (-1..1) for the parallax, and its target.
-    parallax: Smoothed<f32>,
-    parallax_target: f32,
-    shift: ShiftLights,
-    lock: LimiterCue,
+    rev: RevBar,
     gear: HeroGear,
     speed: TabularSpeed,
-    gball: GBall,
-    tyres: TyreSlipQuad,
-    tyre_fill: [Smoothed<Color>; 4],
-    tyre_target: [Color; 4],
-    throttle: Spring,
-    brake: Spring,
-    /// Seconds since the pod-rim light sweep started (negative: none running).
-    sweep_t: f32,
-    sweep_up: bool,
-    reduced_flash: bool,
-    /// The Blender pod lens (`assets/clusters/gt7_hood_pro/pod_lens.png`), when present.
-    pod_lens: Option<ImageId>,
-    /// The ComfyUI ribbon grain tile (`ribbon_grain.png`), when present.
-    grain: Option<ImageId>,
-    /// How far the grain has flowed (local px, wrapped to the tile width).
-    grain_phase: f32,
-    micro_cap: f32,
-    tracking: f32,
+    /// The steering dot (−1 full left .. 1 full right) and its target.
+    steer: Smoothed<f32>,
+    steer_target: f32,
+    /// The boost fill (bar) on the tokens' needle spring, and its target.
+    boost: Spring,
+    boost_target: f32,
+    /// Metres driven since this view was last entered (while racing): the app builds the
+    /// cluster again on a camera or theme change, so the trip starts again then.
+    trip_m: f64,
+    /// The telltales.
+    slide: bool,
+    limiter: bool,
+    tile: Tile,
 }
 
 impl Gt7HoodPro {
-    /// Builds the cluster: faces and the two views' wing ribbons (everything is procedural).
+    /// Builds the cluster: faces, springs and the rendered hardware (procedural without it).
     #[must_use]
     pub fn new(setup: &mut Setup<'_>) -> Self {
+        let sprites = Sprites::load(setup);
         let t: &Tokens = setup.tokens;
-        let palette = Palette::family(t, "modernDigital");
         let display = setup.fonts.role(FontRole::Display);
         let text = setup.fonts.role(FontRole::Text);
-        let faces = Faces {
-            gear: setup.fonts.find("Saira Condensed", 800, false).unwrap_or(display),
-            speed: setup.fonts.find("Saira Condensed", 600, false).unwrap_or(display),
-            metric: setup.fonts.find("Saira Condensed", 600, false).unwrap_or(display),
-            numeral: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
-            label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
-            role_display: display,
+        let wide = setup.fonts.role(FontRole::Wide);
+        let (speed, tracking) = match setup.fonts.find("Michroma", 400, false) {
+            Some(face) => (face, Some(MICHROMA_TRACKING)),
+            None => (wide, None),
         };
-        let clear = palette.roles.ink.with_alpha(2.0 / 255.0);
-        let pod_lens = load_asset(setup, "pod_lens.png");
-        let grain = load_asset(setup, "ribbon_grain.png");
+        let faces = Faces {
+            speed,
+            gear: setup.fonts.find("Orbitron", 600, false).unwrap_or(display),
+            label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
+            wide,
+            tracking,
+        };
         Self {
             faces,
+            own: faces,
+            role_display: display,
+            seen_display: display,
+            sprites,
             sig: Signals::default(),
-            palette,
-            view: View::Hood,
-            hood: Wings::new(t, &HOOD),
-            cockpit: Wings::new(t, &COCKPIT),
-            ticks: [Tick::default(); MAX_TICKS],
-            n_ticks: 0,
-            tick_key: (-1.0, -1.0),
+            calm: false,
+            fresh: true,
+            logo: Logo::default(),
             light: VirtualLight::new(t),
-            parallax: Smoothed::new(0.0, 0.08),
-            parallax_target: 0.0,
-            shift: ShiftLights::new(DIAMONDS),
-            lock: LimiterCue::new(),
+            rev: RevBar::default(),
             gear: HeroGear::new(t),
             speed: TabularSpeed::new(),
-            gball: GBall::new(t),
-            tyres: TyreSlipQuad::new(t),
-            tyre_fill: [Smoothed::new(clear, 0.05); 4],
-            tyre_target: [clear; 4],
-            throttle: Spring::new(t.springs.snap, 0.0),
-            brake: Spring::new(t.springs.snap, 0.0),
-            sweep_t: -1.0,
-            sweep_up: true,
-            reduced_flash: false,
-            pod_lens,
-            grain,
-            grain_phase: 0.0,
-            micro_cap: t.type_scale.micro_label.max(MICRO_MIN_CAP),
-            tracking: t.type_scale.label_tracking,
-        }
-    }
-
-    fn wings(&self) -> &Wings {
-        match self.view {
-            View::Hood => &self.hood,
-            View::Cockpit | View::Chase => &self.cockpit,
-        }
-    }
-
-    fn wings_mut(&mut self) -> &mut Wings {
-        match self.view {
-            View::Hood => &mut self.hood,
-            View::Cockpit | View::Chase => &mut self.cockpit,
-        }
-    }
-
-    /// The wing fill: idle at the tips, the shift rpm at the crest (never past it).
-    fn wing_target(sig: &Signals) -> f32 {
-        let span = (sig.shift_rpm - sig.idle_rpm).max(1.0);
-        ((sig.rpm - sig.idle_rpm) / span).clamp(0.0, 1.0) * FILL_MAX
-    }
-
-    /// Lays the scale out again when the car's idle or shift rpm changes (no allocation).
-    fn layout_ticks(&mut self, idle: f32, shift: f32) {
-        if (idle, shift) == self.tick_key {
-            return;
-        }
-        self.tick_key = (idle, shift);
-        self.n_ticks = 0;
-        let span = shift - idle;
-        if !(span.is_finite() && span > 500.0) {
-            return;
-        }
-        let mut k = 1u32;
-        while self.n_ticks < MAX_TICKS {
-            let rpm = k as f32 * 500.0;
-            k += 1;
-            if rpm <= idle {
-                continue;
-            }
-            if rpm >= shift {
-                break;
-            }
-            let label = if k % 2 == 1 { (rpm / 1000.0) as u8 } else { 0 };
-            self.ticks[self.n_ticks] = Tick {
-                frac: (rpm - idle) / span * FILL_MAX,
-                label,
-            };
-            self.n_ticks += 1;
-        }
-    }
-
-    /// The colour a slip capsule fills to for `step` (alarm by exception: clear until hot).
-    fn tyre_color(step: TyreStep, pal: &Palette) -> Color {
-        match step {
-            TyreStep::Cool | TyreStep::Optimal => pal.roles.ink.with_alpha(2.0 / 255.0),
-            TyreStep::Hot => pal.roles.caution.fade(0.06),
-            TyreStep::Critical => pal.roles.warning.fade(0.08),
+            steer: Smoothed::new(0.0, STEER_TAU),
+            steer_target: 0.0,
+            boost: Spring::new(t.springs.needle, 0.0),
+            boost_target: 0.0,
+            trip_m: 0.0,
+            slide: false,
+            limiter: false,
+            tile: Tile::new(t),
         }
     }
 }
 
 impl Cluster for Gt7HoodPro {
     fn update(&mut self, input: &FrameInput<'_>) {
-        let dt = input.dt.max(0.0);
-        let sig = *input.signals;
-        self.sig = sig;
-        self.palette = *input.palette;
-        let target = Self::wing_target(&sig);
-        if input.view != self.view {
-            self.view = input.view;
-            for w in &mut self.wings_mut().side {
-                w.snap(target);
-            }
-        }
-        // A user display font (FontChoice.display differs from the role) replaces the numerals.
-        if input.fonts.display != self.faces.role_display {
-            self.faces.gear = input.fonts.display;
-            self.faces.speed = input.fonts.display;
-            self.faces.metric = input.fonts.display;
-            self.faces.role_display = input.fonts.display;
-        }
-
-        let span = (sig.shift_rpm - sig.idle_rpm).max(1.0);
-        let rate = sig.rpm_rate / span * FILL_MAX;
-        for w in &mut self.wings_mut().side {
-            w.update(target, rate, dt);
-        }
-        self.layout_ticks(sig.idle_rpm, sig.shift_rpm);
-
-        self.light.update(sig.g_lat, dt);
-        self.parallax_target = (-sig.g_lat / 1.5).clamp(-1.0, 1.0);
-        self.parallax.update(self.parallax_target, dt);
-
-        self.reduced_flash = input.reduced_flash;
-        // The grain flows towards the crest, faster as the revs build.
-        self.grain_phase = (self.grain_phase + dt * (GRAIN_FLOW[0] + GRAIN_FLOW[1] * target)) % GRAIN_TILE.x;
-        self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
-        self.lock.update(self.shift.over_shift(), LOCK_RAMP_S, dt);
-        self.gear.update(sig.gear, self.lock.held(), dt);
-        if self.gear.since_change() == 0.0 {
-            self.sweep_t = 0.0;
-            self.sweep_up = self.gear.was_upshift();
-        } else if self.sweep_t >= 0.0 {
-            self.sweep_t += dt;
-            if self.sweep_t > SWEEP_S {
-                self.sweep_t = -1.0;
-            }
-        }
-        self.speed.update(sig.speed);
-        self.gball.update(&sig, dt);
-
-        // Body slip (verified, from velocity) stands in for tyre slip: the rears carry β, the
-        // fronts half of it; 8° / 18° of body slip reach the caution / warning outlines.
-        let beta = if sig.slip_deg.is_finite() {
-            sig.slip_deg.abs()
+        // A frame time that is not a number, or a long stall, never reaches a clock.
+        let dt = if input.dt.is_finite() {
+            input.dt.clamp(0.0, 0.25)
         } else {
             0.0
         };
-        let (front, rear) = (beta / 200.0, beta / 100.0);
-        self.tyres.update([front, front, rear, rear], None, dt);
-        for c in Corner::ALL {
-            let i = c.index();
-            self.tyre_target[i] = Self::tyre_color(self.tyres.step(c), &self.palette);
-            self.tyre_fill[i].update(self.tyre_target[i], dt);
+        let sig = *input.signals;
+        self.sig = sig;
+        self.calm = input.reduced_flash;
+        // A user display font (FontChoice.display differs from the role) replaces the numerals;
+        // back on the role, the dash's own faces return.
+        let display = input.fonts.display;
+        if display != self.seen_display {
+            self.seen_display = display;
+            self.faces = if display == self.role_display {
+                self.own
+            } else {
+                Faces {
+                    speed: display,
+                    gear: display,
+                    tracking: None,
+                    ..self.own
+                }
+            };
         }
-        self.throttle.update(sig.throttle, dt);
-        self.brake.update(sig.brake, dt);
+        if self.logo != *input.logo {
+            self.logo.clone_from(input.logo);
+        }
+        let g = &HOOD;
+        let fresh = self.fresh;
+
+        self.rev.update(&sig, input.palette, g.ticks, dt, fresh);
+        if fresh {
+            self.gear.snap(sig.gear);
+        }
+        let shown = self.gear.gear();
+        self.gear.update(sig.gear, 0.0, dt);
+        // A change is the shown gear moving on, not a zero clock: a frame with dt 0 after a shift
+        // would read as a second change and restart the hand-over.
+        let changed = !fresh && self.gear.gear() != shown;
+        self.tile.update(sig.gear, changed, self.rev.over, dt);
+        if fresh {
+            // A tile found on the first frame is shown at rest, with no pop.
+            self.tile.pop.reset(0.0);
+        }
+        self.speed.update(sig.speed);
+
+        self.steer_target = (f32::from(input.telemetry.steer) / STEER_FULL).clamp(-1.0, 1.0);
+        let bar = finite(input.telemetry.boost_psi) * PSI_TO_BAR;
+        self.boost_target = bar.clamp(g.boost_bar[0], g.boost_bar[1]);
+        if fresh {
+            self.steer.reset(self.steer_target);
+            self.boost.reset(self.boost_target);
+        } else {
+            self.steer.update(self.steer_target, dt);
+            self.boost.update(self.boost_target, dt);
+        }
+
+        if sig.race_on {
+            self.trip_m += f64::from(finite(sig.speed_ms).max(0.0)) * f64::from(dt);
+        }
+
+        let slip = finite(sig.slip_deg).abs();
+        let moving = finite(sig.speed_ms);
+        // Reversing in a straight line travels at about 180° of slip: not a slide.
+        let forward = sig.gear != Gear::Reverse;
+        self.slide = forward
+            && if self.slide {
+                slip > SLIDE_OFF_DEG && moving > SLIDE_MIN_MS * 0.75
+            } else {
+                slip >= SLIDE_ON_DEG && moving >= SLIDE_MIN_MS
+            };
+        let at = if finite(sig.max_rpm) >= MIN_LIMITER_RPM {
+            fraction(self.rev.rpm, sig.max_rpm)
+        } else {
+            0.0
+        };
+        self.limiter = if self.limiter { at > LIM_OFF } else { at >= LIM_ON };
+
+        self.light.update(sig.g_lat, dt);
+        self.fresh = false;
     }
 
     fn draw(&self, p: &mut Painter<'_>, layout: &Layout) {
-        let g = geom(self.view);
-        let pal = self.palette;
-        let shift_px = self.parallax.value();
-
-        // The feathered pads behind gear and speed go first, under the ribbons' bloom, so they
-        // never cut a dark silhouette into it (alpha <= 0.55, the hood brief's 140).
-        // The pod's pad hugs the pod (a 4 px spread, 8 px sigma: about a 24 px feather) instead of
-        // a radial pool, so it never rises as a dark dome over the apex.
-        p.shadow(
-            &squircle(g.pod, g.pod_size, POD_N),
-            Shadow {
-                offset: Vec2::ZERO,
-                sigma: 8.0,
-                spread: 4.0,
-                color: pal.roles.oled_black.with_alpha(0.45),
-            },
-        );
-        // Soft rounded-rectangle pads (text box + 24 px, 32 px feather, 0.20, clipped to the
-        // envelope) under the speed and, on the hood (no scrim, bright road and sky behind), under
-        // the G and pedal groups, plus the soft dark channel under the wings.
-        let env = layout.envelope;
-        let half = g.speed_cap * 0.5;
-        soft_pad(
-            p,
-            Rect::from_points(
-                vec2(g.speed.x - g.speed_cap * 1.3, g.speed.y - half),
-                vec2(g.speed.x + g.speed_cap * 2.1, g.speed.y + half),
-            ),
-            env,
-            TEXT_PAD,
-            &pal,
-        );
-        if g.keyline {
-            let reach = g.gball_r * 1.06;
-            soft_pad(
-                p,
-                Rect::from_points(g.gball - Vec2::splat(reach), vec2(g.gread.x + 64.0, g.gball.y + reach)),
-                env,
-                TEXT_PAD,
-                &pal,
-            );
-            soft_pad(
-                p,
-                Rect::from_points(
-                    vec2(g.pedal_x[0] - 36.0, g.pedal_y[0]),
-                    vec2(g.pedal_x[1] + 36.0, g.pedal_y[1] + 32.0),
-                ),
-                env,
-                TEXT_PAD,
-                &pal,
-            );
-            self.draw_channel(p, &pal);
-        }
-
-        // Back plane (0 px): hairline, scale, ribbons, comets, the apex fuse and the diamonds.
-        self.draw_scale(p, g, &pal);
-        self.draw_wings(p, g, &pal);
-        self.draw_diamonds(p, g, &pal);
-
-        // Mid plane (2 px): pod, slip capsules, pedals and the G puck.
+        let g = &HOOD;
+        let pal = *p.palette();
+        let (k, off) = geom::fit(g, layout.envelope);
         p.scoped(|p| {
-            p.translate(vec2(shift_px * PARALLAX_PX[0], 0.0));
-            self.draw_pod(p, g, &pal);
-            self.draw_tyres(p, g, &pal);
+            p.translate(off);
+            p.scale(k);
+            let w = hardware::light_weights(self.light.angle());
+            if !self.sprites.draw_plate(p, g, w) {
+                hardware::fallback_plate(p, g, &pal);
+            }
+            self.draw_zone(p, g, &pal);
+            self.draw_rev(p, g, &pal);
+            self.draw_marks(p, g, &pal);
+            self.draw_steer(p, g, &pal);
             self.draw_pedals(p, g, &pal);
-            self.gball.draw_meter(p, g.gball, g.gball_r, &pal);
-            self.gball
-                .draw_readout(p, g.gread, &pal, self.faces.metric, self.faces.label);
-        });
-
-        // Front plane (4 px): gear and speed.
-        p.scoped(|p| {
-            p.translate(vec2(shift_px * PARALLAX_PX[1], 0.0));
-            self.draw_gear(p, g, &pal);
-            self.draw_speed(p, g, &pal);
+            self.draw_tyres(p, g, &pal);
+            self.draw_boost(p, g, &pal);
+            self.draw_trip(p, g, &pal);
+            self.draw_lamps(p, g, &pal);
+            self.draw_readout(p, g, &pal);
+            self.draw_tile(p, g, &pal, w);
+            self.draw_logo(p, g, &pal);
         });
     }
 
     fn animating(&self) -> bool {
-        self.wings().side.iter().any(PathRibbon::animating)
-            || self.shift.animating()
-            || self.lock.animating()
+        self.rev.animating()
             || self.gear.animating()
-            || self.gball.animating()
-            || self.tyres.animating()
-            || self.sweep_t >= 0.0
-            || (self.grain.is_some() && self.wings().side[0].fraction() > 0.002)
-            || (self.parallax.value() - self.parallax_target).abs() > 1e-3
-            || !self.throttle.settled(self.sig.throttle, 1e-3)
-            || !self.brake.settled(self.sig.brake, 1e-3)
-            || (0..4).any(|i| {
-                let (a, b) = (self.tyre_fill[i].value(), self.tyre_target[i]);
-                (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() + (a.a - b.a).abs() > 2e-3
-            })
+            || self.tile.animating()
+            || !self.boost.settled(self.boost_target, 1e-3)
+            || (self.steer.value() - self.steer_target).abs() > 1e-3
     }
 }
 
 impl Gt7HoodPro {
-    /// The 1 px hairline both wings hang from, the ticks under both wings (the right at 70%)
-    /// and the rpm numerals under the left wing.
-    fn draw_scale(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let px = p.device_px();
-        let wings = self.wings();
-        for hair in &wings.hair {
-            let mut i = 0;
-            while i < HAIR_POINTS - 1 {
-                let end = (i + HAIR_CHUNK).min(HAIR_POINTS - 1);
-                p.fill(
-                    &Shape::Polyline {
-                        points: &hair[i..=end],
-                        width: px,
-                        closed: false,
-                    },
-                    roles.ink.with_alpha(HAIRLINE_ALPHA),
-                );
-                i = end;
-            }
+    /// The tabular tracking (em) of the speed face at `cap`: the dash's own for Michroma, or
+    /// for a user face the widest digit's advance less the kit's cell, so its digits never
+    /// overlap.
+    fn tracking(&self, p: &Painter<'_>, cap: f32) -> f32 {
+        if let Some(t) = self.faces.tracking {
+            return t;
         }
-        let clear = g.scale_clear_x();
-        let numeral = TextStyle::new(self.faces.numeral, g.numeral_cap)
-            .paint(roles.ink_muted)
-            .align(Align::Center, VAlign::CapMiddle)
-            .tabular();
-        for (k, w) in wings.side.iter().enumerate() {
-            let gain = if k == 0 { 1.0 } else { RIGHT_GAIN };
-            for tick in &self.ticks[..self.n_ticks] {
-                let at = w.point_at(tick.frac);
-                if at.x.abs() < clear {
-                    continue;
-                }
-                let tan = w.tangent_at(tick.frac);
-                let mut n = vec2(-tan.y, tan.x);
-                if n.y < 0.0 {
-                    n = -n;
-                }
-                let half = w.width_at(tick.frac) * 0.5;
-                let (len, ink) = if tick.label > 0 {
-                    (12.0, roles.ink_label)
-                } else {
-                    (7.0, roles.hairline)
-                };
-                let a = at + n * (half + 5.0);
-                p.fill(&Shape::line(a, a + n * len, 2.0), ink.fade(gain));
-                if k == 0 && tick.label > 0 {
-                    let c = a + n * (len + 6.0 + g.numeral_cap * 0.6);
-                    let cells = if tick.label >= 10 { 2 } else { 1 };
-                    if g.keyline {
-                        keyline_number(p, c, i64::from(tick.label), cells, &numeral, roles.oled_black);
-                    }
-                    p.number(c, i64::from(tick.label), cells, &numeral, None);
-                }
-            }
-        }
+        let style = TextStyle::new(self.faces.speed, cap);
+        let em = cap / p.fonts().cap_ratio(self.faces.speed).max(0.1);
+        let widest = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            .iter()
+            .map(|d| p.measure(d, &style).width)
+            .filter(|w| w.is_finite())
+            .fold(0.0, f32::max);
+        (widest / em.max(1e-3) - TABULAR_CELL_EM).max(0.0)
     }
 
-    /// The twin ribbons, the comet orbs, the apex fuse and the shift blade.
-    fn draw_wings(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let wings = self.wings();
-        let lock = self.lock.level();
-        let ribbons = LayerOptions {
-            bloom: Some(Bloom {
-                threshold: 0.3,
-                intensity: 0.35,
-            }),
-            ..LayerOptions::default()
-        };
-        // The drawn fill never passes FILL_MAX: the ribbon spring may overshoot its target, and
-        // the last stop of the ribbon's colour ramp is the warning role.
-        let fill = [
-            wings.side[0].fraction().min(FILL_MAX),
-            wings.side[1].fraction().min(FILL_MAX),
-        ];
-        p.layer(ribbons, |p| {
-            for (w, &f) in wings.side.iter().zip(fill.iter()) {
-                // Under the lock the white-hot inner fill retracts to LOCK_FROM, and the shift-tinted
-                // arch takes its place (drawn after the cores, in its own bloom).
-                let e = lock * (2.0 - lock);
-                let shown = if f > LOCK_FROM { f + (LOCK_FROM - f) * e } else { f };
-                w.draw_fill(p, shown, pal, 0.0);
-            }
-        });
-
-        // Comet orbs: size and glow follow the orb intensity law; while locked they shrink so
-        // the shift-coloured arch, not a white core, carries the moment.
-        let sig = &self.sig;
-        let intensity = 0.35 + 0.65 * (sig.rpm / sig.shift_rpm.max(1.0)).clamp(0.0, 1.0);
-        let r = g.bead_r * (0.25 + 0.75 * intensity) * (1.0 - 0.35 * lock);
-        let core = r * (0.55 + 0.25 * self.throttle.value().clamp(0.0, 1.0));
-        let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
-        let heads = [wings.side[0].point_at(fill[0]), wings.side[1].point_at(fill[1])];
-        // Apex fuse: a neck grows between the orbs once they are within 2 r + k of each other.
-        let d = (heads[1] - heads[0]).length();
-        let reach = 2.0 * r + FUSE_K;
-        let u = ((reach - d) / reach).clamp(0.0, 1.0);
-        let u = u * u * (3.0 - 2.0 * u);
-        if u > 0.001 {
-            p.layer(LayerOptions::bloom(), |p| {
-                let w = r * (0.5 + 0.9 * u);
-                p.fill(
-                    &Shape::Line {
-                        a: heads[0],
-                        b: heads[1],
-                        width_a: w,
-                        width_b: w,
-                        cap: Cap::Round,
-                    },
-                    roles.ink.lerp(pal.primary, 0.35).fade(u),
-                );
-            });
-        }
-        for (k, w) in wings.side.iter().enumerate() {
-            let gain = if k == 0 { 1.0 } else { RIGHT_GAIN };
-            w.draw_bead(p, fill[k].max(0.004), r, core, light, pal, intensity * gain, 0.0);
-        }
-        // The lock tint goes over the fill, the cores and their bloom (outside any bloom
-        // layer), so the inner arch reads as `shift`, not as a white-hot core.
-        if lock > 0.004 {
-            p.layer(ribbons, |p| {
-                for (w, &f) in wings.side.iter().zip(fill.iter()) {
-                    Self::draw_arch_lock(p, w, f, lock, pal);
-                }
-            });
-        }
-
-        // The lock: a steady blade in `shift` from the crest to the centre diamond, and the
-        // fused orb turning to the shift colour (never strobing).
-        if lock > 0.004 {
-            let e = 1.0 - (1.0 - lock) * (1.0 - lock);
-            // The fused orb sits between the two heads (they lag the rpm on the ribbon spring) and
-            // only shows once the neck has joined them.
-            let mid = (heads[0] + heads[1]) * 0.5;
-            let orb = lock * u;
-            let bottom = mid.y.min(g.crest.y + 8.0);
-            let h = (bottom - g.diamond_y) * e;
-            p.layer(LayerOptions::bloom(), |p| {
-                p.fill(
-                    &Shape::round_rect(
-                        Rect::from_xywh(g.crest.x - BLADE_W * 0.5, bottom - h, BLADE_W, h),
-                        BLADE_W * 0.5,
-                    ),
-                    Gradient::linear(vec2(0.0, bottom), vec2(0.0, bottom - h))
-                        .stop(0.0, pal.shift.lerp(roles.ink, 0.3).fade(lock))
-                        .stop(1.0, pal.shift.fade(lock)),
-                );
-                p.fill(
-                    &Shape::circle(mid, r * 1.05),
-                    Gradient::radial(mid, r * 1.05)
-                        .stop(0.0, roles.ink.fade(orb))
-                        .stop(0.45, pal.shift.lerp(roles.ink, 0.25).fade(orb))
-                        .stop(1.0, pal.shift.fade(0.0)),
-                );
-            });
-        }
-        // The ComfyUI light grain flowing through both ribbons towards the crest (last, so it
-        // shows over the lock tint too).
-        if let Some(grain) = self.grain {
-            for (k, (w, &f)) in wings.side.iter().zip(fill.iter()).enumerate() {
-                self.draw_grain(p, w, f, grain, k, lock, pal);
-            }
-        }
-    }
-
-    /// The colour of diamond `i` this frame: the shared outside-in fill, and on the limiter
-    /// the strobe between the full shift colour and 25% (the strip never vanishes).
-    ///
-    /// The strobe runs on the lock's own clock: the strip holds full `shift` for
-    /// [`STROBE_HOLD_S`] when the shift point is reached, then strobes at 10 Hz, 50% duty, so
-    /// the shift instruction always lands as a flash-on, never as a dimming. Reduced-flash mode
-    /// keeps the shared 2 Hz breath.
-    fn diamond_color(&self, i: usize, pal: &Palette) -> Option<Color> {
-        if !self.shift.over_shift() || self.reduced_flash {
-            return self.shift.color_of(i, pal);
-        }
-        let t = self.lock.held() - STROBE_HOLD_S;
-        let on = t < 0.0 || (t * 10.0).fract() < 0.5;
-        Some(if on { pal.shift } else { pal.shift.fade(STROBE_FLOOR) })
-    }
-
-    /// The 11 converging diamonds; only they strobe at the limiter. A lit diamond is light, not
-    /// a plate: an additive Gaussian-like halo with no edge, then a bloomed core with a 30% white
-    /// centre and a 1 px inner rim. Unlit diamonds are near-black lenses with a faint rim.
-    fn draw_diamonds(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let mut pts = [[Vec2::ZERO; 4]; DIAMONDS as usize];
-        for (i, q) in pts.iter_mut().enumerate() {
-            let r = g.diamond_rect(i);
-            let (c, h) = (r.center(), r.width() * 0.5);
-            *q = [
-                vec2(c.x, c.y - h),
-                vec2(c.x + h, c.y),
-                vec2(c.x, c.y + h),
-                vec2(c.x - h, c.y),
-            ];
-        }
-        for (i, q) in pts.iter().enumerate() {
-            if self.diamond_color(i, pal).is_none() {
-                let shape = Shape::Polygon { points: q };
-                let lens = if g.keyline {
-                    roles.oled_black.with_alpha(DIAMOND_LENS)
-                } else {
-                    roles.ink.with_alpha(1.0 / 255.0)
-                };
-                p.fill(&shape, lens);
-                p.stroke(&shape, roles.ink.with_alpha(0.12), Stroke::rim_px(1.0));
-            }
-        }
-        // Hood: a dark lens behind each lit diamond (1.3x, 0.5 black), so additive light still
-        // reads over a bright sky.
-        if g.keyline {
-            for (i, q) in pts.iter().enumerate() {
-                if self.diamond_color(i, pal).is_some() {
-                    let c = g.diamond_rect(i).center();
-                    let mut big = [Vec2::ZERO; 4];
-                    for (b, v) in big.iter_mut().zip(q.iter()) {
-                        *b = c + (*v - c) * 1.3;
-                    }
-                    p.fill(&Shape::Polygon { points: &big }, roles.oled_black.with_alpha(LIT_LENS));
-                }
-            }
-        }
-        p.scoped(|p| {
-            p.set_blend(BlendMode::Add);
-            for i in 0..DIAMONDS as usize {
-                if let Some(c) = self.diamond_color(i, pal) {
-                    let r = g.diamond_rect(i);
-                    let (center, rad) = (r.center(), r.width() * 1.15);
-                    p.fill(
-                        &Shape::circle(center, rad),
-                        Gradient::radial(center, rad)
-                            .stop(0.0, c.fade(0.35))
-                            .stop(0.22, c.fade(0.12))
-                            .stop(0.45, c.fade(0.03))
-                            .stop(0.7, c.fade(0.006))
-                            .stop(1.0, c.fade(0.0)),
-                    );
-                }
-            }
-        });
-        p.layer(LayerOptions::bloom(), |p| {
-            for (i, q) in pts.iter().enumerate() {
-                if let Some(c) = self.diamond_color(i, pal) {
-                    let r = g.diamond_rect(i);
-                    let shape = Shape::Polygon { points: q };
-                    p.fill(
-                        &shape,
-                        Gradient::radial(r.center(), r.width() * 0.5)
-                            .stop(0.0, c.lerp(roles.ink.with_alpha(c.a), 0.3))
-                            .stop(0.6, c)
-                            .stop(1.0, c),
-                    );
-                }
-            }
-        });
-        for (i, q) in pts.iter().enumerate() {
-            if let Some(c) = self.diamond_color(i, pal) {
-                p.stroke(
-                    &Shape::Polygon { points: q },
-                    roles.ink.fade(0.4 * c.a),
-                    Stroke::inner(1.0),
-                );
-            }
-        }
-    }
-
-    /// Light segments along the pod's squircle rim, centred on outline angle `mid` with half
-    /// width `half` (radians): a tapered streak in `color`, 0 at both ends.
-    #[allow(clippy::too_many_arguments)]
-    fn rim_streak(p: &mut Painter<'_>, g: &Geom, mid: f32, half: f32, width: f32, color: Color, alpha: f32) {
-        const STEPS: usize = 10;
-        let mut prev = squircle_point(g.pod, g.pod_size, POD_N, mid - half, 0.0);
-        for i in 1..=STEPS {
-            let a = mid - half + 2.0 * half * i as f32 / STEPS as f32;
-            let q = squircle_point(g.pod, g.pod_size, POD_N, a, 0.0);
-            let k = (i as f32 - 0.5) / STEPS as f32;
-            let taper = (k * core::f32::consts::PI).sin();
-            p.fill(
-                &Shape::Line {
-                    a: prev,
-                    b: q,
-                    width_a: width,
-                    width_b: width,
-                    cap: Cap::Butt,
-                },
-                color.with_alpha(alpha * taper * taper),
-            );
-            prev = q;
-        }
-    }
-
-    /// Inner arch at the lock: from 55% of the wing to its head the ribbon crossfades to `shift`
-    /// at 85% (opaque round-capped segments: overlapping opaque caps never show as dots, and butt caps
-    /// left anti-aliased seams).
-    fn draw_arch_lock(p: &mut Painter<'_>, w: &PathRibbon, f: f32, lock: f32, pal: &Palette) {
-        const FROM: f32 = LOCK_FROM;
-        const STEPS: usize = 24;
-        if f <= FROM {
+    /// The lit LEDs over the plate's lenses (the unlit lenses are the plate's).
+    fn draw_rev(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let n = self.rev.count(g.ticks);
+        if n == 0 {
             return;
         }
-        let at = |k: usize| FROM + (f - FROM) * k as f32 / STEPS as f32;
-        let tint = |t: f32| {
-            let s = ((t - FROM) / 0.2).clamp(0.0, 1.0);
-            let s = s * s * (3.0 - 2.0 * s);
-            w.color_at(t, pal, 0.0).lerp(pal.shift, 0.85 * lock * s)
+        let (body, head) = self.rev.colors(pal, self.calm);
+        let core = self.rev.core(pal, self.calm);
+        let opts = LayerOptions {
+            bloom: Some(if core.is_some() { ALERT_BLOOM } else { Bloom::default() }),
+            ..LayerOptions::default()
         };
-        let mut prev = w.point_at(at(0));
-        for k in 1..=STEPS {
-            let (t0, t1) = (at(k - 1), at(k));
-            let q = w.point_at(t1);
-            p.fill(
-                &Shape::Line {
-                    a: prev,
-                    b: q,
-                    width_a: w.width_at(t0),
-                    width_b: w.width_at(t1),
-                    cap: Cap::Round,
-                },
-                Gradient::linear(prev, q).stop(0.0, tint(t0)).stop(1.0, tint(t1)),
-            );
-            prev = q;
+        p.layer(opts, |p| {
+            for i in 0..n {
+                let r = g.tick_rect(i);
+                let color = if i + 1 == n { head } else { body };
+                p.fill(&Shape::round_rect(r, g.tick_r), color);
+                if let Some(core) = core {
+                    let hot = Rect::from_points(
+                        r.min + vec2(CORE_INSET[0], CORE_INSET[1]),
+                        r.max - vec2(CORE_INSET[0], CORE_INSET[1]),
+                    );
+                    p.fill(&Shape::round_rect(hot, 1.0), core);
+                }
+            }
+        });
+    }
+
+    /// The alert zone's unlit lenses, tinted red, so the bar shows where the run will change
+    /// colour before it gets there.
+    fn draw_zone(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let Some(from) = self.rev.zone else { return };
+        let red = pal.roles.warning.intensity(ZONE_LIGHT);
+        for i in from.max(self.rev.count(g.ticks))..g.ticks {
+            p.fill(&Shape::round_rect(g.tick_rect(i), g.tick_r), red);
         }
     }
 
-    /// The OLED-black pod with its feathered dimming pad, light-driven rim, the steady limiter
-    /// rim and the gear-change light sweep.
-    fn draw_pod(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let lock = self.lock.level();
-        let pod = squircle(g.pod, g.pod_size, POD_N);
-        match self.pod_lens {
-            // The Blender lens (black glass, rolled bevel, baked speculars) laid 1:1 over the pod;
-            // the texture carries a 2% margin on each side.
-            Some(lens) => {
-                let rect = Rect::from_center_size(g.pod, g.pod_size * POD_LENS_MARGIN);
-                p.fill(&pod, ImagePaint::new(lens, rect));
-            }
-            None => p.fill(&pod, roles.oled_black.with_alpha(0.92)),
+    /// The thousand-rpm marks under the bar, placed by the car's limiter: they make the bar a
+    /// scale. A limiter the telemetry has not named yet draws none.
+    fn draw_marks(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let max = finite(self.sig.max_rpm);
+        if !(MARK_RPM[0]..=MARK_RPM[1]).contains(&max) {
+            return;
         }
-        let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
-        let reach = g.pod_size.length() * 0.5;
-        let calm = 1.0 - lock;
-        p.stroke(
-            &pod,
-            Gradient::linear(g.pod + light * reach, g.pod - light * reach)
-                .stop(0.0, roles.rim_specular.with_alpha(0.6 * calm))
-                .stop(0.45, pal.primary.with_alpha(0.24 * calm))
-                .stop(1.0, pal.primary.with_alpha(0.07 * calm)),
-            Stroke::rim_px(1.0),
+        let ink = static_ink(pal.roles.ink).intensity(MARK_LIGHT);
+        let black = pal.roles.oled_black.with_alpha(KEYLINE_ALPHA);
+        let [top, bottom] = g.mark_y;
+        let mut rpm = MARK_RPM[0];
+        while rpm <= max {
+            let x = g.rev_x_at(rpm, max);
+            let mark = Rect::from_xywh(x - MARK_W * 0.5, top, MARK_W, bottom - top);
+            p.fill(&Shape::round_rect(mark.expand(2.0), 2.0), black);
+            p.fill(&Shape::rect(mark), ink);
+            rpm += MARK_RPM[0];
+        }
+    }
+
+    /// The steering dot over the rev bar's centre, with a black keyline.
+    fn draw_steer(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let c = vec2(dot_x(g, self.steer.value()), g.dot_y);
+        p.fill(
+            &Shape::circle(c, g.dot_r + 2.5),
+            pal.roles.oled_black.with_alpha(KEYLINE_ALPHA),
         );
-        // A specular crescent towards the virtual light (it swings with lateral G).
-        let la = self.light.angle();
-        Self::rim_streak(p, g, la, deg(28.0), 2.0, roles.rim_specular, 0.55 * calm);
-        if lock > 0.004 {
-            p.stroke(&pod, pal.shift.fade(0.85 * lock), Stroke::rim_px(1.5));
-        }
-        if self.sweep_t >= 0.0 {
-            let k = (self.sweep_t / SWEEP_S).clamp(0.0, 1.0);
-            let e = 1.0 - (1.0 - k) * (1.0 - k);
-            // Over the top of the rim: 9 o'clock → 12 → 3 o'clock (reversed on a downshift).
-            let along = if self.sweep_up { e } else { 1.0 - e };
-            let a = deg(180.0) + deg(180.0) * along;
-            let fade = (1.0 - k).min(k * 8.0).clamp(0.0, 1.0);
-            Self::rim_streak(p, g, a, SWEEP_HALF, 3.0, roles.ink, fade);
-        }
+        p.fill(&Shape::circle(c, g.dot_r), pal.primary_text);
     }
 
-    /// The four slip capsules on the pod's corners: clear lenses with a lit rim until a tyre is
-    /// in trouble, then a step fill and an amber / red outline.
-    fn draw_tyres(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let light = Vec2::polar(Vec2::ZERO, 1.0, self.light.angle());
-        for c in Corner::ALL {
-            let r = g.tyre_rect(c);
-            let shape = Shape::round_rect(r, r.width() * 0.5);
-            if g.keyline {
-                p.fill(&shape, roles.oled_black.with_alpha(HOOD_LENS));
-            }
-            p.fill(&shape, self.tyre_fill[c.index()].value());
-            let reach = r.height() * 0.5;
-            p.stroke(
-                &shape,
-                Gradient::linear(r.center() + light * reach, r.center() - light * reach)
-                    .stop(0.0, roles.rim_specular.fade(0.7))
-                    .stop(0.5, roles.ink_label)
-                    .stop(1.0, roles.hairline),
-                Stroke::rim_px(1.0),
-            );
-            let outline = match self.tyres.outline(c) {
-                SlipOutline::None => None,
-                SlipOutline::Caution => Some(roles.caution),
-                SlipOutline::Warning => Some(roles.warning),
-            };
-            if let Some(color) = outline {
-                let gap = 5.0;
-                p.stroke(
-                    &Shape::round_rect(r.expand(gap), r.width() * 0.5 + gap),
-                    color,
-                    Stroke::new(2.5),
-                );
-            }
-        }
-    }
-
-    /// THR (ink) and BRK (warning) capsules, filling from the bottom, with micro-labels.
+    /// The brake and throttle fills, rising in their slots, and their labels.
     fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let label = TextStyle::new(self.faces.label, self.micro_cap)
-            .paint(roles.ink.fade(0.8))
-            .tracking(self.tracking)
+        let ink = pal.roles.ink.intensity(PEDAL_LIGHT);
+        for (i, level) in [self.sig.brake, self.sig.throttle].into_iter().enumerate() {
+            let r = g.fill_rect(i, level);
+            if r.height() >= 1.0 {
+                p.fill(&Shape::round_rect(r, 2.0), ink);
+            }
+        }
+        let style = TextStyle::new(self.faces.label, g.slot_label_cap)
+            .paint(static_ink(pal.roles.ink))
+            .tracking(LABEL_TRACKING)
             .align(Align::Center, VAlign::CapTop);
-        let h = g.pedal_y[1] - g.pedal_y[0];
-        let pedals = [
-            (g.pedal_x[0], self.throttle.value(), roles.ink.fade(0.85), "THR"),
-            (g.pedal_x[1], self.brake.value(), roles.warning.fade(0.9), "BRK"),
-        ];
-        for (x, v, color, name) in pedals {
-            let track = Rect::from_xywh(x - g.pedal_w * 0.5, g.pedal_y[0], g.pedal_w, h);
-            let radius = g.pedal_w * 0.5;
-            p.fill(&Shape::round_rect(track, radius), roles.ink.with_alpha(1.0 / 255.0));
-            p.stroke(&Shape::round_rect(track, radius), roles.hairline, Stroke::rim_px(1.0));
-            let v = v.clamp(0.0, 1.0);
-            if v > 0.005 {
-                let fh = (h * v).max(g.pedal_w);
-                let fill = Rect::from_xywh(track.min.x, track.max.y - fh, g.pedal_w, fh);
-                p.fill(&Shape::round_rect(fill, radius), color);
-            }
-            let at = vec2(x, g.pedal_y[1] + 12.0);
-            if g.keyline {
-                keyline_text(p, at, name, &label, roles.oled_black);
-            }
-            p.text(at, name, &label);
+        for (i, label) in ["BRK", "THR"].into_iter().enumerate() {
+            let pos = vec2(g.slots_x[i], g.slot_label_top);
+            keyline_text(p, pos, label, &style, pal.roles.oled_black, &KEYLINE_HARD);
+            p.text(pos, label, &style);
         }
     }
 
-    /// Rank 1: the gear in its pod (clipped, so the 1.12 entry never leaves it), blooming softly
-    /// and a little more at the limiter.
-    fn draw_gear(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let lock = self.lock.level();
+    /// The tyre lenses lit by tyre load: the felt force moves weight to the outside of a turn
+    /// and to the front under braking.
+    fn draw_tyres(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         p.scoped(|p| {
-            // Inset 16 px, so the 1.12 entry is cut inside the pod and never meets its rim.
-            p.clip(
-                Rect::from_center_size(g.pod, g.pod_size - Vec2::splat(32.0)),
-                g.pod_size.y * 0.26,
+            // Screened over the plate, so the lens keeps its own highlights over the light.
+            p.set_blend(BlendMode::Screen);
+            for i in 0..4 {
+                let level = PILL_LIGHT[0] + (PILL_LIGHT[1] - PILL_LIGHT[0]) * tyre_load(g, i, &self.sig);
+                let r = g.pill_rect(i).inset(PILL_INSET);
+                let ink = pal.roles.ink.intensity(level);
+                let light = Gradient::radial(r.center(), r.height() * 0.5)
+                    .stop(0.0, ink)
+                    .stop(1.0, ink.intensity(PILL_EDGE));
+                p.fill(&Shape::round_rect(r, r.width() * 0.4), light);
+            }
+        });
+    }
+
+    /// The boost fill from zero along the plate's groove, the zero mark and the label.
+    fn draw_boost(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let [track_r, track_w] = g.boost_track;
+        let zero = g.boost_angle(0.0);
+        let sweep = g.boost_angle(self.boost.value()) - zero;
+        if sweep.abs() > 0.004 {
+            p.fill(
+                &Shape::arc(g.boost_c, track_r, track_w, zero, sweep, Cap::Round),
+                pal.roles.ink.intensity(BOOST_LIGHT),
             );
-            self.gear.draw(p, g.pod, self.faces.gear, g.gear_cap, pal);
-            let glow = self.gear.color(pal).fade(0.1 + 0.3 * lock + self.gear.flash() * 0.5);
+        }
+        // The zero mark across the groove, over the fill.
+        let ink = static_ink(pal.roles.ink);
+        let (s, c) = zero.sin_cos();
+        let dir = vec2(c, s);
+        let half = g.boost_groove * 0.5 - 1.0;
+        p.fill(
+            &Shape::line(
+                g.boost_c + dir * (track_r - half),
+                g.boost_c + dir * (track_r + half),
+                2.0,
+            ),
+            ink,
+        );
+        let style = TextStyle::new(self.faces.label, g.boost_label_cap)
+            .paint(ink)
+            .tracking(LABEL_TRACKING)
+            .align(Align::Center, VAlign::CapTop);
+        let pos = vec2(g.boost_c.x, g.boost_label_top);
+        keyline_text(p, pos, "BOOST", &style, pal.roles.oled_black, &KEYLINE_HARD);
+        p.text(pos, "BOOST", &style);
+    }
+
+    /// The trip in the user's unit, as GT7's odometer box: whole units, a point, tenths and the
+    /// unit, set from the right so the digits never move as the number grows.
+    fn draw_trip(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let (per_unit, unit) = match self.sig.unit {
+            SpeedUnit::Mph => (M_PER_MILE, "mi"),
+            SpeedUnit::Kmh => (M_PER_KM, "km"),
+        };
+        let (whole, tenth) = trip_parts(self.trip_m / per_unit);
+        let y = g.trip_c.y;
+        let unit_style = TextStyle::new(self.faces.label, g.trip_cap)
+            .paint(static_ink(pal.roles.ink))
+            .tracking(LABEL_TRACKING)
+            .align(Align::Right, VAlign::CapMiddle);
+        let right = g.trip_face_rect().max.x - TRIP_PAD;
+        p.text(vec2(right, y), unit, &unit_style);
+        let unit_w = finite(p.measure(unit, &unit_style).width);
+
+        let ink = pal.roles.ink.intensity(TRIP_LIGHT);
+        let mut style = TextStyle::new(self.faces.speed, g.trip_cap)
+            .paint(ink)
+            .tabular()
+            .tracking(self.tracking(p, g.trip_cap))
+            .align(Align::Right, VAlign::CapMiddle);
+        style.weight = TRIP_WEIGHT;
+        let cell = p.fonts().tabular_cell(&style);
+        let bias = tabular_bias(p, &style);
+        let tenth_right = right - unit_w - TRIP_GAP;
+        p.number(vec2(tenth_right + bias, y), tenth, 1, &style, None);
+        // The point sits on the baseline between the two fields, a narrow cell of its own.
+        let point_x = tenth_right - cell - TRIP_POINT;
+        let point = Rect::from_xywh(point_x, y + g.trip_cap * 0.5 - TRIP_POINT, TRIP_POINT, TRIP_POINT);
+        p.fill(&Shape::round_rect(point, 1.0), ink);
+        let cells = if whole >= 100 {
+            3
+        } else if whole >= 10 {
+            2
+        } else {
+            1
+        };
+        p.number(vec2(point_x - TRIP_POINT * 0.4 + bias, y), whole, cells, &style, None);
+    }
+
+    /// The telltales: grey when off (GT7), the slide lamp amber and the limiter lamp red when on.
+    fn draw_lamps(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let off = static_ink(pal.roles.ink);
+        for (i, c) in g.lamps.into_iter().enumerate() {
+            let (on, color) = if i == 0 {
+                (self.slide, pal.roles.caution)
+            } else {
+                (self.limiter, pal.roles.warning)
+            };
+            if on {
+                p.fill(
+                    &Shape::circle(c, g.lamp_face),
+                    Gradient::radial(c, g.lamp_face)
+                        .stop(0.0, color.with_alpha(LAMP_GLOW))
+                        .stop(1.0, color.with_alpha(0.0)),
+                );
+                p.stroke(&Shape::circle(c, g.lamp_face), color, Stroke::rim_px(1.5));
+            }
+            let ink = if on { color } else { off };
+            if i == 0 {
+                hardware::slide_icon(p, c, ink);
+            } else {
+                hardware::limiter_icon(p, c, ink);
+            }
+        }
+    }
+
+    /// The speed, its unit, the divider and the gear, each glyph with a black keyline.
+    fn draw_readout(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let black = pal.roles.oled_black;
+        let mut speed = TextStyle::new(self.faces.speed, g.speed_cap)
+            .paint(pal.roles.ink)
+            .tabular()
+            .tracking(self.tracking(p, g.speed_cap))
+            .align(Align::Right, VAlign::CapTop);
+        speed.weight = SPEED_WEIGHT;
+        let bias = tabular_bias(p, &speed);
+        let pos = vec2(g.speed_right + bias, g.speed_top);
+        let value = self.speed.value().clamp(0, 999);
+        keyline_number(p, pos, value, g.speed_cells, &speed, black, &KEYLINE_SOFT);
+        p.number(pos, value, g.speed_cells, &speed, None);
+
+        let ink = static_ink(pal.roles.ink);
+        let unit = match self.sig.unit {
+            SpeedUnit::Mph => "mph",
+            SpeedUnit::Kmh => "km/h",
+        };
+        // Right-aligned with the digits, so it sits under the speed whether that is 7 or 207.
+        let unit_style = TextStyle::new(self.faces.label, g.unit_cap)
+            .paint(ink)
+            .tracking(LABEL_TRACKING)
+            .align(Align::Right, VAlign::CapTop);
+        let unit_pos = vec2(g.speed_right - bias, g.unit_top);
+        keyline_text(p, unit_pos, unit, &unit_style, black, &KEYLINE_HARD);
+        p.text(unit_pos, unit, &unit_style);
+        let divider = rect(g.divider);
+        p.fill(
+            &Shape::round_rect(divider.expand(KEYLINE_MIN), KEYLINE_MIN),
+            black.with_alpha(KEYLINE_ALPHA),
+        );
+        p.fill(&Shape::rect(divider), ink);
+
+        // The gear: a two-digit gear is set smaller to keep clear of the tile. Neutral is the
+        // full ink like a forward gear (rank 1 in every state); reverse keeps its warning colour.
+        let label = self.gear.gear().label();
+        let color = match self.gear.gear() {
+            Gear::Neutral => pal.roles.ink,
+            _ => self.gear.color(pal),
+        };
+        let mut style = TextStyle::new(self.faces.gear, g.gear_cap)
+            .paint(color)
+            .align(Align::Left, VAlign::CapTop);
+        let width = p.measure(label, &style).width;
+        if width > g.gear_max_w && width.is_finite() {
+            style.cap = g.gear_cap * g.gear_max_w / width;
+        }
+        let width = width.min(g.gear_max_w);
+        let (dy, scale) = self.gear.entry();
+        let center = vec2(g.gear_left + width * 0.5, g.gear_top + g.gear_cap * 0.5);
+        let at = vec2(-width * 0.5, -style.cap * 0.5);
+        p.scoped(|p| {
+            p.translate(center + vec2(0.0, dy));
+            p.scale(scale);
+            keyline_text(p, at, label, &style, black, &KEYLINE_SOFT);
+            p.text(at, label, &style);
+        });
+    }
+
+    /// The suggested-gear tile: it pops up at the shift point with an up chevron over the next
+    /// gear. When the driver takes that gear the face brightens for a frame, then the whole tile,
+    /// digit and all, slides towards the gear, shrinking and fading (the hand-over). When the
+    /// revs drop without a shift it fades where it stands.
+    fn draw_tile(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, w: [f32; 3]) {
+        let t = &self.tile;
+        if !t.shown() {
+            return;
+        }
+        let hand = t.fold.map_or(0.0, |f| {
+            let f = f.clamp(0.0, 1.0);
+            f * f * (3.0 - 2.0 * f)
+        });
+        let opacity = t.level.clamp(0.0, 1.0) * (1.0 - hand) * (1.0 - hand);
+        if opacity <= 0.004 {
+            return;
+        }
+        let pop = 1.0 + POP * finite(t.pop.value()).clamp(0.0, 1.0);
+        p.scoped(|p| {
+            p.set_opacity(opacity);
+            p.translate(g.sug_c + vec2(-HAND_SLIDE * hand, 0.0));
+            p.scale(pop * (1.0 - HAND_SHRINK * hand));
+            p.translate(-g.sug_c);
             p.layer(LayerOptions::bloom(), |p| {
-                self.gear.draw_with(p, g.pod, self.faces.gear, g.gear_cap, glow);
+                if !self.sprites.draw_tile(p, g, w) {
+                    hardware::fallback_tile(p, g, pal);
+                }
+                if t.flash {
+                    p.fill(
+                        &Shape::round_rect(g.sug_face_rect(), g.sug_r),
+                        pal.roles.ink.with_alpha(FLASH_ALPHA),
+                    );
+                }
+                let Some(d) = t.digit else { return };
+                let [apex, drop, half, stroke] = g.sug_chevron;
+                let x = g.sug_c.x;
+                let arms = [vec2(x - half, apex + drop), vec2(x, apex), vec2(x + half, apex + drop)];
+                p.fill(
+                    &Shape::Polyline {
+                        points: &arms,
+                        width: stroke,
+                        closed: false,
+                    },
+                    pal.roles.ink,
+                );
+                // A proportional run, set smaller when "10" would overflow the face.
+                let label = Gear::Forward(d).label();
+                let mut style = TextStyle::new(self.faces.gear, g.sug_cap)
+                    .paint(pal.roles.ink)
+                    .align(Align::Center, VAlign::CapMiddle);
+                let width = p.measure(label, &style).width;
+                let room = g.sug_face.x - 2.0 * TILE_MARGIN;
+                if width > room && width.is_finite() {
+                    style.cap = g.sug_cap * room / width;
+                }
+                p.text(vec2(x, g.sug_digit_y), label, &style);
             });
         });
     }
 
-    /// Rank 2: the tabular speed and its unit on the baseline; on the hood the
-    /// digits get a black keyline and a feathered pad (the scrim is 0% there).
-    fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let style = TextStyle::new(self.faces.speed, g.speed_cap)
-            .align(Align::Center, VAlign::CapMiddle)
-            .tabular();
-        let value = self.speed.value();
-        // No ghost 8s: the kit sets low-alpha text far brighter than its linear alpha (even
-        // 1/255 reads as a real 8 on OLED black), so the field is exactly as wide as the digits
-        // and stays centred on the gear axis (see HANDOVER).
-        let cells = speed_cells(value);
-        if g.keyline {
-            let key = style.paint(roles.oled_black.with_alpha(0.85));
-            let r = g.speed_cap * 0.045;
-            for i in 0..8 {
-                let o = Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0);
-                p.number(g.speed + o, value, cells, &key, None);
+    /// The car's logo, or the custom name, at the band's right end (static, so it is dimmed),
+    /// with a keyline like the glyphs.
+    fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let zone = rect(g.logo);
+        // A long wordmark in the wide face would shrink below the label floor: set it in the
+        // label face at the floor instead (the logo then fits it to the zone as before).
+        let (mut font, mut cap, mut tracking) = (self.faces.wide, LOGO_CAP, LOGO_TRACKING);
+        if self.logo.image.is_none() {
+            let mut buf = [0u8; 64];
+            let name = logo::wordmark(&self.logo, &mut buf);
+            let inner = zone.width() - 2.0 * zone.width().min(zone.height()) * logo::SAFE_PADDING;
+            let wide = TextStyle::new(font, cap).tracking(tracking);
+            let w = p.measure(name, &wide).width;
+            if w.is_finite() && w > 0.0 && cap * inner / w < LOGO_MIN_CAP {
+                (font, cap, tracking) = (self.faces.label, LOGO_MIN_CAP, LABEL_TRACKING);
             }
         }
-        let cells = p.number(g.speed, value, cells, &style.paint(roles.ink), None);
-        let unit = TextStyle::new(self.faces.label, self.micro_cap)
-            .paint(roles.ink.fade(0.8))
-            .tracking(self.tracking)
-            .align(Align::Left, VAlign::Baseline);
-        let at = vec2(cells.max.x + 14.0, g.speed.y + g.speed_cap * 0.5);
-        if g.keyline {
-            keyline_text(p, at, self.sig.unit.label(), &unit, roles.oled_black);
+        let style = |c: Color| LogoStyle {
+            tint: c,
+            text: Paint::Solid(c),
+            font,
+            cap,
+            tracking,
+        };
+        let key = style(pal.roles.oled_black.with_alpha(KEYLINE_ALPHA));
+        let r = keyline_width(cap);
+        for i in 0..8 {
+            logo::draw(p, zone.translate(keyline_offset(i, 8, r)), &self.logo, &key);
         }
-        p.text(at, self.sig.unit.label(), &unit);
-    }
-
-    /// Hood: a soft dark channel under each wing (opaque round-capped segments in a blurred
-    /// layer, so the joins never double up). Under the lit span, plus [`CHANNEL_LEAD`] past the comet, it
-    /// sits at [`CHANNEL_ALPHA`] so the ribbon (and the `shift` arch at the lock) keeps its
-    /// contrast over a bright sky; under the unlit span it is a faint [`CHANNEL_UNLIT`] trace,
-    /// so the empty part of the tach never out-contrasts the lit part.
-    fn draw_channel(&self, p: &mut Painter<'_>, pal: &Palette) {
-        let wings = self.wings();
-        for (lit, opacity) in [(true, CHANNEL_ALPHA), (false, CHANNEL_UNLIT)] {
-            let opts = LayerOptions {
-                blur: Some(CHANNEL_BLUR),
-                opacity,
-                ..LayerOptions::default()
-            };
-            p.layer(opts, |p| {
-                for (hair, w) in wings.hair.iter().zip(wings.side.iter()) {
-                    let edge = w.fraction().min(FILL_MAX) + CHANNEL_LEAD / w.length().max(1.0);
-                    for i in 1..HAIR_POINTS {
-                        let (t0, t1) = (
-                            (i - 1) as f32 / (HAIR_POINTS - 1) as f32,
-                            i as f32 / (HAIR_POINTS - 1) as f32,
-                        );
-                        if (t0 < edge) != lit {
-                            continue;
-                        }
-                        p.fill(
-                            &Shape::Line {
-                                a: hair[i - 1],
-                                b: hair[i],
-                                width_a: w.width_at(t0) + CHANNEL_PAD,
-                                width_b: w.width_at(t1) + CHANNEL_PAD,
-                                cap: Cap::Round,
-                            },
-                            pal.roles.oled_black,
-                        );
-                    }
-                }
-            });
-        }
+        logo::draw(p, zone, &self.logo, &style(static_ink(pal.roles.ink)));
     }
 }
 
-/// A soft rounded-rectangle pad under a text group: `rect` grown by 24 px, a 32 px feather
-/// (Gaussian edge, no visible rim), black at `alpha`, clipped to the view's envelope so it
-/// never bleeds past the cluster.
-fn soft_pad(p: &mut Painter<'_>, rect: Rect, envelope: Rect, alpha: f32, pal: &Palette) {
-    let r = rect.expand(24.0);
-    p.scoped(|p| {
-        p.clip(envelope, 0.0);
-        p.shadow(
-            &Shape::round_rect(r, r.height().min(r.width()) * 0.5),
-            Shadow {
-                offset: Vec2::ZERO,
-                sigma: 16.0,
-                spread: 0.0,
-                color: pal.roles.oled_black.with_alpha(alpha),
-            },
-        );
-    });
+/// `v`, or 0 when it is not a number.
+fn finite(v: f32) -> f32 {
+    if v.is_finite() {
+        v
+    } else {
+        0.0
+    }
 }
 
-/// Hood keyline: eight black copies of a text run around `pos` (tokens `type.keyline`), so a
-/// micro-label reads over a bright road or sky. The radius follows the cap height.
-fn keyline_text(p: &mut Painter<'_>, pos: Vec2, text: &str, style: &TextStyle, black: Color) {
-    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
-    for i in 0..8 {
-        p.text(pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0), text, &key);
+/// The first LED of the alert zone: the LED the run's head is on when the revs reach the alert
+/// `stage` of the shift point.
+fn alert_zone(stage: f32, shift_rpm: f32, max_rpm: f32, ticks: usize) -> usize {
+    let onset = stage * finite(shift_rpm) / finite(max_rpm).max(1.0);
+    let lit = (onset * ticks as f32 + 0.5).floor();
+    if lit.is_finite() && lit >= 1.0 {
+        (lit as usize - 1).min(ticks)
+    } else {
+        0
+    }
+}
+
+/// The steering dot's x for `steer` (−1 full left .. 1 full right).
+fn dot_x(g: &Geom, steer: f32) -> f32 {
+    finite(steer).clamp(-1.0, 1.0) * g.dot_travel
+}
+
+/// `rpm` as a share of the limiter (0..=1).
+fn fraction(rpm: f32, max_rpm: f32) -> f32 {
+    let f = rpm / max_rpm.max(1.0);
+    if f.is_finite() {
+        f.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+/// `held` moved just far enough to stay within `band / 2` of `raw`.
+fn backlash(held: f32, raw: f32, band: f32) -> f32 {
+    if !raw.is_finite() {
+        return finite(held);
+    }
+    if !held.is_finite() {
+        return raw;
+    }
+    held.clamp(raw - band * 0.5, raw + band * 0.5)
+}
+
+/// The load on tyre `i` (0..=1, a half at rest) from the felt force of the smoothed G.
+fn tyre_load(g: &Geom, i: usize, sig: &Signals) -> f32 {
+    let felt = felt_force(sig.g_lat, sig.g_long);
+    let pill = g.pills[i.min(3)];
+    let side = if pill.x < g.car_c.x { -1.0 } else { 1.0 };
+    let end = if pill.y < g.car_c.y { -1.0 } else { 1.0 };
+    let load = 0.5 + LOAD_PER_G * (felt.x * side + felt.y * end);
+    if load.is_finite() {
+        load.clamp(0.0, 1.0)
+    } else {
+        0.5
+    }
+}
+
+/// `ink` dimmed so that it shows at [`STATIC_LUMA`] on black: by its light, keeping its coverage
+/// (the overlay blends coverage in encoded space, so a faded ink shows far darker than its
+/// value; `docs/kit/README.md` §13).
+fn static_ink(ink: Color) -> Color {
+    let seen = ink.luminance() * ink.a.clamp(0.0, 1.0);
+    if seen > STATIC_LUMA {
+        ink.intensity(STATIC_LUMA / seen)
+    } else {
+        ink
+    }
+}
+
+/// How far right a tabular run in `style` must move so its digits sit centred on their cells:
+/// the kit centres each digit in a 0.60 em cell and adds the tracking after it.
+fn tabular_bias(p: &Painter<'_>, style: &TextStyle) -> f32 {
+    let em = style.cap / p.fonts().cap_ratio(style.font).max(0.1);
+    0.5 * style.tracking * em
+}
+
+/// The trip's whole units and its tenths digit for `units` driven, held at the tile's limit.
+fn trip_parts(units: f64) -> (i64, i64) {
+    let tenths = (units * 10.0).floor();
+    let tenths = if tenths.is_finite() {
+        (tenths as i64).clamp(0, TRIP_MAX_TENTHS)
+    } else {
+        0
+    };
+    (tenths / 10, tenths % 10)
+}
+
+/// The keyline's width for a cap height.
+fn keyline_width(cap: f32) -> f32 {
+    (cap * KEYLINE_PER_CAP).clamp(KEYLINE_MIN, KEYLINE_MAX)
+}
+
+/// Offset `i` of a keyline ring's `n` copies.
+fn keyline_offset(i: usize, n: usize, r: f32) -> Vec2 {
+    Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / n.max(1) as f32)
+}
+
+/// Hood keyline: black copies of a text run in `rings` round `pos`, so it reads over a bright
+/// road or sky. The width follows the cap height.
+fn keyline_text(
+    p: &mut Painter<'_>,
+    pos: Vec2,
+    text: &str,
+    style: &TextStyle,
+    black: Color,
+    rings: &[(usize, f32, f32)],
+) {
+    let width = keyline_width(style.cap);
+    for &(n, k, alpha) in rings {
+        let key = style.paint(black.with_alpha(alpha));
+        for i in 0..n {
+            p.text(pos + keyline_offset(i, n, width * k), text, &key);
+        }
     }
 }
 
 /// [`keyline_text`] for a tabular number.
-fn keyline_number(p: &mut Painter<'_>, pos: Vec2, value: i64, cells: u8, style: &TextStyle, black: Color) {
-    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = (style.cap * KEYLINE_PER_CAP).max(1.5);
-    for i in 0..8 {
-        p.number(
-            pos + Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0),
-            value,
-            cells,
-            &key,
-            None,
-        );
-    }
-}
-
-/// Loads `name` from `assets/clusters/gt7_hood_pro/` when the assets folder is known and the
-/// file exists (the cluster draws its procedural look otherwise).
-fn load_asset(setup: &mut Setup<'_>, name: &str) -> Option<ImageId> {
-    let path = setup.assets?.join("clusters").join("gt7_hood_pro").join(name);
-    if !path.is_file() {
-        return None;
-    }
-    setup.images.load_file(setup.device, setup.queue, &path, None).ok()
-}
-
-impl Gt7HoodPro {
-    /// The light grain inside one wing's fill, so the ribbon reads as a tube of light filaments
-    /// rather than a flat stroke: the tube body is first dimmed by [`GRAIN_DIM`], then the
-    /// repeating tile adds its filaments back on top (both butt-capped, so nothing stacks into
-    /// dots). It flows towards the crest (the left wing's grain moves right, the right wing's
-    /// left) and is tinted by the palette; under the lock the inner arch's grain turns `shift`.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_grain(
-        &self,
-        p: &mut Painter<'_>,
-        w: &PathRibbon,
-        f: f32,
-        grain: ImageId,
-        side: usize,
-        lock: f32,
-        pal: &Palette,
-    ) {
-        const STEPS: usize = 32;
-        if f <= 0.002 {
-            return;
+fn keyline_number(
+    p: &mut Painter<'_>,
+    pos: Vec2,
+    value: i64,
+    cells: u8,
+    style: &TextStyle,
+    black: Color,
+    rings: &[(usize, f32, f32)],
+) {
+    let width = keyline_width(style.cap);
+    for &(n, k, alpha) in rings {
+        let key = style.paint(black.with_alpha(alpha));
+        for i in 0..n {
+            p.number(pos + keyline_offset(i, n, width * k), value, cells, &key, None);
         }
-        let gain = if side == 0 { 1.0 } else { RIGHT_GAIN };
-        let dir = if side == 0 { -1.0 } else { 1.0 };
-        let tile = Rect::from_xywh(dir * self.grain_phase, 0.0, GRAIN_TILE.x, GRAIN_TILE.y);
-        let mut prev = w.point_at(0.0);
-        for k in 1..=STEPS {
-            let (t0, t1) = (f * (k - 1) as f32 / STEPS as f32, f * k as f32 / STEPS as f32);
-            let q = w.point_at(t1);
-            p.fill(
-                &Shape::Line {
-                    a: prev,
-                    b: q,
-                    width_a: w.width_at(t0) * 0.8,
-                    width_b: w.width_at(t1) * 0.8,
-                    cap: Cap::Butt,
-                },
-                pal.roles
-                    .oled_black
-                    .with_alpha(GRAIN_DIM * (0.35 + 0.65 * t1 / f.max(1e-3))),
-            );
-            prev = q;
-        }
-        p.scoped(|p| {
-            p.set_blend(BlendMode::Add);
-            let mut prev = w.point_at(0.0);
-            for k in 1..=STEPS {
-                let (t0, t1) = (f * (k - 1) as f32 / STEPS as f32, f * k as f32 / STEPS as f32);
-                let q = w.point_at(t1);
-                let lit = pal.primary.lerp(pal.roles.ink, 0.45);
-                let s = ((t1 - LOCK_FROM) / 0.2).clamp(0.0, 1.0) * lock;
-                // Brighter towards the head, as the ribbon's own light is.
-                let a = GRAIN_ALPHA * gain * (0.35 + 0.65 * t1 / f.max(1e-3));
-                let mut paint = ImagePaint::new(grain, tile).tint(lit.lerp(pal.shift, s).fade(a));
-                paint.wrap = ImageWrap::Repeat;
-                p.fill(
-                    &Shape::Line {
-                        a: prev,
-                        b: q,
-                        width_a: w.width_at(t0) * 0.8,
-                        width_b: w.width_at(t1) * 0.8,
-                        cap: Cap::Butt,
-                    },
-                    paint,
-                );
-                prev = q;
-            }
-        });
     }
 }
 
-/// Digit cells for a speed (1–3; the readout clamps to 0..=999).
-fn speed_cells(value: i64) -> u8 {
-    match value {
-        v if v >= 100 => 3,
-        v if v >= 10 => 2,
-        _ => 1,
-    }
-}
-
-/// The registry constructor (`registry::REGISTRY`).
+/// Builds the cluster (the registry's constructor).
 pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
     Box::new(Gt7HoodPro::new(setup))
 }
@@ -1360,88 +1135,262 @@ pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn layout_stays_inside_the_view_envelopes() {
-        let t = Tokens::default();
-        for (g, env) in [(&COCKPIT, t.layout.cockpit_envelope), (&HOOD, t.layout.hood_envelope)] {
-            let inside = |p: Vec2, what: &str| assert!(env.contains(p), "{what} {p:?} outside {env:?}");
-            inside(g.tip - vec2(g.wing_w[0], 0.0), "left wingtip");
-            inside(vec2(-g.tip.x + g.wing_w[0], g.tip.y), "right wingtip");
-            for i in 0..DIAMONDS as usize {
-                let r = g.diamond_rect(i);
-                inside(r.min, "diamond");
-                inside(r.max, "diamond");
-            }
-            let pod = Rect::from_center_size(g.pod, g.pod_size);
-            inside(pod.min, "pod");
-            inside(pod.max, "pod");
-            inside(g.speed + vec2(0.0, g.speed_cap * 0.5), "speed baseline");
-            inside(g.speed - vec2(0.0, g.speed_cap * 0.5), "speed cap top");
-            // The G puck: crosshair 1.06 r, a ball held at the limit 1.18 r.
-            inside(g.gball - Vec2::splat(g.gball_r * 1.18), "G puck");
-            inside(g.gball + Vec2::splat(g.gball_r * 1.18), "G puck");
-            inside(g.gread + vec2(64.0, 0.0), "G readout");
-            inside(g.gread - vec2(64.0, 32.0), "G readout");
-            inside(
-                vec2(g.pedal_x[0] - g.pedal_w, g.pedal_y[1] + 12.0 + 16.0),
-                "pedal label",
-            );
-            for c in Corner::ALL {
-                let r = g.tyre_rect(c).expand(5.0);
-                inside(r.min, "tyre");
-                inside(r.max, "tyre");
-            }
-        }
-    }
-
-    #[test]
-    fn wings_meet_at_the_crest_and_stay_clear_of_the_pod() {
-        let t = Tokens::default();
-        for g in [&COCKPIT, &HOOD] {
-            let w = Wings::new(&t, g);
-            for side in &w.side {
-                assert!((side.point_at(1.0) - g.crest).length() < 1.0);
-                assert!((side.point_at(0.0).y - g.tip.y).abs() < 1.0);
-                // Level at the tip, rising towards the crest.
-                assert!(side.tangent_at(0.0).y.abs() < 0.05);
-            }
-            // The full-size orb on the wing clears the pod and the front capsules by >= 8 px.
-            let mut x = -g.tip.x.abs();
-            while x <= g.tip.x.abs() {
-                let bottom = g.wing_y(x) + (g.wing_width(x) * 0.5).max(g.bead_r);
-                if x.abs() <= g.pod_size.x * 0.5 {
-                    assert!(g.pod_top(x) - bottom >= 8.0, "pod at x {x}: {}", g.pod_top(x) - bottom);
-                }
-                for c in [Corner::FrontLeft, Corner::FrontRight] {
-                    let r = g.tyre_rect(c).expand(5.0);
-                    if x >= r.min.x && x <= r.max.x {
-                        assert!(r.min.y - bottom >= 8.0, "capsule at x {x}");
-                    }
-                }
-                x += 4.0;
-            }
-            // The blade has room between the crest ribbon and the centre diamond, and the strobing
-            // strip stays <= 42 px tall.
-            let top = g.crest.y - g.wing_w[1] * 0.5;
-            let diamond_bottom = g.diamond_y + g.diamond_centre * 0.5;
-            assert!(top - diamond_bottom >= 20.0);
-            assert!(g.diamond_centre <= 42.0);
-        }
-    }
-
-    #[test]
-    fn the_scale_runs_idle_to_shift() {
-        let sig = Signals {
-            rpm: 900.0,
+    fn signals(rpm: f32) -> Signals {
+        Signals {
+            rpm,
+            max_rpm: 8700.0,
             idle_rpm: 900.0,
             shift_rpm: 8439.0,
-            max_rpm: 8700.0,
+            shift_fraction: rpm / 8439.0,
+            rpm_fraction: rpm / 8700.0,
+            gear: Gear::Forward(3),
+            ..Signals::default()
+        }
+    }
+
+    fn palette() -> Palette {
+        Palette::family(&Tokens::default(), "modernDigital")
+    }
+
+    #[test]
+    fn the_led_run_follows_the_revs_and_holds_still_on_the_limiter() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(900.0), &pal, 95, 1.0 / 60.0, true);
+        assert_eq!(rev.count(95), 10, "idle lights about a tenth of the bar");
+        // Same-frame attack, drawn half the backlash behind the revs.
+        rev.update(&signals(5200.0), &pal, 95, 1.0 / 60.0, false);
+        let pulled = ((5200.0 - REV_BAND * 0.5) / 8700.0 * 95.0 + 0.5).floor() as usize;
+        assert_eq!(rev.count(95), pulled);
+        // The engine bounces 50 rpm on the limiter: the head LED stays where it is.
+        rev.update(&signals(8690.0), &pal, 95, 1.0 / 60.0, false);
+        let held = rev.count(95);
+        for k in 0..12 {
+            let rpm = if k % 2 == 0 { 8640.0 } else { 8690.0 };
+            rev.update(&signals(rpm), &pal, 95, 1.0 / 60.0, false);
+            assert_eq!(rev.count(95), held, "frame {k}");
+        }
+        // A lift releases within 50 ms (two time constants: seven eighths of the drop).
+        let from = rev.lit;
+        for _ in 0..3 {
+            rev.update(&signals(2000.0), &pal, 95, 1.0 / 60.0, false);
+        }
+        assert!(
+            rev.lit - rev.target <= 0.14 * (from - rev.target),
+            "{} of {from}",
+            rev.lit
+        );
+    }
+
+    #[test]
+    fn the_alert_colours_the_whole_run_and_the_strobe_starts_lit() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(6000.0), &pal, 95, 1.0 / 60.0, true);
+        let (body, head) = rev.colors(&pal, false);
+        assert_eq!(head, pal.roles.ink);
+        assert_eq!(body, pal.roles.ink.intensity(TICK_BODY));
+        // The warning stage: the whole run takes the shift colour at once, steady.
+        rev.update(&signals(8000.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(rev.alert && !rev.over);
+        assert_eq!(rev.colors(&pal, false).1, pal.shift);
+        // The shift point: the strobe starts on its lit phase, three frames on, three off at 60 fps.
+        let mut lit = Vec::new();
+        for _ in 0..12 {
+            rev.update(&signals(8690.0), &pal, 95, 1.0 / 60.0, false);
+            lit.push(rev.colors(&pal, false).1 == pal.shift);
+        }
+        assert_eq!(
+            lit,
+            [true, true, true, false, false, false, true, true, true, false, false, false]
+        );
+        // The dark phase keeps a fifth of the light, so a still never reads as idle.
+        rev.since = Some(0.06);
+        assert_eq!(rev.colors(&pal, false).1, pal.shift.intensity(STROBE_FLOOR));
+        // Reduced flash: a breath, never below the floor.
+        assert!(rev.colors(&pal, true).1.luminance() >= pal.shift.intensity(STROBE_FLOOR).luminance() * 0.99);
+    }
+
+    #[test]
+    fn the_tile_names_the_next_gear_at_the_shift_point_only() {
+        let t = Tokens::default();
+        let mut tile = Tile::new(&t);
+        tile.update(Gear::Forward(3), false, false, 1.0 / 60.0);
+        assert!(!tile.shown());
+        tile.update(Gear::Forward(3), false, true, 1.0 / 60.0);
+        assert_eq!(tile.digit, Some(4));
+        assert!(tile.shown() && tile.level == 1.0, "no delay at the shift point");
+        // Neutral, reverse and the top gear name nothing.
+        for gear in [Gear::Neutral, Gear::Reverse, Gear::Forward(TOP_GEAR)] {
+            let mut other = Tile::new(&t);
+            other.update(gear, false, true, 1.0 / 60.0);
+            assert_eq!(other.digit, None, "{gear:?}");
+        }
+        // A lift without a shift: gone within 50 ms.
+        for _ in 0..3 {
+            tile.update(Gear::Forward(3), false, false, 1.0 / 60.0);
+        }
+        assert!(!tile.shown(), "level {}", tile.level);
+    }
+
+    #[test]
+    fn taking_the_suggested_gear_folds_the_tile_and_keeps_it_away() {
+        let t = Tokens::default();
+        let mut tile = Tile::new(&t);
+        tile.update(Gear::Forward(3), false, true, 1.0 / 60.0);
+        // The upshift lands while the revs are still past the shift point (the review sequence's
+        // frame 42): the tile flashes, folds and does not come back naming 5.
+        tile.update(Gear::Forward(4), true, true, 1.0 / 60.0);
+        assert!(tile.flash && tile.fold == Some(0.0));
+        assert_eq!(tile.digit, Some(4), "the tile keeps its digit through the hand-over");
+        let mut frames = 1;
+        while tile.shown() {
+            assert_eq!(tile.digit, Some(4), "frame {frames}: never a blank tile");
+            tile.update(Gear::Forward(4), false, true, 1.0 / 60.0);
+            assert!(!tile.flash, "frame {frames}");
+            frames += 1;
+            assert!(frames < 12, "the hand-over ends");
+        }
+        assert!(tile.digit.is_none());
+        assert!((6..=8).contains(&frames), "hands over in about 100 ms: {frames} frames");
+        // Once the revs have dropped below the shift point it may show again.
+        tile.update(Gear::Forward(4), false, false, 1.0 / 60.0);
+        tile.update(Gear::Forward(4), false, true, 1.0 / 60.0);
+        assert_eq!(tile.digit, Some(5));
+    }
+
+    #[test]
+    fn tyre_load_moves_out_of_the_turn_and_forward_under_braking() {
+        let g = &HOOD;
+        let rest = Signals::default();
+        for i in 0..4 {
+            assert!((tyre_load(g, i, &rest) - 0.5).abs() < 1e-6);
+        }
+        // Turning right (acceleration to the right): the left tyres take the load.
+        let right = Signals {
+            g_lat: 1.0,
             ..Signals::default()
         };
-        assert_eq!(Gt7HoodPro::wing_target(&sig), 0.0);
-        let at_shift = Signals { rpm: 8439.0, ..sig };
-        assert!((Gt7HoodPro::wing_target(&at_shift) - FILL_MAX).abs() < 1e-6);
-        let over = Signals { rpm: 8700.0, ..sig };
-        assert!((Gt7HoodPro::wing_target(&over) - FILL_MAX).abs() < 1e-6);
+        assert!(tyre_load(g, 0, &right) > 0.7 && tyre_load(g, 1, &right) < 0.3);
+        // Braking: the front tyres take it.
+        let braking = Signals {
+            g_long: -1.0,
+            ..Signals::default()
+        };
+        assert!(tyre_load(g, 0, &braking) > 0.7 && tyre_load(g, 2, &braking) < 0.3);
+        let wild = Signals {
+            g_lat: f32::NAN,
+            g_long: f32::INFINITY,
+            ..Signals::default()
+        };
+        assert!(tyre_load(g, 3, &wild).is_finite());
+    }
+
+    #[test]
+    fn the_shift_point_holds_through_a_dip_and_an_unknown_limiter_stays_dark() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(8000.0), &pal, 95, 1.0 / 60.0, true);
+        rev.update(&signals(8500.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(rev.over && rev.since == Some(0.0));
+        // The revs hover 60 rpm under the shift point: the strobe's clock keeps running.
+        for _ in 0..4 {
+            rev.update(&signals(8380.0), &pal, 95, 1.0 / 60.0, false);
+            assert!(rev.over);
+        }
+        assert!(rev.since.is_some_and(|t| t > 0.06));
+        // Well under it, the shift point and then the alert let go.
+        rev.update(&signals(8200.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(!rev.over && rev.alert);
+        rev.update(&signals(6000.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(!rev.alert);
+        // A zero packet's limiter (1 rpm): no run, no alert, no strobe.
+        let zero = Signals {
+            rpm: 1.1,
+            max_rpm: 1.0,
+            shift_rpm: 0.97,
+            shift_fraction: 1.1,
+            ..Signals::default()
+        };
+        let mut dark = RevBar::default();
+        dark.update(&zero, &pal, 95, 1.0 / 60.0, true);
+        dark.update(&zero, &pal, 95, 1.0 / 60.0, false);
+        assert!(!dark.over && !dark.alert && dark.count(95) == 0 && dark.since.is_none());
+    }
+
+    #[test]
+    fn the_alert_zone_follows_the_shift_point() {
+        let pal = palette();
+        let t = Tokens::default();
+        // The tokens' shift point (0.97 of the limiter): the zone starts at LED 85.
+        let shift = 8700.0 * t.rev_stages.shift_pct;
+        assert_eq!(alert_zone(pal.stages[2], shift, 8700.0, 95), 85);
+        // A driver who shifts earlier moves it left; an unknown limiter has none.
+        assert!(alert_zone(pal.stages[2], 7800.0, 8700.0, 95) < 85);
+        assert_eq!(alert_zone(pal.stages[2], f32::NAN, 8700.0, 95), 0);
+        let mut rev = RevBar::default();
+        rev.update(&signals(3000.0), &pal, 95, 1.0 / 60.0, true);
+        assert!(rev.zone.is_some());
+        let zero = Signals {
+            max_rpm: 1.0,
+            ..Signals::default()
+        };
+        rev.update(&zero, &pal, 95, 1.0 / 60.0, false);
+        assert_eq!(rev.zone, None);
+        // The zone is a static part: under the cap.
+        assert!(pal.roles.warning.intensity(ZONE_LIGHT).luminance() < STATIC_LUMA);
+    }
+
+    #[test]
+    fn the_steering_dot_spans_its_travel() {
+        let g = &HOOD;
+        assert_eq!(dot_x(g, 1.0), g.dot_travel);
+        assert_eq!(dot_x(g, -128.0 / STEER_FULL), -g.dot_travel);
+        assert_eq!(dot_x(g, 0.0), 0.0);
+        assert_eq!(dot_x(g, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn the_side_groups_burn_below_the_lit_run() {
+        for k in [PEDAL_LIGHT, BOOST_LIGHT, TRIP_LIGHT, PILL_LIGHT[1]] {
+            assert!(k < TICK_BODY, "{k}");
+        }
+    }
+
+    #[test]
+    fn the_trip_counts_tenths_and_holds_at_its_limit() {
+        assert_eq!(trip_parts(0.0), (0, 0));
+        assert_eq!(trip_parts(7.79), (7, 7));
+        assert_eq!(trip_parts(123.45), (123, 4));
+        assert_eq!(trip_parts(-5.0), (0, 0));
+        assert_eq!(trip_parts(1e12), (999, 9));
+        assert_eq!(trip_parts(f64::NAN), (0, 0));
+    }
+
+    #[test]
+    fn the_alert_run_is_brighter_than_the_white_run() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(6000.0), &pal, 95, 1.0 / 60.0, true);
+        assert_eq!(rev.core(&pal, false), None, "no core below the alert");
+        rev.update(&signals(8000.0), &pal, 95, 1.0 / 60.0, false);
+        let core = rev.core(&pal, false).expect("the alert run has a hot core");
+        assert!(core.luminance() > pal.roles.ink.intensity(TICK_BODY).luminance());
+        // On the strobe the core follows the run into its dark phase.
+        rev.update(&signals(8690.0), &pal, 95, 1.0 / 60.0, false);
+        rev.since = Some(0.06);
+        let dark = rev.core(&pal, false).expect("a core on the strobe");
+        assert!(dark.luminance() < core.luminance() * 0.3);
+    }
+
+    #[test]
+    fn backlash_and_fraction_survive_bad_numbers() {
+        assert_eq!(backlash(100.0, f32::NAN, 60.0), 100.0);
+        assert_eq!(backlash(f32::NAN, 500.0, 60.0), 500.0);
+        assert_eq!(backlash(100.0, 200.0, 60.0), 170.0);
+        assert_eq!(fraction(5000.0, 0.0), 1.0);
+        assert_eq!(fraction(f32::NAN, 8700.0), 0.0);
+        assert_eq!(static_ink(Color::BLACK), Color::BLACK);
+        assert!(static_ink(Color::WHITE).luminance() <= STATIC_LUMA + 1e-4);
     }
 }
