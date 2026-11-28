@@ -102,7 +102,7 @@ One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they sha
 |---|---|---|---|---|---|---|---|
 | 1 | 1 | ★ [`LiquidGlass`](../../../crates/fh6-clusters/src/clusters/liquid_glass/) | Liquid Glass | concept | Liquid Glass | cockpit+hood | ✅ |
 | 2 | 7 | ★ [`PorscheAnalog`](../../../crates/fh6-clusters/src/clusters/porsche_analog/) | Retro | recreation | Classic Analog | cockpit | ✅ |
-| 3 | 3 | ★ [`Gt7HoodPro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | Motorsport | recreation | Modern Digital 2027 | hood | ◐ |
+| 3 | 3 | ★ [`Gt7HoodPro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | Motorsport | recreation | Modern Digital 2027 | hood | ✅ |
 | 4 | 12 | ★ [`BoschDdu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | Motorsport | recreation | Race Dash | cockpit | ◐ |
 | 5 | 15 | ★ [`TeslaAdas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | Sci-Fi | recreation | ADAS & HUD | cockpit+hood | ✅ |
 | 6 | 19 | ★ [`RetroCyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | Retro | recreation | Sci-Fi | cockpit+hood | ✅ |
@@ -110,7 +110,7 @@ One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they sha
 | 8 | 4 | [`AmgMbuxSuperscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) (wide glass panel) | Supercar | recreation | Modern Digital 2027 | cockpit | ◐ |
 | 9 | 13 | [`ValkyrieLmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | Hypercar | recreation | Race Dash | cockpit+hood | ◐ |
 | 10 | 2 | [`VisionSpatialGlass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | Apple Vision | concept | Liquid Glass | cockpit | ◐ |
-| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
+| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ◐ |
 | 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ☐ |
 | 13 | 5 | [`DriftGlass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | Motorsport | concept | Modern Digital 2027 | cockpit | ☐ |
 | 14 | 28 | [`CymaticResonanceField`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |

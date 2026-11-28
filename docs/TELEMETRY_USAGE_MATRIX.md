@@ -93,7 +93,7 @@ None today: every dash's inputs are reachable in the common scenarios.
 
 ## Dashes
 
-Six dashes have their own code today (Liquid Glass, GT7 Hood Pro, Porsche Analog, Bosch DDU,
+Six dashes have their own code today (Liquid Glass, Bonnet Line, Porsche Analog, Bosch DDU,
 Tesla ADAS, Retro Cyber). The other 66 (42 from the first catalog and the 24 added on 2026-11-28,
 at the end of the table) draw the shared scaffold (`common::scaffold`), which reads rpm, the
 limiter, gear and speed.
@@ -102,7 +102,7 @@ limiter, gear and speed.
 |---|---|---|
 | `LiquidGlass` | Liquid Glass | `race_on`, `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
 | `VisionSpatialGlass` | Vision Spatial Glass | `rpm`, `max_rpm`, `gear`, `speed` |
-| `Gt7HoodPro` | Bonnet Line | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `Gt7HoodPro` | Bonnet Line | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `g_long`, `velocity`, `boost` |
 | `AmgMbuxSuperscreen` | AMG MBUX Superscreen | `rpm`, `max_rpm`, `gear`, `speed` |
 | `DriftGlass` | Drift Glass | `rpm`, `max_rpm`, `gear`, `speed` |
 | `GlyphDotMatrix` | Glyph Dot Matrix | `rpm`, `max_rpm`, `gear`, `speed` |
