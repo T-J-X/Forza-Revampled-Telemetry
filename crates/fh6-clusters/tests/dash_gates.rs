@@ -236,6 +236,141 @@ const INPUTS: &[Input] = &[
         fields: "boost_psi",
         changes: &[|t| t.boost_psi = 21.0],
     },
+    Input {
+        key: "pitch_roll_rate",
+        fields: "angular_velocity_x, angular_velocity_z",
+        changes: &[|t| {
+            t.angular_velocity_x = 0.4;
+            t.angular_velocity_z = -0.3;
+        }],
+    },
+    Input {
+        key: "tyre_slip_ratio",
+        fields: "tire_slip_ratio_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.tire_slip_ratio_fl = 0.2;
+            t.tire_slip_ratio_fr = 0.3;
+            t.tire_slip_ratio_rl = 1.4;
+            t.tire_slip_ratio_rr = 1.6;
+        }],
+    },
+    Input {
+        key: "wheel_speed",
+        fields: "wheel_rotation_speed_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.wheel_rotation_speed_fl = 80.0;
+            t.wheel_rotation_speed_fr = 81.0;
+            t.wheel_rotation_speed_rl = 95.0;
+            t.wheel_rotation_speed_rr = 96.0;
+        }],
+    },
+    Input {
+        key: "rumble_strip",
+        fields: "wheel_on_rumble_strip_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.wheel_on_rumble_strip_fl = 1;
+            t.wheel_on_rumble_strip_fr = 1;
+            t.wheel_on_rumble_strip_rl = 1;
+            t.wheel_on_rumble_strip_rr = 1;
+        }],
+    },
+    Input {
+        key: "puddle",
+        fields: "wheel_in_puddle_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.wheel_in_puddle_fl = 1;
+            t.wheel_in_puddle_fr = 1;
+            t.wheel_in_puddle_rl = 1;
+            t.wheel_in_puddle_rr = 1;
+        }],
+    },
+    Input {
+        key: "surface_rumble",
+        fields: "surface_rumble_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.surface_rumble_fl = 0.6;
+            t.surface_rumble_fr = 0.7;
+            t.surface_rumble_rl = 0.8;
+            t.surface_rumble_rr = 0.9;
+        }],
+    },
+    Input {
+        key: "tyre_combined_slip",
+        fields: "tire_combined_slip_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.tire_combined_slip_fl = 0.5;
+            t.tire_combined_slip_fr = 0.6;
+            t.tire_combined_slip_rl = 1.5;
+            t.tire_combined_slip_rr = 1.7;
+        }],
+    },
+    Input {
+        key: "car_class",
+        fields: "car_class, car_performance_index",
+        changes: &[|t| {
+            t.car_class = 5;
+            t.car_performance_index = 900;
+        }],
+    },
+    Input {
+        key: "cylinders",
+        fields: "num_cylinders",
+        changes: &[|t| t.num_cylinders = 8, |t| t.num_cylinders = 12],
+    },
+    Input {
+        key: "car_group",
+        fields: "car_group",
+        changes: &[|t| t.car_group = 3],
+    },
+    Input {
+        key: "smashable",
+        fields: "smashable_vel_diff, smashable_mass",
+        changes: &[|t| {
+            t.smashable_vel_diff = 3.0;
+            t.smashable_mass = 150.0;
+        }],
+    },
+    Input {
+        key: "torque",
+        fields: "torque",
+        changes: &[|t| t.torque = 650.0],
+    },
+    Input {
+        key: "tyre_temp",
+        fields: "tire_temp_fl, _fr, _rl, _rr",
+        changes: &[|t| {
+            t.tire_temp_fl = 180.0;
+            t.tire_temp_fr = 182.0;
+            t.tire_temp_rl = 195.0;
+            t.tire_temp_rr = 197.0;
+        }],
+    },
+    Input {
+        key: "fuel",
+        fields: "fuel",
+        changes: &[|t| t.fuel = 0.4],
+    },
+    Input {
+        key: "race_progress",
+        fields: "distance_traveled, best_lap, last_lap, current_lap, current_race_time, lap_number, race_position",
+        changes: &[|t| {
+            t.distance_traveled = 12_000.0;
+            t.best_lap = 91.5;
+            t.last_lap = 92.25;
+            t.current_lap = 30.0;
+            t.current_race_time = 214.0;
+            t.lap_number = 3;
+            t.race_position = 2;
+        }],
+    },
+    Input {
+        key: "driving_line",
+        fields: "normalized_driving_line, normalized_ai_brake_difference",
+        changes: &[|t| {
+            t.normalized_driving_line = -60;
+            t.normalized_ai_brake_difference = 90;
+        }],
+    },
 ];
 
 /// `t` with every field a review state leaves at zero set to a plausible reading, so a probe
@@ -309,70 +444,10 @@ const COMMON: &[Scenario] = &[
     },
 ];
 
-/// A standing start in first gear at 4,500 rpm: the launch scenarios start from it.
-fn standing() -> FH6TelemetryData {
-    let mut t = with_extras(STATES[0].telemetry());
-    t.gear = 1;
-    t.current_engine_rpm = 4_500.0;
-    t
-}
-
 /// Scenarios for inputs a dash reads only in combination with others (a lamp that needs two
 /// conditions). A dash adds its own here when its matrix row lists such an input; its probes
 /// then run in [`COMMON`] and in these. The matrix's `## Scenarios` table lists them.
-const DASH_SCENARIOS: &[(ClusterTheme, Scenario)] = &[
-    // LNCH: standing, throttle above 50% with the brake, handbrake or clutch held.
-    (
-        ClusterTheme::BoschDdu,
-        Scenario {
-            name: "launch, nothing held",
-            packet: |_| FH6TelemetryData {
-                accel: 204,
-                ..standing()
-            },
-        },
-    ),
-    (
-        ClusterTheme::BoschDdu,
-        Scenario {
-            name: "launch, brake held, throttle off",
-            packet: |_| FH6TelemetryData {
-                brake: 255,
-                ..standing()
-            },
-        },
-    ),
-    // ABS: braking harder than 30% while decelerating at 0.85 g or more.
-    (
-        ClusterTheme::BoschDdu,
-        Scenario {
-            name: "threshold braking, brake off",
-            packet: |_| {
-                let mut t = base_packet();
-                t.acceleration_z = -0.95 * 9.806_65;
-                t.accel = 0;
-                t
-            },
-        },
-    ),
-    // TC: throttle with the body slip growing faster than 8 deg/s, unless front-wheel drive.
-    (
-        ClusterTheme::BoschDdu,
-        Scenario {
-            name: "power oversteer, front drive",
-            packet: |i| {
-                let mut t = base_packet();
-                t.speed_ms = 25.0;
-                t.accel = 230;
-                t.drivetrain_type = 0;
-                let (s, c) = (2.0 + 0.6 * i as f32).to_radians().sin_cos();
-                t.velocity_x = t.speed_ms * s;
-                t.velocity_z = t.speed_ms * c;
-                t
-            },
-        },
-    ),
-];
+const DASH_SCENARIOS: &[(ClusterTheme, Scenario)] = &[];
 
 // --- Field coverage --------------------------------------------------------------------------
 

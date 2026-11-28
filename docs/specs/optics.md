@@ -6,7 +6,7 @@
 
 **Where the code is:**
 - `crates/fh6-kit/src/optics.rs` is the CPU reference: one pure function per equation, each with a unit test against a known value ([§13](#13-tests)).
-- `crates/fh6-kit/src/shaders/shape.wgsl` (`optic_glass`) evaluates the same equations per pixel.
+- `crates/fh6-kit/src/shaders/shape.wgsl` (`optic_glass`) evaluates the same equations per pixel, for glass and for metal (`OpticalGlass::metal`).
 - `crates/fh6-kit/tests/glass_gpu.rs` compares rendered pixels with the CPU reference and runs the conservation checks on the GPU.
 
 ---
@@ -43,6 +43,8 @@ A material known only by $n_d$ and $V_d$ uses the two-term Cauchy form $n(\lambd
 $$B = \frac{n_d - 1}{V_d\,(\lambda_F^{-2} - \lambda_C^{-2})}, \qquad A = n_d - \frac{B}{\lambda_d^2}$$
 
 Cauchy holds for normal dispersion in the visible range only [S6]. For N-BK7 it stays within 0.001 of the Sellmeier index from 440 to 660 nm (tested).
+
+**Borosilicate 3.3** (the tubes and the ampoule of `KineticLiquidMetal`, a lab instrument's glass) is known by its two catalogue lines only, so it uses the Cauchy fit above through `Dispersion::from_abbe(1.4714, 66.0)`. SCHOTT gives BOROFLOAT 33 an index $n_d$ = 1.47140 and a principal dispersion $n_F - n_C$ = 71.4 × 10⁻⁴, so $V_d$ = 0.47140 / 0.00714 = 66.0, and a density of 2.23 g cm⁻³ [S29]. Its $R_0$ is 3.6%.
 
 **Water** (the rippled surface that the liquid-light caustic of `tools/asset-forge` is traced through) is used at one index only, $n = 1.333$: the tabulated value at 550 and 575 nm for liquid water at 25 °C [S23]. The same table gives 1.339 at 400 nm and 1.331 at 700 nm; [§5](#5-dispersion) says why one index is enough there.
 
@@ -81,6 +83,16 @@ $$\eta(r) = A\,e^{-x^2}\cos(2\pi x), \qquad x = \frac{r - R}{\lambda}, \qquad \f
 
 with amplitude $A$, wavelength $\lambda$ and ring radius $R$ (animated outwards). The packet is a Gaussian-windowed cosine, a Gabor function [S26]. It is a shape chosen to look like the ring of waves that a drop sends across a liquid surface (the Cauchy–Poisson problem [S27]), not a solution of the capillary-wave equation, so its height and wavelength are design values held to the slope limit below. The surface is $h + \eta$, so the normal becomes $\mathbf n \propto (-\nabla h - \nabla\eta,\ 1)$ and everything after it (reflection, refraction, the highlight) follows without a special case. The steepest slope is about $2\pi A/\lambda$. Through a depth $D = H + b$ of glass a slope $\theta$ moves what lies under it by $D\tan(\theta - \theta_t)$ with $\sin\theta_t = \sin\theta / n$, so a wave over a numeral is kept under 5° (tested on the CPU and against the shader).
 
+**Standing waves.** A liquid shaken up and down at frequency $f$ breaks into Faraday waves: a standing pattern at $f/2$ whose surface is a sum of plane waves sharing one wavenumber [S33]. The kit adds that sum to the height (`StandingWaves`, beside the ripple), with up to six waves:
+
+$$\zeta(\mathbf p) = \sum_{i=1}^{N \le 6} A_i \cos\bigl(k\,\mathbf e_i \cdot (\mathbf p - \mathbf c) + \varphi_i\bigr), \qquad \nabla\zeta = -\sum_i k A_i\,\mathbf e_i \sin\bigl(k\,\mathbf e_i \cdot (\mathbf p - \mathbf c) + \varphi_i\bigr)$$
+
+with unit directions $\mathbf e_i$, amplitudes $A_i$, phases $\varphi_i$, one wavenumber $k = 2\pi/\lambda$ and a centre $\mathbf c$. The gradient is exact, one sine and cosine per wave per pixel, so no texture or flipbook is involved and $k$, $A_i$ and $\varphi_i$ may change every frame. Two waves 90° apart give squares, three 120° apart hexagons, and six 30° apart a twelve-fold quasi-pattern: the patterns Faraday waves select [S33]. Each is unchanged by a turn of 90°, 60° or 30° about $\mathbf c$ (tested). A post pinned at the centre holds the surface still around it, so the height is eased in from a still radius $R_s$ over a band $W$:
+
+$$\eta = w(r)\,\zeta, \qquad w = s^2(3 - 2s), \quad s = \mathrm{clamp}\Bigl(\frac{r - R_s}{W}, 0, 1\Bigr), \qquad \nabla\eta = w\,\nabla\zeta + \zeta\,w'(r)\,\hat{\mathbf r}$$
+
+$w$ is $C^1$, so neither the height nor the normal has a crease at the band's edges. The normal follows as for the ripple, $\mathbf n \propto (-\nabla h - \nabla\eta,\ 1)$. The waves also turn the normal inside a pixel, by the second derivatives $-k^2 \sum_i A_i \cos(\ldots)\,\mathbf e_i \mathbf e_i^{\mathsf T}$ (the ease is taken as constant across a pixel); the shader adds that change to the pixel footprint of [§7](#7-specular-light), so a short wavelength on a mirror widens its highlights instead of breaking them into flickering dots. The amplitude, like the ripple's, scales with materialise. Its steepest slope is at most $k \sum_i |A_i|$ outside the still band and $\sum_i |A_i|\,(k + 1.5/W)$ inside it ($w'$ peaks at $1.5/W$); over a numeral seen through glass, the same 5° limit as the ripple applies. The shader takes $|k| \le 64$ and $|A_i| \le 10^4$, so the second derivatives stay finite.
+
 **Materialise.** A piece appears by scaling $H$ and $b$ from 0 to their values. Lensing and highlights grow in; opacity is never ramped.
 
 ## 3. Fresnel reflectance
@@ -94,6 +106,27 @@ $$\cos\theta_t = \sqrt{1 - \frac{\sin^2\theta_i}{\eta^2}}, \quad r_\parallel = \
 - Sapphire reflects 7.7% face-on, the same at 45° to within a point, and everything at grazing incidence. That rise is what draws the rim of a piece.
 
 **Schlick's approximation** [S8], $F \approx R_0 + (1 - R_0)(1 - \cos\theta_i)^5$, is allowed only where the exact form is too costly. For the three materials above it is within 0.04 of the exact value, worst near 85° (tested). The glass shader uses the exact form.
+
+### Conductors: mercury
+
+A metal has a complex index $\tilde n = n + ik$, the square root of its permittivity $\varepsilon = \varepsilon_1 + i\varepsilon_2$. With $|\varepsilon| = \sqrt{\varepsilon_1^2 + \varepsilon_2^2}$ [S7]:
+
+$$n = \sqrt{\tfrac12\bigl(|\varepsilon| + \varepsilon_1\bigr)}, \qquad k = \sqrt{\tfrac12\bigl(|\varepsilon| - \varepsilon_1\bigr)}$$
+
+The Fresnel equations of the dielectric case hold with $\eta$ replaced by $\tilde n$ (complex arithmetic, unpolarised average of $|r_\parallel|^2$ and $|r_\perp|^2$); face-on they reduce to
+
+$$R_0 = \frac{(n - 1)^2 + k^2}{(n + 1)^2 + k^2}$$
+
+- Liquid mercury at 2.27 eV (546 nm, the green mercury line) has $\varepsilon = -18.46 + 13.50\,i$ [S30], so $n$ = 1.485, $k$ = 4.546 and $R_0$ = 0.779. The same paper's Drude fit gives 0.765 ± 0.008 there.
+- A conductor's reflectance dips only a little near its principal angle (no Brewster zero; mercury stays above 0.7) and reaches 1 at grazing incidence. A liquid-metal dash weights the studio its mercury mirrors by this curve (78% head-on, 100% at the edge), so the metal is a mirror of a measured strength, never a flat grey.
+- **Per channel.** Like a dielectric ([§5](#5-dispersion)), a metal is evaluated at the three channel wavelengths, 611, 549 and 464 nm, with $n$ and $k$ interpolated linearly in measured tables: liquid mercury [S31] and chromium [S32] (`optics::Metal`). Mercury there is $(n, k)$ = (1.86, 5.09), (1.55, 4.64), (1.13, 3.98) and reflects 0.781, 0.779 and 0.779 face-on: a neutral white, because $n$ and $k$ rise together with wavelength. Chromium reflects 0.55 to 0.56.
+- **The shader's form.** The shader evaluates the same reflectance without complex numbers [S7]: with $t = n^2 - k^2 - \sin^2\theta$, $a^2 + b^2 = \sqrt{t^2 + 4n^2k^2}$ and $a = \sqrt{(a^2 + b^2 + t)/2}$,
+
+$$R_s = \frac{a^2 + b^2 - 2a\cos\theta + \cos^2\theta}{a^2 + b^2 + 2a\cos\theta + \cos^2\theta}, \qquad R_p = R_s\,\frac{(a^2 + b^2)\cos^2\theta - 2a\cos\theta\sin^2\theta + \sin^4\theta}{(a^2 + b^2)\cos^2\theta + 2a\cos\theta\sin^2\theta + \sin^4\theta}, \qquad F = \tfrac12(R_s + R_p)$$
+
+  It agrees with the complex form within 1e-4 at every angle for $n$ from 0.05 to 3.2 (tested).
+- **What a metal pixel shows.** A metal transmits nothing; what it does not reflect it absorbs within nanometres. So [§8](#8-what-one-pixel-of-glass-shows) loses its transmitted term, $L_c = F_c\,E_c(\mathbf r) + S_c$, with the conductor's $F$ in the key light's lobe too, and the piece is opaque ($a = 1$): it shows black where it mirrors black, so off pixels stay off. Refraction, absorption and frost do not apply.
+- Code and tests: `crates/fh6-kit/src/optics.rs` (`Conductor`, `Metal`, `index_from_permittivity`, `fresnel_conductor`, `fresnel_conductor_real`); `OpticalGlass::metal` draws it.
 
 ## 4. Refraction through a piece
 
@@ -279,8 +312,10 @@ All in `crates/fh6-kit/src/optics.rs` unless a file is named.
 | §2 profile | `hemisphere_profile` | A radius-50 sphere: height 40 and normal (0.6, 0, 0.8) at 20 in |
 | §2 smooth union | `shape.rs`: `smooth_union_properties`, `two_outlines_touch_at_the_stated_blend_length` | Order independence, never above the plain union, bounded by $k \ln N$; two fronts meet at $k = g / (2 \ln 2)$ |
 | §2 surface waves | `a_ripple_is_a_packet_with_the_stated_slope`; `tests/glass_gpu.rs`: `a_ripple_bends_only_where_it_stands` | The slope is the derivative of the height; still three wavelengths away; the shader's displaced ramp against Snell's law within 0.012 |
+| §2 standing waves | `symmetric_waves_keep_their_rotational_symmetry`, `standing_wave_gradient_is_the_derivative_of_the_height`, `the_still_zone_pins_the_centre`, `zero_amplitude_is_a_still_surface`; `tests/glass_gpu.rs`: `standing_waves_bend_by_their_exact_slope`, `still_standing_waves_are_the_still_surface` | 2, 3 and 6 waves unchanged by 90°, 60° and 30° turns; gradient and second derivatives against central differences within 1e-4; zero height and slope inside the still radius, a $C^1$ ease; the shader's displaced ramp against Snell's law within 0.012; zero amplitude or a whole-piece still zone writes the flat piece's exact pixels, glass and metal |
 | §3 Fresnel | `fresnel_known_values`, `fresnel_matches_the_sine_tangent_form` | 4% at $n$ = 1.5; Brewster's angle; total internal reflection; the sine-tangent form |
 | §3 Schlick | `schlick_stays_within_its_stated_error` | Within 0.04 of exact |
+| §3 conductors | `mercury_from_its_permittivity`, `conductor_fresnel_limits_and_its_real_form`, `metal_tables_interpolate_and_clamp`; `tests/glass_gpu.rs`: `a_metal_reflects_by_its_complex_fresnel` | $n$ 1.485, $k$ 4.546 from $\varepsilon$; $R_0$ 0.779 from $\varepsilon$ and from the table; above 0.7 at every angle; $k = 0$ is the dielectric; 1 at grazing; the real form; the shader per channel within 0.01 on a dome, for mercury and for a metal whose three channels differ, opaque, nothing under it showing |
 | §4 Snell | `refraction_obeys_snell` | $\eta\sin\theta_t = \sin\theta_i$; reversibility; the critical angle |
 | §4 contact model | `a_hemisphere_on_a_page_magnifies_by_its_index`, `the_flat_top_shows_what_is_under_it_unbent` | 1.77× magnification; zero displacement under the flat top; $b\sqrt{\eta^2 - 1}$ at the rim |
 | §5 dispersion | `index_falls_with_wavelength_in_the_visible`, `channel_wavelengths_are_the_srgb_dominant_wavelengths` | Blue > green > red; 611, 549 and 464 nm within 2 nm |
@@ -327,5 +362,12 @@ Read on 2026-11-27. Where a page's text extraction dropped Greek letters or frac
 - **[S26]** D. Gabor, "Theory of communication. Part 1: The analysis of information", Journal of the Institution of Electrical Engineers, Part III, 93(26), 429-441 (1946), https://doi.org/10.1049/ji-3-2.1946.0074 (harmonic oscillations modulated by a Gaussian "probability pulse").
 - **[S27]** H. Lamb, *Hydrodynamics*, 6th edition, Cambridge University Press (1932), chapter IX, "Surface waves" (pp. 363-475), which treats the waves that spread from a local disturbance (the Cauchy-Poisson problem).
 - **[S28]** E. Hecht, *Optics*, 5th edition, Pearson (2017), chapter 5, refraction at a spherical surface: a surface of radius $R$ from air into a medium of index $n$ brings parallel light to a focus $nR/(n - 1)$ behind it.
+
+- **[S29]** SCHOTT, "BOROFLOAT® technical details", optical data (reference values): refraction index $n_d$ (587.6 nm) 1.47140, dispersion $n_F - n_C$ 71.4 × 10⁻⁴; density 2.23 g/cm³ at 25 °C. https://www.schott.com/en-gb/products/borofloat/technical-details (read 2026-11-28).
+- **[S30]** H. Arakawa, T. Inagaki and M. W. Williams, "Optical properties of metals by spectroscopic ellipsometry", Surface Science 96, 248 (1980), quoting the liquid-mercury permittivity of R. S. Smith and R. R. Stromberg, J. Opt. Soc. Am. 56, 1539 (1966). https://www.osti.gov/servlets/purl/6018359 (read 2026-11-28).
+
+- **[S31]** T. Inagaki, E. T. Arakawa and M. W. Williams, "Optical properties of liquid mercury", Physical Review B 23, 5246 (1981), https://doi.org/10.1103/PhysRevB.23.5246; the $n$, $k$ table as published in the refractiveindex.info database (CC0), https://refractiveindex.info/?shelf=main&book=Hg&page=Inagaki (read 2026-11-28).
+- **[S32]** P. B. Johnson and R. W. Christy, "Optical constants of transition metals: Ti, V, Cr, Mn, Fe, Co, Ni, and Pd", Physical Review B 9, 5056 (1974), https://doi.org/10.1103/PhysRevB.9.5056; the $n$, $k$ table as published in the refractiveindex.info database (CC0), https://refractiveindex.info/?shelf=main&book=Cr&page=Johnson (read 2026-11-28).
+- **[S33]** M. Faraday, "On a peculiar class of acoustical figures; and on certain forms assumed by groups of particles upon vibrating elastic surfaces", Philosophical Transactions of the Royal Society 121, 299-340 (1831), https://doi.org/10.1098/rstl.1831.0018 (the waves at half the driving frequency); W. S. Edwards and S. Fauve, "Patterns and quasi-patterns in the Faraday experiment", Journal of Fluid Mechanics 278, 123-148 (1994), https://doi.org/10.1017/S0022112094003642 (squares, hexagons and the twelve-fold quasi-pattern as sums of standing plane waves of one wavenumber).
 
 [S24] to [S28] are cited for the form of a function, not for a number. Their bibliographic records were checked on 2026-11-27 (for [S27], its chapter and pages, not its text).

@@ -9,11 +9,11 @@
 
 use fh6_gpu::GpuContext;
 use fh6_kit::color::srgb_to_linear;
-use fh6_kit::optics::{fresnel_dielectric, ripple_slope, transmittance, view_through, Dispersion, Profile};
+use fh6_kit::optics::{fresnel_dielectric, ripple_slope, transmittance, view_through, Conductor, Dispersion, Profile};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    deg, vec2, Color, Environment, Gradient, Kit, LayerOptions, Layout, OpticalGlass, Painter, Piece, Rect, Ripple,
-    Shape, Tokens, Vec2,
+    deg, vec2, Color, Environment, Gradient, Kit, LayerOptions, Layout, OpticalGlass, Painter, Piece, PlaneWave, Rect,
+    Ripple, Shape, StandingWaves, Tokens, Vec2,
 };
 
 const W: u32 = 640;
@@ -425,6 +425,192 @@ fn a_ripple_bends_only_where_it_stands() {
     for pos in [vec2(3.5, 0.5), vec2(-12.5, 14.5), vec2(0.5, -176.5), vec2(176.5, 0.5)] {
         assert_eq!(at(&still, pos), at(&rippled, pos), "{pos:?}");
     }
+}
+
+/// A black-to-white ramp across the field, under the glass.
+fn ramp_field(p: &mut Painter<'_>) {
+    ramp_band(p, vec2(FIELD.min.x, 0.0), vec2(FIELD.max.x, 0.0));
+}
+
+/// A black-to-white ramp from `from` to `to`, flat beyond them, over the whole field.
+fn ramp_band(p: &mut Painter<'_>, from: Vec2, to: Vec2) {
+    p.fill(
+        &Shape::rect(FIELD),
+        Gradient::linear(from, to)
+            .stop(0.0, Color::BLACK)
+            .stop(1.0, Color::WHITE),
+    );
+}
+
+#[test]
+fn standing_waves_bend_by_their_exact_slope() {
+    // optics.md §2, standing waves. Two plane waves 60° apart tilt a flat face by
+    // atan(|∇η|) along ∇η, so the refracted ray lands (H + b) tan(θi − θt) away along it.
+    // A steep ramp along x, then along y, reads both components of that shift.
+    let (ctx, mut kit) = setup();
+    let profile = Profile {
+        thickness: 20.0,
+        bevel: 20.0,
+        base: 30.0,
+        exponent: 2.0,
+    };
+    let mut waves = StandingWaves::new(vec2(-7.0, 3.0), core::f32::consts::TAU / 40.0);
+    for (angle, amplitude, phase) in [(0.0_f32, 2.5_f32, 0.4_f32), (60.0, 1.6, -1.1)] {
+        let (s, c) = angle.to_radians().sin_cos();
+        waves.push(PlaneWave {
+            direction: vec2(c, s),
+            amplitude,
+            phase,
+        });
+    }
+    let half = 100.0_f32;
+    let eta = Dispersion::SAPPHIRE.primaries()[1];
+    let depth = profile.thickness + profile.base;
+    for axis in [vec2(1.0, 0.0), vec2(0.0, 1.0)] {
+        let mut shot = |name: &str, standing: StandingWaves| {
+            render(&mut kit, &ctx, name, |p| {
+                ramp_band(p, axis * -half, axis * half);
+                let mut glass = dark_sapphire().with_profile(profile);
+                glass.standing = standing;
+                p.layer(LayerOptions::glass(0.0), |p| {
+                    p.fill(&Shape::circle(Vec2::ZERO, 200.0), glass);
+                });
+            })
+        };
+        let tag = if axis.x > 0.5 { "x" } else { "y" };
+        let still = shot(&format!("standing_still_{tag}"), StandingWaves::default());
+        let waved = shot(&format!("standing_{tag}"), waves);
+        let ramp = |q: Vec2| ((q.dot(axis) + half) / (2.0 * half)).clamp(0.0, 1.0);
+        let mut moved = 0.0_f32;
+        for i in 0..36 {
+            // Points along the ramp's axis, spread a little across it, all on the flat top.
+            let along = -82.5 + 4.7 * i as f32;
+            let across = -20.5 + 9.0 * (i % 5) as f32;
+            let pos = axis * along + vec2(axis.y, axis.x) * across + vec2(0.0, 0.0);
+            let g = waves.sample(pos).gradient;
+            let tilt = g.length().atan();
+            let inside = (tilt.sin() / eta).asin();
+            let dir = if g.length() > 1e-9 {
+                g * (1.0 / g.length())
+            } else {
+                Vec2::ZERO
+            };
+            let offset = depth * (tilt - inside).tan();
+            let want = (1.0 - fresnel_dielectric(tilt.cos(), eta)) * ramp(pos + dir * offset);
+            let got = at(&waved, pos)[1];
+            assert!(
+                (got - want).abs() <= 0.012,
+                "{tag} ramp, {pos:?}: shader {got} vs traced {want} (gradient {g:?})"
+            );
+            moved = moved.max((got - at(&still, pos)[1]).abs());
+        }
+        assert!(moved > 0.02, "{tag} ramp: the waves moved it by at most {moved}");
+    }
+}
+
+#[test]
+fn still_standing_waves_are_the_still_surface() {
+    // Zero amplitudes are no waves at all, and a still zone that covers the whole piece pins
+    // every pixel of it: both write exactly the pixels of the plain flat piece, glass and metal.
+    let (ctx, mut kit) = setup();
+    let spin = 0.3;
+    let silent = StandingWaves::symmetric(Vec2::ZERO, 0.2, 6, 0.0, spin);
+    let pinned = StandingWaves::symmetric(Vec2::ZERO, 0.2, 6, 2.0, spin).still(260.0, 10.0);
+    let mut sapphire = dark_sapphire();
+    sapphire.env_gain = [0.7; 3];
+    sapphire.light = [1.5; 3];
+    let mut mercury = OpticalGlass::metal(Conductor::mercury());
+    mercury.light = [1.5; 3];
+    for (label, base) in [("glass", sapphire), ("metal", mercury)] {
+        let mut shot = |name: &str, standing: StandingWaves| {
+            render(&mut kit, &ctx, &format!("{label}_{name}"), |p| {
+                ramp_field(p);
+                let mut piece = base.with_profile(Profile {
+                    thickness: 18.0,
+                    bevel: 30.0,
+                    base: 6.0,
+                    exponent: 2.0,
+                });
+                piece.standing = standing;
+                p.layer(LayerOptions::glass(0.0), |p| {
+                    p.fill(&Shape::circle(Vec2::ZERO, 200.0), piece);
+                });
+            })
+        };
+        let flat = shot("flat", StandingWaves::default());
+        assert!(flat.covered() > 0);
+        assert!(
+            shot("silent", silent).pixels == flat.pixels,
+            "{label}: zero amplitude changed pixels"
+        );
+        assert!(
+            shot("pinned", pinned).pixels == flat.pixels,
+            "{label}: a pinned surface changed pixels"
+        );
+    }
+}
+
+#[test]
+fn a_metal_reflects_by_its_complex_fresnel() {
+    // optics.md §3, conductors. Lit only by a uniform environment of radiance 1, each pixel of
+    // a metal dome is the conductor's Fresnel reflectance at its normal, per channel. A metal
+    // is opaque: nothing under it shows, and it covers the game fully.
+    let (ctx, mut kit) = setup();
+    let radius = 200.0_f32;
+    // Mercury is nearly neutral, so a made-up metal whose channels differ checks that each
+    // channel takes its own index.
+    let tinted = Conductor {
+        n: [0.25, 1.1, 2.6],
+        k: [3.2, 2.2, 0.9],
+    };
+    for hg in [Conductor::mercury(), tinted] {
+        let mut shot = |name: &str, under: bool| {
+            render(&mut kit, &ctx, name, |p| {
+                if under {
+                    ramp_field(p);
+                }
+                let mut metal = OpticalGlass::metal(hg);
+                metal.light = [0.0; 3];
+                metal.environment = Environment::Uniform;
+                p.layer(LayerOptions::glass(0.0), |p| {
+                    p.fill(
+                        &Shape::Blob {
+                            pieces: &[Piece::circle(Vec2::ZERO, radius).dome(radius, 0.0)],
+                            smooth: 0.0,
+                        },
+                        metal,
+                    );
+                });
+            })
+        };
+        let over_black = shot("mercury_dome", false);
+        let over_ramp = shot("mercury_dome_ramp", true);
+        for r in [0.5_f32, 60.0, 120.0, 160.0, 185.0, 195.0] {
+            let cos_i = (1.0 - (r / radius) * (r / radius)).sqrt();
+            let want = hg.reflectance(cos_i);
+            // Near the rim the normal turns about 1.5° per pixel, so the pixel centre's normal and
+            // the traced one differ more there.
+            let tol = if r > 190.0 { 0.02 } else { 0.01 };
+            for pos in [vec2(r, 0.5), vec2(-r, 0.5), vec2(0.5, r)] {
+                let got = at(&over_black, pos);
+                for c in 0..3 {
+                    assert!(
+                        (got[c] - want[c]).abs() <= tol,
+                        "{pos:?}, channel {c}: shader {} vs Fresnel {}",
+                        got[c],
+                        want[c]
+                    );
+                }
+                assert!((got[3] - 1.0).abs() < 1e-6, "a metal is opaque: alpha {}", got[3]);
+                assert_eq!(at(&over_ramp, pos), got, "the ramp under the metal showed at {pos:?}");
+            }
+        }
+    }
+    let face_on = tinted.reflectance(1.0);
+    assert!(
+        face_on[0] - face_on[2] > 0.2,
+        "the tinted metal's channels differ: {face_on:?}"
+    );
 }
 
 #[test]

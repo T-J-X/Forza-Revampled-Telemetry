@@ -603,9 +603,36 @@ pub fn chamfer_level(normal: Vec2, light: f32) -> f32 {
 /// The kit's linear-light opacity of `ink` over an opaque black body that shows `level`
 /// (0..=1) on screen. The kit blends linear premultiplied, so a design level of 18% is about
 /// 2.7% coverage.
+///
+/// Only right over a body of the dash's own (a face, a housing, a window's black fill). Over
+/// the overlay's transparent pixels use [`over_clear`], and for a part that sits on a housing
+/// the driver can turn off, [`level_alpha`].
 #[must_use]
 pub fn on_screen(level: f32) -> f32 {
     srgb_to_linear(finite_or(level, 0.0).clamp(0.0, 1.0))
+}
+
+/// The opacity of `ink` drawn over the overlay's transparent pixels (nothing opaque of the dash
+/// beneath) that shows `level` (0..=1) on screen over black: the level itself. The resolve
+/// writes covered colour as `E(ink) * a` and the desktop compositor blends that in encoded
+/// space (ADR 0001), so coverage is screen level there, unlike over a body ([`on_screen`]),
+/// where the same `on_screen` value would show about 2.5 times too dim (0.47 shows as 0.19).
+#[must_use]
+pub fn over_clear(level: f32) -> f32 {
+    finite_or(level, 0.0).clamp(0.0, 1.0)
+}
+
+/// The opacity of `ink` for a part that shows `level` on screen whether or not an opaque body
+/// lies beneath it: [`on_screen`] when `over_body`, else [`over_clear`]. For a part that sits on
+/// the dash's housing, pass `housing::shown(input.config, theme)`, so it keeps its brightness
+/// when the driver turns the housing off ([`crate::housing`]).
+#[must_use]
+pub fn level_alpha(level: f32, over_body: bool) -> f32 {
+    if over_body {
+        on_screen(level)
+    } else {
+        over_clear(level)
+    }
 }
 
 /// Black coverage of the content falloff at `x` (0 at the cavity edge, 1 at the falloff's inner
@@ -871,6 +898,32 @@ mod tests {
             (g.sample(0.75 - 0.14).a - 0.035).abs() < 1e-6,
             "near lobe within about ±50°"
         );
+    }
+
+    /// What the resolve (`post.wgsl`, `fs_resolve`) and the compositor make of white ink with
+    /// coverage `a`: over an opaque body the pixel is opaque and shows `E(a)`; over transparent
+    /// pixels it is `E(1) * a` blended over black in encoded space.
+    fn shown_white(a: f32, over_body: bool) -> f32 {
+        if over_body {
+            fh6_kit::color::linear_to_srgb(a)
+        } else {
+            fh6_kit::color::linear_to_srgb(1.0) * a
+        }
+    }
+
+    #[test]
+    fn a_level_shows_as_itself_over_a_body_and_over_clear_pixels() {
+        for level in [0.0, 0.18, 0.47, 0.55, 1.0] {
+            for over_body in [true, false] {
+                let shown = shown_white(level_alpha(level, over_body), over_body);
+                assert!((shown - level).abs() < 1e-3, "level {level}, over body {over_body}: {shown}");
+            }
+        }
+        // ValkyrieLmp1's measured case: on_screen over clear pixels shows 0.187 (48/255).
+        assert!((shown_white(on_screen(0.47), false) * 255.0 - 47.7).abs() < 1.0);
+        assert!((shown_white(over_clear(0.47), false) * 255.0 - 119.9).abs() < 1.0);
+        assert_eq!(over_clear(f32::NAN), 0.0);
+        assert_eq!(over_clear(1.5), 1.0);
     }
 
     #[test]

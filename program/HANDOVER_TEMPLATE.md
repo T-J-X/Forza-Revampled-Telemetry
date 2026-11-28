@@ -40,3 +40,4 @@ A dash handover lives in the dash's own module directory. Title it `# HANDOVER: 
 - `## Shared places touched` and `## Requests for shared code`.
 - `## What sibling dashes must know` (in place of "What the next phases must know").
 - `## Review findings`: the findings of the closing review's skills and agents (step 10), each with what was done about it. The self-review stands in for TJX's sign-off (AGENTS.md rule 12); anything TJX says later is added here by a later commit.
+- `## Review panel`: the six-lead review panel of step 10 (`fh6-visual-review`'s `references/panel.md`), run on the final build before the merge. For each of the six reviewers (the design director, HMI/UX, the research scout, the technical artist, Rust systems and QA): its yes/no answers and findings, short; for each finding, the checker's answer (confirmed or not, with its reason) and what was done about it (fixed, with the evidence, or why not).

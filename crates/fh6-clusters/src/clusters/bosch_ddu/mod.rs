@@ -1,683 +1,1169 @@
 //! Bosch DDU (`ClusterTheme::BoschDdu`), catalog row 12: the Race Dash family's pattern-setter
-//! (cockpit, build #4).
+//! (cockpit only).
 //!
-//! An honest race display in a machined carbon housing: an open-bottom U of 2×2 carbon twill
-//! (14 px face) with a deep 28 px 45° chamfer into a true-black cavity, four Allen bolts, the
-//! chamfer's lit and shadowed flanks following the virtual light (lateral G swings it 25°), and a
-//! bonded AR cover glass (a faint crescent and a 1 px tinted rim).
+//! The Bosch Motorsport DDU 10 as BMW fits it to the M4 GT3 (`RESEARCH.md`): one black glass
+//! face edge to edge in an anodised aluminium body with an arched top, large top corners and
+//! small bottom ones; ten shift LEDs across the brow in groups of 2, 6 and 2, five LEDs down each
+//! side, and a 7" screen with the round rev gauge in the middle, a horizon line under it, the
+//! gear in a beam of light that runs from the horizon to the screen's foot, and four quarter
+//! panels. The housing is the Blender render (`hardware.rs`, recipe
+//! `tools/asset-forge/src/recipes/bosch_ddu.rs`) with a procedural fallback; everything lit is
+//! drawn here. No Bosch marks: the chin carries the car's logo and the custom name instead.
+//! Board: Penpot page `07 · BoschDdu`.
 //!
-//! The housing is the Blender render (`assets/clusters/bosch_ddu/housing_l160.png` and
-//! `housing_l110.png`, recipe `tools/asset-forge/src/recipes/bosch_ddu.rs`): the U modelled in 3D,
-//! clear-coated carbon built on the ComfyUI carbon-fibre macro laid into a 2×2 twill
-//! (`carbon_weave.png`), machined Allen screws, one render per key-light azimuth crossfaded by
-//! lateral G. Without the files it draws the procedural housing (twill, facet-lit chamfer, rims,
-//! bolts). The rev cells, the G bar and the lamps are drawn here from the shared components'
-//! state (`TachBar`, `SignedBar`, `AlarmColumn`) without bloom or glow.
+//! Zone table (local 4K px round the cockpit anchor; the hood view draws the table's large parts
+//! at `HOOD_SCALE`, 0.68, see below):
 //!
-//! Glance ranks:
-//! 1. Ten 84 × 36 microprism LED pods in a recessed light bar, filling outside-in onto the centre
-//!    pair; and the gear (`race` Saira Condensed 600, cap 240) under them.
-//! 2. Tabular speed (cap 112, ghost 8s) on the left, its unit under it.
-//! 3. The 45-segment rev bar, numbered in thousands from the car's limiter.
-//! 4. The signed longitudinal-G bar above the gear (accelerating in ink, braking in `warning`);
-//!    the derived load quad under the gear; boost and power tiles on the right.
-//! 5. Six alarm lamps, three under each column, lit without bloom (the shared lamp keeps its soft
-//!    distance glow), labels shy until lit.
+//! | Zone | Part | Where | Holds |
+//! |---|---|---|---|
+//! | H | housing | x ±405, y −316..232 (arch crest −316, corners −306), top corners R 120, bottom R 44 | anodised body, black glass face, light sensor (359, 24) R 8 |
+//! | L·T | top LEDs | 10 lenses 28 × 10, centres y −284 on the arch, x ±19, ±57, ±95 (6) and ±161, ±199 (2 + 2) | rank 1: shift lights, left to right from the first rev stage to the shift point (the tenth lights at it), two green, six amber, two red (the palette's stage colours), then all ten in the shift lamp (`shift`, lifted toward ink to at least the amber stage's light, so that state is the brow's brightest for any palette) with a hotter core; the middle six strobe at 10 Hz from the shift point |
+//! | L·S | side LEDs | 5 lenses 28 × 10 per side at x ±359, centres y −70 up to −222 (pitch 38) | left: brake (fifths, `warning`), on the brake bar's side; right: body slip (one per 2.5°, `caution`); a halo, no bloom |
+//! | S | screen | x ±312, y −204..170 | true black |
+//! | Z | horizon | y 9, across both panel columns and the gauge's disc | a tinted line with a soft band of light over it: it splits the rows, cuts the disc flat and carries the beam's apex |
+//! | R | rev gauge | centre (0, −39), scale ring R 115 over 270° from 7:30, the lit band R 91..113 inside it, numerals outside at R 137 (cap 20) | rank 3: the rpm as a band in `primary` with a needle at its head (cross-faded to ink over the shift point, so only the LEDs carry `shift`); the limiter's tick wider than the others and reaching further in (its outer end where theirs is); the rpm digits (cap 36) and "rpm" in the disc |
+//! | G | gear beam | trapezoid y 9..170, ±32 at the horizon, ±120 at the foot | rank 1: the gear (cap 132, every gear in ink) in a beam of `primary` light, whose two edge lines turn `warning` in reverse |
+//! | Q1 | PEDALS | x −312..−156, y −204..−15 | throttle and brake bars: 28 fine lines, a marker at the value |
+//! | Q2 | G-FORCE | x −312..−156, y 9..170 | a full ring (R 54, band 14) at (−234, 108) on a dim track (half `ink_ghost`), filled clockwise from 12 o'clock by the felt force of the shared `GBall` (full at 1.5 g), a bead at the force's bearing, the total G (cap 26) and its unit inside |
+//! | Q3 | ENGINE | x 156..312, y −204..−15 | power (cap 28, `signals.power_unit`), boost (its label the panel's one accent line, the text-safe accent at the print's light; its value in ink with "psi" after it in print), the shift rpm boxed |
+//! | Q4 | SPEED | x 156..312, y 9..170 | rank 2: tabular speed (cap 58, no ghost 8s: at a glance they read as digits) and its unit |
+//! | C | chin | y 170..232 | the custom name (left zone), the car's logo zone (right); the hood view keeps a logo image only |
+//!
+//! The four quarter panels can be swapped or hidden with the config key `BoschDduPanels`: every
+//! panel fits every slot (the slots mirror about the gauge). A top panel's header stands on a
+//! tinted rule that turns up at the gauge; a bottom panel's stands under the horizon. A panel
+//! uses three type sizes: its header and labels (cap 15: 16 arcminutes at the 0.9 m seat is
+//! 14.1 px), one big value and one small value; a row's unit follows its label in lower case,
+//! and the three values that stand alone (rpm, speed, total G) carry theirs under the digits
+//! (cap 16).
+//!
+//! Sizes against the tokens: the real DDU 10 leads here (`RESEARCH.md`), so the gear (cap 132,
+//! 0.35 of the 374 px screen against `type.ratios.raceGearToPanelHeight` 0.45), the speed
+//! (cap 58) and the LED row (426 px) are under the family's `layout.zones` minimums (150, 84,
+//! 720), which describe the earlier wide concept; gear and figures are larger on the screen than
+//! the real display's, and a test pins the three sizes. The catalog lists the cockpit view only.
+//! The hood view is an uncatalogued fallback at `HOOD_SCALE` that draws only what stays over
+//! the size floors there (one decision, `shows`): the housing, the LEDs, the horizon, the rev
+//! band with its ticks and digits, the gear in its beam, the speed's digits and a logo image on
+//! the chin. The other three panels (ENGINE goes whole, although its power figure alone would be
+//! 19 px), every header, label and unit, the rev numerals and the chin's wordmarks are left out.
+//!
+//! Every static part tinted with `primary` or `warning` (the beam at rest, the header rules and
+//! the horizon, the red zone, the shift box) is held at or under the static cap of 0.2 relative
+//! luminance whatever the palette (`static_alpha`); the printed parts sit under it by their share
+//! of the label role.
 //!
 //! Signature moments:
-//! - **Shift lights:** the pods light in the frame each threshold is crossed, green → amber → red,
-//!   outer pair first, landing on the centre pair above the gear; at the shift point all ten take
-//!   `shift`, and at the limiter only the pod strip strobes (10 Hz, 50% duty, `ShiftLights`).
-//! - **Pod spill:** the one steady limiter cue. The upper carbon chamfer takes a non-emissive
-//!   `shift` reflection (one hot spot over each pod, 35% peak) that ramps in over 150 ms, as if the
-//!   pods spill onto the bevel. It never flashes. The lit rev segments turn steady ink, so only
-//!   the strip and LIM carry `shift`.
-//! - **Shift event page:** on every upshift the right tiles swap to the rpm the shift was made at
-//!   and how far it was early or late against the shift point, for 4 s (a Bosch event page). The
-//!   swap is stepped over 150 ms and never shows two pages at once. The gear itself changes with
-//!   the tokens' entry motion only.
-//! - **Parallax:** lateral G moves the housing ±4 px and the cover glass ±2 px; the data stays.
+//! - **Shift lights:** the brow fills left to right: LED 1 in the frame the palette's first rev
+//!   stage is crossed (0.75 of the shift rpm in the tokens), one more every ninth of the range
+//!   from there to the shift point, so nine are lit just under it and the tenth lights at it.
+//!   Each LED has its group's colour as BMW sets the M4 GT3's: two green, six amber, two red
+//!   (the palette's three stage colours). At the shift point all ten turn the shift lamp with a
+//!   hotter core, the brow's brightest state for any palette (lens and halo), and the middle
+//!   six strobe at 10 Hz on their own clock (the strobe's first frame is lit) while the outer
+//!   pairs stay lit, as the shared
+//!   `ShiftLights` strobes from the shift point too (the tokens' text says "at the limiter").
+//!   The LEDs go out within 50 ms of the rpm falling. Over the shift point the band cross-fades
+//!   to ink in 0.1 s (held at least 0.35 s, no bloom while ink). Over the shift point, or on a
+//!   limiter bounce just under it, the rpm digits and the band show the highest rpm of the last
+//!   0.3 s, so neither the digits nor the band's head flicker on a bounce; an upshift's drop
+//!   releases them at once. With reduced flash the middle six breathe at 2 Hz between 0.6
+//!   and full, from the peak, instead of strobing.
+//! - **Gear change:** the token glyph motion inside the beam; the beam flares once.
+//! - **Light:** lateral G swings one key light 25° across the housing (three renders,
+//!   cross-faded).
 //!
-//! Telemetry: rpm (current, limiter, the shift point), gear, speed, longitudinal and lateral G,
-//! pedals, handbrake, clutch, body slip (from velocity), drivetrain, power and boost are decoded
-//! and golden-tested. Derived (labelled so in `HANDOVER.md`): the TC, ABS, SLIP and LNCH lamps and
-//! the load quad (weight transfer from G). Tyre temperatures, slip ratios, fuel and lap data are
-//! not in the decoder yet, so nothing here pretends to show them.
-//!
-//! Zone table (local 4K px around the cockpit anchor (1920, 1835); the envelope is
-//! x −720..720, y −320..240):
-//!
-//! | Zone | Element | Geometry |
-//! |---|---|---|
-//! | Z5 | housing (open-bottom U) | x ±700, y −306 → open at 234; top corners r 96; face 14, chamfer 28 |
-//! | Z5 | cavity | x ±658, top −264, corners r 54 |
-//! | Z1 | light bar + 10 pods | bar x ±556, y −252..−204; pods 84 × 36 at x −495 + 110·i, y −228 |
-//! | Z3 | rev bar | x ±500, y −196..−172, 45 segments, numerals cap 16 under it |
-//! | Z4 | long-G bar | centre (0, −120), ±260, 8% of the gear cap tall |
-//! | Z1 | gear | centre (0, 46), cap 240 |
-//! | Z4 | load quad | 2 × 2 tyres 28 × 24 at x ±17, y 190 / 220 |
-//! | Z2 | speed | centre (−400, 10), cap 112; unit cap-top at y 84 |
-//! | Z4 | tiles | x 260..560: y −80..35 and 45..160, value cap 56 |
-//! | Z4 | dividers | x ±210, y −80..160, fading at both ends |
-//! | Z5 | lamps | rows x −620..−260 and 260..620 at y 180 |
-//! | Z5 | bolts | (±667, −273) and (±693, 96), r 5.5 |
-//!
-//! Hood: the catalog lists this cluster for the cockpit only. Forced into the hood view it draws
-//! the same layout at [`HOOD_SCALE`], which fits the hood envelope; the housing is opaque, so it
-//! stays legible over a bright bonnet.
-use crate::common::bezel::{chamfer_level, lit_rim, on_screen};
+//! The first frame, a race-flag change and the first frame after a gap take the car's state as
+//! it is (no latch, peak, fade or glyph motion carries over, and the G ball and the virtual light
+//! are put at rest on that frame's force, so nothing drifts after it). Telemetry: rpm, limiter
+//! and shift point, gear, speed, pedals, smoothed G and body slip (derived from the verified
+//! velocity) from `Signals`; power and boost from the packet. Boost reads in psi, the packet's own unit,
+//! whatever the speed unit (the config has no pressure unit yet). Every readout shows its raw
+//! value on the frame it moves, held by `fh6_kit::Hysteresis` (rpm by 30, power by 1 % and at
+//! least 3, boost by 0.3 psi, total G by 0.03).
+mod hardware;
+
+use crate::common::gball::GBall;
 use crate::common::hero_gear::HeroGear;
-use crate::common::race::{AlarmColumn, AlarmLamp, AlarmSide, DataTile, LampTone, TileAlert, TileFormat, TileFrame};
-use crate::common::shift::LimiterCue;
-use crate::common::signed_bar::{AccelTone, SignedBar, SignedSource};
+use crate::common::label::{logo_zone, LogoVariant};
+use crate::common::race::{draw_fixed, saturate_to_cells};
 use crate::common::speed::TabularSpeed;
-use crate::common::tach::TachBar;
-use crate::common::{ShiftLights, VirtualLight};
-use core::f32::consts::{FRAC_1_SQRT_2, PI, TAU};
+use crate::common::VirtualLight;
+use core::f32::consts::{PI, TAU};
 use fh6_kit::cluster::Setup;
+use fh6_kit::logo::LogoStyle;
 use fh6_kit::{
-    deg, vec2, Align, BlendMode, Bloom, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId,
-    ImagePaint, LayerOptions, Layout, Paint, Painter, Palette, Radii, Rect, Shape, Signals, Smoothed, SpeedUnit,
-    Spread, Stroke, TextStyle, Tokens, VAlign, Vec2, View,
+    vec2, Align, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, Hysteresis,
+    LayerOptions, Layout, Logo, Painter, Palette, PowerUnit, Rect, Shape, Signals, SpeedUnit, Strobe, Stroke,
+    TextStyle, Tokens, Tween, VAlign, Vec2, View,
 };
+use hardware::Sprites;
 
-/// Pods in the light bar (catalog brief: ten).
-const PODS: u32 = 10;
-/// Scale of the whole cluster when it is forced into the hood view.
-const HOOD_SCALE: f32 = 0.7;
-/// The pod-spill cue ramps to full over this long (brief: 150 ms).
-const SPILL_RAMP_S: f32 = 0.15;
-/// The pod-spill reflection's peak opacity. The brief asks 60%; at 60% the reflection read as
-/// an emitter in the critique, so each hot spot peaks at 35%.
-const SPILL_PEAK: f32 = 0.35;
-/// How long the shift event page holds (brief: 4 s).
-const EVENT_HOLD_S: f32 = 4.0;
-/// The stepped page swap (brief: 150 ms): 3 steps of 25 ms out, then 3 in.
-const EVENT_STEP_S: f32 = 0.025;
-/// Steps each way.
-const EVENT_STEPS: f32 = 3.0;
-/// The rpm the shift was made at is the peak over this window before the gear changed (the
-/// rpm can drop a frame or two before the gear byte does).
-const SHIFT_PEAK_WINDOW_S: f32 = 0.25;
-/// A shift within this many rpm of the shift point reads as on time (neutral ink).
-const SHIFT_WINDOW_RPM: f32 = 150.0;
-/// Housing parallax at full lateral G (px), and the cover glass's.
-const PARALLAX_HOUSING: f32 = 4.0;
-/// See [`PARALLAX_HOUSING`].
-const PARALLAX_GLASS: f32 = 2.0;
-/// The cover glass crescent: 18/255 as seen on screen (brief).
-const CRESCENT_LEVEL: f32 = 18.0 / 255.0;
-/// Brightness of the twill texture before it is multiplied by itself (the squared weave sits
-/// near 5% on screen, the tows near 7%: static structure stays well under 20%).
-const TWILL_TINT: f32 = 1.0;
-/// The Blender housing renders (`assets/clusters/bosch_ddu/housing_l160.png`, `housing_l110.png`,
-/// recipe `tools/asset-forge/src/recipes/bosch_ddu.rs`): the local rect they cover (the housing
-/// with a 6 px margin, down to the open line) and their key-light azimuths (degrees).
-const BAKED_RECT: Rect = Rect {
-    min: vec2(-706.0, -312.0),
-    max: vec2(706.0, 234.0),
-};
-/// See [`BAKED_RECT`].
-const BAKED_LIGHTS: [f32; 2] = [-160.0, -110.0];
-/// The renders' brightness on screen as a linear share (the studio render is lit for a
-/// monitor; in the cockpit the static structure stays under 20% on screen).
-const BAKED_GAIN: f32 = 0.55;
-/// Twill tile size for the Phase 6 texture (local px).
-const TWILL_TILE: f32 = 208.0;
-/// Procedural twill: weave pitch and tow contrast (linear coverage of ink over black).
-const WEAVE: f32 = 12.0;
-/// See [`WEAVE`].
-const WEAVE_ALPHA: f32 = 0.02;
-/// The twill line's brightness on screen (the diagonal steps of the weave).
-const TWILL_LINE: f32 = 0.07;
-/// Diagonal sheen across the carbon face (linear coverage of ink).
-const SHEEN: f32 = 0.03;
-/// A chamfer facet's brightness across its width, as a share of its facing level (lip, a third
-/// of the way down, base). The lip catches the light; the base sinks into the cavity.
-const CHAMFER_PROFILE: [f32; 3] = [1.0, 0.55, 0.2];
-/// Share of the COMPONENTS.md facing levels (lit 55%, shadow 18%) the chamfer shows: the full
-/// levels on a 28 px band read as a grey plastic frame on OLED black.
-const CHAMFER_GAIN: f32 = 0.9;
-/// Unlit lenses, cells and tracks (pods, rev cells, G-bar track, lamps, tyres) as seen on screen:
-/// 9/255. At the ghost role they read as grey keys and a scroll bar on true black.
-const UNLIT_LENS: f32 = 9.0 / 255.0;
-/// The lit pods' share of the tokens' bloom intensity (rank 1, but an LED behind a lens, not a
-/// glowing button).
-const POD_BLOOM: f32 = 0.4;
-/// Pitch of the microprism rings in a pod lens (local px).
-const POD_RING_PITCH: f32 = 5.0;
-/// Nominal rev segments: `primary` pulled this far toward the label grey (the bar is rank 3; at
-/// full saturation 26 blue cells outshout the gear at cruise).
-const REV_DESAT: f32 = 0.35;
-/// Unlit rank-5 labels (lamps) as seen on screen, under the unit label.
-const LAMP_LABEL: f32 = 0.35;
-/// A load-quad tyre's body on screen: a little above the unlit lenses so the empty part of the
-/// tyre still shows its outline without a stroke.
-const TYRE_BODY: f32 = 14.0 / 255.0;
-/// The speed's ghost 8s as seen on screen (3%): brighter, an unused leading 8 reads as a digit
-/// (74 mph read as 874).
-const GHOST_8: f32 = 0.02;
+/// The hood view draws the cockpit table's large parts at this scale (housing 548 px tall → 373,
+/// inside the hood's 400 px envelope); [`shows`] says what it leaves out.
+const HOOD_SCALE: f32 = 0.68;
+/// Top LEDs.
+const TOP_LEDS: usize = 10;
+/// The outer LEDs at each end of the brow (the 2 of the 2-6-2 groups) stay steady over the
+/// shift point while the middle six strobe.
+const OUTER: usize = 2;
+/// LEDs in each side column.
+const SIDE_LEDS: usize = 5;
+/// Body slip per side LED (degrees), and the fall back a lit LED needs before it goes out.
+const SLIP_STEP_DEG: f32 = 2.5;
+const SLIP_HYST_DEG: f32 = 0.5;
+/// Brake below this is off (pedal noise); a lit first LED goes out only [`BRAKE_HYST`] of this
+/// under it, so a trigger resting at the dead zone does not flicker it.
+const BRAKE_DEAD: f32 = 0.02;
+/// The shift lights' release (s): a full strip is dark this long after the rpm has dropped
+/// (tokens `motion.shiftLights.releaseMaxMs` 50), three frames at 60 Hz.
+const RELEASE_S: f32 = 0.05;
+/// Once over the shift point the lights stay over until the rpm falls this far under it
+/// (tokens `hysteresisRpm`).
+const SHIFT_HYSTERESIS_RPM: f32 = 120.0;
+/// A gap in updates at least this long (s) ends in a snapped frame: take the car's state as it
+/// is. The host caps `dt` (`fh6-app` `MAX_DT`, 0.1 s), so this must stay under that cap for a
+/// gap to show in `dt`. The cluster's own clock (`FrameInput::t`, f32 seconds) is not used: after
+/// about 12 days its step passes this value and every step would read as a gap.
+const RESUME_DT: f32 = 0.09;
+/// The rpm digits show the highest rpm of a window this long (s), kept in two buckets of half
+/// its length ([`PeakWindow`]), while [`holds_peak`] says so: over the shift point, or on a
+/// limiter bounce just under it. A bounce is 50 to 150 ms, so the window always holds a whole
+/// bounce and the digits stay on its peak instead of dipping and coming back. The band and its
+/// needle take the same held rpm, or their head would jump between the bounce's top and bottom
+/// on every frame of a limiter hold (a 30 Hz flash in the flash audit).
+const PEAK_HOLD_S: f32 = 0.3;
+/// A limiter bounce falls at most this far (rpm) under its peak: within [`ARC_HOLD_S`] of the
+/// rpm last reaching the shift point (its latch's band) the digits keep the peak while the rpm
+/// stays this close to it, even when the bounce drops out of the shift lights' latch (a shift
+/// point at the limiter, or a deep bounce). An upshift drops far more, so it releases the digits
+/// at once.
+const BOUNCE_RPM: f32 = 500.0;
+/// The readouts' hysteresis (the kit's `Hysteresis` on the raw value, as the lessons of
+/// `CLUSTER_PROMPT.md` set it): rpm by 30 (in tens), power by 1 % and at least 3 of its unit,
+/// boost by 0.3 psi (3 tenths of a psi), each in the unit it is shown in.
+const RPM_HYST_TENS: f32 = 3.0;
+const POWER_HYST_SHARE: f32 = 0.01;
+const POWER_HYST_MIN: f32 = 3.0;
+const BOOST_HYST_TENTHS: f32 = 3.0;
+/// The total G's hysteresis (hundredths of a g): the limiter's bounce moves the longitudinal G
+/// a little every frame.
+const G_HYST_CENTI: f32 = 3.0;
+/// The digit cells of each readout, which also bound the value it shows (`saturate_to_cells`):
+/// rpm and the shift point (up to 99,999), power (9,999) and the total G (9.99 g).
+const RPM_CELLS: u8 = 5;
+const POWER_CELLS: u8 = 4;
+const G_CELLS: u8 = 3;
+/// A limiter under this (rpm) was not sent: `Signals` reports a missing one as 1. The scale's
+/// top when no limiter is known (rpm).
+const LIMITER_MIN_RPM: f32 = 500.0;
+const DEFAULT_SCALE_TOP: f32 = 8000.0;
+/// The G ring, a full circle: the felt force that fills it (g), where its fill starts (12
+/// o'clock, running clockwise), its band's width (px; 0.23 of the outer radius, towards the DDU
+/// fuel ring's heavy band), the bead at the force's bearing (radius, px) and the force at which
+/// the bead is fully lit (g).
+const G_FULL: f32 = 1.5;
+const G_START: f32 = 1.5 * PI;
+const G_BAND: f32 = 14.0;
+const G_BEAD: f32 = 3.5;
+const G_BEAD_FULL: f32 = 0.15;
+/// The G ring's unlit track: this share of `ink_ghost` (0.03 relative luminance, 1.6:1 over
+/// black), so the ring's form reads without lifting the light round the G value.
+const G_TRACK_SHARE: f32 = 0.5;
+/// A snapped frame settles a new G ball and the virtual light on the frame's force in this many
+/// updates of this length (s): `Spring::update` takes at most 0.25 s a step, and 2 s is twelve
+/// periods of the tokens' `gBall` spring, thirteen of the `light` spring and four lengths of the
+/// ball's trail.
+const SETTLE_STEPS: usize = 8;
+const SETTLE_DT: f32 = 0.25;
+/// A lit brake LED goes out only when the brake has fallen this far under its step (share of a
+/// step; of the dead zone for the first LED), so a pedal resting on a fifth does not flicker it.
+const BRAKE_HYST: f32 = 0.15;
+/// The beam's flare on a gear change (s, linear fade) and its peak.
+const FLARE_S: f32 = 0.25;
+const FLARE_PEAK: f32 = 0.6;
+/// The gear beam's light at rest (alpha of `primary`, or of `warning` for the edges in reverse;
+/// static parts, held under [`STATIC_CAP`] by [`static_alpha`]): its body at the apex, fading out
+/// towards the foot, and the bands of light inside its two edges with their width (px). The
+/// flare on a gear change lifts them for a moment.
+const BEAM_APEX: f32 = 0.3;
+const BEAM_EDGE: f32 = 0.34;
+const BEAM_BAND: f32 = 22.0;
+/// The gear's bloom: far under the token default (0.8). The kit's bloom is a pass over the
+/// whole frame that no clip bounds, so this level, not a clip, is what limits the gear's light
+/// on the chin under the screen.
+const GEAR_BLOOM: f32 = 0.05;
+/// The horizon's soft band of light: alpha of `primary` at the line over the panels and inside
+/// the rev gauge's disc (held under [`STATIC_CAP`]), and the height of each band (px). The
+/// disc's is the lower one, so the "rpm" unit stands on black over it.
+const HORIZON_GLOW: f32 = 0.07;
+const DISC_GLOW: f32 = 0.18;
+const HORIZON_BAND: f32 = 24.0;
+const DISC_BAND: f32 = 16.0;
+/// Header rules and the horizon line are tinted: this share of `primary` (held under
+/// [`STATIC_CAP`]), drawn opaque.
+const RULE_TINT: f32 = 0.3;
+/// The static cap (relative luminance over black): no part that never moves is brighter, the
+/// burn-in rule.
+const STATIC_CAP: f32 = 0.2;
+/// Labels at cap 15 sit this far (px) from their line, so their cap edges (7.5 px either side of
+/// the cap middle) land on whole pixels. The values keep their lines.
+const LABEL_NUDGE: f32 = -0.5;
+/// A header rule's 45° end at the gauge (px), and how far the rule's middle sits under the
+/// header's cap (px): with the header's half cap it lands the 2 px rule on whole pixels.
+const KICK: f32 = 22.0;
+const RULE_DROP: f32 = 8.5;
+/// A lit LED's hot centre: this share of ink mixed into its colour ([`lens_core`]; tokens
+/// `components.shiftLights.pod.core`: 40 % toward white), and the share on the brow over the
+/// shift point. With the shift lamp ([`shift_lamp`]) at least as bright as the amber stage, ten
+/// lit lenses then give more light than the fullest staged fill, lenses and halos counted, for
+/// any palette (a test integrates what `led` paints for several).
+const LED_CORE: f32 = 0.4;
+const SHIFT_CORE: f32 = 0.8;
+/// A lit LED's inner rim, 1 device px: alpha of ink (tokens `pod.innerRimAlphaPct` 50). It keeps
+/// neighbouring lit lenses apart.
+const LED_RIM: f32 = 0.5;
+/// Reduced flash: the middle six breathe at this rate (Hz) by this depth under full (tokens
+/// `motion.limiterStrobe.reducedFlash`: 2 Hz, 40 %), starting at the peak.
+const BREATH_HZ: f32 = 2.0;
+const BREATH_DEPTH: f32 = 0.4;
+/// The rev gauge's lit band: its strength under the scale ring and at its inner edge, and the
+/// bright edge under the ring: its strength at the band's start (its head is at full strength)
+/// and its width (px).
+const ARC_BODY: f32 = 0.55;
+const ARC_INNER: f32 = 0.1;
+const ARC_TAIL: f32 = 0.5;
+const ARC_HOT: f32 = 7.0;
+/// The bloom of the band's bright edge while the band is `primary`, under the token default
+/// (0.8) for the numerals beside it. It falls to none as the band turns ink.
+const ARC_BLOOM: f32 = 0.35;
+/// The band over the shift point: its cross-fade from `primary` to ink and back (s), and how
+/// long it stays ink at least once the shift point is reached (s), so brushing the shift point
+/// never flickers the band.
+const ARC_FADE_S: f32 = 0.1;
+const ARC_HOLD_S: f32 = 0.35;
+/// The ticks across the scale ring (px): how far each reaches inside and outside the ring and
+/// its width (the line's ends are round, half the width further on). The limiter's tick (on the
+/// first whole thousand at or over the limiter, which is the scale's end, as the scale tops out
+/// there) is wider and starts much further inside, so it differs by shape and not by its red alone; outside the
+/// ring its round end stops where the other ticks' ends do, clear of the numeral beside it.
+const TICK_IN: f32 = 4.0;
+const TICK_OUT: f32 = 5.0;
+const TICK_W: f32 = 2.0;
+const LIMIT_TICK_IN: f32 = 10.0;
+const LIMIT_TICK_W: f32 = 3.5;
+const LIMIT_TICK_OUT: f32 = TICK_OUT - (LIMIT_TICK_W - TICK_W) * 0.5;
+/// The shift box's inner padding at each end (px), and the air between a row's label and its
+/// unit.
+const SHIFT_PAD: f32 = 6.0;
+const ROW_GAP: f32 = 4.0;
+/// The gap (px) between the boost value and its unit after it: a thin space at the label cap,
+/// which leaves the value 7.5 px clear of the accent label at the widest value ("60.0").
+const UNIT_GAP: f32 = 2.0;
+/// The red zone on the scale ring (px wide), and its strength (alpha of `warning`; a static part,
+/// held under [`STATIC_CAP`]).
+const RED_BAND: f32 = 5.0;
+const RED_LEVEL: f32 = 0.75;
+/// The printed parts (numerals, labels, the boxed shift point, the chin) draw at this share of
+/// the `ink_label` role: 0.19 relative luminance, so they keep 4.5:1 over black (4.8:1) and stay
+/// under the static cap (0.2), dimmer than every live value; a test holds both. The role itself
+/// (alpha 120 of 255) is over the cap. Unlit segments are `ink_ghost`.
+const PRINT_SHARE: f32 = 0.44;
+/// The hairlines (the disc's ring, the bars' two rules, the minor ticks) are one tier under the
+/// print: this share of the `hairline` role (0.11 relative luminance, 3.2:1 over black),
+/// drawn opaque so crossing strokes show no brighter joints.
+const HAIRLINE_SHARE: f32 = 0.6;
+/// A logo image carries no label alpha of its own, so it draws at this opacity: a white logo
+/// then stays under the static cap (0.2).
+const LOGO_SHARE: f32 = 0.19;
+/// The outline of the box round the shift point (alpha of `primary`; a static part, held under
+/// [`STATIC_CAP`]). The box has no fill: the printed digits stand on black.
+const SHIFT_BOX: f32 = 0.4;
+/// A pedal bar: its fine lines, their width, how far the marker stands over the bar, and how far
+/// a bar's label sits over its top (px; with [`LABEL_NUDGE`] in it, so THR and BRK share their
+/// lines with POWER and BOOST).
+const HATCH: usize = 28;
+const HATCH_W: f32 = 2.0;
+const MARKER_OVER: f32 = 4.0;
+const BAR_LABEL: f32 = 12.5;
 
-/// Derived lamp thresholds (proposed; labelled derived in `HANDOVER.md`).
-mod lamp {
-    /// SLIP: body slip angle (deg) above this at speed.
-    pub const SLIP_DEG: f32 = 10.0;
-    /// SLIP / TC / ABS: minimum speed (m/s) before any slip or lock-up reading counts.
-    pub const MIN_SPEED_MS: f32 = 4.0;
-    /// TC: throttle above this (race-dash.md: 20%).
-    pub const TC_THROTTLE: f32 = 0.2;
-    /// TC: body slip above this (deg) and growing faster than [`TC_SLIP_RATE`].
-    pub const TC_SLIP_DEG: f32 = 3.0;
-    /// TC: the slip onset rate (deg/s) that reads as power oversteer.
-    pub const TC_SLIP_RATE: f32 = 8.0;
-    /// ABS: brake above this (race-dash.md: 30% in the brief).
-    pub const ABS_BRAKE: f32 = 0.3;
-    /// ABS: deceleration (g) above this reads as threshold braking.
-    pub const ABS_DECEL_G: f32 = 0.85;
-    /// LIM: rpm at or above this share of the limiter.
-    pub const LIM_PCT: f32 = 0.985;
-    /// HB: handbrake above this.
-    pub const HANDBRAKE: f32 = 0.1;
-    /// LNCH: standing still (m/s), throttle above this with the brake, handbrake or clutch held.
-    pub const LAUNCH_SPEED_MS: f32 = 0.5;
-    /// See [`LAUNCH_SPEED_MS`].
-    pub const LAUNCH_THROTTLE: f32 = 0.5;
-    /// Forza `DrivetrainType` 0 is front-wheel drive: no power oversteer to catch.
-    pub const FWD: i32 = 0;
-}
+/// Numerals 0 to 20 (thousands), so drawing never formats a string.
+const NUMERALS: [&str; 21] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+];
 
-/// Weight transfer per g as a share of the axle (centre of mass height / wheelbase, typical of a
-/// road car) and per g as a share of the side (height / track width).
-const LOAD_LONG_PER_G: f32 = 0.18;
-/// See [`LOAD_LONG_PER_G`].
-const LOAD_LAT_PER_G: f32 = 0.30;
-
-/// Geometry (local 4K px around the anchor). See the zone table in the module docs.
+/// The zone table as data (cockpit, local 4K px round the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Geom {
-    /// The housing's outer bounds; `max.y` is the open bottom line.
-    housing: Rect,
-    top_radius: f32,
-    face: f32,
-    chamfer: f32,
-    light_bar: Rect,
-    pod_first_x: f32,
-    pod_pitch: f32,
-    pod_y: f32,
-    pod_size: Vec2,
-    bar: Rect,
-    scale_cap: f32,
-    g_bar: Vec2,
-    g_bar_half: f32,
-    gear: Vec2,
+    half_w: f32,
+    /// The top corners' y (the arch's crest is `arch` above it) and the bottom edge.
+    top: f32,
+    bottom: f32,
+    arch: f32,
+    corner_top: f32,
+    corner_bottom: f32,
+    sensor: Vec2,
+    sensor_r: f32,
+    screen: Rect,
+    top_led_x: [f32; TOP_LEDS],
+    top_led_y: f32,
+    top_led: Vec2,
+    side_led_x: f32,
+    side_led_y0: f32,
+    side_led_pitch: f32,
+    side_led: Vec2,
+    /// The horizon line's y: the rows' split, the disc's flat foot and the beam's apex.
+    horizon: f32,
+    rev_c: Vec2,
+    /// The lit band's middle radius and its width; the scale ring runs just outside it.
+    rev_r: f32,
+    rev_w: f32,
+    rev_start: f32,
+    rev_sweep: f32,
+    num_r: f32,
+    num_cap: f32,
+    rpm_cap: f32,
+    rpm_at: Vec2,
+    /// The units that stand under their value (rpm, speed, total G).
+    unit_cap: f32,
+    /// The beam's half widths at the horizon and at the screen's foot.
+    beam_half: (f32, f32),
+    gear_at: Vec2,
     gear_cap: f32,
-    quad: Vec2,
-    tyre: Vec2,
-    quad_step: Vec2,
-    speed: Vec2,
+    /// Quarter panels: left (x0, x1), right (x0, x1), top row's header y and bottom row's.
+    left: (f32, f32),
+    right: (f32, f32),
+    head_top: f32,
+    head_bottom: f32,
+    head_cap: f32,
+    label_cap: f32,
+    /// Offsets below a panel's header line (px): a panel's first row label, the pedal bars'
+    /// tops, the G ring's centre, the power figure, the boost row, the shift row's middle, the
+    /// speed and its unit.
+    row_dy: f32,
+    bar_h: f32,
+    thr_dy: f32,
+    brk_dy: f32,
+    g_dy: f32,
+    g_r: f32,
+    g_value_cap: f32,
+    power_dy: f32,
+    power_cap: f32,
+    boost_dy: f32,
+    value_cap: f32,
+    shift_dy: f32,
+    shift_h: f32,
+    speed_dy: f32,
     speed_cap: f32,
-    unit_y: f32,
-    tiles: [Rect; 2],
-    tile_cap: f32,
-    divider_x: f32,
-    divider_y: [f32; 2],
-    lamps: [Rect; 2],
-    bolts: [Vec2; 4],
-    bolt_r: f32,
-    /// The U's legs fade into the column over this length above the open line.
-    leg_fade: f32,
+    unit_dy: f32,
+    /// The chin's two zones: the custom name (left) and the car's logo (right).
+    name: Rect,
+    logo: Rect,
 }
 
-const COCKPIT: Geom = Geom {
-    housing: Rect {
-        min: vec2(-700.0, -306.0),
-        max: vec2(700.0, 234.0),
+const GEOM: Geom = Geom {
+    half_w: 405.0,
+    top: -306.0,
+    bottom: 232.0,
+    arch: 10.0,
+    corner_top: 120.0,
+    corner_bottom: 44.0,
+    sensor: Vec2 { x: 359.0, y: 24.0 },
+    sensor_r: 8.0,
+    screen: Rect {
+        min: Vec2 { x: -312.0, y: -204.0 },
+        max: Vec2 { x: 312.0, y: 170.0 },
     },
-    top_radius: 96.0,
-    face: 14.0,
-    chamfer: 28.0,
-    light_bar: Rect {
-        min: vec2(-556.0, -252.0),
-        max: vec2(556.0, -204.0),
+    top_led_x: [-199.0, -161.0, -95.0, -57.0, -19.0, 19.0, 57.0, 95.0, 161.0, 199.0],
+    top_led_y: -284.0,
+    top_led: Vec2 { x: 28.0, y: 10.0 },
+    side_led_x: 359.0,
+    side_led_y0: -70.0,
+    side_led_pitch: 38.0,
+    side_led: Vec2 { x: 28.0, y: 10.0 },
+    horizon: 9.0,
+    rev_c: Vec2 { x: 0.0, y: -39.0 },
+    rev_r: 102.0,
+    rev_w: 22.0,
+    rev_start: 0.75 * PI,
+    rev_sweep: 1.5 * PI,
+    num_r: 137.0,
+    num_cap: 20.0,
+    rpm_cap: 36.0,
+    rpm_at: Vec2 { x: 0.0, y: -54.0 },
+    unit_cap: 16.0,
+    beam_half: (32.0, 120.0),
+    gear_at: Vec2 { x: 0.0, y: 94.0 },
+    gear_cap: 132.0,
+    left: (-312.0, -156.0),
+    right: (156.0, 312.0),
+    head_top: -182.0,
+    head_bottom: 24.0,
+    head_cap: 15.0,
+    label_cap: 15.0,
+    row_dy: 34.0,
+    bar_h: 18.0,
+    thr_dy: 46.0,
+    brk_dy: 108.0,
+    g_dy: 84.0,
+    g_r: 54.0,
+    g_value_cap: 26.0,
+    power_dy: 66.0,
+    power_cap: 28.0,
+    boost_dy: 96.0,
+    value_cap: 18.0,
+    shift_dy: 128.0,
+    shift_h: 26.0,
+    speed_dy: 81.0,
+    speed_cap: 58.0,
+    unit_dy: 128.0,
+    name: Rect {
+        min: Vec2 { x: -330.0, y: 184.0 },
+        max: Vec2 { x: -150.0, y: 220.0 },
     },
-    pod_first_x: -495.0,
-    pod_pitch: 110.0,
-    pod_y: -228.0,
-    pod_size: vec2(84.0, 36.0),
-    bar: Rect {
-        min: vec2(-500.0, -196.0),
-        max: vec2(500.0, -172.0),
+    logo: Rect {
+        min: Vec2 { x: 150.0, y: 184.0 },
+        max: Vec2 { x: 330.0, y: 220.0 },
     },
-    scale_cap: 16.0,
-    g_bar: vec2(0.0, -120.0),
-    g_bar_half: 260.0,
-    gear: vec2(0.0, 46.0),
-    gear_cap: 240.0,
-    quad: vec2(0.0, 205.0),
-    tyre: vec2(28.0, 24.0),
-    quad_step: vec2(34.0, 30.0),
-    speed: vec2(-400.0, 10.0),
-    speed_cap: 112.0,
-    unit_y: 84.0,
-    tiles: [
-        Rect {
-            min: vec2(260.0, -80.0),
-            max: vec2(560.0, 35.0),
-        },
-        Rect {
-            min: vec2(260.0, 45.0),
-            max: vec2(560.0, 160.0),
-        },
-    ],
-    tile_cap: 56.0,
-    divider_x: 210.0,
-    divider_y: [-80.0, 160.0],
-    lamps: [
-        Rect {
-            min: vec2(-620.0, 180.0),
-            max: vec2(-260.0, 230.0),
-        },
-        Rect {
-            min: vec2(260.0, 180.0),
-            max: vec2(620.0, 230.0),
-        },
-    ],
-    bolts: [
-        vec2(-667.0, -273.0),
-        vec2(667.0, -273.0),
-        vec2(-693.0, 96.0),
-        vec2(693.0, 96.0),
-    ],
-    bolt_r: 5.5,
-    leg_fade: 96.0,
 };
 
+/// One quarter panel's place: its x range, its header line, its side of the gauge and its row
+/// (the top row's headers mirror about the gauge and stand on a rule; the bottom row's are both
+/// left-aligned).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Slot {
+    x: (f32, f32),
+    head: f32,
+    right_side: bool,
+    top: bool,
+}
+
+/// Quarter panels, in the order of the `BoschDduPanels` list: left top, left bottom, right top,
+/// right bottom.
+const PANELS: usize = 4;
+
 impl Geom {
-    /// The housing extended below the open line (its bottom corners are clipped away).
-    fn outer(&self) -> Rect {
-        Rect::from_points(self.housing.min, vec2(self.housing.max.x, self.housing.max.y + 120.0))
-    }
-
-    /// The outer bounds inset by `d` on the top, left and right (the open bottom stays).
-    fn inset_u(&self, d: f32) -> Rect {
-        let o = self.outer();
-        Rect::from_points(o.min + vec2(d, d), vec2(o.max.x - d, o.max.y))
-    }
-
-    /// The edge between the face and the chamfer (the lip).
-    fn lip(&self) -> Rect {
-        self.inset_u(self.face)
-    }
-
-    /// The cavity (the chamfer's base).
-    fn cavity(&self) -> Rect {
-        self.inset_u(self.face + self.chamfer)
-    }
-
-    fn lip_radius(&self) -> f32 {
-        self.top_radius - self.face
-    }
-
-    fn cavity_radius(&self) -> f32 {
-        self.top_radius - self.face - self.chamfer
-    }
-
-    /// The centres of the two top corners (left, right).
-    fn corner_centers(&self) -> (Vec2, Vec2) {
-        let h = self.housing;
-        let r = self.top_radius;
-        (vec2(h.min.x + r, h.min.y + r), vec2(h.max.x - r, h.min.y + r))
-    }
-
-    /// The hard clip region of each band piece (same order as [`Geom::band`]); they tile the
-    /// housing and meet on the corner centres' lines, which sit on whole pixels at the anchor.
-    fn band_clips(&self) -> [Rect; 5] {
-        let h = self.housing;
-        let (cl, cr) = self.corner_centers();
-        let top = h.min.y - 4.0;
-        [
-            Rect::from_points(vec2(h.min.x - 4.0, top), cl),
-            Rect::from_points(vec2(cr.x, top), vec2(h.max.x + 4.0, cr.y)),
-            Rect::from_points(vec2(cl.x, top), vec2(cr.x, cl.y)),
-            Rect::from_points(vec2(h.min.x - 4.0, cl.y), vec2(cl.x, h.max.y)),
-            Rect::from_points(cr, vec2(h.max.x + 4.0, h.max.y)),
-        ]
-    }
-
-    /// The band of the U from `d0` to `d1` px in from the outer edge, as five small shapes (no
-    /// fill covers the whole housing): the left and right corner arcs, the top run and the left
-    /// and right legs down to the open line. The straight runs reach `overlap` px into the corners:
-    /// opaque passes use 1 px so the anti-aliased joints don't let the game show through (two
-    /// half-covered edges add up to 75%); additive passes use 0 so the joint is not lit twice.
-    fn band(&self, d0: f32, d1: f32, overlap: f32) -> [Shape<'static>; 5] {
-        let h = self.housing;
-        let r = self.top_radius;
-        let (cl, cr) = self.corner_centers();
-        let mid = r - (d0 + d1) * 0.5;
-        let w = d1 - d0;
-        let q = PI * 0.5;
-        let o = overlap;
-        // The arcs overrun their quarter by `overlap` px at each end too.
-        let e = o / (r - d1).max(1.0);
-        [
-            Shape::arc(cl, mid, w, PI - e, q + 2.0 * e, fh6_kit::Cap::Butt),
-            Shape::arc(cr, mid, w, PI * 1.5 - e, q + 2.0 * e, fh6_kit::Cap::Butt),
-            Shape::rect(Rect::from_points(
-                vec2(cl.x - o, h.min.y + d0),
-                vec2(cr.x + o, h.min.y + d1),
-            )),
-            Shape::rect(Rect::from_points(
-                vec2(h.min.x + d0, cl.y - o),
-                vec2(h.min.x + d1, h.max.y),
-            )),
-            Shape::rect(Rect::from_points(
-                vec2(h.max.x - d1, cr.y - o),
-                vec2(h.max.x - d0, h.max.y),
-            )),
-        ]
-    }
-
-    /// Pod centres, outermost left first.
-    fn pod_centers(&self) -> [Vec2; PODS as usize] {
-        let mut out = [Vec2::ZERO; PODS as usize];
-        for (i, c) in out.iter_mut().enumerate() {
-            *c = vec2(self.pod_first_x + self.pod_pitch * i as f32, self.pod_y);
+    /// Quarter panel `i` (see [`PANELS`]).
+    fn slot(&self, i: usize) -> Slot {
+        let right_side = i >= 2;
+        let top = i.is_multiple_of(2);
+        Slot {
+            x: if right_side { self.right } else { self.left },
+            head: if top { self.head_top } else { self.head_bottom },
+            right_side,
+            top,
         }
-        out
+    }
+
+    /// The shift row's y range in an ENGINE panel at `s`.
+    fn shift_row(&self, s: Slot) -> (f32, f32) {
+        let middle = s.head + self.shift_dy;
+        (middle - self.shift_h * 0.5, middle + self.shift_h * 0.5)
+    }
+
+    /// The scale ring's radius: just outside the lit band.
+    fn ring_r(&self) -> f32 {
+        self.rev_r + self.rev_w * 0.5 + 2.0
+    }
+
+    /// The radius of the disc inside the lit band, which holds the rpm digits.
+    fn disc_r(&self) -> f32 {
+        self.rev_r - self.rev_w * 0.5 - 5.0
+    }
+
+    /// The housing's body below the arch.
+    fn body(&self) -> Rect {
+        Rect::from_points(vec2(-self.half_w, self.top), vec2(self.half_w, self.bottom))
+    }
+
+    /// The whole housing, arch included.
+    #[cfg(test)]
+    fn housing(&self) -> Rect {
+        Rect::from_points(vec2(-self.half_w, self.top - self.arch), vec2(self.half_w, self.bottom))
+    }
+
+    /// Half the flat span between the top corners, which the arch bridges.
+    fn arch_span(&self) -> f32 {
+        self.half_w - self.corner_top
+    }
+
+    /// The radius of the arch's circle: it rises `arch` over the span between the top corners.
+    fn arch_radius(&self) -> f32 {
+        let span = self.arch_span();
+        (span * span + self.arch * self.arch) / (2.0 * self.arch)
+    }
+
+    /// How far the arch drops below its crest at `x` (0 at the middle).
+    fn arch_drop(&self, x: f32) -> f32 {
+        let r = self.arch_radius();
+        r - (r * r - x * x).max(0.0).sqrt()
+    }
+
+    /// Top LED `i`'s lens, following the arch.
+    fn top_led_rect(&self, i: usize) -> Rect {
+        let x = self.top_led_x[i];
+        Rect::from_center_size(vec2(x, self.top_led_y + self.arch_drop(x)), self.top_led)
+    }
+
+    /// Side LED `i` (0 at the bottom) of the left (`side` −1) or right (+1) column.
+    fn side_led_rect(&self, side: f32, i: usize) -> Rect {
+        let c = vec2(
+            side * self.side_led_x,
+            self.side_led_y0 - self.side_led_pitch * i as f32,
+        );
+        Rect::from_center_size(c, self.side_led)
+    }
+
+    /// The gear beam's corners: apex left, apex right, foot right, foot left.
+    fn beam(&self) -> [Vec2; 4] {
+        let (t, b) = self.beam_half;
+        let foot = self.screen.max.y;
+        [
+            vec2(-t, self.horizon),
+            vec2(t, self.horizon),
+            vec2(b, foot),
+            vec2(-b, foot),
+        ]
     }
 }
 
-/// Fills `shape` inside the hard (not anti-aliased) clip `clip`: band pieces meet on clip edges, so
-/// their joints are neither doubled nor left half-covered.
-fn clipped(p: &mut Painter<'_>, clip: Rect, shape: &Shape<'_>, paint: impl Into<Paint>) {
-    p.scoped(|p| {
-        p.clip(clip, 0.0);
-        p.fill(shape, paint);
-    });
+/// What a quarter panel shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Content {
+    Pedals,
+    GForce,
+    Engine,
+    Speed,
+    Off,
 }
 
-/// U-shaped round rect (top corners only).
-fn u_shape(rect: Rect, r: f32) -> Shape<'static> {
-    Shape::round_rect(rect, Radii::new(r, r, 0.0, 0.0))
+impl Content {
+    fn parse(value: &str) -> Option<Content> {
+        let v = value.trim();
+        [
+            ("pedals", Content::Pedals),
+            ("g", Content::GForce),
+            ("gforce", Content::GForce),
+            ("engine", Content::Engine),
+            ("speed", Content::Speed),
+            ("off", Content::Off),
+            ("hidden", Content::Off),
+        ]
+        .into_iter()
+        .find_map(|(name, content)| v.eq_ignore_ascii_case(name).then_some(content))
+    }
 }
 
-/// The faces this cluster sets (resolved once; a user display font replaces the numerals).
+/// The dash's own option, from the config's extra key `BoschDduPanels` (hot-reloaded; set by
+/// hand in `config.json` until the OSD and the configurator offer it): the four quarter panels'
+/// contents as a comma-separated list in the order left top, left bottom, right top, right
+/// bottom, each `Pedals`, `G`, `Engine`, `Speed` or `Off` (default `Pedals,G,Engine,Speed`). A
+/// missing or unknown entry keeps its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Options {
+    panels: [Content; PANELS],
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            panels: [Content::Pedals, Content::GForce, Content::Engine, Content::Speed],
+        }
+    }
+}
+
+impl Options {
+    /// Parses the list; an empty one keeps every default.
+    fn parse(list: &str) -> Self {
+        let mut opts = Self::default();
+        for (slot, name) in opts.panels.iter_mut().zip(list.split(',')) {
+            if let Some(content) = Content::parse(name) {
+                *slot = content;
+            }
+        }
+        opts
+    }
+}
+
+/// What the hood view decides on: a quarter panel by its content, or the fine print (every
+/// header, label and unit, the rev numerals and the chin's wordmarks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Panel(Content),
+    Print,
+}
+
+/// True when `part` is drawn in `view`. The cockpit draws everything; the hood view, at
+/// [`HOOD_SCALE`], keeps only what stays over the size floors there and leaves the rest out
+/// whole: the PEDALS, G-FORCE and ENGINE panels (ENGINE although its power figure alone would be
+/// 19 px: its labels and boxed shift point could not come with it), and the fine print (caps 15
+/// and 16 would be 10.2 and 10.9 px, under the tokens' smallest size; the rev numerals' cap 20
+/// would be 13.6 px, under the 17.7 px of a readout; the chin's wordmark, the kit's cap 18,
+/// would be 12.2 px at best, at the smallest size's edge, and under it whenever a long name is
+/// shrunk to its zone).
+/// The SPEED panel keeps its digits.
+fn shows(view: View, part: Part) -> bool {
+    view != View::Hood || part == Part::Panel(Content::Speed)
+}
+
+/// A static part's alpha of `color`: `alpha`, or less where that would pass [`STATIC_CAP`] over
+/// black, so a light palette colour cannot lift a part that never moves over the cap.
+fn static_alpha(color: Color, alpha: f32) -> f32 {
+    alpha.min(STATIC_CAP / color.luminance().max(1e-3))
+}
+
+/// `color` at a static part's alpha ([`static_alpha`]).
+fn static_tint(color: Color, alpha: f32) -> Color {
+    color.with_alpha(static_alpha(color, alpha))
+}
+
+/// The colour of a lit lens's hot centre: `core` of ink mixed into `color`, at the lens's own
+/// level (a breathing lens's centre breathes with it).
+fn lens_core(color: Color, core: f32, pal: &Palette) -> Color {
+    color.lerp(pal.roles.ink.fade(color.a), core)
+}
+
+/// The brow's lamp over the shift point: `shift`, lifted toward ink until it gives at least the
+/// amber stage's light (a dark or saturated shift colour, such as `#FF1744`, gives less), so ten
+/// lit lenses always outshine the fullest staged fill. A shift colour as bright as amber or
+/// brighter is kept as it is.
+fn shift_lamp(pal: &Palette) -> Color {
+    let gap = (light(pal.roles.caution) - light(pal.shift)).max(0.0);
+    let room = (light(pal.roles.ink) - light(pal.shift)).max(1e-3);
+    pal.shift.lerp(pal.roles.ink, (gap / room).clamp(0.0, 1.0))
+}
+
+/// The halo round a lit lens: the first lobe of the tokens' medium glow.
+fn led_halo(t: &Tokens) -> Option<Glow> {
+    t.glow
+        .medium
+        .lobes()
+        .first()
+        .map(|lobe| Glow::new(lobe.sigma, lobe.intensity))
+}
+
+/// True when the shift point's limiter is known: `Signals` reports a missing limiter as 1 and
+/// derives the shift rpm from it.
+fn limiter_known(sig: &Signals) -> bool {
+    sig.max_rpm > LIMITER_MIN_RPM && sig.shift_rpm > 0.0
+}
+
+/// The faces this cluster sets (a user display font replaces the figures).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Faces {
     gear: FontId,
-    speed: FontId,
-    value: FontId,
+    figures: FontId,
     label: FontId,
-    /// The display role at creation, to notice a user font override.
+    wide: FontId,
     role_display: FontId,
 }
 
-/// The right column's page.
+/// The ten brow LEDs: they fill left to right from the palette's first rev stage to the shift
+/// point (0 ms attack, a release of at most 50 ms), turn `shift` together at the shift point
+/// and strobe from there.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct EventPage {
-    /// Seconds since the page opened (negative: closed).
-    t: f32,
-    /// Peak rpm over the last [`SHIFT_PEAK_WINDOW_S`].
-    peak_rpm: f32,
-    peak_age: f32,
-    last_gear: Gear,
-    /// The last shift was at or past the shift point.
-    late: bool,
+struct TopLeds {
+    /// Share of the strip lit (0..=1): LED `i` (0 at the left) is lit from `(i + 1) / 10`.
+    level: f32,
+    over: bool,
+    /// The strobe's own clock (s): from the frame the shift point is reached.
+    strobe_t: f32,
+    strobe_on: bool,
+    breath: f32,
+    /// True while the level falls toward its target (the release).
+    releasing: bool,
 }
 
-impl EventPage {
+impl TopLeds {
     fn new() -> Self {
         Self {
-            t: -1.0,
-            peak_rpm: 0.0,
-            peak_age: 0.0,
-            last_gear: Gear::Neutral,
-            late: false,
+            level: 0.0,
+            over: false,
+            strobe_t: 0.0,
+            strobe_on: true,
+            breath: 1.0,
+            releasing: false,
         }
     }
 
-    /// The opacities of the normal page and the event page. The swap is stepped and never
-    /// overlaps two pages of text: the outgoing page steps out in three 25 ms steps, then the
-    /// incoming one steps in (150 ms in all); after the hold the same happens in reverse.
-    fn levels(&self) -> (f32, f32) {
-        if self.t < 0.0 {
-            return (1.0, 0.0);
+    /// Feeds the rpm. A car that sends no limiter or shift point leaves the strip dark.
+    fn update(&mut self, sig: &Signals, pal: &Palette, dt: f32, calm: bool, snap: bool) {
+        if snap {
+            // A snapped frame starts from the car's state: no latch or strobe phase carries over.
+            self.over = false;
+            self.strobe_t = 0.0;
         }
-        let half = EVENT_STEP_S * EVENT_STEPS;
-        // 1 → 0 then 0 → 1 over `2 × half`, in steps.
-        let swap = |t: f32| -> (f32, f32) {
-            if t < half {
-                let steps = ((t / EVENT_STEP_S).floor() + 1.0).min(EVENT_STEPS);
-                (1.0 - steps / EVENT_STEPS, 0.0)
+        let known = limiter_known(sig);
+        let rpm = sig.rpm.max(0.0);
+        let frac = if known { sig.shift_fraction.max(0.0) } else { 0.0 };
+        let over = known
+            && if self.over {
+                rpm >= sig.shift_rpm - SHIFT_HYSTERESIS_RPM
             } else {
-                let steps = (((t - half) / EVENT_STEP_S).floor() + 1.0).min(EVENT_STEPS);
-                (0.0, steps / EVENT_STEPS)
-            }
-        };
-        if self.t < EVENT_HOLD_S {
-            let (out, inn) = swap(self.t);
-            (out, inn)
+                frac >= 1.0
+            };
+        self.strobe_t = if over && self.over { self.strobe_t + dt } else { 0.0 };
+        self.over = over;
+        let start = pal.stages[0];
+        let target = if over {
+            1.0
+        } else if known && frac >= start {
+            // LED 1 at the first stage, one more every ninth of the range, the tenth at the
+            // shift point: reaching it adds a light as well as the colour. Under the shift point
+            // the level stays half a rank under the tenth, which lights only with the shift state.
+            let range = ((frac - start) / (1.0 - start).max(1e-3)).clamp(0.0, 1.0);
+            let staged = (1.0 + (TOP_LEDS - 1) as f32 * range) / TOP_LEDS as f32;
+            staged.min((TOP_LEDS as f32 - 0.5) / TOP_LEDS as f32)
         } else {
-            let (out, inn) = swap(self.t - EVENT_HOLD_S);
-            (inn, out)
+            0.0
+        };
+        self.level = if target >= self.level || snap {
+            target
+        } else {
+            // A linear release: even a full strip is dark within [`RELEASE_S`].
+            (self.level - dt.max(0.0) / RELEASE_S).max(target)
+        };
+        self.releasing = self.level > target;
+        if calm {
+            // A breath from the peak: full on the frame the shift point is reached.
+            self.strobe_on = true;
+            let dip = 0.5 - 0.5 * (self.strobe_t * TAU * BREATH_HZ).cos();
+            self.breath = 1.0 - BREATH_DEPTH * dip;
+        } else {
+            self.strobe_on = Strobe::LIMITER.on(self.strobe_t);
+            self.breath = 1.0;
         }
     }
 
-    fn running(&self) -> bool {
-        self.t >= 0.0
+    /// The colour of LED `i` (0 at the left), or `None` when it is dark or strobed off. LED `i`
+    /// lights when the rpm reaches `stage 1 + (1 − stage 1) × i / 9` of the shift rpm, so the
+    /// first lights as stage 1 is crossed and the tenth at the shift point. A lit LED has its
+    /// group's colour (the lenses' 2-6-2 groups, as BMW sets the M4 GT3's): the palette's three
+    /// stage colours in turn; over the shift point all are the shift lamp ([`shift_lamp`]).
+    fn color_of(&self, i: usize, pal: &Palette) -> Option<Color> {
+        let rank = (i + 1) as f32 / TOP_LEDS as f32;
+        if self.level < rank - 1e-4 {
+            return None;
+        }
+        if self.over {
+            // The outer pairs stay lit, so the strobe's dark phase never reads as "no shift";
+            // the middle six strobe.
+            let lamp = shift_lamp(pal);
+            if !(OUTER..TOP_LEDS - OUTER).contains(&i) {
+                return Some(lamp);
+            }
+            return self.strobe_on.then(|| lamp.fade(self.breath));
+        }
+        let stage = if i < OUTER {
+            pal.roles.go
+        } else if i < TOP_LEDS - OUTER {
+            pal.roles.caution
+        } else {
+            pal.roles.warning
+        };
+        Some(stage)
+    }
+
+    /// The share of ink in a lit lens's hot centre: the shift state is the brow's brightest.
+    fn core(&self) -> f32 {
+        if self.over {
+            SHIFT_CORE
+        } else {
+            LED_CORE
+        }
+    }
+
+    /// True while the strip changes without new telemetry: the strobe or breath over the shift
+    /// point, or a release under way. A steady staged fill is still.
+    fn animating(&self) -> bool {
+        self.over || self.releasing
     }
 }
 
-/// The lamps' derived conditions, evaluated from decoded fields.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-struct LampInputs {
-    slip_rate: f32,
+/// The rev band's colour over the shift point: it cross-fades between `primary` and ink in
+/// [`ARC_FADE_S`] instead of stepping, and once the shift point is reached it stays ink for at
+/// least [`ARC_HOLD_S`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ArcInk {
+    /// Share of ink in the band (0 is `primary`, 1 is ink).
+    mix: f32,
+    /// Time since the shift point was last reached (s), counted up to [`ARC_HOLD_S`].
+    since: f32,
 }
 
-/// Left lamps (assists, derived): TC, ABS, SLIP.
-const LEFT_LAMPS: [AlarmLamp; 3] = [AlarmLamp::TC, AlarmLamp::ABS, AlarmLamp::new("SLIP", LampTone::Caution)];
-/// Right lamps: LIM (the limiter, `shift`), HB (handbrake), LNCH (launch armed, derived).
-const RIGHT_LAMPS: [AlarmLamp; 3] = [
-    AlarmLamp::LIM,
-    AlarmLamp::new("HB", LampTone::Caution),
-    AlarmLamp::new("LNCH", LampTone::Caution),
-];
+impl ArcInk {
+    fn new() -> Self {
+        Self {
+            mix: 0.0,
+            since: ARC_HOLD_S,
+        }
+    }
 
-/// The left lamp states: TC, ABS, SLIP.
-fn left_conditions(sig: &Signals, drivetrain: i32, slip_rate: f32) -> [bool; 3] {
-    let moving = sig.speed_ms > lamp::MIN_SPEED_MS;
-    let slip = sig.slip_deg.abs();
-    let tc = moving
-        && drivetrain != lamp::FWD
-        && sig.throttle > lamp::TC_THROTTLE
-        && slip > lamp::TC_SLIP_DEG
-        && slip_rate > lamp::TC_SLIP_RATE;
-    let abs = moving && sig.brake > lamp::ABS_BRAKE && -sig.g_long >= lamp::ABS_DECEL_G;
-    let slipping = moving && slip >= lamp::SLIP_DEG;
-    [tc, abs, slipping]
+    /// Feeds whether the lights are over the shift point, and whether they got there on this
+    /// frame (`reached`). A snapped frame takes the state as it is, with no fade.
+    fn update(&mut self, over: bool, reached: bool, dt: f32, snap: bool) {
+        if snap {
+            self.mix = if over { 1.0 } else { 0.0 };
+            self.since = if over { 0.0 } else { ARC_HOLD_S };
+            return;
+        }
+        self.since = if reached {
+            0.0
+        } else {
+            (self.since + dt).min(ARC_HOLD_S)
+        };
+        let held = self.mix > 0.0 && self.since < ARC_HOLD_S;
+        let step = dt / ARC_FADE_S;
+        self.mix = if over || held {
+            (self.mix + step).min(1.0)
+        } else {
+            (self.mix - step).max(0.0)
+        };
+    }
+
+    /// True while the band has ink to lose: in its fade, or held with the rpm back under the
+    /// shift point.
+    fn animating(self, over: bool) -> bool {
+        self.mix > 0.0 && (self.mix < 1.0 || !over)
+    }
 }
 
-/// The right lamp states: LIM, HB, LNCH.
-fn right_conditions(sig: &Signals) -> [bool; 3] {
-    let lim = sig.max_rpm > 1.0 && sig.rpm >= sig.max_rpm * lamp::LIM_PCT;
-    let hb = sig.handbrake > lamp::HANDBRAKE;
-    let held = sig.brake > lamp::ABS_BRAKE || sig.handbrake > lamp::ABS_BRAKE || sig.clutch > 0.5;
-    let launch = sig.speed_ms < lamp::LAUNCH_SPEED_MS
-        && matches!(sig.gear, Gear::Forward(_))
-        && sig.throttle > lamp::LAUNCH_THROTTLE
-        && held;
-    [lim, hb, launch]
+/// The highest rpm of the last [`PEAK_HOLD_S`], for the rpm digits at the shift point: a
+/// running maximum in two buckets of half that length, so a peak is kept for at least half the
+/// window and at most all of it, and nothing sinks or allocates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PeakWindow {
+    /// The last full bucket's peak, and the peak of the bucket being filled.
+    prev: f32,
+    cur: f32,
+    /// How long the current bucket has been filled (s).
+    t: f32,
 }
 
-/// Per-corner load (1 = static share) from the smoothed G: FL, FR, RL, RR.
-fn corner_loads(g_long: f32, g_lat: f32) -> [f32; 4] {
-    let gl = if g_long.is_finite() {
-        g_long.clamp(-2.5, 2.5)
-    } else {
-        0.0
-    };
-    let gt = if g_lat.is_finite() { g_lat.clamp(-2.5, 2.5) } else { 0.0 };
-    // Accelerating moves load rearwards; accelerating to the right (a right turn) moves it to
-    // the left (outside) tyres.
-    let front = (0.5 - LOAD_LONG_PER_G * gl).clamp(0.0, 1.0);
-    let left = (0.5 + LOAD_LAT_PER_G * gt).clamp(0.0, 1.0);
-    let rear = 1.0 - front;
-    let right = 1.0 - left;
-    [
-        front * left * 4.0,
-        front * right * 4.0,
-        rear * left * 4.0,
-        rear * right * 4.0,
-    ]
+impl PeakWindow {
+    fn new() -> Self {
+        Self {
+            prev: 0.0,
+            cur: 0.0,
+            t: 0.0,
+        }
+    }
+
+    /// Feeds the rpm and returns the window's peak, never under `rpm`. A snapped frame starts
+    /// the window again at `rpm`.
+    fn update(&mut self, rpm: f32, dt: f32, snap: bool) -> f32 {
+        if snap {
+            *self = Self {
+                prev: rpm,
+                cur: rpm,
+                t: 0.0,
+            };
+            return rpm;
+        }
+        self.t += dt;
+        if self.t >= PEAK_HOLD_S * 0.5 {
+            self.prev = self.cur;
+            self.cur = rpm;
+            self.t = 0.0;
+        }
+        self.cur = self.cur.max(rpm);
+        self.prev.max(self.cur)
+    }
+}
+
+/// True when the rpm digits keep the window's `peak`: over the shift point, or, still holding
+/// it, within [`ARC_HOLD_S`] of the rpm last reaching the shift point (`since_reached`: the last
+/// frame it was inside the lights' latch band, [`SHIFT_HYSTERESIS_RPM`] under the shift point,
+/// so a bounce whose later peaks stop just under a shift point at the limiter still counts) and
+/// within [`BOUNCE_RPM`] of the peak. Once released the digits follow the rpm until the lights
+/// are over the shift point again, so an old peak never comes back.
+fn holds_peak(over: bool, holding: bool, since_reached: f32, peak: f32, rpm: f32) -> bool {
+    over || (holding && since_reached < ARC_HOLD_S && peak - rpm <= BOUNCE_RPM)
+}
+
+/// The rpm digits: 10 rpm steps with 30 rpm of hysteresis on the raw rpm (or on the peak while
+/// [`holds_peak`] says so), in a field of 3 to 5 cells.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct RpmDigits {
+    peak: PeakWindow,
+    holding: bool,
+    /// Time since the rpm was last in the shift point's latch band (s), counted up to
+    /// [`ARC_HOLD_S`].
+    since_reached: f32,
+    digits: Hysteresis,
+    /// The rpm the band and the digits follow: the window's peak while held, else the live rpm.
+    held: f32,
+    /// The rpm shown, and the field's cells.
+    shown: i64,
+    cells: u8,
+}
+
+impl RpmDigits {
+    fn new() -> Self {
+        Self {
+            peak: PeakWindow::new(),
+            holding: false,
+            since_reached: ARC_HOLD_S,
+            digits: Self::start(0.0),
+            held: 0.0,
+            shown: 0,
+            cells: 3,
+        }
+    }
+
+    /// The digits' hysteresis, started at `rpm`.
+    fn start(rpm: f32) -> Hysteresis {
+        Hysteresis::new(rpm / 10.0, RPM_HYST_TENS)
+    }
+
+    /// Feeds the live rpm, the lights' latch and whether the rpm is in the latch's band.
+    fn update(&mut self, rpm: f32, over: bool, near: bool, dt: f32, snap: bool) {
+        self.since_reached = if near {
+            0.0
+        } else if snap {
+            ARC_HOLD_S
+        } else {
+            (self.since_reached + dt).min(ARC_HOLD_S)
+        };
+        let peak = self.peak.update(rpm, dt, snap);
+        self.holding = holds_peak(over, self.holding && !snap, self.since_reached, peak, rpm);
+        let held = if self.holding { peak } else { rpm };
+        self.held = held;
+        if snap {
+            self.digits = Self::start(held);
+        }
+        self.shown = saturate_to_cells(self.digits.update(held / 10.0) * 10, RPM_CELLS).max(0);
+        self.cells = rpm_cells(self.cells, self.shown, snap);
+    }
+}
+
+/// Everything the rpm drives: the shift lights, the rev band's colour and the rpm digits, fed in
+/// that order from one place.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rev {
+    leds: TopLeds,
+    /// The rev band's colour over the shift point.
+    arc: ArcInk,
+    digits: RpmDigits,
+}
+
+impl Rev {
+    fn new() -> Self {
+        Self {
+            leds: TopLeds::new(),
+            arc: ArcInk::new(),
+            digits: RpmDigits::new(),
+        }
+    }
+
+    fn update(&mut self, sig: &Signals, pal: &Palette, dt: f32, calm: bool, snap: bool) {
+        let was_over = self.leds.over;
+        self.leds.update(sig, pal, dt, calm, snap);
+        let over = self.leds.over;
+        self.arc.update(over, over && !was_over, dt, snap);
+        let rpm = sig.rpm.max(0.0);
+        let near = limiter_known(sig) && rpm >= sig.shift_rpm - SHIFT_HYSTERESIS_RPM;
+        self.digits.update(rpm, over, near, dt, snap);
+    }
+}
+
+/// The readouts held by hysteresis besides the rpm: the total G in hundredths, power in the
+/// user's unit and boost in tenths of a psi, each in the unit it is shown in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Readouts {
+    g_total: Hysteresis,
+    power: Hysteresis,
+    boost: Hysteresis,
+}
+
+impl Readouts {
+    /// Started at these values (zeros for a new cluster, the car's state on a snapped frame).
+    fn start(g_centi: f32, power: f32, boost_tenths: f32) -> Self {
+        Self {
+            g_total: Hysteresis::new(g_centi, G_HYST_CENTI),
+            power: Hysteresis::new(power, POWER_HYST_MIN),
+            boost: Hysteresis::new(boost_tenths, BOOST_HYST_TENTHS),
+        }
+    }
 }
 
 /// The Bosch DDU cluster.
 #[derive(Debug, Clone)]
 pub struct BoschDdu {
     faces: Faces,
+    own_faces: Faces,
+    sprites: Sprites,
+    fresh: bool,
     sig: Signals,
     palette: Palette,
     view: View,
-    light: VirtualLight,
-    shift: ShiftLights,
-    spill: LimiterCue,
-    bar: TachBar,
-    g_bar: SignedBar,
+    calm: bool,
+    logo: Logo,
+    opts: Options,
+    /// The `BoschDduPanels` text `opts` was parsed from (parsed again only when it changes).
+    opts_text: String,
+    /// The shift lights, the rev band's colour and the rpm digits.
+    rev: Rev,
+    /// Side columns lit: left (brake), right (slip).
+    brake_lit: usize,
+    slip_lit: usize,
     gear: HeroGear,
+    flare: Tween,
     speed: TabularSpeed,
-    boost: DataTile,
-    power_hp: DataTile,
-    power_kw: DataTile,
-    shift_at: DataTile,
-    shift_late: DataTile,
-    shift_early: DataTile,
-    power_w: Smoothed<f32>,
-    event: EventPage,
-    left: AlarmColumn,
-    right: AlarmColumn,
-    lamp_in: LampInputs,
-    prev_slip: f32,
-    twill: Option<ImageId>,
-    /// The Blender housing renders (the −160° and −110° key lights), when both load.
-    housing: Option<[ImageId; 2]>,
-    micro_cap: f32,
+    gball: GBall,
+    /// The total G, power and boost as held by hysteresis, and as shown.
+    readouts: Readouts,
+    g_shown: i64,
+    power_shown: i64,
+    boost_shown: i64,
+    /// The custom name alone, for the chin's left zone (kept in step with the frame's logo).
+    name: Logo,
+    light: VirtualLight,
+    /// True while the virtual light moved on the last update (its spring still settling).
+    light_moving: bool,
     tracking: f32,
 }
 
 impl BoschDdu {
-    /// Builds the cluster: faces, components and the optional Phase 6 carbon twill.
+    /// Builds the cluster: faces, springs and the rendered housing (with a procedural fallback).
     #[must_use]
     pub fn new(setup: &mut Setup<'_>) -> Self {
+        let sprites = Sprites::load(setup);
         let t: &Tokens = setup.tokens;
         let display = setup.fonts.role(FontRole::Display);
         let text = setup.fonts.role(FontRole::Text);
+        let figures = setup
+            .fonts
+            .find("Saira Semi Condensed", 600, false)
+            .or_else(|| setup.fonts.find("Saira Condensed", 600, false))
+            .unwrap_or(display);
         let faces = Faces {
-            gear: setup.fonts.find("Saira Condensed", 600, false).unwrap_or(display),
-            speed: setup.fonts.find("Saira Condensed", 700, false).unwrap_or(display),
-            value: setup.fonts.find("Saira Condensed", 600, false).unwrap_or(display),
+            gear: setup.fonts.find("Saira Condensed", 700, false).unwrap_or(display),
+            figures,
             label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
+            wide: setup.fonts.role(FontRole::Wide),
             role_display: display,
         };
-        let mut load = |rel: &str| {
-            setup.assets.and_then(|a| {
-                let path = a.join(rel);
-                path.is_file()
-                    .then(|| setup.images.load_file(setup.device, setup.queue, &path, None).ok())
-                    .flatten()
-            })
-        };
-        // The Blender housing first; the Phase 6 twill only feeds the procedural fallback.
-        let housing = match (
-            load("clusters/bosch_ddu/housing_l160.png"),
-            load("clusters/bosch_ddu/housing_l110.png"),
-        ) {
-            (Some(a), Some(b)) => Some([a, b]),
-            _ => None,
-        };
-        let twill = if housing.is_some() {
-            None
-        } else {
-            load("classic/carbon_twill_lit.png")
-        };
-        let open = TileFrame::Open;
+        let palette = Palette::family(t, "raceDash");
         Self {
             faces,
+            own_faces: faces,
+            sprites,
+            fresh: true,
             sig: Signals::default(),
-            palette: Palette::family(t, "raceDash"),
+            palette,
             view: View::Cockpit,
-            light: VirtualLight::new(t),
-            shift: ShiftLights::new(PODS),
-            spill: LimiterCue::new(),
-            bar: TachBar::new(t),
-            g_bar: SignedBar::new(t, SignedSource::LongitudinalG { full_scale_g: 1.5 })
-                .with_accel_tone(AccelTone::Ink)
-                .with_height_pct(0.08),
+            calm: false,
+            logo: Logo::default(),
+            opts: Options::default(),
+            opts_text: String::new(),
+            rev: Rev::new(),
+            brake_lit: 0,
+            slip_lit: 0,
             gear: HeroGear::new(t),
+            flare: Tween::new(FLARE_S),
             speed: TabularSpeed::new(),
-            boost: DataTile::new("BOOST PSI", TileFormat::Fixed { decimals: 1 }).with_frame(open),
-            power_hp: DataTile::new("POWER HP", TileFormat::Integer { cells: 4 }).with_frame(open),
-            power_kw: DataTile::new("POWER KW", TileFormat::Integer { cells: 4 }).with_frame(open),
-            shift_at: DataTile::new("SHIFT RPM", TileFormat::Integer { cells: 5 }).with_frame(open),
-            shift_late: DataTile::new("LATE BY RPM", TileFormat::Integer { cells: 4 }).with_frame(open),
-            shift_early: DataTile::new("EARLY BY RPM", TileFormat::Integer { cells: 4 }).with_frame(open),
-            power_w: Smoothed::new(0.0, 0.10),
-            event: EventPage::new(),
-            left: AlarmColumn::new(t, AlarmSide::Bottom, &LEFT_LAMPS),
-            right: AlarmColumn::new(t, AlarmSide::Bottom, &RIGHT_LAMPS),
-            lamp_in: LampInputs::default(),
-            prev_slip: 0.0,
-            twill,
-            housing,
-            micro_cap: t.type_scale.micro_label,
+            gball: GBall::new(t),
+            readouts: Readouts::start(0.0, 0.0, 0.0),
+            g_shown: 0,
+            power_shown: 0,
+            boost_shown: 0,
+            name: Logo::default(),
+            light: VirtualLight::new(t),
+            light_moving: false,
             tracking: t.type_scale.label_tracking,
         }
     }
 
-    /// The housing's parallax (−1..1) from the light's swing (lateral G on the light spring).
-    fn parallax(&self) -> f32 {
-        ((self.light.angle() - deg(-135.0)) / deg(25.0)).clamp(-1.0, 1.0)
+    /// The scale's top (rpm): the limiter rounded up to a thousand ([`DEFAULT_SCALE_TOP`] when
+    /// none is known).
+    fn scale_top(&self) -> f32 {
+        if limiter_known(&self.sig) {
+            (self.sig.max_rpm / 1000.0).ceil().clamp(1.0, 20.0) * 1000.0
+        } else {
+            DEFAULT_SCALE_TOP
+        }
     }
 
-    fn update_event(&mut self, dt: f32) {
-        let sig = self.sig;
-        // Peak rpm over the window before the gear changes.
-        if sig.rpm >= self.event.peak_rpm || self.event.peak_age > SHIFT_PEAK_WINDOW_S {
-            self.event.peak_rpm = sig.rpm;
-            self.event.peak_age = 0.0;
-        } else {
-            self.event.peak_age += dt;
-        }
-        let upshift = match (self.event.last_gear, sig.gear) {
-            (Gear::Forward(a), Gear::Forward(b)) => b > a,
-            _ => false,
-        };
-        self.event.last_gear = sig.gear;
-        if upshift {
-            let at = self.event.peak_rpm;
-            self.shift_at.update(Some(at));
-            // Early or late against the shift point, as a magnitude under its own label (a tile
-            // cannot sign a positive number). Colour only by exception: outside the window it
-            // turns `caution`, never `warning` (red is for alarms).
-            let delta = at - sig.shift_rpm;
-            self.event.late = delta >= 0.0;
-            let alert = if delta.abs() > SHIFT_WINDOW_RPM {
-                TileAlert::Caution
-            } else {
-                TileAlert::Normal
-            };
-            for tile in [&mut self.shift_late, &mut self.shift_early] {
-                tile.update(Some(delta.abs()));
-                tile.set_alert(alert);
-            }
-            self.event.t = 0.0;
-            self.event.peak_rpm = sig.rpm;
-            self.event.peak_age = 0.0;
-        } else if self.event.t >= 0.0 {
-            self.event.t += dt;
-            if self.event.t > EVENT_HOLD_S + 2.0 * EVENT_STEP_S * EVENT_STEPS {
-                self.event.t = -1.0;
-            }
-        }
+    /// The angle of `rpm` on the rev gauge.
+    fn rev_angle(&self, g: &Geom, rpm: f32) -> f32 {
+        g.rev_start + g.rev_sweep * (rpm / self.scale_top()).clamp(0.0, 1.0)
+    }
+}
+
+/// The slip column's count for `value` in steps of `step`, latched so a value sitting on a step
+/// never flickers: it rises at a step and falls only `hyst` under it.
+fn latched(lit: usize, value: f32, step: f32, hyst: f32, max: usize) -> usize {
+    let v = value.abs();
+    let up = ((v / step).floor() as usize).min(max);
+    if up >= lit {
+        up
+    } else {
+        (((v + hyst) / step).floor() as usize).min(lit)
+    }
+}
+
+/// The brake column's count for `brake` (0..=1): one LED per started fifth above the dead zone,
+/// latched so a pedal resting on a fifth never flickers: an LED lights as its fifth starts and
+/// goes out only [`BRAKE_HYST`] of a step under it.
+fn brake_latched(lit: usize, brake: f32) -> usize {
+    // The dead zone is latched as well: a lit first LED holds a little under it.
+    let dead = if lit > 0 {
+        BRAKE_DEAD * (1.0 - BRAKE_HYST)
+    } else {
+        BRAKE_DEAD
+    };
+    if brake < dead {
+        return 0;
+    }
+    let steps = brake.clamp(0.0, 1.0) * SIDE_LEDS as f32;
+    let up = (steps.ceil() as usize).min(SIDE_LEDS);
+    if up >= lit {
+        up
+    } else {
+        ((steps + BRAKE_HYST).ceil() as usize).min(lit)
+    }
+}
+
+/// A G ball at rest on the force of `sig`, its trail collapsed onto it, for a snapped frame: a
+/// new ball starts in the centre and would drift to the force over the next frames. (The shared
+/// `GBall` has no snap of its own; this settles it on its own spring, on the stack.)
+fn settled_gball(tokens: &Tokens, sig: &Signals) -> GBall {
+    let mut ball = GBall::new(tokens);
+    for _ in 0..SETTLE_STEPS {
+        ball.update(sig, SETTLE_DT);
+    }
+    ball
+}
+
+/// The virtual light at rest on the lateral G of `sig`, for a snapped frame, as
+/// [`settled_gball`] puts the ball at rest.
+fn settled_light(tokens: &Tokens, sig: &Signals) -> VirtualLight {
+    let mut light = VirtualLight::new(tokens);
+    for _ in 0..SETTLE_STEPS {
+        light.update(sig.g_lat, SETTLE_DT);
+    }
+    light
+}
+
+/// The rpm field's digit cells: as many as the value needs (3 to 5), so the centred digits stay
+/// on the gauge's axis. The field grows at once and shrinks only 50 rpm under the step, so it
+/// moves rarely.
+fn rpm_cells(cells: u8, shown: i64, snap: bool) -> u8 {
+    let need = match shown {
+        ..=999 => 3,
+        1000..=9999 => 4,
+        _ => 5,
+    };
+    let held = match cells {
+        5 => shown > 9949,
+        4 => shown > 949,
+        _ => false,
+    };
+    if snap || need >= cells || !held {
+        need
+    } else {
+        cells
     }
 }
 
@@ -685,699 +1171,751 @@ impl Cluster for BoschDdu {
     fn update(&mut self, input: &FrameInput<'_>) {
         let dt = input.dt.max(0.0);
         let sig = *input.signals;
+        let race_edge = sig.race_on != self.sig.race_on;
+        // A gap in `dt` (the host caps `dt` at 0.1 s, over [`RESUME_DT`]).
+        let gap = input.dt >= RESUME_DT;
+        let snap = self.fresh || race_edge || gap;
+        self.fresh = false;
         self.sig = sig;
         self.palette = *input.palette;
+        self.calm = input.reduced_flash;
         self.view = input.view;
         if input.fonts.display != self.faces.role_display {
-            self.faces.gear = input.fonts.display;
-            self.faces.speed = input.fonts.display;
-            self.faces.value = input.fonts.display;
-            self.faces.role_display = input.fonts.display;
+            self.faces = if input.fonts.display == self.own_faces.role_display {
+                self.own_faces
+            } else {
+                Faces {
+                    gear: input.fonts.display,
+                    figures: input.fonts.display,
+                    role_display: input.fonts.display,
+                    ..self.own_faces
+                }
+            };
+        }
+        if self.logo != *input.logo {
+            self.logo.clone_from(input.logo);
+            // The host empties the logo when `ShowLogo` is off, so the name goes with it.
+            self.name.custom_name.clone_from(&input.logo.custom_name);
+        }
+        let panels = input
+            .config
+            .extra
+            .get("BoschDduPanels")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if panels != self.opts_text {
+            panels.clone_into(&mut self.opts_text);
+            self.opts = Options::parse(panels);
         }
 
-        self.light.update(sig.g_lat, dt);
-        self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
-        self.spill.update(self.shift.over_shift(), SPILL_RAMP_S, dt);
-        self.bar.update(&sig, dt);
-        self.g_bar.update(&sig, dt);
-        self.gear.update(sig.gear, 0.0, dt);
+        // The gear first. Snapped frames show the engaged gear at rest.
+        if snap {
+            self.gear.snap(sig.gear);
+            self.flare = Tween::new(FLARE_S);
+        } else {
+            let changed = sig.gear != self.gear.gear();
+            self.gear.update(sig.gear, 0.0, dt);
+            if changed && !self.calm {
+                self.flare.restart();
+            }
+        }
+        self.flare.update(dt);
+
+        // Shift lights, the rev band's colour and the rpm digits (over the shift point and on a
+        // limiter bounce they and the band show the peak of the last 0.3 s, so a bounce never
+        // moves them), then the side columns.
+        self.rev.update(&sig, &self.palette, dt, self.calm, snap);
+        if snap {
+            self.slip_lit = 0;
+            self.brake_lit = 0;
+        }
+        self.slip_lit = latched(self.slip_lit, sig.slip_deg, SLIP_STEP_DEG, SLIP_HYST_DEG, SIDE_LEDS);
+        self.brake_lit = brake_latched(self.brake_lit, sig.brake);
+
+        // Speed, G (the shared ball, on the tokens' spring), power and boost.
         self.speed.update(sig.speed);
+        if snap {
+            self.gball = settled_gball(input.tokens, &sig);
+        }
+        self.gball.update(&sig, dt);
+        let g_total = sig.g_lat.hypot(sig.g_long) * 100.0;
+        let watts = input.telemetry.power_watts.max(0.0);
+        let power = match sig.power_unit {
+            PowerUnit::Hp => watts / 745.7,
+            PowerUnit::Kw => watts / 1000.0,
+        };
+        // Boost in tenths of a psi, the packet's unit, whatever the speed unit.
+        let boost = input.telemetry.boost_psi.clamp(-15.0, 60.0) * 10.0;
+        if snap {
+            self.readouts = Readouts::start(g_total, power, boost);
+        }
+        let r = &mut self.readouts;
+        self.g_shown = saturate_to_cells(r.g_total.update(g_total), G_CELLS).max(0);
+        r.power.threshold = (self.power_shown as f32 * POWER_HYST_SHARE).max(POWER_HYST_MIN);
+        self.power_shown = saturate_to_cells(r.power.update(power), POWER_CELLS).max(0);
+        self.boost_shown = r.boost.update(boost);
 
-        let boost = input.telemetry.boost_psi;
-        self.boost.update(Some(if boost.is_finite() { boost } else { 0.0 }));
-        let watts = input.telemetry.power_watts;
-        let w = self
-            .power_w
-            .update(if watts.is_finite() { watts.max(0.0) } else { 0.0 }, dt);
-        self.power_hp.update(Some(w / 745.7));
-        self.power_kw.update(Some(w / 1000.0));
-        self.update_event(dt);
-
-        let slip = sig.slip_deg.abs();
-        self.lamp_in.slip_rate = if dt > 1e-4 { (slip - self.prev_slip) / dt } else { 0.0 };
-        self.prev_slip = slip;
-        let drivetrain = input.telemetry.drivetrain_type;
-        self.left
-            .update(&left_conditions(&sig, drivetrain, self.lamp_in.slip_rate), dt);
-        self.right.update(&right_conditions(&sig), dt);
+        // The virtual light, put at rest on a snapped frame like the G ball.
+        if snap {
+            self.light = settled_light(input.tokens, &sig);
+        }
+        let before = self.light.angle();
+        self.light.update(sig.g_lat, dt);
+        self.light_moving = (self.light.angle() - before).abs() > 1e-4;
     }
 
     fn draw(&self, p: &mut Painter<'_>, _layout: &Layout) {
-        let g = &COCKPIT;
-        let pal = self.palette;
+        let g = &GEOM;
+        let pal = &self.palette;
         p.scoped(|p| {
             if self.view == View::Hood {
                 p.scale(HOOD_SCALE);
             }
-            let par = self.parallax();
-            let light = self.light.angle();
-            p.scoped(|p| {
-                // Whole pixels: the band pieces meet on hard clip edges that must sit on pixel
-                // boundaries (a 1 px step at 4K is below what the eye tracks).
-                p.translate(vec2((-par * PARALLAX_HOUSING).round(), 0.0));
-                self.draw_housing(p, g, &pal, light);
-            });
-            self.draw_light_bar(p, g, &pal);
-            self.draw_data(p, g, &pal);
-            p.scoped(|p| {
-                p.translate(vec2(-par * PARALLAX_GLASS, 0.0));
-                Self::draw_cover_glass(p, g, &pal, light);
-            });
+            let w = hardware::light_weights(self.light.angle());
+            hardware::contact_shadow(p, g, pal);
+            if !self.sprites.draw(p, w) {
+                hardware::fallback(p, g, pal, w[2] - w[1]);
+            }
+            // The screen is true black whatever the housing under it (a render's glass leaves up
+            // to 0.004 there).
+            p.fill(&Shape::rect(g.screen), pal.roles.oled_black);
+            self.draw_leds(p, g, pal);
+            Self::draw_horizon(p, g, pal);
+            self.draw_rev(p, g, pal);
+            self.draw_gear(p, g, pal);
+            for (i, &content) in self.opts.panels.iter().enumerate() {
+                if !shows(self.view, Part::Panel(content)) {
+                    continue;
+                }
+                let slot = g.slot(i);
+                match content {
+                    Content::Pedals => self.draw_pedals(p, g, slot, pal),
+                    Content::GForce => self.draw_g(p, g, slot, pal),
+                    Content::Engine => self.draw_engine(p, g, slot, pal),
+                    Content::Speed => self.draw_speed(p, g, slot, pal),
+                    Content::Off => {}
+                }
+            }
+            self.draw_chin(p, g, pal);
         });
     }
 
     fn animating(&self) -> bool {
-        self.shift.animating()
-            || self.spill.animating()
-            || self.bar.animating()
-            || self.g_bar.animating()
+        // The G ball counts only where it is drawn (its trail is never drawn here).
+        let ball_drawn = shows(self.view, Part::Panel(Content::GForce)) && self.opts.panels.contains(&Content::GForce);
+        self.rev.leds.animating()
+            || self.rev.arc.animating(self.rev.leds.over)
             || self.gear.animating()
-            || self.event.running()
-            || self.left.animating()
-            || self.right.animating()
+            || self.flare.running()
+            || (ball_drawn && self.gball.animating())
+            || self.light_moving
     }
+}
+
+/// The ink of the printed parts: [`PRINT_SHARE`] of the label role.
+fn print_ink(pal: &Palette) -> Color {
+    pal.roles.ink_label.fade(PRINT_SHARE)
+}
+
+/// The light of `color` over black: its relative luminance at its opacity.
+fn light(color: Color) -> f32 {
+    color.luminance() * color.a
+}
+
+/// The palette's text-safe accent at the printed parts' light, for the one label that follows
+/// its value's colour (BOOST).
+fn accent_print(pal: &Palette) -> Color {
+    let accent = pal.primary_text;
+    accent.fade((light(print_ink(pal)) / light(accent).max(1e-3)).min(1.0))
+}
+
+/// The hairlines' paint: [`HAIRLINE_SHARE`] of the `hairline` role, opaque.
+fn hairline(pal: &Palette) -> Color {
+    solid(pal.roles.hairline.fade(HAIRLINE_SHARE))
+}
+
+/// The horizon's band of light: none `band` px over the line, `level` of `primary` at the line
+/// (held under the static cap).
+fn horizon_glow(g: &Geom, band: f32, level: f32, pal: &Palette) -> Gradient {
+    Gradient::linear(vec2(0.0, g.horizon - band), vec2(0.0, g.horizon))
+        .stop(0.0, pal.primary.with_alpha(0.0))
+        .stop(1.0, static_tint(pal.primary, level))
+}
+
+/// The tint of the header rules and the horizon line.
+fn rule_tint(pal: &Palette) -> Color {
+    solid(static_tint(pal.primary, RULE_TINT))
+}
+
+/// The red zone on the scale ring and the limiter's tick.
+fn red_zone(pal: &Palette) -> Color {
+    solid(static_tint(pal.roles.warning, RED_LEVEL))
+}
+
+/// The outline of the box round the shift point.
+fn shift_box(pal: &Palette) -> Color {
+    static_tint(pal.primary, SHIFT_BOX)
+}
+
+/// The gear beam at rest: the alpha of its body at the apex, and its edge bands' colour (in
+/// `warning` in reverse) with their alpha, before the flare. The parts are capped as they stack
+/// at the apex (the beam is drawn from under the horizon rule, see `draw_gear`, so it lies on
+/// black): the body, then an edge over it, stays under [`STATIC_CAP`] (source-over), not only
+/// each part on its own.
+fn beam_rest(pal: &Palette, reverse: bool) -> (f32, Color, f32) {
+    let edge = if reverse { pal.roles.warning } else { pal.primary };
+    let apex = static_alpha(pal.primary, BEAM_APEX);
+    let body = beam_stack(pal.primary.luminance(), apex, 0.0);
+    (apex, edge, stacked_alpha(edge, BEAM_EDGE, body))
+}
+
+/// `color`'s alpha for a static part laid over a background of light `under`: `alpha`, or less
+/// where the result would pass [`STATIC_CAP`]. A colour no lighter than the background cannot
+/// lift it, so it keeps `alpha` (under the part's own cap).
+fn stacked_alpha(color: Color, alpha: f32, under: f32) -> f32 {
+    let own = static_alpha(color, alpha);
+    let lift = color.luminance() - under;
+    if lift <= 1e-4 {
+        return own;
+    }
+    own.min(((STATIC_CAP - under) / lift).max(0.0))
+}
+
+/// The light of a layer of luminance `l` at alpha `a` over a background of light `under`.
+fn beam_stack(l: f32, a: f32, under: f32) -> f32 {
+    a * l + (1.0 - a) * under
+}
+
+/// The G ring's unlit track: [`G_TRACK_SHARE`] of `ink_ghost`.
+fn g_track(pal: &Palette) -> Color {
+    pal.roles.ink_ghost.fade(G_TRACK_SHARE)
+}
+
+/// `color` as an opaque stroke of the same light over black, so strokes that cross or join show
+/// no brighter spot (the screen under them is black).
+fn solid(color: Color) -> Color {
+    Color { a: 1.0, ..color }
 }
 
 impl BoschDdu {
-    /// The carbon U, drawn as five small band pieces (two corner arcs, the top run, two legs) so
-    /// no fill covers the whole housing: the body, the squared-contrast twill, the diagonal sheen
-    /// on the face, the chamfer facets lit by facing and sinking toward the base, the pod spill,
-    /// rims, bolts and the leg fade.
-    fn draw_housing(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, light: f32) {
-        let roles = pal.roles;
-        let ink = roles.ink;
-        let c = g.housing.center();
-        let band = g.face + g.chamfer;
+    /// True when the fine print is drawn: not in the hood view ([`shows`]).
+    fn fine_print(&self) -> bool {
+        shows(self.view, Part::Print)
+    }
+
+    fn label(&self, cap: f32, ink: Color, align: Align) -> TextStyle {
+        TextStyle::new(self.faces.label, cap)
+            .paint(ink)
+            .tracking(self.tracking)
+            .align(align, VAlign::CapMiddle)
+    }
+
+    /// A row label inside a panel: no tracking, so label and value share the narrow panel.
+    fn row_label(&self, cap: f32, ink: Color) -> TextStyle {
+        TextStyle::new(self.faces.label, cap)
+            .paint(ink)
+            .align(Align::Left, VAlign::CapMiddle)
+    }
+
+    fn figures(&self, cap: f32, ink: Color, align: Align) -> TextStyle {
+        TextStyle::new(self.faces.figures, cap)
+            .paint(ink)
+            .align(align, VAlign::CapMiddle)
+            .tabular()
+    }
+
+    /// One LED lens: lit as one soft oval of light with a hot centre ([`lens_core`]), a 1 px
+    /// inner rim and a tight halo ([`led_halo`]), or an unlit lens in `ink_ghost` (left to the
+    /// housing render when it loaded: its lenses are the real hardware). Only the shift lights
+    /// (`bloom`, rank 1) feed the bloom.
+    fn led(&self, p: &mut Painter<'_>, rect: Rect, lit: Option<Color>, core: f32, bloom: bool, pal: &Palette) {
+        let r = rect.width().min(rect.height()) * 0.5;
+        let shape = Shape::round_rect(rect, r);
+        match lit {
+            Some(color) => {
+                if let Some(halo) = led_halo(p.tokens()) {
+                    p.glow(&shape, color, halo);
+                }
+                // The hot centre and the rim fade with the lens, so a breathing LED (reduced
+                // flash) breathes as a whole.
+                let hot = lens_core(color, core, pal);
+                let lens = Gradient::radial(rect.center(), rect.width() * 0.5)
+                    .stop(0.0, hot)
+                    .stop(1.0, color);
+                if bloom {
+                    p.layer(LayerOptions::bloom(), |p| p.fill(&shape, lens));
+                } else {
+                    p.fill(&shape, lens);
+                }
+                p.stroke(&shape, pal.roles.ink.with_alpha(LED_RIM * color.a), Stroke::rim_px(1.0));
+            }
+            None if self.sprites.loaded() => {}
+            None => p.fill(&shape, pal.roles.ink_ghost),
+        }
+    }
+
+    /// The brow's shift lights and the two side columns.
+    fn draw_leds(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let leds = &self.rev.leds;
+        let core = leds.core();
+        for i in 0..TOP_LEDS {
+            self.led(p, g.top_led_rect(i), leds.color_of(i, pal), core, true, pal);
+        }
+        for i in 0..SIDE_LEDS {
+            // The brake on the left, the side its bar is on. Each column keeps one colour, and
+            // slip is a caution, never red: red is kept for the limiter and the brake.
+            let brake = (i < self.brake_lit).then_some(pal.roles.warning);
+            self.led(p, g.side_led_rect(-1.0, i), brake, LED_CORE, false, pal);
+            let slip = (i < self.slip_lit).then_some(pal.roles.caution);
+            self.led(p, g.side_led_rect(1.0, i), slip, LED_CORE, false, pal);
+        }
+    }
+
+    /// The horizon over both panel columns: a tinted line with a soft band of light over it (the
+    /// rev gauge's disc draws its own stretch).
+    fn draw_horizon(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let glow = horizon_glow(g, HORIZON_BAND, HORIZON_GLOW, pal);
+        for (x0, x1) in [g.left, g.right] {
+            let band = Rect::from_points(vec2(x0, g.horizon - HORIZON_BAND), vec2(x1, g.horizon));
+            p.fill(&Shape::rect(band), glow);
+            p.fill(
+                &Shape::rect(Rect::from_points(vec2(x0, g.horizon - 1.0), vec2(x1, g.horizon + 1.0))),
+                rule_tint(pal),
+            );
+        }
+    }
+
+    /// The round rev gauge as the DDU draws it: a hairline scale ring with ticks across it and
+    /// numerals outside, the lit band inside the ring with a needle at its head, and the digits
+    /// in the disc, which the horizon cuts flat.
+    fn draw_rev(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let c = g.rev_c;
+        let ink = pal.roles.ink;
+        let top = self.scale_top();
+        let print = solid(print_ink(pal));
+        let rule = hairline(pal);
+        let red = red_zone(pal);
+        let (ring, disc) = (g.ring_r(), g.disc_r());
+        let fine = self.fine_print();
+        // The disc: black glass in a thin ring, cut flat by the horizon, whose light gathers in
+        // the [`DISC_BAND`] px at its foot: it starts under the "rpm" unit's descender, so the
+        // unit stands on black.
         p.scoped(|p| {
-            // The open bottom: everything below the line is cut.
             p.clip(
-                Rect::from_points(
-                    g.housing.min - vec2(4.0, 4.0),
-                    vec2(g.housing.max.x + 4.0, g.housing.max.y),
-                ),
+                Rect::from_points(vec2(c.x - disc, c.y - disc), vec2(c.x + disc, g.horizon)),
                 0.0,
             );
-            // The true-black cavity (opaque: the game never shows through the screen).
-            p.fill(&u_shape(g.cavity(), g.cavity_radius()), roles.oled_black);
-            let pieces = g.band(0.0, band, 2.0);
-            let clips = g.band_clips();
-            for (s, k) in pieces.iter().zip(clips) {
-                clipped(p, k, s, roles.oled_black);
-            }
-            if let Some(baked) = self.housing {
-                // The Blender housing (ComfyUI weave, clear coat, chamfer, bolts), one render
-                // per key-light azimuth, crossfaded by the light's swing.
-                let t = ((light - deg(BAKED_LIGHTS[0])) / deg(BAKED_LIGHTS[1] - BAKED_LIGHTS[0])).clamp(0.0, 1.0);
-                for (s, k) in pieces.iter().zip(clips) {
-                    clipped(p, k, s, ImagePaint::new(baked[0], BAKED_RECT));
-                }
-                if t > 1e-3 {
-                    for (s, k) in pieces.iter().zip(clips) {
-                        clipped(
-                            p,
-                            k,
-                            s,
-                            ImagePaint::new(baked[1], BAKED_RECT).tint(Color::WHITE.fade(t)),
-                        );
-                    }
-                }
-                // Static structure stays under 20% on screen: a uniform darkening of the render.
-                let dim = roles.oled_black.with_alpha(1.0 - BAKED_GAIN);
-                for (s, k) in pieces.iter().zip(clips) {
-                    clipped(p, k, s, dim);
-                }
-                p.stroke(
-                    &u_shape(g.cavity(), g.cavity_radius()),
-                    pal.glass_tint.with_alpha(0.07),
-                    Stroke::rim_px(1.0),
-                );
+            p.fill(&Shape::circle(c, disc), horizon_glow(g, DISC_BAND, DISC_GLOW, pal));
+            p.stroke(&Shape::circle(c, disc), rule, Stroke::inner(1.5));
+        });
+        let drop = g.horizon - c.y;
+        let half = (disc * disc - drop * drop).max(0.0).sqrt();
+        p.fill(
+            &Shape::rect(Rect::from_points(
+                vec2(c.x - half, g.horizon - 1.0),
+                vec2(c.x + half, g.horizon + 1.0),
+            )),
+            rule_tint(pal),
+        );
+        // The scale ring, red from the shift point to the scale's end.
+        p.fill(&Shape::arc(c, ring, 2.0, g.rev_start, g.rev_sweep, Cap::Butt), print);
+        let known = limiter_known(&self.sig);
+        let max = self.sig.max_rpm;
+        let shift = self.sig.shift_rpm;
+        if known && shift < top {
+            let a0 = self.rev_angle(g, shift);
+            p.fill(
+                &Shape::arc(c, ring, RED_BAND, a0, self.rev_angle(g, top) - a0, Cap::Butt),
+                red,
+            );
+        }
+        // The band follows the rpm the digits show (the live rpm, or a limiter bounce's peak).
+        // Over the shift point it turns ink, so only the LEDs carry the shift colour (the
+        // family's rule): a short cross-fade, never a step.
+        let rpm = self.rev.digits.held.max(0.0);
+        let mix = self.rev.arc.mix;
+        if rpm > 0.0 {
+            let lit = pal.primary.lerp(ink, mix);
+            let head = self.rev_angle(g, rpm);
+            let sweep = head - g.rev_start;
+            let (r0, r1) = (g.rev_r - g.rev_w * 0.5, g.rev_r + g.rev_w * 0.5);
+            // Its body fades towards the disc.
+            let body = Gradient::radial(c, r1)
+                .stop(0.0, lit.fade(ARC_INNER))
+                .stop(r0 / r1, lit.fade(ARC_INNER))
+                .stop(1.0, lit.fade(ARC_BODY));
+            p.fill(&Shape::arc(c, g.rev_r, g.rev_w, g.rev_start, sweep, Cap::Butt), body);
+            // Its edge under the ring is bright, and brightens towards its head as the DDU's
+            // does.
+            let ramp = Gradient::conic(c, g.rev_start)
+                .stop(0.0, lit.fade(ARC_TAIL))
+                .stop((sweep / TAU).clamp(0.001, 1.0), lit)
+                .stop(1.0, lit);
+            let hot = Shape::arc(c, r1 - ARC_HOT * 0.5, ARC_HOT, g.rev_start, sweep, Cap::Butt);
+            // Its bloom goes as the band turns ink: an ink band has no bloom layer, so the
+            // numerals beside it keep their contrast.
+            let bloom = ARC_BLOOM * (1.0 - mix);
+            if bloom > 0.0 {
+                let glow = LayerOptions {
+                    bloom: Some(Bloom {
+                        intensity: bloom,
+                        ..Bloom::default()
+                    }),
+                    ..LayerOptions::default()
+                };
+                p.layer(glow, |p| p.fill(&hot, ramp));
             } else {
-                // Carbon: the twill texture times itself (squares the weave contrast, so the tows
-                // read on a near-black resin), or the procedural 2×2 twill.
-                match self.twill {
-                    Some(img) => {
-                        let tile = Rect::from_center_size(c, Vec2::splat(TWILL_TILE));
-                        let paint = ImagePaint::new(img, tile).repeat();
-                        for (s, k) in pieces.iter().zip(clips) {
-                            clipped(p, k, s, paint.tint(ink.with_alpha(TWILL_TINT)));
-                        }
-                        p.set_blend(BlendMode::Multiply);
-                        for (s, k) in pieces.iter().zip(clips) {
-                            clipped(p, k, s, paint);
-                        }
-                        p.set_blend(BlendMode::Normal);
-                    }
-                    None => {
-                        for (dir, pitch, alpha) in [
-                            (vec2(1.0, 1.0), WEAVE, WEAVE_ALPHA),
-                            (vec2(1.0, -1.0), WEAVE * 2.0, WEAVE_ALPHA * 0.6),
-                        ] {
-                            let d = dir.normalize_or_zero() * pitch;
-                            let paint = Gradient::linear(c, c + d)
-                                .spread(Spread::Repeat)
-                                .stop(0.0, ink.with_alpha(0.0))
-                                .stop(0.35, ink.with_alpha(alpha))
-                                .stop(0.5, ink.with_alpha(alpha))
-                                .stop(0.85, ink.with_alpha(0.0))
-                                .stop(1.0, ink.with_alpha(0.0));
-                            for (s, k) in pieces.iter().zip(clips) {
-                                clipped(p, k, s, paint);
-                            }
-                        }
-                    }
-                }
-                // The twill line: the diagonal steps a 2×2 weave makes, lit by facing (the tows
-                // running toward the light catch it), about ±9/255 over the resin.
-                let l = Vec2::from_angle(light);
-                let catch = 0.6 + 0.4 * l.dot(vec2(FRAC_1_SQRT_2, FRAC_1_SQRT_2)).abs();
-                let line = ink.with_alpha(on_screen(TWILL_LINE * catch));
-                let d = vec2(1.0, 1.0).normalize_or_zero() * WEAVE * 2.0;
-                let twill_line = Gradient::linear(c, c + d)
-                    .spread(Spread::Repeat)
-                    .stop(0.0, line.with_alpha(0.0))
-                    .stop(0.45, line.with_alpha(0.0))
-                    .stop(0.55, line)
-                    .stop(0.95, line)
-                    .stop(1.0, line.with_alpha(0.0));
-                p.set_blend(BlendMode::Add);
-                for (s, k) in pieces.iter().zip(clips) {
-                    clipped(p, k, s, twill_line);
-                }
-                p.set_blend(BlendMode::Normal);
-                // Diagonal sheen on the face from the light's corner (additive).
-                let ext = g.outer().size().length() * 0.5;
-                let sheen = Gradient::linear(c + l * ext, c - l * ext)
-                    .stop(0.0, ink.with_alpha(SHEEN * 0.5))
-                    .stop(0.16, ink.with_alpha(SHEEN))
-                    .stop(0.42, ink.with_alpha(0.0))
-                    .stop(1.0, ink.with_alpha(0.0));
-                p.set_blend(BlendMode::Add);
-                let face = g.band(0.0, g.face, 2.0);
-                for (s, k) in face.iter().zip(clips) {
-                    clipped(p, k, s, sheen);
-                }
-                p.set_blend(BlendMode::Normal);
-
-                self.draw_chamfer(p, g, pal, light);
-
-                // Rims: the outer edge and the lip catch the light; the cavity edge is the cover
-                // glass's 1 px AR tint.
-                p.stroke(
-                    &u_shape(g.outer(), g.top_radius),
-                    lit_rim(
-                        c,
-                        light,
-                        roles.rim_specular.with_alpha(0.32),
-                        roles.hairline.with_alpha(0.06),
-                    ),
-                    Stroke::rim_px(1.0),
-                );
-                p.stroke(
-                    &u_shape(g.lip(), g.lip_radius()),
-                    lit_rim(
-                        c,
-                        light,
-                        roles.rim_specular.with_alpha(0.25),
-                        roles.hairline.with_alpha(0.04),
-                    ),
-                    Stroke::rim_px(1.0),
-                );
-                p.stroke(
-                    &u_shape(g.cavity(), g.cavity_radius()),
-                    pal.glass_tint.with_alpha(0.07),
-                    Stroke::rim_px(1.0),
-                );
-
-                for b in g.bolts {
-                    allen_bolt(p, b, g.bolt_r, pal, light);
+                p.fill(&hot, ramp);
+            }
+            // The needle: a white line at the band's head, from the disc's ring out across the
+            // scale ring (never into the disc, where the rpm digits are).
+            p.fill(
+                &Shape::line(Vec2::polar(c, disc, head), Vec2::polar(c, ring + 6.0, head), 3.0),
+                ink,
+            );
+        }
+        // Ticks across the ring every thousand with three between them (one on a scale over
+        // 10,000), numerals outside (not in the hood view). From the limiter on a tick is red,
+        // wider and reaches further in; outside the ring it ends where the others do.
+        let thousands = (top / 1000.0).round() as usize;
+        let (step, parts) = if thousands > 10 { (2, 2) } else { (1, 4) };
+        let style = self.figures(g.num_cap, print_ink(pal), Align::Center);
+        for k in 0..=thousands {
+            let at = k as f32 * 1000.0;
+            let a = self.rev_angle(g, at);
+            let numeral = if fine && k % step == 0 { NUMERALS.get(k) } else { None };
+            let (inside, outside, width, tick) = if known && at >= max - 1.0 {
+                (LIMIT_TICK_IN, LIMIT_TICK_OUT, LIMIT_TICK_W, red)
+            } else {
+                (TICK_IN, TICK_OUT, TICK_W, print)
+            };
+            p.fill(
+                &Shape::line(
+                    Vec2::polar(c, ring - inside, a),
+                    Vec2::polar(c, ring + outside, a),
+                    width,
+                ),
+                tick,
+            );
+            if k < thousands {
+                for part in 1..parts {
+                    let a = self.rev_angle(g, at + 1000.0 * part as f32 / parts as f32);
+                    p.fill(
+                        &Shape::line(Vec2::polar(c, ring, a), Vec2::polar(c, ring + 4.0, a), 1.5),
+                        rule,
+                    );
                 }
             }
-            self.draw_spill(p, g, pal);
+            if let Some(label) = numeral {
+                p.text(Vec2::polar(c, g.num_r, a), label, &style);
+            }
+        }
+        // The rpm digits and their unit in the disc, centred on the gauge's axis.
+        let digits = self.figures(g.rpm_cap, ink, Align::Center);
+        let rpm_digits = &self.rev.digits;
+        p.number(g.rpm_at, rpm_digits.shown, rpm_digits.cells, &digits, None);
+        if fine {
+            let unit = self.label(g.unit_cap, print_ink(pal), Align::Center);
+            p.text(vec2(g.rpm_at.x, g.rpm_at.y + g.rpm_cap * 0.5 + 15.0), "rpm", &unit);
+        }
+    }
 
-            // The legs dissolve into the steering column above the open line.
-            let open = g.housing.max.y;
-            let cav = g.cavity();
-            for (x0, x1) in [
-                (g.housing.min.x - 4.0, cav.min.x + 1.0),
-                (cav.max.x - 1.0, g.housing.max.x + 4.0),
-            ] {
-                let r = Rect::from_points(vec2(x0, open - g.leg_fade), vec2(x1, open));
-                p.fill(
-                    &Shape::rect(r),
-                    Gradient::linear(r.at(0.5, 0.0), r.at(0.5, 1.0))
-                        .stop(0.0, roles.oled_black.with_alpha(0.0))
-                        .stop(0.5, roles.oled_black.with_alpha(0.75))
-                        .stop(1.0, roles.oled_black),
-                );
+    /// The gear in its beam, like a road running away from the horizon: light at the apex that
+    /// fades out towards the foot, and a band of light inside each edge. Every gear is ink;
+    /// reverse shows in the beam's two edge bands, which turn `warning`.
+    fn draw_gear(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let beam = g.beam();
+        let flare = if self.flare.running() {
+            1.0 + FLARE_PEAK * (1.0 - self.flare.progress())
+        } else {
+            1.0
+        };
+        let foot = g.screen.max.y;
+        let reverse = self.gear.gear() == Gear::Reverse;
+        let (apex_rest, edge_ink, edge_rest) = beam_rest(pal, reverse);
+        let apex = (apex_rest * flare).min(1.0);
+        let body = Gradient::linear(vec2(0.0, g.horizon), vec2(0.0, foot))
+            .stop(0.0, pal.primary.with_alpha(apex))
+            .stop(0.45, pal.primary.with_alpha(apex * 0.25))
+            .stop(1.0, pal.primary.with_alpha(0.0));
+        // The beam starts under the horizon rule's bottom edge, so its light never stacks on the
+        // rule's (the static cap holds for the stack, `beam_rest`).
+        p.scoped(|p| {
+            p.clip(
+                Rect::from_points(vec2(g.screen.min.x, g.horizon + 1.0), g.screen.max),
+                0.0,
+            );
+            p.fill(&Shape::Polygon { points: &beam }, body);
+            // The edge bands: each a strip inside its edge, at one strength along the edge and
+            // fading inwards along the edge's normal.
+            let edge = (edge_rest * flare).min(1.0);
+            let along = (beam[2] - beam[1]).normalize_or_zero();
+            for (side, top, base) in [(1.0, beam[1], beam[2]), (-1.0, beam[0], beam[3])] {
+                // The inward normal of this edge, and the strip's width along x.
+                let normal = vec2(-side * along.y, along.x);
+                let across = vec2(-side * BEAM_BAND / along.y.max(0.1), 0.0);
+                let strip = [top, base, base + across, top + across];
+                let fade = Gradient::linear(top, top + normal * BEAM_BAND)
+                    .stop(0.0, edge_ink.with_alpha(edge))
+                    .stop(1.0, edge_ink.with_alpha(0.0));
+                p.fill(&Shape::Polygon { points: &strip }, fade);
             }
         });
-    }
-
-    /// The chamfer facets: each takes the light by its facing (additive, uniform along the
-    /// straight runs, turning with a conic round the corners), then sinks toward the cavity
-    /// under a black overlay across its width. The pod spill sits on the upper run.
-    fn draw_chamfer(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, light: f32) {
-        let roles = pal.roles;
-        let ink = roles.ink;
-        let black = roles.oled_black;
-        let [corner_l, corner_r, top, leg_l, leg_r] = g.band(g.face, g.face + g.chamfer, 2.0);
-        let [k_cl, k_cr, k_top, k_ll, k_lr] = g.band_clips();
-        let level = |normal: Vec2| ink.with_alpha(on_screen(chamfer_level(normal, light) * CHAMFER_GAIN));
-        let [k0, k1, k2] = CHAMFER_PROFILE;
-        let shade = |k: f32| black.with_alpha((1.0 - on_screen(k)).clamp(0.0, 1.0));
-        let (cl, cr) = g.corner_centers();
-        let r_lip = g.lip_radius();
-        let r_base = g.cavity_radius();
-        let base_t = r_base / r_lip.max(1.0);
-        let mid_t = 1.0 - (1.0 - base_t) * 0.35;
-        let n = |a: f32| -Vec2::from_angle(a);
-        let q = PI * 0.5;
-
-        p.set_blend(BlendMode::Add);
-        clipped(p, k_top, &top, level(vec2(0.0, 1.0)));
-        clipped(p, k_ll, &leg_l, level(vec2(1.0, 0.0)));
-        clipped(p, k_lr, &leg_r, level(vec2(-1.0, 0.0)));
-        for (shape, center, start, k) in [(corner_l, cl, PI, k_cl), (corner_r, cr, PI * 1.5, k_cr)] {
-            clipped(
-                p,
-                k,
-                &shape,
-                Gradient::conic(center, start)
-                    .stop(0.0, level(n(start)))
-                    .stop(0.125, level(n(start + q * 0.5)))
-                    .stop(0.25, level(n(start + q)))
-                    .stop(1.0, level(n(start + q))),
-            );
-        }
-        p.set_blend(BlendMode::Normal);
-
-        // Across the width: the lip keeps its light, the base sinks into the cavity.
-        let across = |from: Vec2, to: Vec2| {
-            Gradient::linear(from, to)
-                .stop(0.0, shade(k0))
-                .stop(0.35, shade(k1))
-                .stop(1.0, shade(k2))
-        };
-        let lip = g.lip();
-        let cav = g.cavity();
-        clipped(p, k_top, &top, across(vec2(0.0, lip.min.y), vec2(0.0, cav.min.y)));
-        clipped(p, k_ll, &leg_l, across(vec2(lip.min.x, 0.0), vec2(cav.min.x, 0.0)));
-        clipped(p, k_lr, &leg_r, across(vec2(lip.max.x, 0.0), vec2(cav.max.x, 0.0)));
-        for (shape, center, k) in [(corner_l, cl, k_cl), (corner_r, cr, k_cr)] {
-            clipped(
-                p,
-                k,
-                &shape,
-                Gradient::radial(center, r_lip)
-                    .stop(base_t, shade(k2))
-                    .stop(mid_t, shade(k1))
-                    .stop(1.0, shade(k0)),
-            );
-        }
-    }
-
-    /// The pod spill: a non-emissive reflection of each pod on the upper chamfer, one hot spot
-    /// over every pod (falling off over 44 px), strongest at the chamfer's base.
-    fn draw_spill(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let lip = g.lip();
-        let cav = g.cavity();
-        let spill = self.spill.level();
-        if spill > 1e-3 {
-            let col = pal.shift.with_alpha(SPILL_PEAK * spill);
-            for c in g.pod_centers() {
-                let r = Rect::from_points(vec2(c.x - 48.0, lip.min.y), vec2(c.x + 48.0, cav.min.y));
-                let at = vec2(c.x, cav.min.y);
-                p.fill(
-                    &Shape::rect(r),
-                    Gradient::radial(at, 44.0)
-                        .stop(0.0, col)
-                        .stop(0.45, col.fade(0.35))
-                        .stop(1.0, col.with_alpha(0.0)),
-                );
-            }
-        }
-    }
-
-    /// The recessed light bar and its ten microprism pods.
-    fn draw_light_bar(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let bar = g.light_bar;
-        let radius = bar.height() * 0.3;
-        // A recessed channel, no outline: its floor rises from black under the top lip to a
-        // faint lit bottom lip (6% on screen).
-        p.fill(
-            &Shape::round_rect(bar, radius),
-            Gradient::linear(bar.at(0.5, 0.0), bar.at(0.5, 1.0))
-                .stop(0.0, roles.oled_black)
-                .stop(0.7, roles.oled_black)
-                .stop(1.0, roles.ink.with_alpha(on_screen(0.06))),
-        );
-        // The ten LEDs behind microprism lenses, from `ShiftLights`' state (outside-in fill, stage
-        // colours, the 10 Hz limiter strobe). No outlines: a lens is a two-stop radial (a core 40%
-        // toward white), fine concentric prism rings and one top glint; lit lenses take a tight
-        // 6 px glow and a reduced bloom, so they read as LEDs behind glass, not glowing buttons.
-        let bloom = LayerOptions {
+        // The shared glyph's own colours are left out: its red R would stand over the beam's
+        // colour, so reverse is ink like every gear (neutral at the glyph's 72 %).
+        let ink = if reverse { pal.roles.ink } else { self.gear.color(pal) };
+        // The clip keeps the glyph itself on the screen while it slides in on a gear change. It
+        // cannot bound the bloom, which the kit adds over the whole frame: [`GEAR_BLOOM`] keeps
+        // that light low instead.
+        let glow = LayerOptions {
             bloom: Some(Bloom {
-                threshold: p.tokens().glow.bloom_threshold,
-                intensity: p.tokens().glow.bloom_intensity * POD_BLOOM,
+                intensity: GEAR_BLOOM,
+                ..Bloom::default()
             }),
             ..LayerOptions::default()
         };
-        for (i, c) in g.pod_centers().into_iter().enumerate() {
-            let lens = Rect::from_center_size(c, g.pod_size);
-            let shape = Shape::round_rect(lens, lens.height() * 0.35);
-            let half = lens.width() * 0.5;
-            let rings = |a: f32| {
-                Gradient::radial(c, POD_RING_PITCH)
-                    .spread(Spread::Repeat)
-                    .stop(0.0, roles.ink.with_alpha(0.0))
-                    .stop(0.7, roles.ink.with_alpha(0.0))
-                    .stop(0.85, roles.ink.with_alpha(a))
-                    .stop(1.0, roles.ink.with_alpha(0.0))
-            };
-            let glint = Rect::from_xywh(lens.min.x + 14.0, lens.min.y + 3.0, lens.width() - 28.0, 2.0);
-            match self.shift.color_of(i, pal) {
-                Some(color) => {
-                    p.glow(&shape, color, Glow::new(6.0, 0.25));
-                    p.layer(bloom, |p| {
-                        p.fill(
-                            &shape,
-                            Gradient::radial(c, half)
-                                .stop(0.0, color.lerp(roles.ink.with_alpha(color.a), 0.4))
-                                .stop(0.55, color)
-                                .stop(1.0, color.fade(0.8)),
-                        );
-                    });
-                    p.fill(&shape, rings(0.10));
-                    p.fill(&Shape::round_rect(glint, 1.0), roles.ink.with_alpha(0.3));
-                }
-                None => {
-                    p.fill(&shape, roles.ink.with_alpha(on_screen(UNLIT_LENS)));
-                    p.fill(&shape, rings(on_screen(0.05)));
-                    p.fill(&Shape::round_rect(glint, 1.0), roles.ink.with_alpha(on_screen(0.12)));
-                }
-            }
-        }
-    }
-
-    /// Everything on the screen: rev bar, G bar, gear, load quad, speed, dividers, tiles, lamps.
-    fn draw_data(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        // Rank 3: the rev bar and its numerals from the car's limiter.
-        self.draw_rev_bar(p, g, pal);
-        self.bar.draw_scale(p, g.bar, self.faces.value, g.scale_cap, pal);
-        // Rank 4: the long-G bar above the gear.
-        self.draw_g_bar(p, g, pal);
-        // Rank 1: the gear, a crisp TFT glyph (no bloom: a halo on OLED black reads as a game HUD).
-        self.gear.draw(p, g.gear, self.faces.gear, g.gear_cap, pal);
-        self.draw_quad(p, g, pal);
-
-        // Rank 2: speed with ghost 8s, the unit under it.
-        self.speed.draw(
-            p,
-            g.speed,
-            self.faces.speed,
-            g.speed_cap,
-            roles.ink,
-            Some(roles.ink.with_alpha(on_screen(GHOST_8))),
-        );
-        self.speed.draw_unit(
-            p,
-            vec2(g.speed.x, g.unit_y),
-            self.sig.unit.label(),
-            self.faces.label,
-            self.micro_cap,
-            self.tracking,
-            pal,
-        );
-
-        // Hairline dividers, fading at both ends: data is grouped by alignment, never boxed.
-        for x in [-g.divider_x, g.divider_x] {
-            let r = Rect::from_points(vec2(x - 0.5, g.divider_y[0]), vec2(x + 0.5, g.divider_y[1]));
-            p.fill(
-                &Shape::rect(r),
-                Gradient::linear(r.at(0.5, 0.0), r.at(0.5, 1.0))
-                    .stop(0.0, roles.hairline.with_alpha(0.0))
-                    .stop(0.25, roles.hairline)
-                    .stop(0.75, roles.hairline)
-                    .stop(1.0, roles.hairline.with_alpha(0.0)),
-            );
-        }
-
-        // Rank 4 tiles, with the stepped swap to the shift event page.
-        let (normal, ev) = self.event.levels();
-        let power = match self.sig.unit {
-            SpeedUnit::Mph => &self.power_hp,
-            SpeedUnit::Kmh => &self.power_kw,
-        };
-        let (value, label) = (self.faces.value, self.faces.label);
-        if normal > 0.0 {
-            p.scoped(|p| {
-                p.set_opacity(normal);
-                self.boost.draw(p, g.tiles[0], g.tile_cap, pal, value, label);
-                power.draw(p, g.tiles[1], g.tile_cap, pal, value, label);
-            });
-        }
-        if ev > 0.0 {
-            p.scoped(|p| {
-                p.set_opacity(ev);
-                self.shift_at.draw(p, g.tiles[0], g.tile_cap, pal, value, label);
-                let delta = if self.event.late {
-                    &self.shift_late
-                } else {
-                    &self.shift_early
-                };
-                delta.draw(p, g.tiles[1], g.tile_cap, pal, value, label);
-            });
-        }
-
-        // Rank 5: the alarm lamps (no bloom, no glow), labels shy until lit.
-        self.draw_lamps(p, g.lamps[0], &self.left, pal);
-        self.draw_lamps(p, g.lamps[1], &self.right, pal);
-    }
-
-    /// The rev bar's cells, drawn here from `TachBar`'s honest fill model (lit count, stage
-    /// colour per cell, limiter amount) without its bloom: the rank-3 bar is a lit TFT, and a
-    /// cyan halo over its numerals read as a game HUD. Unlit cells are fill-only at 9/255; lit
-    /// cells are top-lit lenses (a glint fading down, a shade at the bottom). At the limiter the
-    /// lit run crossfades to steady ink, so only the strip and LIM carry `shift`.
-    fn draw_rev_bar(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let lit = self.bar.lit();
-        let k = self.bar.limiter().clamp(0.0, 1.0);
-        let first = self.bar.cell_rect(g.bar, 0);
-        let radius = first.width().min(first.height()) * 0.14;
-        let unlit = roles.ink.with_alpha(on_screen(UNLIT_LENS));
-        // `TachBar` lights nominal cells at 72% of `primary`; only those are pulled toward grey,
-        // and the caution and warning stages keep their full colour (colour by exception). Flat
-        // cells, no gloss.
-        let nominal = pal.primary.fade(0.72);
-        let quiet = nominal.lerp(roles.ink_label.fade(nominal.a), REV_DESAT);
-        for i in 0..self.bar.count() {
-            let cell = Shape::round_rect(self.bar.cell_rect(g.bar, i), radius);
-            if i < lit {
-                let stage = self.bar.segment_color(g.bar, i, pal);
-                let base = if stage == nominal { quiet } else { stage };
-                p.fill(&cell, base.lerp(roles.ink, k));
-            } else {
-                p.fill(&cell, unlit);
-            }
-        }
-        // The scale's unit at the bar's end (the last whole thousand sits short of the limiter).
-        let ts = p.tokens().type_scale;
-        let style = TextStyle::new(self.faces.label, ts.nano)
-            .paint(roles.ink_label)
-            .tracking(ts.label_tracking)
-            .align(Align::Right, VAlign::CapTop);
-        p.text(vec2(g.bar.max.x, g.bar.max.y + g.scale_cap * 0.9), "×1000", &style);
-    }
-
-    /// The long-G bar, from `SignedBar`'s spring: a 4 px track at 12%, ±1 g ticks, a notch the
-    /// bar's height + 4 px, and a flat 8 px fill with square ends (ink accelerating, `warning`
-    /// braking) that fades in from a tenth of full scale.
-    fn draw_g_bar(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let c = g.g_bar;
-        let half = g.g_bar_half;
-        let faint = roles.ink.with_alpha(on_screen(0.12));
-        p.fill(&Shape::rect(Rect::from_center_size(c, vec2(half * 2.0, 4.0))), faint);
-        // Full scale is 1.5 g: the ±1 g ticks sit at two thirds.
-        for s in [-1.0, 1.0] {
-            let x = c.x + s * half / 1.5;
-            p.fill(
-                &Shape::rect(Rect::from_center_size(vec2(x, c.y), vec2(2.0, 12.0))),
-                faint,
-            );
-        }
-        p.fill(
-            &Shape::rect(Rect::from_center_size(c, vec2(2.0, 8.0 + 4.0))),
-            roles.ink.with_alpha(on_screen(0.35)),
-        );
-        let a = self.g_bar.opacity();
-        if a > 0.0 {
-            let v = self.g_bar.value();
-            let len = v.abs() * half;
-            let (x0, color) = if v >= 0.0 {
-                (c.x, roles.ink)
-            } else {
-                (c.x - len, roles.warning)
-            };
-            p.fill(&Shape::rect(Rect::from_xywh(x0, c.y - 4.0, len, 8.0)), color.fade(a));
-        }
-    }
-
-    /// One row of alarm lamps from an `AlarmColumn`'s state, in the same slots as its bottom-row
-    /// layout. Unlit: fill-only lenses at 9/255 with a 1 px top glint. Lit: the lamp colour with a
-    /// core 40% toward white and a 1 px inner rim, and no glow (the brief: lit without bloom).
-    fn draw_lamps(&self, p: &mut Painter<'_>, rect: Rect, column: &AlarmColumn, pal: &Palette) {
-        let roles = pal.roles;
-        let ts = p.tokens().type_scale;
-        let lamps = column.lamps();
-        let slot = rect.width() / 5.0;
-        let (w, h) = (slot * 0.72, slot * 0.72 * 30.0 / 88.0);
-        let first = rect.center().x - slot * lamps.len() as f32 * 0.5;
-        for (i, lamp) in lamps.iter().enumerate() {
-            let cx = first + slot * (i as f32 + 0.5);
-            let lens = Rect::from_xywh(cx - w * 0.5, rect.min.y, w, h);
-            let shape = Shape::round_rect(lens, h * 0.35);
-            let on = column.is_lit(i);
-            let color = lamp.tone.color(pal);
-            if on {
-                p.fill(
-                    &shape,
-                    Gradient::radial(lens.center(), w * 0.5)
-                        .stop(0.0, color.lerp(roles.ink, 0.4))
-                        .stop(0.55, color)
-                        .stop(1.0, color),
-                );
-                p.stroke(&shape, roles.ink.with_alpha(0.5), Stroke::inner(1.0));
-            } else {
-                p.fill(&shape, roles.ink.with_alpha(on_screen(UNLIT_LENS)));
-                let glint = Rect::from_xywh(lens.min.x + h * 0.35, lens.min.y + 1.0, w - h * 0.7, 1.0);
-                p.fill(&Shape::rect(glint), roles.ink.with_alpha(on_screen(0.12)));
-            }
-            let ink = if on {
-                color.text_safe()
-            } else {
-                roles.ink.with_alpha(on_screen(LAMP_LABEL))
-            };
-            let style = TextStyle::new(self.faces.label, (h * 0.55).min(ts.micro_label).max(ts.nano))
-                .paint(ink)
-                .tracking(ts.label_tracking)
-                .align(Align::Center, VAlign::CapTop);
-            p.text(vec2(cx, lens.max.y + h * 0.45), lamp.label, &style);
-        }
-    }
-
-    /// The derived load quad: four tyres seen from above, brighter with more load; an unloaded
-    /// (lifting) or overloaded corner turns `caution`.
-    fn draw_quad(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let loads = corner_loads(self.sig.g_long, self.sig.g_lat);
-        let offsets = [vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(-0.5, 0.5), vec2(0.5, 0.5)];
-        for (load, o) in loads.iter().zip(offsets) {
-            let c = g.quad + vec2(o.x * g.quad_step.x, o.y * g.quad_step.y);
-            let r = Rect::from_center_size(c, g.tyre);
-            let radius = g.tyre.x * 0.18;
-            // The tyre: an unlit cell (no outline), filled from the bottom in proportion to its
-            // load (full at twice the static share).
-            p.fill(
-                &Shape::round_rect(r, radius),
-                roles.ink.with_alpha(on_screen(TYRE_BODY)),
-            );
-            let share = (load * 0.5).clamp(0.0, 1.0);
-            // Nominal load is a quiet 20%; a loaded corner (over 1.3 × static) lifts to 60%; an
-            // unloaded or overloaded corner turns clean `caution`, the SLIP lamp's amber.
-            let color = if *load < 0.25 || *load > 1.9 {
-                roles.caution
-            } else if *load > 1.3 {
-                roles.ink.with_alpha(on_screen(0.6))
-            } else {
-                roles.ink.with_alpha(on_screen(0.2))
-            };
-            // A lifting wheel (under a quarter of its static load) is flagged by the whole cell in
-            // `caution`; otherwise the fill rises with the load, and under a quarter of the cell it
-            // is left out rather than drawn as a meaningless sliver.
-            if *load < 0.25 {
-                p.fill(&Shape::round_rect(r, radius), color);
-            } else if share >= 0.25 {
-                let fill = Rect::from_points(vec2(r.min.x, r.max.y - r.height() * share), r.max);
-                p.fill(&Shape::round_rect(fill, radius), color);
-            }
-        }
-        let style = TextStyle::new(self.faces.label, p.tokens().type_scale.nano)
-            .paint(roles.ink_label)
-            .tracking(self.tracking)
-            .align(Align::Right, VAlign::CapMiddle);
-        p.text(
-            vec2(g.quad.x - g.quad_step.x * 0.5 - g.tyre.x * 0.5 - 14.0, g.quad.y),
-            "TYRE LOAD",
-            &style,
-        );
-    }
-
-    /// The bonded AR cover glass: an 18/255 crescent along the top of the cavity on the light's
-    /// side (additive, very faint). It stays above the light bar, so it never smudges the lenses.
-    fn draw_cover_glass(p: &mut Painter<'_>, g: &Geom, pal: &Palette, light: f32) {
-        let cav = g.cavity();
-        let ink = pal.roles.ink;
         p.scoped(|p| {
-            p.clip(
-                Rect::from_points(cav.min, vec2(cav.max.x, g.light_bar.min.y - 2.0)),
-                g.cavity_radius(),
+            p.clip(g.screen, 0.0);
+            p.layer(glow, |p| {
+                self.gear.draw_with(p, g.gear_at, self.faces.gear, g.gear_cap, ink);
+            });
+        });
+    }
+
+    /// A quarter panel's caps header, at the screen's edge of its panel (the bottom right one at
+    /// the gauge's side, as the DDU sets SPEED). A top panel's header stands on a tinted rule
+    /// that runs from the screen's edge and turns up at 45° at the gauge; a bottom panel stands
+    /// under the horizon, which is its rule.
+    fn header(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, text: &str, pal: &Palette) {
+        if !self.fine_print() {
+            return;
+        }
+        let (x, y) = (s.x, s.head);
+        let (at, align) = if s.right_side && s.top {
+            (x.1, Align::Right)
+        } else {
+            (x.0, Align::Left)
+        };
+        p.text(
+            vec2(at, y + LABEL_NUDGE),
+            text,
+            &self.label(g.head_cap, print_ink(pal), align),
+        );
+        if !s.top {
+            return;
+        }
+        // A right-hand panel has the gauge on its left.
+        let (edge_end, gauge_end, dir) = if s.right_side {
+            (x.1, x.0, -1.0)
+        } else {
+            (x.0, x.1, 1.0)
+        };
+        let ry = y + g.head_cap * 0.5 + RULE_DROP;
+        let rule = rule_tint(pal);
+        p.fill(&Shape::line(vec2(edge_end, ry), vec2(gauge_end, ry), 2.0), rule);
+        p.fill(
+            &Shape::line(vec2(gauge_end, ry), vec2(gauge_end + dir * KICK, ry - KICK), 2.0),
+            rule,
+        );
+    }
+
+    /// A horizontal bar as the DDU draws it: a strip of fine lines between two hairlines, lit up
+    /// to `value` (0..=1), with a taller ink marker at the value.
+    fn bar(p: &mut Painter<'_>, x: (f32, f32), y: f32, h: f32, value: f32, lit: Color, pal: &Palette) {
+        let rule = hairline(pal);
+        let w = x.1 - x.0;
+        p.fill(&Shape::rect(Rect::from_xywh(x.0, y, w, 1.0)), rule);
+        p.fill(&Shape::rect(Rect::from_xywh(x.0, y + h - 1.0, w, 1.0)), rule);
+        let v = value.clamp(0.0, 1.0);
+        let pitch = (w - HATCH_W) / (HATCH as f32 - 1.0);
+        for i in 0..HATCH {
+            let on = (i as f32 + 0.5) / HATCH as f32 <= v;
+            let line = Rect::from_xywh(x.0 + i as f32 * pitch, y + 3.0, HATCH_W, h - 6.0);
+            p.fill(&Shape::rect(line), if on { lit } else { pal.roles.ink_ghost });
+        }
+        if v > 0.0 {
+            let marker = Rect::from_xywh(
+                x.0 + v * (w - HATCH_W) - 0.5,
+                y - MARKER_OVER,
+                HATCH_W + 1.0,
+                h + 2.0 * MARKER_OVER,
             );
-            // A very shallow arc of a large circle (it drops 5 px over ±300 px), offset toward
-            // the light.
-            let lx = Vec2::from_angle(light).x;
-            let r = 9000.0;
-            let half = 0.067;
-            let center = vec2(lx * 260.0, cav.min.y + 5.0 + r);
-            let a = ink.with_alpha(on_screen(CRESCENT_LEVEL));
-            let start = -PI * 0.5 - half;
-            p.fill(
-                &Shape::arc(center, r, 6.0, start, 2.0 * half, fh6_kit::Cap::Butt),
-                Gradient::conic(center, start)
-                    .stop(0.0, a.with_alpha(0.0))
-                    .stop(half / TAU, a)
-                    .stop(2.0 * half / TAU, a.with_alpha(0.0))
-                    .stop(1.0, a.with_alpha(0.0)),
-            );
+            p.fill(&Shape::rect(marker), pal.roles.ink);
+        }
+    }
+
+    /// PEDALS: throttle and brake.
+    fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "PEDALS", pal);
+        let label = self.row_label(g.label_cap, print_ink(pal));
+        let (thr, brk) = (s.head + g.thr_dy, s.head + g.brk_dy);
+        p.text(vec2(s.x.0, thr - BAR_LABEL), "THR", &label);
+        Self::bar(p, s.x, thr, g.bar_h, self.sig.throttle, pal.primary, pal);
+        p.text(vec2(s.x.0, brk - BAR_LABEL), "BRK", &label);
+        Self::bar(p, s.x, brk, g.bar_h, self.sig.brake, pal.roles.warning, pal);
+    }
+
+    /// G-FORCE (rank 4: no bloom), in the form of the DDU's fuel ring: a full ring, filled
+    /// clockwise from 12 o'clock by the felt force of the shared `GBall` (its spring, its
+    /// felt-force rule and its hold at the limit), a bead on the ring at the force's bearing
+    /// (any bearing: the ring has no gap), and the total G with its unit inside.
+    fn draw_g(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "G-FORCE", pal);
+        let c = vec2((s.x.0 + s.x.1) * 0.5, s.head + g.g_dy);
+        p.fill(&Shape::ring(c, g.g_r, G_BAND), g_track(pal));
+        let ball = self.gball.ball();
+        let force = ball.length();
+        let share = (force / G_FULL).clamp(0.0, 1.0);
+        if share > 0.0 {
+            let lit = Shape::arc(c, g.g_r, G_BAND, G_START, TAU * share, Cap::Butt);
+            p.fill(&lit, pal.primary);
+        }
+        // The bead fades in with the force: a force near zero has no bearing to show.
+        let bead = (force / G_BEAD_FULL).clamp(0.0, 1.0);
+        if bead > 0.0 {
+            let at = c + ball.normalize_or_zero() * g.g_r;
+            p.fill(&Shape::circle(at, G_BEAD), pal.roles.ink.fade(bead));
+        }
+        let value = self.figures(g.g_value_cap, pal.roles.ink, Align::Center);
+        draw_fixed(p, vec2(c.x, c.y - 4.0), self.g_shown, 2, &value);
+        let unit = self.label(g.unit_cap, print_ink(pal), Align::Center);
+        p.text(vec2(c.x, c.y + g.g_value_cap * 0.5 + 11.0), "g", &unit);
+    }
+
+    /// A row's label with its unit after it in lower case, on the line `at` (nudged by
+    /// [`LABEL_NUDGE`]), in `ink`.
+    fn row(&self, p: &mut Painter<'_>, g: &Geom, at: Vec2, label: &str, unit: &str, ink: Color) {
+        let style = self.row_label(g.label_cap, ink);
+        let w = p.measure(label, &style).width;
+        let y = at.y + LABEL_NUDGE;
+        p.text(vec2(at.x, y), label, &style);
+        p.text(vec2(at.x + w + ROW_GAP, y), unit, &style);
+    }
+
+    /// ENGINE: power in the user's unit, boost in psi (its label is the panel's accent line, as
+    /// the DDU colours one line of its list; its value is ink, which reads at a glance), and the
+    /// shift point boxed.
+    fn draw_engine(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        let (x0, x1) = s.x;
+        self.header(p, g, s, "ENGINE", pal);
+        let power_unit = match self.sig.power_unit {
+            PowerUnit::Hp => "hp",
+            PowerUnit::Kw => "kW",
+        };
+        self.row(p, g, vec2(x0, s.head + g.row_dy), "POWER", power_unit, print_ink(pal));
+        let big = self.figures(g.power_cap, pal.roles.ink, Align::Right);
+        p.number(vec2(x1, s.head + g.power_dy), self.power_shown, POWER_CELLS, &big, None);
+
+        // Boost: the label alone on the left in the text-safe accent at the printed parts'
+        // light; on the right the value in ink (vacuum reads 0) with its unit after it in print,
+        // so the value stands clear of the accent label at a glance (board v2).
+        let boost_y = s.head + g.boost_dy;
+        let label_y = boost_y + LABEL_NUDGE;
+        p.text(
+            vec2(x0, label_y),
+            "BOOST",
+            &self.row_label(g.label_cap, accent_print(pal)),
+        );
+        let unit = self
+            .row_label(g.label_cap, print_ink(pal))
+            .align(Align::Right, VAlign::CapMiddle);
+        let unit_w = p.measure("psi", &unit).width;
+        p.text(vec2(x1, label_y), "psi", &unit);
+        let small = self.figures(g.value_cap, pal.roles.ink, Align::Right);
+        draw_fixed(
+            p,
+            vec2(x1 - unit_w - UNIT_GAP, boost_y),
+            self.boost_shown.max(0),
+            1,
+            &small,
+        );
+
+        // The shift point in an outlined box, as the DDU boxes its key value. It never changes
+        // while a car is driven, so it is printed at the labels' level, on black.
+        let (y0, y1) = g.shift_row(s);
+        let cy = (y0 + y1) * 0.5;
+        let print = print_ink(pal);
+        p.text(vec2(x0, cy + LABEL_NUDGE), "SHIFT", &self.row_label(g.label_cap, print));
+        let shift = saturate_to_cells((self.sig.shift_rpm / 10.0).round() as i64 * 10, RPM_CELLS).max(0);
+        let (cells, field) = if shift > 9999 { (5, "00000") } else { (4, "0000") };
+        let printed = self.figures(g.value_cap, print, Align::Right);
+        let w = p.measure(field, &printed).width + 2.0 * SHIFT_PAD;
+        let boxed = Shape::round_rect(Rect::from_points(vec2(x1 - w, y0), vec2(x1, y1)), 4.0);
+        p.stroke(&boxed, shift_box(pal), Stroke::inner(2.0));
+        // With no limiter from the car there is no shift point to print: the box stays empty,
+        // as the strip stays dark and the red zone is left out.
+        if limiter_known(&self.sig) {
+            p.number(vec2(x1 - SHIFT_PAD, cy), shift, cells, &printed, None);
+        }
+    }
+
+    /// SPEED: tabular digits flush right, as every value in a panel is (no ghost 8s: at a glance
+    /// a ghost read as a digit), and the unit in lower case under their last digit.
+    fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "SPEED", pal);
+        let digits = self.figures(g.speed_cap, pal.roles.ink, Align::Right);
+        p.number(vec2(s.x.1, s.head + g.speed_dy), self.speed.value(), 3, &digits, None);
+        if !self.fine_print() {
+            return;
+        }
+        let unit = self.label(g.unit_cap, print_ink(pal), Align::Right);
+        let text = match self.sig.unit {
+            SpeedUnit::Mph => "mph",
+            SpeedUnit::Kmh => "km/h",
+        };
+        p.text(vec2(s.x.1, s.head + g.unit_dy), text, &unit);
+    }
+
+    /// The chin: the custom name in the left zone, the car's logo zone on the right, both
+    /// printed (at the labels' level; a logo image at [`LOGO_SHARE`]). The name is the wordmark
+    /// of the tokens' logo zone (the `wide` face, fitted to its zone by the kit) and goes when
+    /// the logo is switched off. The hood view keeps a logo image only: a wordmark there would be
+    /// under the size floor.
+    fn draw_chin(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        if !self.fine_print() {
+            if let Some(image) = self.logo.image {
+                // The image alone (empty names allocate nothing), so no wordmark stands in.
+                let only = Logo {
+                    image: Some(image),
+                    ..Logo::default()
+                };
+                p.scoped(|p| {
+                    p.set_opacity(LOGO_SHARE);
+                    logo_zone(p, g.logo, &only, self.faces.wide, LogoVariant::Full, pal);
+                });
+            }
+            return;
+        }
+        // While the car's logo is still loading the logo zone stays empty, so no stand-in shows
+        // and then swaps; the name keeps its own zone.
+        let loading = self.logo.loading;
+        // Without a logo image or brand the logo zone shows the custom name itself: never twice.
+        let zone_shows_name = !loading && self.logo.image.is_none() && self.logo.brand_name.trim().is_empty();
+        if !zone_shows_name {
+            p.scoped(|p| {
+                p.set_opacity(PRINT_SHARE);
+                let style = LogoStyle {
+                    text: pal.roles.ink_label.into(),
+                    ..LogoStyle::new(self.faces.wide)
+                };
+                fh6_kit::logo::draw(p, g.name, &self.name, &style);
+            });
+        }
+        if loading {
+            return;
+        }
+        p.scoped(|p| {
+            p.set_opacity(if self.logo.image.is_some() {
+                LOGO_SHARE
+            } else {
+                PRINT_SHARE
+            });
+            logo_zone(p, g.logo, &self.logo, self.faces.wide, LogoVariant::Full, pal);
         });
     }
 }
 
-/// An Allen bolt: a lit dome head and a black hex socket with a rim lit from the other side.
-fn allen_bolt(p: &mut Painter<'_>, at: Vec2, r: f32, pal: &Palette, light: f32) {
-    let roles = pal.roles;
-    let ink = roles.ink;
-    let l = Vec2::from_angle(light);
-    let head = Shape::circle(at, r);
-    p.fill(
-        &head,
-        Gradient::linear(at + l * r, at - l * r)
-            .stop(0.0, ink.with_alpha(on_screen(0.42)))
-            .stop(1.0, ink.with_alpha(on_screen(0.08))),
-    );
-    p.stroke(&head, roles.oled_black.with_alpha(0.8), Stroke::outer(1.0));
-    let mut hex = [Vec2::ZERO; 6];
-    for (i, v) in hex.iter_mut().enumerate() {
-        *v = Vec2::polar(at, r * 0.5, deg(15.0 + 60.0 * i as f32));
-    }
-    let socket = Shape::Polygon { points: &hex };
-    p.fill(&socket, roles.oled_black);
-    p.stroke(
-        &socket,
-        lit_rim(
-            at,
-            light + PI,
-            roles.rim_specular.with_alpha(0.4),
-            roles.hairline.with_alpha(0.0),
-        ),
-        Stroke::rim_px(1.0),
-    );
-}
-
-/// The registry constructor (`registry::REGISTRY`).
+/// Builds the cluster for the registry.
 pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
     Box::new(BoschDdu::new(setup))
 }
@@ -1387,172 +1925,977 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_stays_inside_the_envelopes_and_clear() {
+    fn housing_fits_both_envelopes() {
         let t = Tokens::default();
-        let g = &COCKPIT;
+        let h = GEOM.housing();
         let env = t.layout.cockpit_envelope;
-        assert!(
-            env.contains(g.housing.min) && env.contains(g.housing.max),
-            "housing in the cockpit envelope"
-        );
-        // Forced into the hood view, the scaled layout fits the hood envelope.
+        assert!(env.contains(h.min) && env.contains(h.max), "{h:?} in {env:?}");
         let hood = t.layout.hood_envelope;
         assert!(
-            hood.contains(g.housing.min * HOOD_SCALE) && hood.contains(g.housing.max * HOOD_SCALE),
-            "scaled housing {:?} in {hood:?}",
-            g.housing
+            hood.contains(h.min * HOOD_SCALE) && hood.contains(h.max * HOOD_SCALE),
+            "scaled {h:?} in {hood:?}"
         );
-        let cav = g.cavity();
-        // Everything on the screen stays inside the cavity, clear of its walls by >= 20 px.
-        for r in [g.light_bar, g.bar, g.tiles[0], g.tiles[1], g.lamps[0], g.lamps[1]] {
+        let frame = hardware::HOUSING_FRAME;
+        assert!(
+            env.contains(frame.min) && env.contains(frame.max),
+            "sprite frame in the envelope"
+        );
+    }
+
+    #[test]
+    fn leds_sit_on_the_brow_and_borders() {
+        let g = &GEOM;
+        let s = g.screen;
+        for i in 0..TOP_LEDS {
+            let r = g.top_led_rect(i);
             assert!(
-                r.min.x >= cav.min.x + 20.0 && r.max.x <= cav.max.x - 20.0,
-                "{r:?} inside the cavity"
+                r.max.y < s.min.y - 20.0 && r.min.y > g.top - g.arch + 20.0,
+                "top LED {i} {r:?} on the brow"
             );
-            assert!(
-                r.min.y >= cav.min.y + 10.0 && r.max.y <= g.housing.max.y,
-                "{r:?} inside the cavity"
+            assert!(r.height() <= 42.0, "the strobing strip is at most 42 px tall");
+        }
+        for i in 0..SIDE_LEDS {
+            for side in [-1.0, 1.0] {
+                let r = g.side_led_rect(side, i);
+                assert!(
+                    r.min.x.abs().min(r.max.x.abs()) > s.max.x + 20.0,
+                    "side LED clear of the screen"
+                );
+                assert!(r.max.x.abs() < g.half_w - 20.0, "side LED inside the housing");
+                // Clear of the top corner's curve.
+                let corner = vec2(side * (g.half_w - g.corner_top), g.top + g.corner_top);
+                let far = vec2(r.center().x + side * r.width() * 0.5, r.min.y);
+                assert!(
+                    far.y > corner.y || (far - corner).length() < g.corner_top - 16.0,
+                    "side LED {i} inside the corner"
+                );
+            }
+        }
+        assert!(
+            (g.sensor.y - g.top) / (g.bottom - g.top) > 0.55,
+            "the sensor sits in the lower right border"
+        );
+    }
+
+    #[test]
+    fn screen_zones_stay_on_the_screen_and_apart() {
+        let g = &GEOM;
+        let s = g.screen;
+        // The rev numerals stay on the screen and clear of the quarter panels.
+        let outer = g.num_r + g.num_cap * 0.5 + 4.0;
+        assert!(g.rev_c.y - outer >= s.min.y, "numerals under the screen's top");
+        assert!(g.rev_c.x - outer > g.left.1, "numerals clear of the left panels");
+        assert!(g.rev_c.x + outer < g.right.0, "numerals clear of the right panels");
+        // The horizon cuts the disc under the rpm unit and over the band's ends, and the beam
+        // starts on it inside the gauge's open bottom, clear of the band's ends.
+        // The unit's descender (5 px under its cap foot) ends over the disc's band of light.
+        let unit_foot = g.rpm_at.y + g.rpm_cap * 0.5 + 15.0 + g.unit_cap * 0.5;
+        assert!(
+            unit_foot + 5.0 <= g.horizon - DISC_BAND,
+            "the unit over the disc's light"
+        );
+        assert!(g.horizon < g.rev_c.y + g.disc_r(), "the horizon cuts the disc");
+        let end = Vec2::polar(g.rev_c, g.ring_r(), g.rev_start);
+        assert!(end.y > g.horizon, "the band starts under the horizon");
+        let beam = g.beam();
+        let at_end =
+            beam[0].x.abs() + (beam[3].x.abs() - beam[0].x.abs()) * ((end.y - g.horizon) / (s.max.y - g.horizon));
+        assert!(at_end + 16.0 < end.x.abs(), "beam clear of the band's end");
+        assert!(
+            beam[2].x < g.right.0 && beam[3].x > g.left.1,
+            "beam clear of the panels"
+        );
+        // The gear (at its 1.12 entry) stays on the screen and under the horizon (its width
+        // against the beam's is measured in `panel_rows_fit_the_narrowest_slot`).
+        assert!(g.gear_at.y + g.gear_cap * 0.56 <= s.max.y, "gear on the screen");
+        assert!(g.gear_at.y - g.gear_cap * 0.56 >= g.horizon, "gear under the horizon");
+        // The top row's header rules end clear of the numerals, on the screen.
+        let rule_y = g.head_top + g.head_cap * 0.5 + RULE_DROP;
+        assert_eq!(rule_y.fract(), 0.0, "the 2 px rule on whole pixels");
+        // Cap-15 labels sit half a pixel up, so their cap edges land on whole pixels, and THR
+        // and BRK share their lines with POWER and BOOST.
+        for head in [g.head_top, g.head_bottom] {
+            for line in [head, head + g.row_dy, head + g.boost_dy, head + g.shift_dy] {
+                let edge = line + LABEL_NUDGE - g.label_cap * 0.5;
+                assert_eq!(edge.fract(), 0.0, "a label's cap edge at {edge}");
+            }
+            assert_eq!(
+                head + g.row_dy + LABEL_NUDGE,
+                head + g.thr_dy - BAR_LABEL,
+                "THR on POWER's line"
+            );
+            assert_eq!(
+                head + g.boost_dy + LABEL_NUDGE,
+                head + g.brk_dy - BAR_LABEL,
+                "BRK on BOOST's line"
             );
         }
-        // The light bar clears the cavity's top corners.
+        assert_eq!(g.head_cap, g.label_cap, "headers take the labels' nudge");
+        // The limiter's tick: wider and longer than the others, its round outer end where theirs
+        // is, so it stands no closer to the numeral beside it.
+        assert_eq!(LIMIT_TICK_OUT + LIMIT_TICK_W * 0.5, TICK_OUT + TICK_W * 0.5);
+        const { assert!(LIMIT_TICK_W > TICK_W && LIMIT_TICK_IN + LIMIT_TICK_OUT > TICK_IN + TICK_OUT) };
         assert!(
-            g.light_bar.max.x <= cav.max.x - g.cavity_radius(),
-            "light bar clear of the corner"
+            g.ring_r() - LIMIT_TICK_IN - LIMIT_TICK_W * 0.5 > g.disc_r(),
+            "the limiter's tick stays out of the disc"
         );
-        // The strobing strip is <= 42 px tall and the pods sit inside the light bar.
-        assert!(g.pod_size.y <= 42.0);
-        for c in g.pod_centers() {
-            let pod = Rect::from_center_size(c, g.pod_size);
-            assert!(pod.min.x > g.light_bar.min.x && pod.max.x < g.light_bar.max.x);
-            assert!(pod.min.y > g.light_bar.min.y && pod.max.y < g.light_bar.max.y);
+        let kick_end = vec2(g.left.1 + KICK, rule_y - KICK);
+        assert!(kick_end.y > s.min.y, "the rule's end on the screen");
+        assert!(
+            (kick_end - g.rev_c).length() > outer,
+            "the rule's end clear of the numerals"
+        );
+        assert!(
+            s.max.y < g.logo.min.y && g.logo.max.y < g.bottom,
+            "logo zone on the chin"
+        );
+        assert!(g.logo.max.x < g.half_w - g.corner_bottom, "logo clear of the corner");
+        assert!(
+            g.shift_row(g.slot(2)).1 < g.horizon - HORIZON_BAND,
+            "the shift box clears the horizon's light"
+        );
+        // ISO 15008 minimums: every dynamic readout at least 17.7 px cap.
+        for cap in [
+            g.num_cap,
+            g.rpm_cap,
+            g.value_cap,
+            g.power_cap,
+            g.speed_cap,
+            g.g_value_cap,
+        ] {
+            assert!(cap >= 17.7);
         }
-        // Rev numerals clear the G bar; the gear (at its 1.12 entry) clears the G bar.
-        let numerals_bottom = g.bar.max.y + g.scale_cap * 0.9 + g.scale_cap;
-        let g_half_h = g.gear_cap * 0.08 * 0.5;
+        // The recorded exception to the family's zone minimums (150, 84, 720; the module doc):
+        // the real DDU 10's proportions lead, and these three sizes are held where they are.
+        assert_eq!(g.gear_cap, 132.0);
+        assert_eq!(g.speed_cap, 58.0);
+        assert_eq!(g.top_led_x[TOP_LEDS - 1] - g.top_led_x[0] + g.top_led.x, 426.0);
+        // Labels and units: 16 arcminutes at 0.9 m is 14.1 px (the review's standards table);
+        // the tokens' smallest size is 12. The sizes that are the tokens' own stay bound to them.
+        let t = Tokens::default();
+        for cap in [g.head_cap, g.label_cap, g.unit_cap] {
+            assert!(cap >= 14.1 && cap >= t.type_scale.nano);
+        }
+        assert_eq!(g.unit_cap, t.type_scale.micro_label);
+        assert_eq!(g.num_cap, t.type_scale.unit);
+        // The rank order in size: gear, then speed, then the rpm digits.
+        assert!(g.gear_cap > g.speed_cap && g.speed_cap > g.rpm_cap);
+        // The chin's zones mirror about the centreline.
+        assert_eq!(g.name.min.x, -g.logo.max.x);
+        assert_eq!(g.name.max.x, -g.logo.min.x);
+    }
+
+    #[test]
+    fn every_panel_fits_every_slot_vertically() {
+        let g = &GEOM;
+        // The tallest content of each kind ends above the horizon's band of light (top row) or
+        // the screen's foot (bottom row), whichever slot it is put in.
+        // The G ring stays under the header's rule, and its value and unit inside it.
+        let reach = g.g_r + G_BAND * 0.5;
         assert!(
-            g.g_bar.y - g_half_h - numerals_bottom >= 12.0,
-            "numerals clear of the G bar"
+            g.g_dy - reach >= g.head_cap * 0.5 + RULE_DROP + 2.0,
+            "ring under the rule"
         );
-        assert!(
-            g.gear.y - g.gear_cap * 0.5 * 1.12 >= g.g_bar.y + g_half_h,
-            "gear clear of the G bar"
-        );
-        assert!(
-            g.gear.y - g.gear_cap * 0.5 - (g.g_bar.y + g_half_h) >= 36.0,
-            "air between the G bar and the gear"
-        );
-        let quad_top = g.quad.y - g.quad_step.y * 0.5 - g.tyre.y * 0.5;
-        assert!(
-            quad_top >= g.gear.y + g.gear_cap * 0.5 + 8.0,
-            "load quad clear of the gear"
-        );
-        assert!(
-            quad_top + g.quad_step.y + g.tyre.y <= g.housing.max.y,
-            "load quad above the open line"
-        );
-        // The pods' centre pair sits over the gear.
-        let c = g.pod_centers();
-        assert!((c[4].x + c[5].x).abs() < 1e-3);
-        // Bolts sit on the carbon face.
-        for b in g.bolts {
-            let on_face = b.x.abs() + g.bolt_r <= g.housing.max.x && b.x.abs() - g.bolt_r >= g.lip().max.x - 30.0;
-            assert!(on_face, "bolt {b:?} on the face");
+        let inside = g.g_r - G_BAND * 0.5;
+        let unit_foot = g.g_value_cap * 0.5 + 11.0 + g.unit_cap * 0.5;
+        assert!(unit_foot + 6.0 <= inside, "the G unit inside the ring");
+        let lowest = [
+            g.brk_dy + g.bar_h + MARKER_OVER,
+            g.g_dy + reach,
+            g.shift_dy + g.shift_h * 0.5,
+            g.unit_dy + g.unit_cap,
+        ];
+        for i in 0..PANELS {
+            let s = g.slot(i);
+            let floor = if s.top {
+                g.horizon - HORIZON_BAND
+            } else {
+                g.screen.max.y
+            };
+            for dy in lowest {
+                assert!(
+                    s.head + dy <= floor,
+                    "slot {i}: {dy} px under the header passes {floor}"
+                );
+            }
+            assert!(s.x.0 >= g.screen.min.x && s.x.1 <= g.screen.max.x);
         }
     }
 
     #[test]
-    fn event_page_steps_in_holds_and_steps_out() {
-        let mut e = EventPage::new();
-        assert_eq!(e.levels(), (1.0, 0.0));
-        // Never two pages at once, and the whole swap takes 150 ms.
-        let mut t = 0.0;
-        while t < EVENT_HOLD_S + 0.3 {
-            e.t = t;
-            let (normal, event) = e.levels();
-            assert!(normal == 0.0 || event == 0.0, "pages overlap at {t}");
-            t += 0.005;
+    fn panels_option_swaps_and_hides() {
+        assert_eq!(Options::parse(""), Options::default());
+        let o = Options::parse("speed, OFF, bogus");
+        assert_eq!(
+            o.panels,
+            [Content::Speed, Content::Off, Content::Engine, Content::Speed],
+            "unknown and missing entries keep their defaults"
+        );
+        assert_eq!(Options::parse("g,gforce,hidden,pedals").panels[2], Content::Off);
+    }
+
+    /// The signals of a car at `rpm` with this limiter and shift point, as `Signals` derives
+    /// them.
+    fn signals_at(rpm: f32, max_rpm: f32, shift_rpm: f32) -> Signals {
+        Signals {
+            rpm,
+            max_rpm,
+            shift_rpm,
+            shift_fraction: rpm / shift_rpm,
+            ..Signals::default()
         }
-        e.t = 0.0;
-        assert!(
-            (e.levels().0 - 2.0 / 3.0).abs() < 1e-6,
-            "the normal page steps out first"
-        );
-        e.t = 0.149;
-        assert_eq!(e.levels(), (0.0, 1.0));
-        e.t = 1.0;
-        assert_eq!(e.levels(), (0.0, 1.0));
-        e.t = EVENT_HOLD_S + 0.01;
-        assert!(
-            (e.levels().1 - 2.0 / 3.0).abs() < 1e-6,
-            "the event page steps out first"
-        );
-        e.t = EVENT_HOLD_S + 0.149;
-        assert_eq!(e.levels(), (1.0, 0.0));
+    }
+
+    fn signals(rpm: f32) -> Signals {
+        signals_at(rpm, 8000.0, 7760.0)
     }
 
     #[test]
-    fn lamps_follow_their_sources() {
-        let base = Signals {
-            speed_ms: 30.0,
-            max_rpm: 8000.0,
-            rpm: 5000.0,
-            gear: Gear::Forward(3),
+    fn shift_lights_fill_left_to_right_then_strobe() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let mut leds = TopLeds::new();
+        leds.update(&signals(1000.0), &pal, 1.0 / 60.0, false, true);
+        assert!(
+            (0..TOP_LEDS).all(|i| leds.color_of(i, &pal).is_none()),
+            "dark at low rpm"
+        );
+        let lit_at =
+            |leds: &TopLeds| -> Vec<bool> { (0..TOP_LEDS).map(|i| leds.color_of(i, &pal).is_some()).collect() };
+        // The first LED lights as stage 1 is crossed, and one more every ninth of the range.
+        let start = pal.stages[0];
+        leds.update(&signals(7760.0 * (start + 0.001)), &pal, 1.0 / 60.0, false, false);
+        assert_eq!(lit_at(&leds).iter().filter(|l| **l).count(), 1, "LED 1 at stage 1");
+        assert_eq!(leds.color_of(0, &pal), Some(pal.roles.go));
+        let mid = start + (1.0 - start) * 0.55;
+        leds.update(&signals(7760.0 * mid), &pal, 1.0 / 60.0, false, false);
+        let lit = lit_at(&leds);
+        assert_eq!(
+            lit.iter().filter(|l| **l).count(),
+            5,
+            "five at 55 % of the range: {lit:?}"
+        );
+        assert!(lit.windows(2).all(|w| w[0] || !w[1]), "no gaps: {lit:?}");
+        // Nine are lit in their groups' colours just under the shift point (2 green, 6 amber,
+        // 1 red): the tenth is kept for the shift point itself.
+        leds.update(&signals(7760.0 * 0.99), &pal, 1.0 / 60.0, false, false);
+        let colors: Vec<Option<Color>> = (0..TOP_LEDS).map(|i| leds.color_of(i, &pal)).collect();
+        let count = |c: Color| colors.iter().filter(|x| **x == Some(c)).count();
+        assert_eq!(
+            (count(pal.roles.go), count(pal.roles.caution), count(pal.roles.warning)),
+            (2, 6, 1),
+            "{colors:?}"
+        );
+        assert_eq!(colors[TOP_LEDS - 1], None, "LED 10 waits for the shift point");
+        assert_eq!(leds.core(), LED_CORE);
+        // Over the shift point all ten are the shift lamp on the strobe's first frame and the
+        // second (frames 0 and 1 at 60 Hz), and a middle one is dark on frame 4, in the second
+        // half of the 6-frame cycle.
+        let lamp = shift_lamp(&pal);
+        leds.update(&signals(7800.0), &pal, 1.0 / 60.0, false, false);
+        assert!((0..TOP_LEDS).all(|i| leds.color_of(i, &pal) == Some(lamp)));
+        assert_eq!(leds.core(), SHIFT_CORE, "the shift state has the hotter core");
+        assert!(leds.animating(), "the strobe runs without new telemetry");
+        leds.update(&signals(7900.0), &pal, 1.0 / 60.0, false, false);
+        assert_eq!(leds.color_of(4, &pal), Some(lamp), "still lit on the second frame");
+        for _ in 0..3 {
+            leds.update(&signals(7900.0), &pal, 1.0 / 60.0, false, false);
+        }
+        assert!(
+            leds.color_of(4, &pal).is_none(),
+            "a middle LED strobed off on the fifth frame, mid-phase (6 frames per cycle)"
+        );
+        assert_eq!(leds.color_of(0, &pal), Some(lamp), "the outer pairs stay lit");
+        assert_eq!(leds.color_of(9, &pal), Some(lamp));
+        // A dip inside the hysteresis keeps it over; an upshift's drop clears it at once.
+        leds.update(&signals(7700.0), &pal, 1.0 / 60.0, false, false);
+        assert!(leds.over);
+        leds.update(&signals(5200.0), &pal, 1.0 / 60.0, false, false);
+        assert!(!leds.over);
+        // An upshift's drop from a full strip leaves no LED lit after 50 ms (three frames).
+        leds.update(&signals(7800.0), &pal, 1.0 / 60.0, false, false);
+        for frame in 0..3 {
+            leds.update(&signals(5200.0), &pal, 1.0 / 60.0, false, false);
+            if frame < 2 {
+                assert!(leds.color_of(0, &pal).is_some(), "the release has a short tail");
+                assert!(leds.animating(), "the host draws the release");
+            }
+        }
+        assert!(
+            (0..TOP_LEDS).all(|i| leds.color_of(i, &pal).is_none()),
+            "dark 50 ms after the drop"
+        );
+        assert!(!leds.animating(), "a dark strip is still");
+        // A steady staged fill changes nothing between packets.
+        leds.update(&signals(7000.0), &pal, 1.0 / 60.0, false, false);
+        leds.update(&signals(7000.0), &pal, 1.0 / 60.0, false, false);
+        assert!(
+            leds.color_of(0, &pal).is_some() && !leds.animating(),
+            "a staged fill is still"
+        );
+        // A snapped frame inside the hysteresis band starts from the staged fill, not the latch:
+        // nine lit, the tenth dark.
+        leds.update(&signals(7800.0), &pal, 1.0 / 60.0, false, false);
+        leds.update(&signals(7700.0), &pal, 0.5, false, true);
+        assert!(!leds.over, "a snap clears the latch");
+        assert_eq!(leds.color_of(8, &pal), Some(pal.roles.warning));
+        assert_eq!(leds.color_of(9, &pal), None);
+        // A car that sends no shift point leaves the strip dark.
+        let unknown = Signals {
+            rpm: 7000.0,
             ..Signals::default()
         };
-        assert_eq!(left_conditions(&base, 1, 0.0), [false; 3]);
-        assert_eq!(right_conditions(&base), [false; 3]);
-        // Power oversteer onset in a RWD car lights TC, not in a FWD car.
-        let pow = Signals {
-            throttle: 0.8,
-            slip_deg: 5.0,
-            ..base
-        };
-        assert!(left_conditions(&pow, 1, 20.0)[0]);
-        assert!(!left_conditions(&pow, lamp::FWD, 20.0)[0]);
-        // Threshold braking lights ABS.
-        let brake = Signals {
-            brake: 0.9,
-            g_long: -1.1,
-            ..base
-        };
-        assert!(left_conditions(&brake, 1, 0.0)[1]);
-        // A drift lights SLIP.
-        let drift = Signals {
-            slip_deg: -24.0,
-            ..base
-        };
-        assert!(left_conditions(&drift, 1, 0.0)[2]);
-        // LIM at the limiter, HB with the handbrake, LNCH armed at a standstill.
-        let lim = Signals { rpm: 7990.0, ..base };
-        assert!(right_conditions(&lim)[0]);
-        let hb = Signals { handbrake: 1.0, ..base };
-        assert!(right_conditions(&hb)[1]);
-        let launch = Signals {
-            speed_ms: 0.0,
-            throttle: 1.0,
-            brake: 1.0,
-            gear: Gear::Forward(1),
-            ..base
-        };
-        assert!(right_conditions(&launch)[2]);
+        leds.update(&unknown, &pal, 1.0 / 60.0, false, true);
+        assert!((0..TOP_LEDS).all(|i| leds.color_of(i, &pal).is_none()));
+        assert!(!limiter_known(&unknown));
     }
 
     #[test]
-    fn load_moves_with_g() {
-        let still = corner_loads(0.0, 0.0);
-        for l in still {
-            assert!((l - 1.0).abs() < 1e-6);
+    fn each_led_lights_at_its_share_of_the_shift_rpm() {
+        // LED i (0..9) lights when rpm / shift rpm reaches stage 1 + (1 − stage 1) × i / 9: the
+        // first at the tokens' first rev stage (0.75), the tenth exactly at the shift point.
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let start = pal.stages[0];
+        assert_eq!(start, t.rev_stages.stage1);
+        assert_eq!(start, 0.75, "the tokens' first stage");
+        let shift_rpm = signals(0.0).shift_rpm;
+        for i in 0..TOP_LEDS {
+            let threshold = start + (1.0 - start) * i as f32 / (TOP_LEDS - 1) as f32;
+            let mut leds = TopLeds::new();
+            leds.update(&signals(shift_rpm * (threshold - 0.002)), &pal, 1.0 / 60.0, false, true);
+            assert!(leds.color_of(i, &pal).is_none(), "LED {i} dark just under {threshold}");
+            if i > 0 {
+                assert!(
+                    leds.color_of(i - 1, &pal).is_some(),
+                    "the LED before {i} is lit by then"
+                );
+            }
+            leds.update(&signals(shift_rpm * threshold), &pal, 1.0 / 60.0, false, false);
+            assert!(leds.color_of(i, &pal).is_some(), "LED {i} lit at {threshold}");
+            if i + 1 < TOP_LEDS {
+                assert!(leds.color_of(i + 1, &pal).is_none(), "LED {} not yet", i + 1);
+                assert!(!leds.over);
+            } else {
+                assert!(leds.over, "the tenth lights with the shift state");
+                assert_eq!(leds.color_of(i, &pal), Some(shift_lamp(&pal)));
+            }
         }
-        let braking = corner_loads(-1.0, 0.0);
-        assert!(braking[0] > 1.0 && braking[2] < 1.0, "braking loads the front");
-        let right_turn = corner_loads(0.0, 1.0);
-        assert!(
-            right_turn[0] > 1.0 && right_turn[1] < 1.0,
-            "a right turn loads the left"
+        // A hair under the shift point the tenth is still dark: it lights with the shift state.
+        let mut leds = TopLeds::new();
+        leds.update(&signals(shift_rpm * 0.99999), &pal, 1.0 / 60.0, false, true);
+        assert!(!leds.over);
+        assert_eq!(
+            leds.color_of(TOP_LEDS - 1, &pal),
+            None,
+            "LED 10 waits for the shift point"
         );
-        let total: f32 = corner_loads(0.7, -0.9).iter().sum();
-        assert!((total - 4.0).abs() < 1e-4, "load is conserved");
-        let nan = corner_loads(f32::NAN, f32::INFINITY);
-        assert!(nan.iter().all(|l| l.is_finite()));
+        assert!(leds.color_of(TOP_LEDS - 2, &pal).is_some());
+    }
+
+    /// The light `led` paints for one lit lens of `size` in `color` (px² of relative luminance
+    /// over black), integrated on a quarter-pixel grid: the radial fill from its hot centre
+    /// ([`lens_core`]) to its colour, the 1 px inner rim over it, and the halo outside it
+    /// ([`led_halo`]: the kit's glow, `intensity × exp(−d² / 2σ²)` outside the shape out to 3σ).
+    /// The bloom is left out: it follows the fill.
+    fn lens_light(size: Vec2, color: Color, core: f32, pal: &Palette, t: &Tokens) -> f32 {
+        let halo = led_halo(t).expect("the medium glow has a lobe");
+        let half = size * 0.5;
+        let r = half.x.min(half.y);
+        let reach = halo.sigma * 3.0;
+        let hot = lens_core(color, core, pal);
+        let rim = pal.roles.ink.with_alpha(LED_RIM * color.a);
+        let step = 0.25;
+        let (nx, ny) = (
+            ((half.x + reach) / step).ceil() as i32,
+            ((half.y + reach) / step).ceil() as i32,
+        );
+        let mut sum = 0.0;
+        for iy in -ny..ny {
+            for ix in -nx..nx {
+                let p = vec2((ix as f32 + 0.5) * step, (iy as f32 + 0.5) * step);
+                // The round rect's signed distance (corner radius `r`, as `led` draws it).
+                let q = vec2(p.x.abs(), p.y.abs()) - half + Vec2::splat(r);
+                let d = q.max(Vec2::ZERO).length() + q.x.max(q.y).min(0.0) - r;
+                let lit = if d > 0.0 {
+                    halo.intensity * (-0.5 * (d / halo.sigma) * (d / halo.sigma)).exp() * light(color)
+                } else {
+                    let fill = light(hot.lerp(color, (p.length() / half.x).min(1.0)));
+                    if d > -1.0 {
+                        // The rim, source-over the fill (premultiplied).
+                        light(rim) + fill * (1.0 - rim.a)
+                    } else {
+                        fill
+                    }
+                };
+                sum += lit * step * step;
+            }
+        }
+        sum
+    }
+
+    /// The family's palette, and palettes with a darker or more saturated shift colour (the
+    /// default brand's `#FF1744`, the tokens' `#7C5CFF`) and a white one.
+    fn shift_palettes(t: &Tokens) -> Vec<Palette> {
+        let family = Palette::family(t, "raceDash");
+        let mut out = vec![family];
+        for hex in ["#FF1744", "#7C5CFF", "#FFFFFF"] {
+            let shift = Color::from_hex(hex).expect("hex");
+            out.push(Palette::new(
+                t,
+                [family.primary, family.secondary, family.accent, shift],
+                fh6_kit::PaletteSource::Custom,
+            ));
+        }
+        out
+    }
+
+    #[test]
+    fn the_brow_is_brightest_over_the_shift_point() {
+        // Ten lit lenses over the shift point give more light than the fullest staged fill, the
+        // halos counted, for every palette.
+        let t = Tokens::default();
+        let size = GEOM.top_led;
+        for pal in shift_palettes(&t) {
+            let brow = |leds: &TopLeds| -> f32 {
+                (0..TOP_LEDS)
+                    .filter_map(|i| leds.color_of(i, &pal))
+                    .map(|c| lens_light(size, c, leds.core(), &pal, &t))
+                    .sum()
+            };
+            let mut leds = TopLeds::new();
+            let mut staged: f32 = 0.0;
+            for step in 0..=200 {
+                // 0.70 to 0.999 of the shift rpm: every staged fill.
+                let frac = 0.70 + 0.299 * step as f32 / 200.0;
+                leds.update(&signals(7760.0 * frac), &pal, 1.0 / 60.0, false, true);
+                assert!(!leds.over);
+                staged = staged.max(brow(&leds));
+            }
+            leds.update(&signals(7760.0), &pal, 1.0 / 60.0, false, false);
+            assert!(leds.over);
+            let over = brow(&leds);
+            let shift = pal.shift.to_srgb8();
+            assert!(
+                over > staged,
+                "shift {shift:?}: reaching the shift point adds light: {over} against the fullest staged brow {staged}"
+            );
+            // The lamp is the shift colour where that is bright enough, and never dimmer than
+            // amber.
+            let lamp = shift_lamp(&pal);
+            assert!(light(lamp) >= light(pal.roles.caution) - 1e-4 || lamp == pal.shift);
+            assert!(light(lamp) >= light(pal.shift) - 1e-4);
+        }
+        // The outer pairs alone (the strobe's dark phase) do not have to beat the staged fill:
+        // the cue there is the strobe itself.
+    }
+
+    #[test]
+    fn reduced_flash_breathes_from_the_peak_and_never_goes_dark() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let lamp = shift_lamp(&pal);
+        let mut calm = TopLeds::new();
+        calm.update(&signals(7000.0), &pal, 1.0 / 60.0, true, true);
+        let mut levels = Vec::new();
+        for _ in 0..60 {
+            calm.update(&signals(7900.0), &pal, 1.0 / 60.0, true, false);
+            assert!(calm.strobe_on, "reduced flash never strobes");
+            assert_eq!(calm.color_of(4, &pal), Some(lamp.fade(calm.breath)));
+            assert_eq!(calm.color_of(0, &pal), Some(lamp), "the outer pairs stay full");
+            levels.push(calm.breath);
+        }
+        assert_eq!(levels[0], 1.0, "the cue starts at its peak");
+        let floor = levels.iter().copied().fold(f32::MAX, f32::min);
+        let peak = levels.iter().copied().fold(f32::MIN, f32::max);
+        assert!(
+            (floor - 0.6).abs() < 0.005 && peak <= 1.0,
+            "0.6 to 1.0: {floor}..{peak}"
+        );
+        // 2 Hz: back at the peak after half a second, at the floor a quarter of a second in.
+        assert!((levels[30] - 1.0).abs() < 0.01 && (levels[15] - 0.6).abs() < 0.01);
+        // The lens's hot centre fades with it, and so does what the lens paints.
+        let dim = lamp.fade(0.6);
+        assert!(
+            (lens_core(dim, SHIFT_CORE, &pal).a - 0.6).abs() < 1e-6,
+            "the core keeps the lens's level"
+        );
+        let size = GEOM.top_led;
+        let full = lens_light(size, lamp, SHIFT_CORE, &pal, &t);
+        // 0.6 of its light, a hair more where the 1 px rim lies over a dimmer lens (source-over
+        // is not linear in the lens's level).
+        let dimmed = lens_light(size, dim, SHIFT_CORE, &pal, &t);
+        assert!(dimmed < full * 0.62, "{dimmed} against {full}");
+    }
+
+    #[test]
+    fn the_rev_band_cross_fades_to_ink_and_holds_it() {
+        let dt = 1.0 / 60.0;
+        let mut arc = ArcInk::new();
+        arc.update(false, false, dt, true);
+        assert_eq!(arc.mix, 0.0);
+        assert!(!arc.animating(false));
+        // Reaching the shift point: a fade over about 0.1 s, never a one-frame step.
+        let mut last = 0.0;
+        let mut frames = 0;
+        arc.update(true, true, dt, false);
+        while arc.mix < 1.0 {
+            assert!(
+                arc.mix - last <= dt / ARC_FADE_S + 1e-6,
+                "no step: {last} to {}",
+                arc.mix
+            );
+            assert!(arc.animating(true));
+            last = arc.mix;
+            frames += 1;
+            arc.update(true, false, dt, false);
+        }
+        assert!((5..=7).contains(&frames), "about 0.1 s at 60 Hz: {frames} frames");
+        // A brush of the shift point (two frames over it) still gives ink for at least 0.35 s
+        // from the frame it was reached, then fades back.
+        let mut arc = ArcInk::new();
+        arc.update(true, true, dt, false);
+        arc.update(true, false, dt, false);
+        let mut ink_frames = 2;
+        loop {
+            arc.update(false, false, dt, false);
+            if arc.mix <= 0.0 {
+                break;
+            }
+            assert!(arc.animating(false), "the host keeps drawing until the ink is gone");
+            ink_frames += 1;
+            assert!(ink_frames < 120, "the hold ends");
+        }
+        let seconds = ink_frames as f32 * dt;
+        assert!(
+            (ARC_HOLD_S..=ARC_HOLD_S + ARC_FADE_S + 2.0 * dt).contains(&seconds),
+            "ink for {seconds} s"
+        );
+        // After a long stay over the shift point the band fades back at once.
+        let mut arc = ArcInk::new();
+        arc.update(true, true, dt, false);
+        for _ in 0..60 {
+            arc.update(true, false, dt, false);
+        }
+        assert_eq!(arc.mix, 1.0);
+        assert!(!arc.animating(true));
+        arc.update(false, false, dt, false);
+        assert!(arc.mix < 1.0 && arc.mix > 0.0);
+        // A snapped frame takes the state as it is.
+        arc.update(true, false, 0.5, true);
+        assert_eq!(arc.mix, 1.0);
+        arc.update(false, false, 0.5, true);
+        assert_eq!(arc.mix, 0.0);
+    }
+
+    #[test]
+    fn side_columns_latch_their_steps() {
+        assert_eq!(latched(0, 2.4, 2.5, 0.5, 5), 0);
+        assert_eq!(latched(0, -5.1, 2.5, 0.5, 5), 2, "either direction of slip");
+        assert_eq!(latched(2, 4.8, 2.5, 0.5, 5), 2, "held within the hysteresis");
+        assert_eq!(latched(2, 4.4, 2.5, 0.5, 5), 1);
+        assert_eq!(latched(0, 40.0, 2.5, 0.5, 5), 5, "at most five");
+        // The brake: one LED per started fifth; a pedal resting on a fifth (the packet's byte
+        // toggling 51 and 52 of 255) keeps its LED.
+        assert_eq!(brake_latched(0, 0.01), 0, "dead zone");
+        assert_eq!(brake_latched(0, 0.05), 1);
+        assert_eq!(brake_latched(0, 52.0 / 255.0), 2);
+        assert_eq!(brake_latched(2, 51.0 / 255.0), 2, "held within the hysteresis");
+        assert_eq!(
+            brake_latched(2, 0.16),
+            1,
+            "out once the pedal is clearly under the step"
+        );
+        assert_eq!(brake_latched(3, 1.0), 5);
+        assert_eq!(brake_latched(5, 0.0), 0, "released at once");
+        // The dead zone (0.02, between bytes 5 and 6) is latched too: a trigger resting on byte
+        // 5 keeps a lit LED and lights none.
+        assert_eq!(brake_latched(0, 6.0 / 255.0), 1);
+        assert_eq!(brake_latched(1, 5.0 / 255.0), 1, "held at the dead zone");
+        assert_eq!(brake_latched(0, 5.0 / 255.0), 0);
+        assert_eq!(brake_latched(1, 4.0 / 255.0), 0, "out under it");
+    }
+
+    #[test]
+    fn rpm_field_follows_the_value_and_moves_rarely() {
+        assert_eq!(rpm_cells(3, 900, false), 3);
+        assert_eq!(rpm_cells(3, 1000, false), 4, "grows at once");
+        assert_eq!(rpm_cells(4, 960, false), 4, "held 50 rpm under the step");
+        assert_eq!(rpm_cells(4, 940, false), 3);
+        assert_eq!(rpm_cells(4, 10_000, false), 5);
+        assert_eq!(rpm_cells(5, 9960, false), 5);
+        assert_eq!(rpm_cells(5, 9940, false), 4);
+        assert_eq!(rpm_cells(5, 800, false), 3, "a big drop takes what the value needs");
+        assert_eq!(rpm_cells(5, 9960, true), 4, "a snap takes the value as it is");
+    }
+
+    #[test]
+    fn rpm_digits_never_change_on_a_limiter_bounce() {
+        // A sawtooth limiter bounce from 9000 rpm whose later peaks vary, fed through the path
+        // the dash runs (the lights' latch, the band's clock, the digits' gate): the digits (10
+        // rpm steps, 30 rpm of hysteresis) must not change at all. A shift point at the limiter
+        // (`ShiftPointPct` 1.00) and a deep bounce both fall out of the lights' 120 rpm latch on
+        // every bounce, so only the digits' own gate holds them.
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let dt = 1.0 / 60.0;
+        /// The peak of bounce `n`.
+        type Peaks = fn(usize) -> f32;
+        let shapes: [(usize, Peaks); 4] = [
+            // 100 ms bounces, later peaks 10 rpm lower.
+            (6, |bounce| if bounce == 0 { 9000.0 } else { 8990.0 }),
+            // 150 ms bounces (the longest), later peaks 10 rpm lower.
+            (9, |bounce| if bounce == 0 { 9000.0 } else { 8990.0 }),
+            // 100 ms and 150 ms bounces whose peaks alternate.
+            (6, |bounce| if bounce % 2 == 0 { 9000.0 } else { 8990.0 }),
+            (9, |bounce| [9000.0, 8990.0, 8980.0, 8990.0][bounce % 4]),
+        ];
+        // (shift point, bounce depth): the default 0.97, a shift point at the limiter, and a
+        // deep bounce at each.
+        let cars = [(8730.0, 240.0), (9000.0, 240.0), (8730.0, 500.0), (9000.0, 500.0)];
+        for (shift_rpm, depth) in cars {
+            for (case, (period, top)) in shapes.into_iter().enumerate() {
+                let mut rev = Rev::new();
+                let mut shown = Vec::new();
+                let mut band = Vec::new();
+                let mut dropped_out = false;
+                for frame in 0..480 {
+                    let phase = (frame % period) as f32 / period as f32;
+                    let rpm = top(frame / period) - depth * phase;
+                    rev.update(&signals_at(rpm, 9000.0, shift_rpm), &pal, dt, false, frame == 0);
+                    dropped_out |= !rev.leds.over;
+                    shown.push(rev.digits.shown);
+                    band.push(rev.digits.held);
+                }
+                assert!(
+                    shown.iter().all(|&v| v == 9000),
+                    "shift {shift_rpm}, depth {depth}, case {case}: the digits never change: {shown:?}"
+                );
+                // The band's head takes the same held rpm: it stays on the bounces' peaks
+                // (8980 to 9000) instead of following each bounce down.
+                assert!(
+                    band.iter().all(|&v| (8980.0..=9000.0).contains(&v)),
+                    "shift {shift_rpm}, depth {depth}, case {case}: the band holds the peak: {band:?}"
+                );
+                if shift_rpm == 9000.0 || depth > 400.0 {
+                    assert!(
+                        dropped_out,
+                        "shift {shift_rpm}, depth {depth}: the bounce leaves the latch"
+                    );
+                }
+            }
+        }
+        // An upshift's drop releases the digits on its first frame, and an old peak never comes
+        // back as the rpm climbs again.
+        let mut rev = Rev::new();
+        rev.update(&signals_at(9000.0, 9000.0, 9000.0), &pal, dt, false, true);
+        rev.update(&signals_at(9000.0, 9000.0, 9000.0), &pal, dt, false, false);
+        assert_eq!(rev.digits.shown, 9000);
+        rev.update(&signals_at(6500.0, 9000.0, 9000.0), &pal, dt, false, false);
+        assert_eq!(rev.digits.shown, 6500, "an upshift shows the new rpm at once");
+        rev.update(&signals_at(8600.0, 9000.0, 9000.0), &pal, dt, false, false);
+        assert_eq!(
+            rev.digits.shown, 8600,
+            "released until the shift point is reached again"
+        );
+        // A climb that has not reached the shift point is never held.
+        let mut rev = Rev::new();
+        rev.update(&signals_at(8000.0, 9000.0, 8730.0), &pal, dt, false, true);
+        rev.update(&signals_at(8600.0, 9000.0, 8730.0), &pal, dt, false, false);
+        rev.update(&signals_at(8400.0, 9000.0, 8730.0), &pal, dt, false, false);
+        assert_eq!(rev.digits.shown, 8400);
+    }
+
+    #[test]
+    fn the_digits_gate_holds_a_bounce_and_releases_an_upshift() {
+        // Over the shift point the peak is held; under it only while still holding, soon after
+        // the shift point was reached and close to the peak.
+        assert!(holds_peak(true, false, ARC_HOLD_S, 9000.0, 8000.0));
+        assert!(holds_peak(false, true, 0.1, 9000.0, 9000.0 - BOUNCE_RPM));
+        assert!(
+            !holds_peak(false, true, 0.1, 9000.0, 9000.0 - BOUNCE_RPM - 1.0),
+            "an upshift"
+        );
+        assert!(!holds_peak(false, true, ARC_HOLD_S, 9000.0, 8900.0), "too long after");
+        assert!(!holds_peak(false, false, 0.1, 9000.0, 8900.0), "released already");
+        // The readout saturates to its five cells.
+        let mut digits = RpmDigits::new();
+        digits.update(1.0e7, false, false, 1.0 / 60.0, true);
+        assert_eq!(digits.shown, 99_999);
+    }
+
+    #[test]
+    fn the_peak_window_forgets_within_its_length() {
+        let dt = 1.0 / 60.0;
+        let mut window = PeakWindow::new();
+        assert_eq!(window.update(9000.0, dt, true), 9000.0, "a snap takes the rpm");
+        // A peak is kept for at least half the window and at most all of it (a frame of slack
+        // for the bucket's edge).
+        let mut held = 0;
+        while window.update(8000.0, dt, false) > 8000.0 {
+            held += 1;
+            assert!(held < 60, "the peak is dropped");
+        }
+        let seconds = held as f32 * dt;
+        assert!(
+            (PEAK_HOLD_S * 0.5 - dt..=PEAK_HOLD_S + dt).contains(&seconds),
+            "held {seconds} s"
+        );
+        // A rising rpm is followed at once.
+        assert_eq!(window.update(8500.0, dt, false), 8500.0);
+        assert_eq!(window.update(3000.0, dt, true), 3000.0, "a snap starts again");
+    }
+
+    #[test]
+    fn a_snapped_frame_puts_the_g_ball_at_rest() {
+        // A new ball starts in the centre and would drift to the force over eight or so frames
+        // after a snapped frame; the settled one is on the force with its trail collapsed.
+        let t = Tokens::default();
+        let sig = Signals {
+            g_lat: 0.9,
+            g_long: -0.4,
+            ..Signals::default()
+        };
+        let mut ball = settled_gball(&t, &sig);
+        let rest = crate::common::gball::felt_force(sig.g_lat, sig.g_long);
+        assert!((ball.ball() - rest).length() < 1e-4, "{:?} at {rest:?}", ball.ball());
+        assert!(!ball.animating(), "nothing left to settle");
+        for _ in 0..12 {
+            ball.update(&sig, 1.0 / 60.0);
+            assert!((ball.ball() - rest).length() < 1e-4, "no drift");
+            assert!(!ball.animating());
+        }
+        assert!(
+            SETTLE_STEPS as f32 * SETTLE_DT >= 4.0 * crate::common::gball::TRAIL_SECONDS,
+            "the settle outlasts the trail"
+        );
+    }
+
+    #[test]
+    fn a_snapped_frame_puts_the_virtual_light_at_rest() {
+        // Built mid-corner, the housing is lit from the corner's side at once: the settled light
+        // no longer moves, as a light run long on the same force does not.
+        let t = Tokens::default();
+        let sig = Signals {
+            g_lat: 0.9,
+            ..Signals::default()
+        };
+        let mut light = settled_light(&t, &sig);
+        let mut long = VirtualLight::new(&t);
+        for _ in 0..600 {
+            long.update(sig.g_lat, 1.0 / 60.0);
+        }
+        assert!((light.angle() - long.angle()).abs() < 1e-4, "at rest on the force");
+        let before = light.angle();
+        light.update(sig.g_lat, 1.0 / 60.0);
+        assert!((light.angle() - before).abs() <= 1e-4, "nothing left to settle");
+    }
+
+    #[test]
+    fn printed_parts_keep_their_contrast_under_the_static_cap() {
+        // Relative luminance over OLED black: at least 4.5:1 (WCAG 1.4.3) and at most the static
+        // cap of 0.2 (the burn-in rule for parts that never move).
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let contrast = |c: Color| (light(c) + 0.05) / 0.05;
+        let print = print_ink(&pal);
+        assert!(contrast(print) >= 4.5, "print at {}:1", contrast(print));
+        assert!(light(print) <= STATIC_CAP, "print at {}", light(print));
+        // The BOOST label takes the accent at the same light; its value is ink, the brightest
+        // text there is, so it reads at a glance.
+        let accent = accent_print(&pal);
+        assert!((light(accent) - light(print)).abs() < 0.005);
+        assert!(contrast(accent) >= 4.5 && light(accent) < light(pal.primary_text));
+        assert!(
+            light(accent) < light(pal.roles.ink),
+            "the BOOST value outshines its label"
+        );
+        // The hairlines sit one tier under the print and still read as lines (3:1).
+        let rule = hairline(&pal);
+        assert_eq!(rule.a, 1.0, "opaque, so crossings show no joints");
+        assert!(light(rule) < light(print) * 0.75, "hairlines at {}", light(rule));
+        assert!(contrast(rule) >= 3.0, "hairlines at {}:1", contrast(rule));
+        // The G ring's unlit track: half the light it had, still a form on black (1.5:1).
+        let track = g_track(&pal);
+        assert!(light(track) <= light(pal.roles.ink_ghost) * 0.5 + 1e-6);
+        assert!(contrast(track) >= 1.5, "the G track at {}:1", contrast(track));
+        // A white logo image at its opacity stays under the cap.
+        const { assert!(LOGO_SHARE <= STATIC_CAP) };
+    }
+
+    #[test]
+    fn tinted_static_parts_stay_under_the_cap_for_any_palette() {
+        // The parts tinted with `primary` or `warning` that never move, through the helpers
+        // `draw` uses, on the family's palette, the default brand's cyan, a brand green and a
+        // white primary.
+        let t = Tokens::default();
+        let family = Palette::family(&t, "raceDash");
+        let mut palettes = vec![family];
+        for hex in ["#00E5FF", "#76FF03", "#FFFFFF"] {
+            let primary = Color::from_hex(hex).expect("hex");
+            palettes.push(Palette::new(
+                &t,
+                [primary, family.secondary, family.accent, family.shift],
+                fh6_kit::PaletteSource::Custom,
+            ));
+        }
+        let cap = STATIC_CAP + 1e-5;
+        for pal in palettes {
+            let hex = pal.primary.to_srgb8();
+            for reverse in [false, true] {
+                let (apex, edge, edge_alpha) = beam_rest(&pal, reverse);
+                assert!(light(pal.primary.with_alpha(apex)) <= cap, "{hex:?}: beam apex");
+                assert!(light(edge.with_alpha(edge_alpha)) <= cap, "{hex:?}: beam edges");
+                // As they stack at the apex: the body on black, an edge over it.
+                let body = beam_stack(pal.primary.luminance(), apex, 0.0);
+                let top = beam_stack(edge.luminance(), edge_alpha, body);
+                assert!(body <= cap && top <= cap, "{hex:?}: beam stack {body} / {top}");
+            }
+            for (part, color) in [
+                ("header rules and horizon", rule_tint(&pal)),
+                ("red zone", red_zone(&pal)),
+                ("shift box", shift_box(&pal)),
+                ("horizon light", static_tint(pal.primary, HORIZON_GLOW)),
+                ("disc light", static_tint(pal.primary, DISC_GLOW)),
+            ] {
+                assert!(light(color) <= cap, "{hex:?}: {part} at {}", light(color));
+            }
+        }
+        // The family's own palette keeps its levels: the cap only bites on light colours.
+        assert_eq!(static_alpha(family.primary, SHIFT_BOX), SHIFT_BOX);
+        // The beam keeps its apex; its edges give up a little where they lie over the body.
+        let (apex, _, edge) = beam_rest(&family, false);
+        assert!(apex == BEAM_APEX && edge > 0.8 * BEAM_EDGE, "{apex} {edge}");
+    }
+
+    #[test]
+    fn the_hood_view_keeps_only_parts_over_the_floors() {
+        // The one decision `draw` follows: the cockpit draws everything; the hood view keeps the
+        // SPEED panel (its digits) and leaves out the other panels and all fine print (headers,
+        // labels, units, rev numerals and the chin's wordmarks).
+        let contents = [
+            Content::Pedals,
+            Content::GForce,
+            Content::Engine,
+            Content::Speed,
+            Content::Off,
+        ];
+        for content in contents {
+            assert!(shows(View::Cockpit, Part::Panel(content)));
+            assert_eq!(
+                shows(View::Hood, Part::Panel(content)),
+                content == Content::Speed,
+                "{content:?}"
+            );
+        }
+        assert!(shows(View::Cockpit, Part::Print));
+        assert!(!shows(View::Hood, Part::Print));
+        // What it keeps (the rpm digits, the gear and the speed's digits) stays over a
+        // readout's 17.7 px at HOOD_SCALE.
+        let g = &GEOM;
+        for cap in [g.rpm_cap, g.gear_cap, g.speed_cap] {
+            assert!(cap * HOOD_SCALE >= 17.7, "cap {cap} in the hood view");
+        }
+        // What it leaves out as fine print would fall under the floors: labels and units under
+        // the tokens' smallest size, the rev numerals and the panels' small values under 17.7 px.
+        let t = Tokens::default();
+        for cap in [g.head_cap, g.label_cap, g.unit_cap] {
+            assert!(
+                cap * HOOD_SCALE < t.type_scale.nano,
+                "cap {cap} is over its floor in the hood view: draw it there"
+            );
+        }
+        for cap in [g.num_cap, g.value_cap, g.g_value_cap] {
+            assert!(
+                cap * HOOD_SCALE < 17.7,
+                "cap {cap} is over its floor in the hood view: draw it there"
+            );
+        }
+        // The recorded exceptions. ENGINE goes whole although its power figure alone would clear
+        // the floor, since its labels and boxed shift point could not come with it. The chin's
+        // wordmark (the kit's logo cap 18) would stand at the smallest size's edge, 12.2 px, and
+        // under it whenever the kit shrinks a long name to its zone, so it goes with the print.
+        assert!(g.power_cap * HOOD_SCALE >= 17.7);
+        let fonts = fh6_kit::Fonts::new().expect("embedded font");
+        let wordmark = LogoStyle::new(fonts.role(FontRole::Wide)).cap * HOOD_SCALE;
+        assert!(
+            (wordmark - 12.24).abs() < 0.01 && wordmark < t.type_scale.nano + 0.5,
+            "{wordmark} px"
+        );
+    }
+
+    #[test]
+    fn panel_rows_fit_the_narrowest_slot() {
+        // Every panel can sit in every slot, so its widest row must fit the narrowest one.
+        let mut fonts = fh6_kit::Fonts::new().expect("embedded font");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
+        fonts.load_dir(&dir).expect("assets/fonts");
+        let label = fonts.find("Titillium Web", 600, false).expect("label face");
+        let figures = fonts.find("Saira Semi Condensed", 600, false).expect("figures face");
+        assert_eq!(
+            fonts.desc(figures).map(|d| d.weight),
+            Some(600),
+            "the SemiBold face is in the pack"
+        );
+        // Pack faces load their glyphs lazily; measure the real advances.
+        let gear_face = fonts.find("Saira Condensed", 700, false).expect("gear face");
+        fonts.ensure_preloaded(label);
+        fonts.ensure_preloaded(figures);
+        fonts.ensure_preloaded(gear_face);
+        let t = Tokens::default();
+        let g = &GEOM;
+        assert_eq!(g.left.1 - g.left.0, g.right.1 - g.right.0, "the slots mirror");
+        assert_eq!(g.left.1, -g.right.0, "about the gauge");
+        let narrow = g.right.1 - g.right.0;
+        let width = |text: &str, style: &TextStyle| fonts.measure(text, style).width;
+        let head = TextStyle::new(label, g.head_cap).tracking(t.type_scale.label_tracking);
+        for text in ["PEDALS", "G-FORCE", "ENGINE", "SPEED"] {
+            assert!(width(text, &head) <= narrow, "header {text}");
+        }
+        // A value keeps at least this much air from the label and unit before it.
+        const AIR: f32 = 4.0;
+        let row = TextStyle::new(label, g.label_cap);
+        let small = TextStyle::new(figures, g.value_cap).tabular();
+        let boost = width("BOOST", &row) + AIR + width("60.0", &small) + UNIT_GAP + width("psi", &row);
+        assert!(boost <= narrow, "BOOST row: {boost} px in {narrow}");
+        let shift = width("SHIFT", &row) + AIR + SHIFT_PAD + 5.0 * fonts.tabular_cell(&small) + SHIFT_PAD;
+        assert!(
+            shift <= narrow,
+            "SHIFT row with five boxed cells: {shift} px in {narrow}"
+        );
+        assert!(g.value_cap + 6.0 <= g.shift_h, "the shift point inside its box");
+        let power = TextStyle::new(figures, g.power_cap).tabular();
+        assert!(4.0 * fonts.tabular_cell(&power) <= narrow, "four power cells");
+        assert!(width("POWER", &row) + ROW_GAP + width("kW", &row) <= narrow);
+        let speed = TextStyle::new(figures, g.speed_cap).tabular();
+        assert!(3.0 * fonts.tabular_cell(&speed) <= narrow, "three speed cells");
+        // The G ring stays in the panel, and its value (0.00 to 9.99, bounded by `G_CELLS`)
+        // inside the ring.
+        assert!((g.g_r + G_BAND * 0.5) * 2.0 <= narrow);
+        let g_value = TextStyle::new(figures, g.g_value_cap).tabular();
+        let chord = {
+            let (r, up) = (g.g_r - G_BAND * 0.5, 4.0 + g.g_value_cap * 0.5);
+            2.0 * (r * r - up * up).sqrt()
+        };
+        assert!(width("9.99", &g_value) + 4.0 <= chord, "the G value inside its ring");
+        // Every gear's label fits inside the beam at the gear's middle line: a single glyph even
+        // at its 1.12 entry, the two-digit "10" at rest (its entry passes the beam's edges there
+        // for the moment of the change).
+        let beam = g.beam();
+        let along = (g.gear_at.y - g.horizon) / (beam[3].y - g.horizon);
+        let beam_w = 2.0 * (beam[1].x + (beam[2].x - beam[1].x) * along);
+        for raw in 0..=11u8 {
+            let label = Gear::from_raw(raw).label();
+            let entry = if label.len() > 1 { 1.0 } else { 1.12 };
+            let w = width(label, &TextStyle::new(gear_face, g.gear_cap * entry));
+            assert!(w <= beam_w, "gear {label} ({w} px) in the beam ({beam_w} px)");
+        }
+        // The rpm digits (five cells at most) stay inside the disc.
+        let rpm = TextStyle::new(figures, g.rpm_cap).tabular();
+        let inner = g.disc_r();
+        assert!(
+            5.0 * fonts.tabular_cell(&rpm) <= 2.0 * inner - 8.0,
+            "five rpm cells in the disc"
+        );
     }
 }
