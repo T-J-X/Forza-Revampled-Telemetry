@@ -127,7 +127,7 @@ Idle with the car still: nothing moves (checked in the direction check).
 | brake, g_long | the derived ABS lamp |
 
 ### Edge cases to test before the closing review
-1. **Housing off** (the new OSD switch): with the face gone, the encoder labels read much dimmer (brightest pixel 46/255 against 117/255 with the face, measured on `03_redline_strobe` crops, `/mnt/project-files/valkyrie_lmp1/housing_on_off.png`). Find why the label level depends on what is under it, and check housing-off over a bright game frame (`--backdrop`), since the encoders then float over the scene.
+1. **Housing off** (the new OSD switch): with the face gone, the encoder labels read much dimmer (brightest pixel 46/255 against 117/255 with the face, measured on `03_redline_strobe` crops, `/mnt/project-files/valkyrie_lmp1/housing_on_off.png`). **Cause found:** `bezel::on_screen` turns a design level into linear coverage *over an opaque black body* (its doc says so). The face was that body. With it off, the labels and the encoders' unlit tracks sit over the overlay's transparent pixels, which the desktop compositor blends in encoded space, so the linear coverage shows as itself: on_screen(0.47) = 0.187, about 48/255, as measured. Fix planned (after LIBRARY DONE): parts outside the window use the design level directly as alpha when the face is off, and the same check over a bright game frame (`--backdrop`). The window's contents are unaffected (they sit on its opaque black fill).
 2. **2 g and more:** the friction circle pins at 1.5 g (above).
 3. **Low-revving cars** (trucks, diesels): scale top clamps at 4; check the numerals and tunnel spacing at 4 and 5.
 4. **20,000 rpm cars:** scale top 20, 21 numerals; check numeral crowding on the 240° arc.
