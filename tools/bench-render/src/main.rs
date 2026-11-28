@@ -8,7 +8,10 @@
 //! - GPU time from timestamp queries around the whole frame.
 //!
 //! `--frames N` (default 600), `--out FILE` writes the Markdown report
-//! (e.g. `docs/perf/render-kit.md`).
+//! (e.g. `docs/perf/render-kit.md`). `--glass-spikes` runs the glass layer's frame-by-frame bench
+//! instead (`spikes.rs`; `--csv FILE` also writes every frame).
+
+mod spikes;
 
 use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 use fh6_gpu::GpuContext;
@@ -107,13 +110,20 @@ fn telemetry(frame: usize) -> FH6TelemetryData {
 fn main() -> Result<()> {
     let mut frames = 600usize;
     let mut out: Option<PathBuf> = None;
+    let mut csv: Option<PathBuf> = None;
+    let mut glass_spikes = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--frames" => frames = args.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a value")?)),
+            "--csv" => csv = Some(PathBuf::from(args.next().ok_or("--csv needs a value")?)),
+            "--glass-spikes" => glass_spikes = true,
             other => return Err(format!("unknown argument {other:?}").into()),
         }
+    }
+    if glass_spikes {
+        return spikes::run(frames, out.as_deref(), csv.as_deref());
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_default();

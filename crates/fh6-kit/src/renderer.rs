@@ -327,12 +327,40 @@ pub struct FrameStats {
     pub dropped: u32,
 }
 
+/// One pass of the last frame on the GPU, from the pass timeline ([`crate::Kit::set_gpu_timeline`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GpuPassTime {
+    /// What ran: `"shapes"`, `"glass shapes"` (a segment that began with a backdrop copy) or
+    /// `"resolve"`.
+    pub name: &'static str,
+    /// The layer segment a shapes pass drew (0 for the resolve).
+    pub segment: u32,
+    /// When the pass began, from the start of the frame's first pass.
+    pub start: Duration,
+    /// When the pass ended, from the start of the frame's first pass. The gap to the next pass's
+    /// start holds what ran between them: barriers, a backdrop copy, blur or bloom passes.
+    pub end: Duration,
+}
+
+/// Timestamps one frame can write: the frame's begin and end, then a begin and an end for every
+/// shapes pass after the first and for the resolve when the pass timeline is on.
+const TIMER_QUERIES: u32 = 2 + 2 * (MAX_SEGMENTS as u32 + 1);
+
 #[derive(Debug)]
 struct GpuTimer {
     set: wgpu::QuerySet,
     resolve: wgpu::Buffer,
     readback: wgpu::Buffer,
     period_ns: f32,
+}
+
+/// A pass of the pass timeline: its name, segment and timestamp indices.
+#[derive(Debug, Clone, Copy)]
+struct TimelineMark {
+    name: &'static str,
+    segment: u32,
+    begin: u32,
+    end: u32,
 }
 
 #[derive(Debug)]
@@ -376,6 +404,11 @@ pub(crate) struct Renderer {
     pub(crate) meshes: Meshes,
     timer: Option<GpuTimer>,
     timing_enabled: bool,
+    /// Every pass is timed, not only the whole frame (benches).
+    timeline_enabled: bool,
+    /// The passes the last frame timed, and how many timestamps it wrote.
+    timeline: Vec<TimelineMark>,
+    queries_used: u32,
     bloom_enabled: bool,
     /// Premultiplied black floor under the whole target (0 = none), see `Kit::set_underlay`.
     underlay: f32,
@@ -677,17 +710,17 @@ impl Renderer {
                 set: device.create_query_set(&wgpu::QuerySetDescriptor {
                     label: Some("fh6-kit gpu timer"),
                     ty: wgpu::QueryType::Timestamp,
-                    count: 2,
+                    count: TIMER_QUERIES,
                 }),
                 resolve: device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("fh6-kit timer resolve"),
-                    size: 16,
+                    size: u64::from(TIMER_QUERIES) * 8,
                     usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
                     mapped_at_creation: false,
                 }),
                 readback: device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("fh6-kit timer readback"),
-                    size: 16,
+                    size: u64::from(TIMER_QUERIES) * 8,
                     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 }),
@@ -723,6 +756,9 @@ impl Renderer {
             meshes: Meshes::new(device, DEPTH_FORMAT),
             timer,
             timing_enabled: false,
+            timeline_enabled: false,
+            timeline: Vec::with_capacity(MAX_SEGMENTS + 1),
+            queries_used: 2,
             bloom_enabled: true,
             underlay: 0.0,
             globals: Vec::with_capacity(MAX_SEGMENTS),
@@ -744,7 +780,15 @@ impl Renderer {
 
     pub(crate) fn set_timing(&mut self, on: bool) -> bool {
         self.timing_enabled = on && self.timer.is_some();
+        self.timeline_enabled &= self.timing_enabled;
         self.timing_enabled
+    }
+
+    /// Times every pass, not only the whole frame (turns frame timing on with it).
+    pub(crate) fn set_timeline(&mut self, on: bool) -> bool {
+        let timing = self.set_timing(on || self.timing_enabled);
+        self.timeline_enabled = on && timing;
+        self.timeline_enabled
     }
 
     /// Sets (or clears) the refraction source: a view of the captured game frame and the target
@@ -1218,6 +1262,10 @@ impl Renderer {
         let resolve_index = self.ensure_resolve(device, output_format);
         let (tw, th) = (target_size.0.max(1), target_size.1.max(1));
         let timer_on = self.timing_enabled && self.timer.is_some();
+        let timeline_on = timer_on && self.timeline_enabled;
+        self.timeline.clear();
+        // Indices 0 and 1 are the frame's begin and end; the timeline's own start at 2.
+        let mut next_query = 2_u32;
 
         // Work rectangle: what was drawn (+ bloom margin), snapped to 16 px, inside the target.
         let mut bounds = scene.bounds;
@@ -1252,6 +1300,7 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             }));
+            self.queries_used = 2;
             self.finish_timer(encoder);
             stats.passes = 1;
             stats.cpu = t0.elapsed();
@@ -1383,14 +1432,31 @@ impl Renderer {
                 break;
             };
             let Some(t) = self.targets.as_ref() else { break };
+            let (begin, end) = if timeline_on {
+                let begin = if first_pass { 0 } else { take_query(&mut next_query) };
+                let end = take_query(&mut next_query);
+                self.timeline.push(TimelineMark {
+                    name: if seg.backdrop_px.is_some() {
+                        "glass shapes"
+                    } else {
+                        "shapes"
+                    },
+                    segment: si as u32,
+                    begin,
+                    end,
+                });
+                (Some(begin), Some(end))
+            } else {
+                (first_pass.then_some(0), None)
+            };
             let ts = self
                 .timer
                 .as_ref()
-                .filter(|_| timer_on && first_pass)
+                .filter(|_| timer_on && (first_pass || timeline_on))
                 .map(|tm| wgpu::RenderPassTimestampWrites {
                     query_set: &tm.set,
-                    beginning_of_pass_write_index: Some(0),
-                    end_of_pass_write_index: None,
+                    beginning_of_pass_write_index: begin,
+                    end_of_pass_write_index: end,
                 });
             first_pass = false;
             let dyn_offsets = [
@@ -1538,13 +1604,23 @@ impl Renderer {
         if let Some(offset) = self.push_post(offs.post, params) {
             self.post_group(device, V::Scene, base);
             if let Some(group) = self.post_groups.get(&(V::Scene, base)) {
+                let begin = timeline_on.then(|| {
+                    let begin = take_query(&mut next_query);
+                    self.timeline.push(TimelineMark {
+                        name: "resolve",
+                        segment: 0,
+                        begin,
+                        end: 1,
+                    });
+                    begin
+                });
                 let ts = self
                     .timer
                     .as_ref()
                     .filter(|_| timer_on)
                     .map(|tm| wgpu::RenderPassTimestampWrites {
                         query_set: &tm.set,
-                        beginning_of_pass_write_index: None,
+                        beginning_of_pass_write_index: begin,
                         end_of_pass_write_index: Some(1),
                     });
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1565,6 +1641,7 @@ impl Renderer {
                 stats.draw_calls += 1;
             }
         }
+        self.queries_used = next_query;
         self.finish_timer(encoder);
 
         // ----- the single upload ------------------------------------------------------------
@@ -1606,13 +1683,50 @@ impl Renderer {
 
     fn finish_timer(&self, encoder: &mut wgpu::CommandEncoder) {
         if let Some(t) = self.timer.as_ref().filter(|_| self.timing_enabled) {
-            encoder.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
-            encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.readback, 0, 16);
+            let used = self.queries_used.clamp(2, TIMER_QUERIES);
+            encoder.resolve_query_set(&t.set, 0..used, &t.resolve, 0);
+            encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.readback, 0, u64::from(used) * 8);
         }
     }
 
     /// Reads the GPU time of the last submitted frame (blocks; benches and tests only).
     pub(crate) fn read_gpu_time(&self, device: &wgpu::Device) -> Option<Duration> {
+        self.read_timestamps(device, |ticks, to_time| {
+            let (a, b) = (*ticks.first()?, *ticks.get(1)?);
+            Some(to_time(b.saturating_sub(a)))
+        })
+    }
+
+    /// Reads every pass of the last submitted frame when the pass timeline is on (blocks;
+    /// benches only). Times run from the start of the frame's first pass.
+    pub(crate) fn read_gpu_timeline(&self, device: &wgpu::Device) -> Option<Vec<GpuPassTime>> {
+        if !self.timeline_enabled {
+            return None;
+        }
+        self.read_timestamps(device, |ticks, to_time| {
+            let origin = *ticks.first()?;
+            let at = |i: u32| ticks.get(i as usize).map(|t| to_time(t.saturating_sub(origin)));
+            self.timeline
+                .iter()
+                .map(|m| {
+                    Some(GpuPassTime {
+                        name: m.name,
+                        segment: m.segment,
+                        start: at(m.begin)?,
+                        end: at(m.end)?,
+                    })
+                })
+                .collect()
+        })
+    }
+
+    /// Maps the timestamp readback of the last submitted frame and hands `f` its raw ticks and a
+    /// tick-to-time conversion.
+    fn read_timestamps<T>(
+        &self,
+        device: &wgpu::Device,
+        f: impl FnOnce(&[u64], &dyn Fn(u64) -> Duration) -> Option<T>,
+    ) -> Option<T> {
         let t = self.timer.as_ref().filter(|_| self.timing_enabled)?;
         let (tx, rx) = std::sync::mpsc::channel();
         t.readback.map_async(wgpu::MapMode::Read, .., move |r| {
@@ -1625,15 +1739,18 @@ impl Renderer {
             })
             .ok()?;
         rx.recv_timeout(Duration::from_secs(5)).ok()?.ok()?;
-        let ticks = {
+        let used = self.queries_used.clamp(2, TIMER_QUERIES) as usize;
+        let ticks: Vec<u64> = {
             let view = t.readback.get_mapped_range(..).ok()?;
-            let bytes: [u8; 16] = view.get(..16)?.try_into().ok()?;
-            let a = u64::from_le_bytes(bytes[..8].try_into().ok()?);
-            let b = u64::from_le_bytes(bytes[8..].try_into().ok()?);
-            b.saturating_sub(a)
+            view.get(..used * 8)?
+                .chunks_exact(8)
+                .map(|c| c.try_into().map_or(0, u64::from_le_bytes))
+                .collect()
         };
         t.readback.unmap();
-        Some(Duration::from_nanos((ticks as f64 * f64::from(t.period_ns)) as u64))
+        let period = f64::from(t.period_ns);
+        let to_time = |ticks: u64| Duration::from_nanos((ticks as f64 * period) as u64);
+        f(&ticks, &to_time)
     }
 }
 
@@ -1648,6 +1765,13 @@ enum PostPipe {
     Down,
     Blur,
     Composite,
+}
+
+/// The next free timestamp index, which it then takes.
+fn take_query(next: &mut u32) -> u32 {
+    let index = *next;
+    *next += 1;
+    index
 }
 
 fn zero_params() -> PostParams {

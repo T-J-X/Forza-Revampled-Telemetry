@@ -7,7 +7,7 @@ use crate::mesh::{MeshData, MeshId, Meshes};
 use crate::paint::ImageId;
 use crate::painter::Painter;
 use crate::palette::Palette;
-use crate::renderer::{FrameStats, Renderer};
+use crate::renderer::{FrameStats, GpuPassTime, Renderer};
 use crate::scene::Scene;
 use crate::text::{FontError, FontRole, Fonts};
 use crate::tokens::Tokens;
@@ -259,5 +259,19 @@ impl Kit {
     #[must_use]
     pub fn gpu_time(&self, device: &wgpu::Device) -> Option<Duration> {
         self.renderer.read_gpu_time(device)
+    }
+
+    /// Times every pass of each frame, not only the whole frame (turns GPU timing on with it);
+    /// false when the device lacks `TIMESTAMP_QUERY`. A diagnostic for benches: the extra
+    /// timestamps cost a little GPU time themselves.
+    pub fn set_gpu_timeline(&mut self, on: bool) -> bool {
+        self.renderer.set_timeline(on)
+    }
+
+    /// Every pass of the last submitted frame, in order, when the pass timeline is on (blocks
+    /// until it is available; for benches).
+    #[must_use]
+    pub fn gpu_timeline(&self, device: &wgpu::Device) -> Option<Vec<GpuPassTime>> {
+        self.renderer.read_gpu_timeline(device)
     }
 }
