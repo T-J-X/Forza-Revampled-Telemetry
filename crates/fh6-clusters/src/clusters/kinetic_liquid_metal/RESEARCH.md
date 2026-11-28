@@ -136,3 +136,22 @@ Ideas the research suggests for the telemetry (for the board to pick from, not a
 - The drop is drawn stroboscopically (see above), not at its real 15–143 Hz.
 - Mode changes are capped at about 0.25 s, against Lamb's 0.3–7 s, so the gauge stays instant. The real τ is kept for the upshift's ring-down at high n.
 - The cylinder count is folded into the drop's size, because the packet does not carry it.
+
+## The sheen and the ring-down, computed (research figure 02)
+
+Figure `film_and_ringdown.png` in the project files. Worked here with the Airy sum for a single film on a metal: r = (r₀₁ + r₁₂e^{2iβ}) ÷ (1 + r₀₁r₁₂e^{2iβ}), β = 2π n₁ d cosθ₁ ÷ λ, s and p averaged, the substrate at the kit's mercury constant (n 1.485, k 4.546), CIE 1931 colour matching (Wyman, Sloan and Shirley's 2013 fit) under 6504 K light.
+
+**What the sheen can and cannot be.**
+- The native oxide on gallium alloys is 0.5–5 nm thick in air, about 3 nm at steady state (RSC Nanoscale Horizons 2024 review, "Interface of gallium-based liquid metals: oxide skin, wetting, and applications", section 2, [rsc.org](https://pubs.rsc.org/en/content/articlehtml/2024/nh/d4nh00067f); an HRSTEM image there shows 2.2 nm on EGaIn). That is far under the first interference order, so **a real galinstan drop shows no colour from its skin**. It reads as a bright grey mirror, a little less white than mercury.
+- Colour needs a film tens to hundreds of nanometres thick: an oil slick on the metal, or a thick anodic oxide. The board's sheen is therefore an oil film, as the direction already says, and its thickness is what drains.
+- Brightness minima (photopic Y) head-on, oil n 1.47: 76, 264, 455, 645 nm. Oxide n 1.9 (an assumed value for amorphous Ga₂O₃, not checked against a source here): 56, 202, 349, 495 nm. The metal's phase shift moves the first minimum off the quarter-wave value, which is why these are not evenly spaced from zero.
+- Oil stays pastel: Y swings only 0.60–0.78. An oxide film swings 0.44–0.79 and is more saturated. So a pastel oil-slick sheen is the physics, not a styling choice, and any strong saturated band would be wrong.
+- At 60° the same minima move to 100, 335, 569, 803 nm (oil). The bands stretch towards thicker film, so at the drop's rim a film shows the colour a thinner film shows head-on. The rim runs one colour lower in the sequence than the centre, which the shader gets for free from cosθ₁. The kit's `oil_on_mercury_film` table (x = thickness, y = cosθ) already holds exactly this.
+
+**Motion notes (timings for the board's "motion + material notes" panel and for the code).**
+- Upshift kick. Every mode gets one impulse and rings down with its own Lamb τ for R 6.08 mm: n 3 7.1 s, n 6 1.5 s, n 8 0.83 s, n 10 0.52 s, n 13 0.31 s. Low in the rev range a kick lingers as a slow wobble; near the limiter the drop snaps back almost at once. The amplitude is clamped so the gear void stays readable.
+- Mode change while revving. Capped at about 0.25 s (the deliberate change above). The new star grows from the old one's crests, never a cross-fade.
+- Limiter. On entry the tension ramps towards zero over about 80 ms, the points finger outward, and necks pinch off at the Rayleigh–Plateau ratio (drop radius 1.89 × neck). On exit the satellites coalesce back within 300 ms, with volume kept in one ledger.
+- Lean and slide. The U-tube swing at ζ 0.35 overshoots once by about 30% and settles in about a second, which reads as weight.
+- Film drainage. Mysels h ∼ √(z ÷ t): after a brake the thick film runs towards the deceleration side, so the colour bands slide forward and thin out over a few seconds. This is the one slow motion in the dash, and it is ambient: it carries no reading the driver needs.
+- Idle. Stroboscopic sampling holds the n = 3 star still. Only the film's slow drainage moves, under the house rule for idle motion.
