@@ -14,7 +14,7 @@
 //! the anodised window bezel, the LED partition and pod housings, the unlit LED caps and the
 //! knurled encoders, one render per key-light azimuth (−135°, −160°, −110°) crossfaded by the
 //! virtual light (lateral G swings it 25°). Without the files it draws a flat procedural face.
-//! The config key `ValkyrieLmp1Face` (`false`) turns the face off: the screen, the lit lights and
+//! The OSD's Housing row (config `"Housing": {"ValkyrieLmp1": false}`) turns the face off: the screen, the lit lights and
 //! the encoder arcs then float on black.
 //!
 //! Glance ranks:
@@ -72,6 +72,7 @@ use crate::common::hero_gear::HeroGear;
 use crate::common::race::{AlarmColumn, AlarmLamp, AlarmSide};
 use crate::common::speed::TabularSpeed;
 use crate::common::{ShiftLights, VirtualLight};
+use fh6_core::theme::ClusterTheme;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
     deg, vec2, Align, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Glow, Gradient, Hysteresis, ImageId,
@@ -81,9 +82,6 @@ use fh6_kit::{
 
 /// Shift lights: one on each shoulder and eight in the centre partition.
 const PODS: u32 = 10;
-/// The config's extra key that turns the wheel face (the carbon slab round the screen) on or
-/// off: `true` (the default) or `false`. Hot-reloaded; set in `config.json` until the OSD offers it.
-const FACE_KEY: &str = "ValkyrieLmp1Face";
 /// Scale of the layout in the hood view (the recipe renders the hood face at this scale).
 const HOOD_SCALE: f32 = 0.7;
 /// The wheel face's parallax at full lateral G (px). The data on the screen stays.
@@ -490,7 +488,8 @@ pub struct ValkyrieLmp1 {
     plates: [Option<[ImageId; 3]>; 2],
     envelopes: [Rect; 2],
     tracking: f32,
-    /// The wheel face is drawn ([`FACE_KEY`]); off, the screen and the lights float on black.
+    /// The wheel face is drawn (the OSD's Housing row); off, the screen and the lights float on
+    /// black.
     face: bool,
 }
 
@@ -579,8 +578,7 @@ impl Cluster for ValkyrieLmp1 {
         self.sig = sig;
         self.palette = *input.palette;
         self.view = input.view;
-        let face = input.config.extra.get(FACE_KEY);
-        self.face = face_on(face.and_then(|v| v.as_bool()), face.and_then(|v| v.as_str()));
+        self.face = crate::housing::shown(input.config, ClusterTheme::ValkyrieLmp1);
         if input.fonts.display != self.faces.role_display {
             self.faces.gear = input.fonts.display;
             self.faces.digits = input.fonts.display;
@@ -1100,28 +1098,9 @@ pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
     Box::new(ValkyrieLmp1::new(setup))
 }
 
-/// The wheel face's option ([`FACE_KEY`]) from the key's value as a bool or as text: on unless
-/// it is `false` (or the text `off`).
-fn face_on(flag: Option<bool>, text: Option<&str>) -> bool {
-    match (flag, text) {
-        (Some(on), _) => on,
-        (None, Some(t)) => !t.eq_ignore_ascii_case("off"),
-        (None, None) => true,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn wheel_face_turns_off_only_when_asked() {
-        assert!(face_on(None, None), "on by default");
-        assert!(!face_on(Some(false), None), "false turns it off");
-        assert!(face_on(Some(true), None), "true keeps it on");
-        assert!(!face_on(None, Some("Off")), "the text off turns it off");
-        assert!(face_on(None, Some("on")), "other text keeps it on");
-    }
 
     #[test]
     fn layout_stays_inside_the_envelopes_and_clear() {
