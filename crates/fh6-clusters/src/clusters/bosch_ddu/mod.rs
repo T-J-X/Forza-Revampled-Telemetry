@@ -45,7 +45,7 @@ use crate::common::hero_gear::HeroGear;
 use crate::common::label::{logo_zone, LogoVariant};
 use crate::common::speed::TabularSpeed;
 use crate::common::VirtualLight;
-use core::f32::consts::PI;
+use core::f32::consts::{PI, TAU};
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
     vec2, Align, Cluster, Color, FontId, FontRole, FrameInput, Glow, Gradient, Hysteresis, LayerOptions, Layout, Logo,
@@ -97,6 +97,13 @@ const BEAM_EDGE: f32 = 0.55;
 const LED_GLOW: (f32, f32) = (5.0, 0.45);
 /// An unlit LED: a smoked lens over a dark emitter (linear level).
 const LED_OFF: f32 = 0.018;
+/// The accent light pooled low in the rev gauge's disc (alpha of `primary`).
+const DISC_POOL: f32 = 0.16;
+/// The lit arc's brightness at its start (its head is at full strength).
+const ARC_TAIL: f32 = 0.5;
+/// How far the pointer at the arc's head reaches into the disc (px): not at all, so it never
+/// touches the rpm digits.
+const POINTER_IN: f32 = 0.0;
 /// The red zone's width on the rev gauge's inner edge (px).
 const RED_BAND: f32 = 6.0;
 /// The rev gauge's unlit track (alpha of `ink`).
@@ -780,12 +787,35 @@ impl BoschDdu {
                 pal.roles.warning,
             );
         }
+        // The dial's glass disc: a faint pool of the accent light low in the disc and a thin
+        // inner ring, so the gauge has depth without a panel fill.
+        let inner = g.rev_r - g.rev_w * 0.5 - 12.0;
+        let pool = Gradient::radial(vec2(c.x, c.y + inner * 0.55), inner * 1.25)
+            .stop(0.0, pal.primary.with_alpha(DISC_POOL))
+            .stop(1.0, pal.primary.with_alpha(0.0));
+        p.fill(&Shape::circle(c, inner), pool);
+        p.stroke(&Shape::circle(c, inner), ink.with_alpha(LEVEL_RULE), Stroke::inner(1.5));
         let rpm = self.arc_rpm;
         if rpm > 0.0 {
             let lit = if self.leds.over { pal.shift } else { pal.primary };
-            let sweep = self.rev_angle(g, rpm) - g.rev_start;
+            let head = self.rev_angle(g, rpm);
+            let sweep = head - g.rev_start;
+            // The arc brightens towards its head, as the DDU's does.
+            let ramp = Gradient::conic(c, g.rev_start)
+                .stop(0.0, lit.fade(ARC_TAIL))
+                .stop((sweep / TAU).clamp(0.001, 1.0), lit)
+                .stop(1.0, lit);
             let arc = Shape::arc(c, g.rev_r, g.rev_w, g.rev_start, sweep, fh6_kit::Cap::Butt);
-            p.layer(LayerOptions::bloom(), |p| p.fill(&arc, lit));
+            p.layer(LayerOptions::bloom(), |p| p.fill(&arc, ramp));
+            // The pointer: a white line across the track at the arc's head, reaching into the disc.
+            p.fill(
+                &Shape::line(
+                    Vec2::polar(c, inner - POINTER_IN, head),
+                    Vec2::polar(c, g.rev_r + g.rev_w * 0.5, head),
+                    3.0,
+                ),
+                ink,
+            );
         }
         // Ticks every thousand across the track's outer edge, numerals outside.
         let thousands = (top / 1000.0).round() as usize;
@@ -804,6 +834,17 @@ impl BoschDdu {
                 &Shape::line(Vec2::polar(c, outer + 2.0, a), Vec2::polar(c, outer + 9.0, a), 2.0),
                 tick,
             );
+            if k < thousands {
+                let half = self.rev_angle(g, k as f32 * 1000.0 + 500.0);
+                p.fill(
+                    &Shape::line(
+                        Vec2::polar(c, outer + 2.0, half),
+                        Vec2::polar(c, outer + 6.0, half),
+                        1.5,
+                    ),
+                    ink.with_alpha(LEVEL_RULE),
+                );
+            }
             if k % step == 0 {
                 if let Some(label) = NUMERALS.get(k) {
                     p.text(Vec2::polar(c, g.num_r, a), label, &style);
@@ -984,14 +1025,15 @@ impl BoschDdu {
     /// lower case.
     fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         self.header(p, g, g.right, g.head_bottom, "SPEED", pal, true);
-        self.speed
-            .draw(p, g.speed_at, self.faces.figures, g.speed_cap, pal.roles.ink, None);
-        let unit = self.label(g.label_cap + 2.0, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Center);
+        // Flush right, as every value on this side is; the unit sits under the last digit.
+        let digits = self.figures(g.speed_cap, pal.roles.ink, Align::Right);
+        p.number(vec2(g.right.1, g.speed_at.y), self.speed.value(), 3, &digits, None);
+        let unit = self.label(g.label_cap + 2.0, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Right);
         let text = match self.sig.unit {
             SpeedUnit::Mph => "mph",
             SpeedUnit::Kmh => "km/h",
         };
-        p.text(vec2(g.speed_at.x, g.unit_y), text, &unit);
+        p.text(vec2(g.right.1, g.unit_y), text, &unit);
     }
 
     /// The chin: the driver's name on the left, the car's logo zone on the right.
