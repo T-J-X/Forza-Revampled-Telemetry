@@ -99,6 +99,30 @@ This dash's upshift moment is a ring running from the disc out to the crescents 
 
 **Geometry.** The W214 driver display is 12.3 inches at about 2.67:1. On the 4K cockpit anchor this dash's glass is 1412 × 522 px in a 14 px bezel (x ±720, y −314 .. 236), inside the cockpit envelope. A sibling that recreates a 12.3-inch screen can take the same `housing` and `screen` rects from `geom.rs`.
 
+## Round v5: weather and the road logo (research, 28 Nov)
+
+TJS, 09:07: "The animated clouds should match the ingame weather so also rain would be cool as fuck or that I can turn on" and "And have the logo on the road".
+
+**What the game sends.** The official FH6 Data Out page (support.forza.net, article 51744149102611, read 09:12) lists no weather, rain or wetness field. The only puddle channel is `WheelInPuddle{FrontLeft,FrontRight,RearLeft,RearRight}` at bytes 132, 136, 140 and 144. It is an S32 that the page defines as 1 in a puddle and 0 out of one, so it is a flag, not a depth (the Motorsport name `WheelInPuddleDepth` does not apply). `SurfaceRumble*` (148 to 160) is a force-feedback value with no stated range. fh6-core does not decode bytes 132 to 147 today. All 20 golden packets carry 0 there, so no recorded rain capture exists yet. The page's own field list adds up to 323 bytes against its stated 324, so check the offsets on a real capture before trusting them.
+
+**What follows for Auto.** A puddle flag fires only while a tyre crosses standing water, so it cannot say "it is raining" frame by frame. Auto therefore keeps a wetness level from 0 to 1:
+- each frame with any wheel flagged adds `dt / 2 s` (two seconds of puddle contact makes it fully wet);
+- it decays with a 90 s time constant, so rain stays on between puddles and fades about three minutes after the last one;
+- rain shows above 0.35 and clears below 0.15 (hysteresis, so it never flickers);
+- the rain layer fades in and out over 4 s.
+
+This needs the real-game check (session C): drive in FH6 rain and in clear weather, log the four flags, and confirm that rain on tarmac gives puddle hits often enough and that dry roads give none (fords, splashes). If dry roads trip it, raise the threshold. If rain gives too few hits, Auto stays off and the manual Rain switch carries the feature. The **setting** is `Weather: Auto | Clear | Rain`, per dash, with Clear as the default until the check passes.
+
+**Rain, as drawn on board v5.**
+- Streaks radiate from the vanishing point, and their length and speed scale with `speed_ms`.
+- Beads sit on the near ribs below the horizon.
+- The sky darkens by about a third, and the road takes a wet sheen.
+- The streaks are thin (1 to 2 px) and grey-white at low alpha, and they change position, not brightness. That keeps them out of the flash audit's scope: they are motion, not flashing.
+
+**Road logo.** The car's logo (from `fh6-kit::logo::draw`, never an AMG or Mercedes mark) is painted flat on the road near y 150 under a vertical squash of about 0.34. It is a faint satin decal that turns glossy when wet. It is static, so `static` must show it under the 20% cap. It replaces the bottom-left logo box.
+
+**Housing.** The OSD thread is adding `housing::shown(config, ClusterTheme::AmgMbuxSuperscreen)`, with MBUX dashes off by default. This dash draws an optional slab only when that returns true.
+
 ## Gaps (not guessed)
 
 1. **Motion of the Sporty display while driving.** Whether the crescents fill, pulse or stay static is not described by any source read, and no driving video was opened. The dash's fill is an interpretation (change 7).
