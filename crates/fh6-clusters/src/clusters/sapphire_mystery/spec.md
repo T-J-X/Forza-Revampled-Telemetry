@@ -1,9 +1,11 @@
 # Sapphire Mystery (`SapphireMystery`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 37 (SapphireMystery — build #38 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 37) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** new · **View:** cockpit · **Build order:** 38
+
+**Category note.** In the Liquid Glass category (moved from Apple Vision on 2026-11-28 to make room for `CarplayIsland`) the invisible sapphire disc and the domed cabochon are the instrument: both are the kit's clear optical glass, and the cabochon's lensing follows its row in [Real geometry and maths](../../../../../program/phases/07-cluster-factory/CATALOG.md#real-geometry-and-maths). Hands, lume and indices stay Classic Analog. This brief's own warning stands: no frost and no light running round the rims, so it is never mistaken for `LiquidGlass`.
 
 A mystery dial made for a display that is itself transparent: no face, no ring and no visible pivot. Lume indices hang over the live cockpit on three parallax layers. The rpm hand floats, its root lost in an invisible Ø520 sapphire disc (alpha 28) that shows only as a 1 px fresnel crescent where the G-driven light grazes it. Rank 1: Saira Condensed 700 gear, cap 190, in a domed sapphire cabochon (Ø230, alpha 44) that lenses the indices behind it; 13 floating lume dots form the shift strip, 24 × 740 px. Rank 2: tabular Saira 300 speed, cap 100, floating under the cabochon on a dimming pad. Rank 3: a primary-colour lance with a lume core and a counterweight tail; numerals appear only at the quarter marks and at the shift rpm, which sits at 12. Rank 4: a ringless G-dot under the speed. Rank 5: one Michroma name, cap 12.
 

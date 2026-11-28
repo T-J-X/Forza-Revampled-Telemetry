@@ -1,9 +1,11 @@
 # Valkyrie LMP1 (`ValkyrieLmp1`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 13 (ValkyrieLmp1 — build #16 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 13) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** Race Dash (Design Council 3B), spec [docs/design/families/race-dash.md](../../../../../docs/design/families/race-dash.md), hero frames [docs/design/heroes/race-dash/](../../../../../docs/design/heroes/race-dash/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 16
+
+**Category note.** The Aston Martin Valkyrie's own display leads. Where that is a screen on the steering wheel, step 1's rule applies: take its parts, not its shape. The Porsche 963 and McLaren references in this brief are benchmarks only. The Race Dash asset rule applies.
 
 A hypercar endurance wheel face, not a panel: a 1440×420 forged-carbon yoke (chopped-fibre marble, unlike Bosch's twill) with angled shoulders around a 1000×340 true-black window. Rank 1: a straight 15-LED crown (34 px) across the window top and a `race` 800 gear at cap 250 in a tall portrait well. Rank 3 is the well's frame: an 8 px rpm channel climbing the left side, crossing the top, descending the right. Rank 2: speed, cap 112, left of the well; a signed lap delta at cap 84 right. Rank 4: a 4 s throttle/brake/steer engineer trace under the gear. Shoulders hold knurled anodised encoder rings with intervention arcs. Labels Titillium Web; delta and sectors in B612 Mono.
 

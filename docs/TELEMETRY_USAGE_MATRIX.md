@@ -96,8 +96,9 @@ Dash scenarios (`DASH_SCENARIOS`):
 ## Dashes
 
 Six dashes have their own code today (Liquid Glass, Bonnet Line, Porsche Analog, Bosch DDU,
-Tesla ADAS, Retro Cyber). The other 42 draw the shared scaffold (`common::scaffold`), which reads
-rpm, the limiter, gear and speed.
+Tesla ADAS, Retro Cyber). The other 66 (42 from the first catalog and the 24 added on 2026-11-28,
+at the end of the table) draw the shared scaffold (`common::scaffold`), which reads rpm, the
+limiter, gear and speed.
 
 | Theme | Dash | Reads |
 |---|---|---|
@@ -149,3 +150,27 @@ rpm, the limiter, gear and speed.
 | `IsochromaticLoadPath` | Isochromatic Load Path | `rpm`, `max_rpm`, `gear`, `speed` |
 | `AbyssalShearBloom` | Abyssal Shear Bloom | `rpm`, `max_rpm`, `gear`, `speed` |
 | `HarmonographDrive` | Harmonograph Drive | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AmgMbuxSupersport` | AMG MBUX Supersport | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SkylineR34Mfd` | Skyline R34 MFD | `rpm`, `max_rpm`, `gear`, `speed` |
+| `VisionPetals` | Vision Petals | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AmgOneF1` | AMG ONE F1 | `rpm`, `max_rpm`, `gear`, `speed` |
+| `CarplayIsland` | CarPlay Island | `rpm`, `max_rpm`, `gear`, `speed` |
+| `Gt3RsApogee` | GT3 RS Apogee | `rpm`, `max_rpm`, `gear`, `speed` |
+| `Gt7CockpitPro` | GT7 Cockpit Pro | `rpm`, `max_rpm`, `gear`, `speed` |
+| `LiquidMorph` | Liquid Morph | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AmgMbuxTrackPace` | AMG MBUX Track Pace | `rpm`, `max_rpm`, `gear`, `speed` |
+| `GtrNismoMfd` | GT-R Nismo MFD | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SimInputTrace` | Sim Input Trace | `rpm`, `max_rpm`, `gear`, `speed` |
+| `LorenzButterfly` | Lorenz Butterfly | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AmgMbuxClassic` | AMG MBUX Classic | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SuminagashiMarble` | Suminagashi Marble | `rpm`, `max_rpm`, `gear`, `speed` |
+| `T50Floodlit` | T.50 Floodlit | `rpm`, `max_rpm`, `gear`, `speed` |
+| `HakosukaS20` | Hakosuka S20 | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SimPitWall` | Sim Pit Wall | `rpm`, `max_rpm`, `gear`, `speed` |
+| `KaleidoscopeMirror` | Kaleidoscope Mirror | `rpm`, `max_rpm`, `gear`, `speed` |
+| `RevueltoCorsa` | Revuelto Corsa | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ZNismoSport` | Z Nismo Sport | `rpm`, `max_rpm`, `gear`, `speed` |
+| `GoldenAngle` | Golden Angle | `rpm`, `max_rpm`, `gear`, `speed` |
+| `MclarenSlimDisplay` | McLaren Slim Display | `rpm`, `max_rpm`, `gear`, `speed` |
+| `HopfFibration` | Hopf Fibration | `rpm`, `max_rpm`, `gear`, `speed` |
+| `HyperbolicTiles` | Hyperbolic Tiles | `rpm`, `max_rpm`, `gear`, `speed` |

@@ -672,59 +672,10 @@ pub fn theme_step(theme: ClusterTheme, steps: i32) -> ClusterTheme {
     all[(i + steps).rem_euclid(all.len() as i32) as usize]
 }
 
-/// The display name of a cluster.
+/// The display name of a cluster: its catalog row's (`fh6_clusters::catalog`, the only copy).
 #[must_use]
 pub fn theme_label(theme: ClusterTheme) -> &'static str {
-    match theme {
-        ClusterTheme::BoschDdu => "Bosch DDU",
-        ClusterTheme::DriftGlass => "Drift Glass",
-        ClusterTheme::PorscheAnalog => "Porsche Analog",
-        ClusterTheme::LiquidGlass => "Liquid Glass",
-        ClusterTheme::WindshieldHud => "Windshield HUD",
-        ClusterTheme::TeslaAdas => "Tesla ADAS",
-        ClusterTheme::RetroCyber => "Retro Cyber",
-        ClusterTheme::Gt7HoodPro => "Bonnet Line",
-        ClusterTheme::AmgMbuxSuperscreen => "AMG MBUX",
-        ClusterTheme::LfaV10Nurburgring => "LFA V10",
-        ClusterTheme::PaganiHorologerie => "Pagani Horologerie",
-        ClusterTheme::F35HelmetHmd => "F-35 Helmet",
-        ClusterTheme::BugattiTourbillon => "Bugatti Tourbillon",
-        ClusterTheme::EvaBioSync => "EVA Bio-Sync",
-        ClusterTheme::KoenigseggGyro => "Koenigsegg Gyro",
-        ClusterTheme::ValkyrieLmp1 => "Valkyrie LMP1",
-        ClusterTheme::SynthwaveOutrun => "Synthwave Outrun",
-        ClusterTheme::ChronoMultiverse => "Chrono Multiverse",
-        ClusterTheme::ChronoEventHorizon => "Event Horizon",
-        ClusterTheme::NeuralCyberSynapse => "Neural Synapse",
-        ClusterTheme::Gt7ModularTripod => "GT7 Tripod",
-        ClusterTheme::ArNavWayfinder => "AR Wayfinder",
-        ClusterTheme::SolarisWarpCore => "Solaris Warp Core",
-        ClusterTheme::VisionSpatialGlass => "Vision Spatial",
-        ClusterTheme::GlyphDotMatrix => "Glyph Dot Matrix",
-        ClusterTheme::AeroPlasmaBlade => "Aero Plasma Blade",
-        ClusterTheme::CymaticResonanceField => "Cymatic Field",
-        ClusterTheme::KineticLiquidMetal => "Kinetic Liquid Metal",
-        ClusterTheme::ShibuyaChromaticPrisma => "Shibuya Prisma",
-        ClusterTheme::LumenEtch => "Lumen Etch",
-        ClusterTheme::VernierLoupe => "Vernier Loupe",
-        ClusterTheme::DichroicLouvre => "Dichroic Louvre",
-        ClusterTheme::FibreOpticCorona => "Fibre-Optic Corona",
-        ClusterTheme::ApertureNine => "Aperture Nine",
-        ClusterTheme::AeroSmokeTunnel => "Aero Smoke Tunnel",
-        ClusterTheme::RattrapanteSector => "Rattrapante Sector",
-        ClusterTheme::SapphireMystery => "Sapphire Mystery",
-        ClusterTheme::RackFocus => "Rack Focus",
-        ClusterTheme::BionicSpaceframe => "Bionic Spaceframe",
-        ClusterTheme::GeodesicWell => "Geodesic Well",
-        ClusterTheme::Lightpainter => "Lightpainter",
-        ClusterTheme::TreadSeismograph => "Tread Seismograph",
-        ClusterTheme::StarSailOrigami => "Star Sail Origami",
-        ClusterTheme::ArcLadderCascade => "Arc Ladder Cascade",
-        ClusterTheme::AuroraVeil => "Aurora Veil",
-        ClusterTheme::IsochromaticLoadPath => "Isochromatic Load Path",
-        ClusterTheme::AbyssalShearBloom => "Abyssal Shear Bloom",
-        ClusterTheme::HarmonographDrive => "Harmonograph Drive",
-    }
+    fh6_clusters::catalog::display_name(theme)
 }
 
 /// The label of a view.

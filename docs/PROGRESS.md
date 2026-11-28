@@ -59,7 +59,7 @@ What fix phase F added (finding 6 of the 2026-11-27 Rust assessment; `program/ph
 ## State of the code (after Rust fix phase G, 2026-11-28)
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | ✅ in the cloud: 810 passed, 88 failed, 1 ignored, the 88 being the container's known reds (no DX12 adapter, Windows paths); the GPU tests and image goldens pass on a software GPU (lavapipe), every golden frame byte-identical to main's. The PC's GPU run is pending (its session paused on the usage limit) |
+| `cargo test --workspace` | ✅ on the PC at `fd13cf5`: 966 passed, 0 failed (1 ignored; `golden_images` 49/49). In the cloud the GPU tests and image goldens also pass on a software GPU, every golden frame byte-identical to main's |
 | `cargo test -p fh6-clusters --test dash_gates` | ✅ 10 passed, no GPU, about 50 s |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean, with the workspace lint table |
 | `cargo fmt --all -- --check` | ✅ clean |
@@ -68,7 +68,7 @@ What fix phase F added (finding 6 of the 2026-11-27 Rust assessment; `program/ph
 | `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
 
 What fix phase G changed (the test findings and findings 16 and 18 of the 2026-11-27 Rust assessment; `program/phases/fix-g-gates/HANDOVER.md`):
-- **Every dash is gated without a GPU.** `crates/fh6-clusters/tests/dash_gates.rs` builds all 48 registry dashes on wgpu's no-op backend and checks the telemetry matrix input by input (G2, G3), hostile telemetry and odd targets (G5), warm-frame allocation and the no-asset fallback. A dash thread runs it and keeps its row in `docs/TELEMETRY_USAGE_MATRIX.md` true.
+- **Every dash is gated without a GPU.** `crates/fh6-clusters/tests/dash_gates.rs` builds all 72 registry dashes on wgpu's no-op backend and checks the telemetry matrix input by input (G2, G3), hostile telemetry and odd targets (G5), warm-frame allocation and the no-asset fallback. A dash thread runs it and keeps its row in `docs/TELEMETRY_USAGE_MATRIX.md` true.
 - **Packet floats are cleaned once.** `decode` turns NaN and the infinities into 0 and clamps to `±MAX_ABS`; zeros still pass, so divisions need a guard. `normalized_rpm` is gone.
 - **The goldens mean something.** `golden_telemetry` checks every field bit for bit, and `parity-dump` fails on a missing or orphaned golden.
 - **The rules are checks.** One `[workspace.lints]` table denies `unsafe` outside `fh6-win` and `fh6-input`'s `xinput`, and `unwrap`, `expect`, `panic!`, `todo!` and `dbg!` outside tests; the safe crates forbid `unsafe`. The MSRV is 1.90, checked.
@@ -142,7 +142,7 @@ What fix phase B added (findings 1, 4 and 20 of the 2026-11-27 Rust assessment; 
 | `cargo build -p fh6-kit -p fh6-clusters --target wasm32-unknown-unknown` | ✅ |
 
 What the Phase 7 setup added:
-- **Cluster factory:** `fh6_clusters::catalog` (48 rows as data), the generated `registry`, one module per cluster under `clusters/<snake>/` (scaffold until its chat builds it), v1 clusters moved to `legacy/`.
+- **Cluster factory:** `fh6_clusters::catalog` (48 rows as data then; 72 since the code re-cut of 2026-11-28), the generated `registry`, one module per cluster under `clusters/<snake>/` (scaffold until its chat builds it), v1 clusters moved to `legacy/`.
 - **Shared components:** 17 modules in `fh6_clusters::common` (glass plate, light ribbon, shift lights, hero gear, tabular speed, labels, tachs, needle dial, bezel, ADAS road, G-ball, tyre slip, signed bar, race tiles, seven-segment, liquid metal), documented in `docs/kit/README.md` §12.
 - **Per-cluster tooling:** `preview-export --cluster <Name>` (4 states per view, crops, composites, 60-frame sequence, GPU p50 / p99), a golden test per catalog row (260 goldens), `FH6_WheelDash --demo --cluster <Name>`, `web-preview ?cluster=<Name>`.
 - **Kit:** (font-pack loading is Phase 9's, adopted in the merge) `Scene::missing_glyph_count`, the glass-first backdrop cleared without `CLEAR_TEXTURE`.
@@ -273,7 +273,7 @@ What exists:
 - A per-cluster scaler (0.70× to 1.40×) with optical centre lock, plus typography presets.
 
 **P5: mockups and contact sheet**
-- Keep `preview-export` working: the 48 catalog clusters × 4 states, the 0/50/100% scrim, the OSD and the `index.html` gallery.
+- Keep `preview-export` working: the 72 catalog dashes × 4 states, the 0/50/100% scrim, the OSD and the `index.html` gallery.
 - Add the in-cockpit compositor (Phase 8 spec P8-4), using `assets/reference/cockpit_with_wheel.jpg`.
 - Pair the `--car` logo with that car's palette and telemetry (fix phase F sets only the logo; the states keep the family palettes and car 0, so a preview can pair a brand's dial with another family's colours).
 
@@ -478,3 +478,5 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-28 | `Logo` gains `loading`: while a car's dial loads, the host passes the car's names marked loading, and a logo zone draws nothing (`logo::draw` does so; a dash with its own logo-zone code checks it). PorscheAnalog shows its own Porsche wordmark for a Porsche meanwhile | An empty `Logo` hid the brand from everything that reads it: with fix D's empty default driver name, PorscheAnalog greeted a parked car "HELLO, DRIVER 1" until the dial was in (the pre-landing review). Build a `Logo` with `..Logo::default()` |
 | 2026-11-28 | `lose_gpu` drops the dial being uploaded (`CarLogo::new_kit`) before the device, and the half-made texture lives inside its upload | A wgpu texture keeps its device alive, and Direct3D 12 gives an adapter no new device while a removed one exists, so the app would have come back on another adapter. Every wgpu object of a lost device must go before the new device is made |
 | 2026-11-28 | The cluster catalog is re-cut into 9 categories of 8 (72 dashes): all 48 kept, 24 added, the build order goes round the categories, and a scheduled dash chain starts the next dash when one is done, at most 4 at once (`program/phases/07-cluster-factory/CATALOG.md`) | TJX asked for equal categories (supercar, hypercar, motorsport, retro, liquid glass, apple vision, psychedelic, sci-fi), chose "8 each, 64 dashes", then added "eight brand-new dashes on top" as an Abstract category, and asked for the next dash to start when one is "fully finished, reviewed, accepted by github". The code re-cut (`CATALOG.md`, "Code re-cut") brings the code level |
+| 2026-11-28 | `preview-export --no-assets` renders what a player without `assets/` sees (dashes and the OSD with `assets: None`, no pack fonts, an empty car database, the custom name in the logo zone) into `mockups/no-assets/` | The last audit extra of fix phase G; it follows the app's own no-asset path in `fh6-app/src/resources.rs`, so the fallback can be reviewed like any render |
+| 2026-11-28 | The code re-cut: `CatalogEntry` gains `category`, `shelf` and `target`; `catalog.rs` is the only copy of display names (the OSD and the registry read it); `catalog::in_browse_order` (category, then shelf) orders the `preview-export` gallery; `fh6_kit::Cluster` gains `figure_zone` (default `None`), the rank-4 figure's local rect, which `preview-export` leaves out of the colour budget of a Psychedelic or Abstract dash; the scaffold prints catalog row and category, never a build number; every dash has a registered asset-forge set | CATALOG.md, "Code re-cut": a change of build order touches only CATALOG.md and `catalog.rs`, and a dash thread never edits a shared list |

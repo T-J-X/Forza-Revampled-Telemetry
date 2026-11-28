@@ -11,8 +11,7 @@ The coordinator starts you with: *"You are the dash thread for `<Name>` (build #
 
 **Edit nothing outside them.** The catalog table (`catalog.rs`), the registry, `ClusterTheme`, `common/`, the golden harness, the kit and the tools are shared. If a shared helper or the kit needs a change, write it in your handover so the coordinator can schedule it.
 
-Five shared places are yours to touch in a small way, each noted in your handover:
-- the three lines that register your recipe in asset-forge (`tools/asset-forge/src/main.rs`, `src/recipes/mod.rs` and `src/sets/mod.rs`)
+Four shared places are yours to touch in a small way, each noted in your handover:
 - a missing part or material added to the hero library (`tools/asset-forge/src/hero/`)
 - an effect added to `docs/specs/optics.md`, with its source
 - your own crops in `docs/handover-shots/cluster-<snake_name>-*.png`
@@ -138,7 +137,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
   - ComfyUI and Blender serve material realism only: anti-glare LCD and matrix texture, the CNC housing, LED lens caps, carbon.
 - **Designs with 3D elements** (cars, mechanisms, gyros and tourbillons, spaceframes, origami, prisms, liquid volumes, anything that turns or has parallax) get real 3D from Blender. That means glTF meshes drawn by the kit's mesh pass, or pre-rendered sprite and flipbook sequences with matching normal maps, lit to match the cluster. A flat texture standing in for a 3D object does not pass.
 - "Real abstract fluidity" means a named physical or mathematical model driven by telemetry (its row in "Real geometry and maths"), dressed by baked Blender and ComfyUI flipbooks, flow and normal maps that never draw the figure themselves.
-- Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
+- Use the Phase 6 recipes and workflows, or fill your recipe module `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too. The code re-cut (2026-11-28) registered an empty one for every dash in all three asset-forge lists (`tools/asset-forge/src/main.rs`, `src/recipes/mod.rs` and `src/sets/mod.rs`), so you never edit those lists: replace the body of its `build` and run `asset-forge build --set <snake_name>`.
 - **Where files go.** Compressed runtime assets (KTX2 or optimised PNG) go to `assets/clusters/<snake_name>/`, each with a row in `assets/clusters/<snake_name>/ASSETS.md` (recipe, seed, licence and the master's file name), written by your recipe. The uncompressed 4K masters go to your Drive folder.
 - Every textured look keeps a procedural fallback: `setup.assets` may be `None`.
 
