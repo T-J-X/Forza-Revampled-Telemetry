@@ -61,6 +61,7 @@
 use crate::common::bezel::{lit_rim, on_screen};
 use crate::common::seg7::{
     draw_scanlines, Emission, Phosphor, Reveal, Seg7Digit, Seg7Geometry, Seg7Number, Segments, Separator, DIAGONAL,
+    SCANLINE_PX,
 };
 use crate::common::shift::LimiterCue;
 use crate::common::{ShiftLights, SpeedReadout, VirtualLight};
@@ -216,6 +217,17 @@ const SNAP_SLACK: f32 = 1.0;
 const SHOULDER_REACH: f32 = 5.0 * LENS_BLEND;
 /// Rectangles in the surround's ring cover ([`Geom::ring_cover`]).
 const RING_RECTS: usize = 12;
+/// Steps of the tach band's mesh zone ([`Geom::mesh_zones`]).
+const TACH_CHUNKS: usize = 6;
+/// Mesh zones: the tach band's steps, the speed, the gear and the three side windows.
+const MESH_ZONES: usize = TACH_CHUNKS + 5;
+/// Room around the tach band's bars, numerals and pods for their halos (local px).
+const TACH_MARGIN: f32 = 12.0;
+/// The widest halo lobe of a seven-segment digit (tokens `glow.phosphor`, its outer lobe) at
+/// [`HALO_REFERENCE_CAP`]; `common::seg7` scales it with the digit (0.25 to 2 times).
+const HALO_SIGMA: f32 = 10.0;
+/// See [`HALO_SIGMA`].
+const HALO_REFERENCE_CAP: f32 = 240.0;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -534,6 +546,82 @@ impl Geom {
         [self.pedal, self.centre, self.slip, self.gauges]
     }
 
+    /// Where the mesh, filaments and scanlines go: the three side windows whole, and in the
+    /// centre window only the parts phosphor can light (the tach and bracket band in
+    /// [`TACH_CHUNKS`] steps that follow its rising curve, and the speed and gear cells with
+    /// their halos). Over black they change nothing, and the centre window is mostly black: at
+    /// about 0.12 ms per megapixel for the two passes, this halves their cost there. The
+    /// rectangles never overlap (a multiply drawn twice would darken twice). The print outside
+    /// them (legend, logo, unit) is on the lens, not under the grid.
+    fn mesh_zones(&self, scale: &Scale) -> [Rect; MESH_ZONES] {
+        let c = self.centre;
+        // Zone tops and feet sit on the scanline grid (4 local px from the centre window's top,
+        // 2 px lines), so neighbouring zones' lines neither double nor leave a gap.
+        let grid = 2.0 * SCANLINE_PX;
+        let grid_up = |y: f32| c.min.y + ((y - c.min.y) / grid).floor() * grid;
+        let grid_down = |y: f32| c.min.y + ((y - c.min.y) / grid).ceil() * grid;
+        let n = scale.bars();
+        let pitch = (self.tach_x.1 - self.tach_x.0) / n.max(1) as f32;
+        // Chunk edges sit in the gaps between bars, so where two chunks' scanlines meet on a
+        // shared pixel column they meet over black.
+        let edge = |k: usize| match k {
+            0 => self.tach_x.0 - TACH_MARGIN,
+            k if k >= TACH_CHUNKS => self.tach_x.1 + TACH_MARGIN,
+            k => {
+                let bar = (k * n / TACH_CHUNKS).max(1);
+                (self.x_at(bar as f32 / n as f32) + pitch * (1.0 - BAR_FILL) * 0.5).round()
+            }
+        };
+        let u_of = |x: f32| ((x - self.tach_x.0) / (self.tach_x.1 - self.tach_x.0)).clamp(0.0, 1.0);
+        let (from, to) = scale.bracket;
+        let mut zones = [Rect::default(); MESH_ZONES];
+        for (k, zone) in zones.iter_mut().take(TACH_CHUNKS).enumerate() {
+            let (xa, xb) = (edge(k), edge(k + 1));
+            let (u0, u1) = (u_of(xa), u_of(xb));
+            // The curves fall to the right: the chunk's top is at its right end (or the
+            // bracket's, where the bracket ends inside it), its foot at its left end.
+            let mut top = self.numeral_at(u1) - self.numeral_cap * 0.7;
+            if u1 > from && u0 < to {
+                top = top.min(self.pod_base_at(u1.min(to)) - self.pod_h - TACH_MARGIN);
+            }
+            let foot = grid_down(self.base_at(u0) + RED_LINE_DROP * 3.0 + TACH_MARGIN);
+            *zone = rect(xa, grid_up(top).max(c.min.y), xb, foot.min(c.max.y));
+        }
+        let cell = |at: Vec2, cap: f32, cells: f32| {
+            let sg = Seg7Geometry::new(cap);
+            let halo = 3.0 * HALO_SIGMA * (cap / HALO_REFERENCE_CAP).clamp(0.25, 2.0) + 2.0;
+            let half_w = sg.advance() * cells * 0.5 + cap * 0.5 * sg.slant.tan() + halo;
+            let half_h = cap * 0.5 + halo;
+            rect(
+                at.x - half_w,
+                grid_up(at.y - half_h),
+                at.x + half_w,
+                grid_down(at.y + half_h).min(c.max.y),
+            )
+        };
+        let cells = [
+            cell(self.speed, self.speed_cap, 3.0),
+            cell(self.gear, self.gear_cap, 1.0),
+        ];
+        // Under the tach band the chunks over the digits share one foot, the digits' zones start
+        // there, so the band's feet and the digits' tops meet with no gap.
+        let over = |z: &Rect| cells.iter().any(|d| z.min.x < d.max.x && d.min.x < z.max.x);
+        let shared = zones[..TACH_CHUNKS]
+            .iter()
+            .filter(|z| over(z))
+            .fold(c.min.y, |y, z| y.max(z.max.y));
+        for z in zones[..TACH_CHUNKS].iter_mut().filter(|z| over(z)) {
+            z.max.y = shared;
+        }
+        for (k, d) in cells.into_iter().enumerate() {
+            zones[TACH_CHUNKS + k] = rect(d.min.x, d.min.y.max(shared), d.max.x, d.max.y);
+        }
+        zones[TACH_CHUNKS + 2] = self.pedal;
+        zones[TACH_CHUNKS + 3] = self.slip;
+        zones[TACH_CHUNKS + 4] = self.gauges;
+        zones
+    }
+
     /// Twelve rectangles that together cover the surround's ring, from [`RING_INSIDE`] inside
     /// the lens outline to the surround's outer edge and its image margin, and never overlap.
     /// The surround's art, face and rims and the lens black are drawn on these and not over
@@ -575,6 +663,12 @@ impl Geom {
         let w = b.width() / SECTORS as f32;
         rect(b.min.x + w * k as f32, b.min.y, b.min.x + w * (k + 1) as f32, b.max.y)
     }
+}
+
+/// The scanline period in device pixels at `scale` device px per 4K px, as `draw_scanlines`
+/// (`common::seg7`) lays its lines.
+fn scanline_period(scale: f32) -> f32 {
+    (2.0 * SCANLINE_PX * scale).round().max(2.0)
 }
 
 /// The lens outline (or the surround's, from grown pieces) as a shape.
@@ -1054,12 +1148,13 @@ impl Cluster for RetroCyber {
         // 6. Control-grid mesh and filaments, multiplied (they only modulate lit phosphor), then
         //    the scanlines.
         let windows = g.windows();
+        let zones = g.mesh_zones(&self.scale);
         p.scoped(|p| {
             p.set_blend(BlendMode::Multiply);
             p.scoped(|p| {
                 p.translate(self.offset(0));
-                for w in windows {
-                    self.draw_mesh(p, w, g.lens.min);
+                for z in zones.iter().filter(|z| !z.is_empty()) {
+                    self.draw_mesh(p, *z, g.lens.min);
                 }
             });
             p.translate(self.offset(1));
@@ -1074,8 +1169,21 @@ impl Cluster for RetroCyber {
                 }
             }
         });
-        for w in windows {
-            draw_scanlines(p, w, &pal);
+        // `draw_scanlines` starts its lines at each rectangle's top pixel; every zone's top is
+        // moved up onto the centre window's line phase, so the lines run on across zones.
+        let xf = p.current_transform();
+        let s = xf.scale_factor();
+        let origin = xf.apply(Vec2::ZERO);
+        if s > 0.0 && s.is_finite() {
+            let period = scanline_period(s);
+            let phase = xf.apply_rect(&g.centre).min.y.floor();
+            for z in zones.iter().filter(|z| !z.is_empty()) {
+                let top = xf.apply_rect(z).min.y.floor();
+                let aligned = phase + ((top - phase) / period).floor() * period;
+                let mut z = *z;
+                z.min.y = (aligned + 0.25 - origin.y) / s;
+                draw_scanlines(p, z, &pal);
+            }
         }
         if let Some(t) = boot_t {
             if t < FILAMENT_WARM_S {
@@ -1725,6 +1833,47 @@ mod tests {
         let silly = Scale::new(f32::NAN, f32::NAN, f32::NAN);
         assert!(silly.top >= MIN_THOUSANDS && silly.top <= MAX_THOUSANDS);
         assert_eq!(Scale::new(1e9, 1e9, 0.75).top, MAX_THOUSANDS);
+    }
+
+    #[test]
+    fn the_mesh_zones_cover_every_segment_once() {
+        for g in [&COCKPIT, &HOOD] {
+            for (max_rpm, shift) in [(7000.0, 6790.0), (8700.0, 8439.0), (12000.0, 11640.0)] {
+                let scale = Scale::new(max_rpm, shift, 0.75);
+                let zones = g.mesh_zones(&scale);
+                for (k, a) in zones.iter().enumerate() {
+                    assert!(!a.is_empty(), "zone {k} is empty");
+                    assert!(g.windows().iter().any(|w| inside(*w, *a)), "{a:?} leaves its window");
+                    for b in &zones[k + 1..] {
+                        assert!(!overlaps(*a, *b), "{a:?} overlaps {b:?}");
+                    }
+                }
+                let covered = |q: Vec2| zones.iter().any(|z| z.contains(q));
+                let n = scale.bars();
+                for i in 0..n {
+                    for q in g.bar(i, n) {
+                        assert!(covered(q), "bar {i} corner {q:?}");
+                    }
+                }
+                for i in 0..PODS {
+                    for q in g.pod(i, scale.bracket.0, scale.bracket.1) {
+                        assert!(covered(q), "pod {i} corner {q:?}");
+                    }
+                }
+                for (at, cap, cells) in [(g.speed, g.speed_cap, 3.0), (g.gear, g.gear_cap, 1.0)] {
+                    let sg = Seg7Geometry::new(cap);
+                    let hw = sg.advance() * cells * 0.5 + cap * 0.5 * sg.slant.tan();
+                    for q in [vec2(at.x - hw, at.y - cap * 0.5), vec2(at.x + hw, at.y + cap * 0.5)] {
+                        assert!(covered(q), "digit corner {q:?}");
+                    }
+                }
+                // The point: much less than the four windows.
+                let area = |r: &Rect| r.width() * r.height();
+                let zones_area: f32 = zones.iter().map(area).sum();
+                let windows_area: f32 = g.windows().iter().map(area).sum();
+                assert!(zones_area < 0.85 * windows_area, "{zones_area} of {windows_area} px2");
+            }
+        }
     }
 
     #[test]
