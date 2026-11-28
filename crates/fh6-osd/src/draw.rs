@@ -153,6 +153,9 @@ pub struct DrawInput<'a> {
     /// The live cluster's layout this frame ([`live_layout`]): the driving position keeps clear
     /// of it ([`drive_fit`]).
     pub live: Layout,
+    /// The accent of last resort, when neither the palette's accent nor its primary can light
+    /// the glass ([`osd_accent`]): the Liquid Glass family's primary from the tokens.
+    pub fallback_accent: Color,
 }
 
 /// A row's place in the scrolling content (relative to its top).
@@ -372,9 +375,10 @@ impl Ink {
 /// The quiet ink's share of full ink, and the label ink's.
 const QUIET_INK: f32 = 0.21;
 const LABEL_INK: f32 = 0.86;
-/// A dark mark on a lit accent (a switch's knob, the focused key's letter, a thumb's ring).
-fn on_accent() -> Color {
-    Color::rgb_u32(0x0A0E12)
+/// A dark mark on a lit accent (a switch's knob, the focused key's letter, a thumb's ring): the
+/// palette's OLED black.
+fn on_accent(ink: &Ink) -> Color {
+    ink.pal.roles.oled_black
 }
 
 /// The share of a light under the glass that reaches the screen: a fill measures about two
@@ -518,7 +522,7 @@ pub fn live_layout(base: &Layout, anim: &OsdAnim, frame: Frame) -> Layout {
 /// under them are not drawn here: see [`pools`].
 pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
     let pal = *p.palette();
-    let (acc, acc_text) = osd_accent(&pal);
+    let (acc, acc_text) = osd_accent(&pal, inp.fallback_accent);
     let ink = Ink {
         pal,
         acc,
@@ -1196,7 +1200,7 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
                     p.glow(&Shape::circle(thumb, KNOB_R), ink.acc, Glow::new(10.0, 0.5 * energy));
                 }
                 // A dark ring keeps the knob apart from its own glow with any accent.
-                p.fill(&Shape::circle(thumb, KNOB_R + 2.0), on_accent());
+                p.fill(&Shape::circle(thumb, KNOB_R + 2.0), on_accent(ink));
                 p.fill(&Shape::circle(thumb, KNOB_R), ink.ink());
             } else {
                 // Opaque, so the default tick never shows through it.
@@ -1218,7 +1222,7 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
             // On and focused: a dark knob on the lit pill. On and unfocused: an ink knob on a
             // dimmed pill. Off: an outlined pill with the knob at the left. Each over 3:1.
             let (pill_paint, knob_paint) = match (on, focused) {
-                (true, true) => (ink.acc, on_accent()),
+                (true, true) => (ink.acc, on_accent(ink)),
                 (true, false) => (ink.acc.fade(0.4), ink.ink()),
                 (false, _) => (ink.ghost(), ink.muted()),
             };
@@ -1379,7 +1383,7 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             if !focused {
                 p.stroke(&shape, ink.hair(), Stroke::rim_px(1.0));
             }
-            let paint = if focused { on_accent() } else { ink.muted() };
+            let paint = if focused { on_accent(ink) } else { ink.muted() };
             match key {
                 Key::Char(c) => {
                     let cap = if focused { 46.0 } else { 40.0 };
@@ -1515,11 +1519,20 @@ const NAVY_HUES: (f32, f32) = (250.0, 310.0);
 /// Least chroma (OKLCH) the light inside the glass keeps, so a pale accent never turns grey.
 const FIELD_CHROMA: f32 = 0.10;
 
-/// The OSD accent: the palette accent, else its primary, else sapphire, the first that has
+/// The accent of last resort ([`DrawInput::fallback_accent`]): the Liquid Glass family's primary
+/// from the tokens, or the tokens' default glass rim colour when the family is missing.
+#[must_use]
+pub fn fallback_accent(tokens: &fh6_kit::Tokens) -> Color {
+    tokens
+        .family("liquidGlass")
+        .map_or(tokens.roles.rim_specular, |f| f.colors[0])
+}
+
+/// The OSD accent: the palette accent, else its primary, else `fallback` (sapphire), the first that has
 /// colour, sits at least 25° of hue from the warning red (a red focus ring reads as an error)
 /// and lies outside the blue-to-violet band ([`NAVY_HUES`]). Returns the fill colour and its
 /// text-safe variant.
-fn osd_accent(pal: &Palette) -> (Color, Color) {
+fn osd_accent(pal: &Palette, fallback: Color) -> (Color, Color) {
     let warn = pal.roles.warning.to_oklch().h;
     let ok = |c: Color| {
         let o = c.to_oklch();
@@ -1532,8 +1545,7 @@ fn osd_accent(pal: &Palette) -> (Color, Color) {
     } else if ok(pal.primary) {
         (pal.primary, pal.primary_text)
     } else {
-        let sapphire = Color::rgb_u32(0x38BDF8);
-        (sapphire, sapphire)
+        (fallback, fallback)
     }
 }
 
@@ -1562,7 +1574,8 @@ mod tests {
             Color::WHITE,
             None,
         );
-        let (acc, _) = osd_accent(&red);
+        let sapphire = fallback_accent(&t);
+        let (acc, _) = osd_accent(&red, sapphire);
         let h = acc.to_oklch().h;
         assert!(fh6_kit::color::Oklch::hue_distance(h, red.roles.warning.to_oklch().h) >= 25.0);
         let blue = Palette::custom(
@@ -1572,11 +1585,11 @@ mod tests {
             Color::WHITE,
             None,
         );
-        assert_eq!(osd_accent(&blue).0, blue.accent);
+        assert_eq!(osd_accent(&blue, sapphire).0, blue.accent);
         // A navy or violet accent turns into a slate box under the glass: it falls back.
         for hex in [0x1E3A8A, 0x8B5CF6] {
             let deep = Palette::custom(&t, Color::rgb_u32(hex), Color::rgb_u32(hex), Color::WHITE, None);
-            let h = osd_accent(&deep).0.to_oklch().h.rem_euclid(360.0);
+            let h = osd_accent(&deep, sapphire).0.to_oklch().h.rem_euclid(360.0);
             assert!(!(NAVY_HUES.0..=NAVY_HUES.1).contains(&h), "{hex:06X} gives hue {h}");
         }
         // A pale accent keeps some colour as light inside the glass.

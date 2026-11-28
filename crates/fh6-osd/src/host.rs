@@ -20,7 +20,7 @@ use crate::model::{self, Tab};
 use crate::nav::{Mode, NavInput, NavOutput, OsdController};
 use fh6_clusters::clusters::liquid_glass;
 use fh6_core::{AppConfig, ClusterTheme};
-use fh6_kit::{wgpu, Cluster, FrameInput, ImageId, Kit, Layout, Painter, Tokens, View};
+use fh6_kit::{wgpu, Cluster, Color, FrameInput, ImageId, Kit, Layout, Painter, Tokens, View};
 use std::path::Path;
 use std::time::Duration;
 
@@ -45,6 +45,8 @@ pub struct OsdHost {
     /// The studio and the driving position have been loaded ([`OsdHost::load_assets`]), found
     /// or not: a missing file is not looked for again every frame.
     loaded: bool,
+    /// The accent of last resort ([`draw::fallback_accent`]), read from the tokens once.
+    fallback_accent: Color,
 }
 
 impl std::fmt::Debug for OsdHost {
@@ -71,6 +73,7 @@ impl OsdHost {
             env: None,
             drive: None,
             loaded: false,
+            fallback_accent: draw::fallback_accent(tokens),
         }
     }
 
@@ -300,6 +303,7 @@ impl OsdHost {
                 env: self.env,
                 drive: self.drive,
                 live: *layout,
+                fallback_accent: self.fallback_accent,
             },
         );
     }
