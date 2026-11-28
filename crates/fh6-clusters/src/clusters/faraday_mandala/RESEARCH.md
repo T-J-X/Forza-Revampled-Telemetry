@@ -137,7 +137,7 @@ From `assets/clusters/faraday_mandala/prebuild/manifest.json` (branch `claude/pr
 
 **What the kit leaves to this dash:** the wave field and its normals (live maths, cheaper than any flipbook), and the rim hardware (its size comes from the layout). The Blender rim, post and the ComfyUI brushed finish are made after the board and after LIBRARY DONE, through `tools/asset-forge/src/recipes/faraday_mandala.rs` on the cloud lane.
 
-**Render path, to settle before code:** the kit has no per-pixel height-field paint. A dash-owned compute pass in the manner of `fh6_kit::fluid` (WGSL as a Rust string, registered as an image) or a kit request for a wave-field paint. The handover will say which, and why.
+**Render path (checked 2026-11-28).** `Cluster::update` gets no device or queue, so a dash cannot run a compute pass of its own per frame (`fh6_kit::fluid` is used only from the kit's tests). The kit's `Paint::OpticalGlass` already shades a height profile per pixel (normal, environment reflection with its footprint, key-light GGX) and carries one live height term, `Ripple`. It lacks a standing-wave term and a conductor (metal) mode; the conductor equations are in `docs/specs/optics.md` on the `KineticLiquidMetal` branch (37f9f02). Both were asked of the coordinator as shared kit work on 2026-11-28 (`/mnt/project-files/faraday_mandala/kit-request-liquid-metal-surface.md`). A pre-shaded texture scaled by k would be exact for the squares and hexagons (they are periodic and ζ(kx) only rescales), but not for the amplitude, the phase drift or the crossfades, so it is the fallback only.
 
 ## 6. Departures (kept for the handover)
 
