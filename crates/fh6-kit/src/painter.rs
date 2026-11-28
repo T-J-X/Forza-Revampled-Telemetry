@@ -23,6 +23,11 @@ use crate::tokens::Tokens;
 /// Most nested `save` levels.
 const MAX_DEPTH: usize = 32;
 
+/// How far (target pixels) a glass quad trimmed to a clip reaches past the clip's rectangle.
+/// The clip's coverage, `clamp(0.5 - distance)`, is zero from half a pixel out, so one pixel
+/// keeps every pixel the untrimmed draw wrote, with room for rounding.
+const GLASS_CLIP_SLACK_PX: f32 = 1.0;
+
 /// Paint kinds (must match `shape.wgsl`).
 mod paint_kind {
     pub const SOLID: u32 = 0;
@@ -581,14 +586,22 @@ impl<'f> Painter<'f> {
         let image = paint.image();
 
         // Anti-aliasing margin: 1.5 device pixels.
-        let mut bbox = bbox.expand(1.5 / px_scale);
+        let frame = bbox.expand(1.5 / px_scale);
+        let mut bbox = frame;
         // Trim the quad to the clip when the transform is axis-aligned: pixels outside the clip
-        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep) costs only
-        // the clipped area.
-        // Glass derives its optics from the full bounds, so it is never trimmed.
-        if let (Some(clip), false) = (self.state.clip_rect, is_glass) {
+        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep, a lens
+        // drawn band by band) costs only the clipped area.
+        if let Some(clip) = self.state.clip_rect {
             let [a, b, c, d, tx, ty] = xf.m;
             if b == 0.0 && c == 0.0 && a > 1e-6 && d > 1e-6 {
+                // The clip's anti-aliased edge covers pixel centres up to half a pixel outside
+                // its rectangle. Glass keeps those pixels, so its trimmed draw writes exactly what
+                // the untrimmed one did; other shapes keep the trim they always had.
+                let clip = if is_glass {
+                    clip.expand(GLASS_CLIP_SLACK_PX)
+                } else {
+                    clip
+                };
                 let local = Rect::from_points(
                     vec2((clip.min.x - tx) / a, (clip.min.y - ty) / d),
                     vec2((clip.max.x - tx) / a, (clip.max.y - ty) / d),
@@ -599,6 +612,10 @@ impl<'f> Painter<'f> {
                 }
             }
         }
+        // Glass derives its optics (centre, rim gradient, sheen, caustic, the fallback outline)
+        // from the shape's own bounds, never from the trimmed quad. A glass paint has no solid
+        // colour, so the instance colour carries those bounds (`shape.wgsl` `glass_frame`).
+        let color = if is_glass { frame.to_array() } else { color.to_array() };
         let world = xf.apply_rect(&bbox);
         let blur_margin = self.state.segment.blur_px * 3.0;
         self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
@@ -615,7 +632,7 @@ impl<'f> Painter<'f> {
             p1: enc.p1,
             p2: enc.p2,
             style,
-            color: color.to_array(),
+            color,
             ids: [
                 enc.kind | (coverage_mode << 8) | (enc.flags << 16),
                 paint_index,

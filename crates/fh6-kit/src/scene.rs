@@ -28,7 +28,8 @@ pub(crate) struct Instance {
     pub xform: [f32; 4],
     /// Translation `[tx, ty]`, device pixels per local unit, opacity.
     pub xlate: [f32; 4],
-    /// Local quad `[min.x, min.y, max.x, max.y]`, padded for AA and effects.
+    /// Local quad `[min.x, min.y, max.x, max.y]`, padded for AA and effects, trimmed to the clip
+    /// when the transform is axis-aligned.
     pub bbox: [f32; 4],
     /// Shape parameters.
     pub p0: [f32; 4],
@@ -38,7 +39,9 @@ pub(crate) struct Instance {
     pub p2: [f32; 4],
     /// Mode parameters: stroke (width, align), glow (sigma, intensity), shadow (dx, dy, sigma, spread).
     pub style: [f32; 4],
-    /// Solid colour (linear premultiplied) when `paint == 0`.
+    /// Solid colour (linear premultiplied) when `paint == 0`. A glass paint has no solid colour:
+    /// for it this is the shape's own local bounds, padded for AA but never trimmed, which its
+    /// optics are derived from (`shape.wgsl` `glass_frame`).
     pub color: [f32; 4],
     /// `kind | mode << 8 | flags << 16`, paint index, clip index, packed bloom (intensity, threshold).
     pub ids: [u32; 4],

@@ -585,11 +585,19 @@ fn backdrop_uv(world_px: vec2<f32>) -> vec2<f32> {
     return clamp((world_px - g.work_origin) / g.cap_size, vec2<f32>(0.0), (g.work_size - 0.5) / g.cap_size);
 }
 
+// A glass instance's own bounds (local, padded for anti-aliasing). Its optics come from these,
+// never from the quad, which the painter trims to a clip. Glass paints have no solid colour, so the
+// painter stores the bounds in the instance's colour lane.
+fn glass_frame(in: VsOut) -> vec4<f32> {
+    return in.color;
+}
+
 fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
     let pa = paints[in.ids.y];
+    let fr = glass_frame(in);
     let px = in.xlate.z;
     let wp = frag + g.work_origin;
-    let c_local = (in.bbox.xy + in.bbox.zw) * 0.5;
+    let c_local = (fr.xy + fr.zw) * 0.5;
     let wc = vec2<f32>(
         in.xform.x * c_local.x + in.xform.z * c_local.y + in.xlate.x,
         in.xform.y * c_local.x + in.xform.w * c_local.y + in.xlate.y,
@@ -631,8 +639,8 @@ fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
     col = col + vec4<f32>(vec3<f32>(fres * 0.35 * facing), fres * 0.35 * facing);
 
     // 1 px specular rim, coloured top to bottom.
-    let h = max(in.bbox.w - in.bbox.y, 1e-3);
-    let ty = clamp((p.y - in.bbox.y) / h, 0.0, 1.0);
+    let h = max(fr.w - fr.y, 1e-3);
+    let ty = clamp((p.y - fr.y) / h, 0.0, 1.0);
     var rim_col = mix(pa.colors[1], pa.colors[2], clamp(ty / 0.4, 0.0, 1.0));
     if (ty > 0.4) {
         rim_col = mix(pa.colors[2], pa.colors[3], (ty - 0.4) / 0.6);
@@ -645,8 +653,8 @@ fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
 
     // Arched crown sheen under the top edge.
     let pad = 1.5 / px;
-    let top = in.bbox.y + pad;
-    let hw = max((in.bbox.z - in.bbox.x) * 0.5 - pad, 1e-3);
+    let top = fr.y + pad;
+    let hw = max((fr.z - fr.x) * 0.5 - pad, 1e-3);
     let cx = c_local.x + cos(pa.g2.y + 2.356) * hw * 0.15;
     let crest = top + pa.g2.x * ((p.x - cx) / hw) * ((p.x - cx) / hw);
     let sh_h = max((h - 2.0 * pad) * pa.g1.w, 1e-3);
@@ -660,7 +668,7 @@ fn glass_delta(in: VsOut, p: vec2<f32>, d: f32, frag: vec2<f32>) -> vec4<f32> {
 
     // Caustic texture, screen-blended.
     if (pa.head.w == 1u) {
-        let cuv = (p - in.bbox.xy) / max(in.bbox.zw - in.bbox.xy, vec2<f32>(1e-3));
+        let cuv = (p - fr.xy) / max(fr.zw - fr.xy, vec2<f32>(1e-3));
         let caus = textureSampleLevel(image, samp_rep, cuv, 0.0) * pa.g2.z;
         col = vec4<f32>(col.rgb + caus.rgb * (vec3<f32>(1.0) - min(col.rgb, vec3<f32>(1.0))), col.a);
     }
@@ -698,7 +706,8 @@ fn sd_basic(in: VsOut, kind: u32, flags: u32, p: vec2<f32>) -> f32 {
     if (kind == K_POLYLINE) {
         return sd_polyline(p, u32(in.p0.x), u32(in.p0.y), (flags & F_CLOSED) != 0u, in.p1.x);
     }
-    return sd_box(p - (in.bbox.xy + in.bbox.zw) * 0.5, (in.bbox.zw - in.bbox.xy) * 0.5);
+    let fr = glass_frame(in);
+    return sd_box(p - (fr.xy + fr.zw) * 0.5, (fr.zw - fr.xy) * 0.5);
 }
 
 // (distance, thickness, bevel, base) of a glass shape at p: a blob's pieces carry their own
