@@ -2,12 +2,15 @@
 
 Catalog row 19 · `ClusterTheme::RetroCyber` (config value `"RetroCyber"`) · Sci-Fi · cockpit+hood · build #6 · ★ pattern-setter (VFD dialect).
 
-**What it is:** the Toyota Supra A70 "Panoramic Digital Meter" (1986 to 1993), the full-width vacuum-fluorescent panel, as a 2027 production revival. One long smoked lens covers separate VFD windows on black. From left to right: pedal columns (where the A70 has its fuel window), the centre window (a horizontal tach whose bars rise to the right, a red bracket over the red zone that is also the shift light, big blue-green seven-segment speed, the gear, and lateral G where the A70 has its trip), a slip-angle bar (where it has its temperature bar), and power and boost as slanted bars (where it has oil and turbo). Research, sources and the deliberate changes: [`RESEARCH.md`](RESEARCH.md). Board: Penpot page `07 · RetroCyber` (see `HANDOVER.md`).
+**What it is:** the Toyota Supra A70 "Panoramic Digital Meter" (1986 to 1993), the full-width vacuum-fluorescent panel, as a 2027 production revival. One long smoked lens, stepped like the A70's panel (a low strip across the width with a raised part over the centre), covers bare VFD windows on black, separated by a thin printed line under them. From left to right: pedal columns (where the A70 has its fuel window), the centre window (a horizontal tach whose bars rise to the right, a red bracket over the red zone that is also the shift light, big blue-green seven-segment speed, the gear, and lateral G where the A70 has its trip), a slip-angle bar (where it has its temperature bar), and power and boost as slanted bars (where it has oil and turbo). Research, sources and the deliberate changes: [`RESEARCH.md`](RESEARCH.md). Board: Penpot page `07 · RetroCyber` (see `HANDOVER.md`).
 
 ## Signature moments
 - **Ignition:** on the first observed `IsRaceOn` 0 → 1 after launch, the filaments warm for 150 ms, then 8 sectors light left to right (40 ms each) as an all-segments self-test and settle to ghost. Segments switch, they never fade. Gear and speed are live from frame 1.
 - **Shift light:** the red bracket over the red zone fills from the shift point, then strobes magenta on the limiter (10 Hz, or the reduced-flash breath); the gear turns magenta with it.
 - **Glass:** the kit's optical lens (clear, smoked by absorption, crisp rims) shows the studio's reflections, and its light swings with lateral G.
+
+## GPU budget
+The PC timed each layer (RTX 3070 Ti Laptop, 28 Nov): the surround's full-panel fills, the lens and the speed's bloom were the costs. So the surround's art, face, rims and the lens black are drawn on twelve rectangles that cover only its ring (`Geom::ring_cover`, about 17% of the panel; a test checks every ring pixel of both views), and the speed and gear glow with local halos (`Emission::Halo`, `Emission::SoftHalo`): no frame of this dash blooms, so the work rectangle never grows by the bloom margin.
 
 ## Files
 - `mod.rs`: the zone tables for both views (`Geom`), the tach scale, the gauges, the boot, the cluster (`update`, `draw`) and its tests.
