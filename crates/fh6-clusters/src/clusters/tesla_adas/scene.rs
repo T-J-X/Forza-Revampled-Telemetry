@@ -1016,20 +1016,24 @@ impl Scene {
         match self.sprites.ego {
             Some(img) => sprite(p, img, EGO_GRID, cell, false, rect, Color::WHITE),
             None => {
-                // No sprite: the car's plan as a white block with its dark glass.
+                // No sprite: the car's plan as a white block with its dark glass, turned by the
+                // same yaw the atlas would show.
                 let m = f.scale(EGO_Z);
                 let c = rect.min + vec2(rect.width() * EGO_ANCHOR[0], rect.height() * EGO_ANCHOR[1]);
                 let body = Rect::from_xywh(c.x - 0.97 * m, c.y - 1.10 * m, 1.94 * m, 2.50 * m);
-                p.fill(&Shape::round_rect(body, 0.30 * m), pal.roles.ink.fade(0.9));
-                p.fill(
-                    &Shape::round_rect(body.inset(0.30 * m), 0.18 * m),
-                    pal.roles.oled_black.with_alpha(0.85),
-                );
-                let y = body.max.y - 0.55 * m;
-                p.fill(
-                    &Shape::line(vec2(body.min.x + 0.2 * m, y), vec2(body.max.x - 0.2 * m, y), 0.07 * m),
-                    warning.fade(0.45 + 0.55 * self.braking),
-                );
+                p.scoped(|p| {
+                    p.rotate_about(self.yaw.value().to_radians(), c);
+                    p.fill(&Shape::round_rect(body, 0.30 * m), pal.roles.ink.fade(0.9));
+                    p.fill(
+                        &Shape::round_rect(body.inset(0.30 * m), 0.18 * m),
+                        pal.roles.oled_black.with_alpha(0.85),
+                    );
+                    let y = body.max.y - 0.55 * m;
+                    p.fill(
+                        &Shape::line(vec2(body.min.x + 0.2 * m, y), vec2(body.max.x - 0.2 * m, y), 0.07 * m),
+                        warning.fade(0.45 + 0.55 * self.braking),
+                    );
+                });
             }
         }
         if self.braking > 0.01 {
