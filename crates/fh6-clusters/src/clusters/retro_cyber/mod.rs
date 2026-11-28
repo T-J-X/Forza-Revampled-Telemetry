@@ -225,11 +225,10 @@ const MESH_ZONES: usize = TACH_CHUNKS + 5;
 const SIDE_MARGIN: f32 = 2.0;
 /// Room around the tach band's bars, numerals and pods for their halos (local px).
 const TACH_MARGIN: f32 = 12.0;
-/// The widest halo lobe of a seven-segment digit (tokens `glow.phosphor`, its outer lobe) at
-/// [`HALO_REFERENCE_CAP`]; `common::seg7` scales it with the digit (0.25 to 2 times).
+/// The widest halo lobe of a seven-segment digit (tokens `glow.phosphor`, its outer lobe; the
+/// test `the_halo_reach_matches_the_tokens` keeps the two equal) at seg7's reference height;
+/// [`Seg7Geometry::glow_scale`] scales it with the digit.
 const HALO_SIGMA: f32 = 10.0;
-/// See [`HALO_SIGMA`].
-const HALO_REFERENCE_CAP: f32 = 240.0;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -591,7 +590,7 @@ impl Geom {
         }
         let cell = |at: Vec2, cap: f32, cells: f32| {
             let sg = Seg7Geometry::new(cap);
-            let halo = 3.0 * HALO_SIGMA * (cap / HALO_REFERENCE_CAP).clamp(0.25, 2.0) + 2.0;
+            let halo = 3.0 * HALO_SIGMA * sg.glow_scale() + 2.0;
             let half_w = sg.advance() * cells * 0.5 + cap * 0.5 * sg.slant.tan() + halo;
             let half_h = cap * 0.5 + halo;
             rect(
@@ -789,6 +788,46 @@ fn felt_g(sig: &Signals) -> Vec2 {
     }
 }
 
+/// The power slant's scale: the top figure re-ranges to the highest power seen in this car, in
+/// the user's unit and in whole [`POWER_STEP`]s, only off the throttle (never mid-pull); a new
+/// car starts again from [`POWER_MIN_SCALE`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PowerScale {
+    /// The top figure (user's unit).
+    top: f32,
+    /// The highest engine power seen in this car (W).
+    peak_w: f32,
+    /// The car the peak belongs to (ordinal).
+    car: i32,
+}
+
+impl Default for PowerScale {
+    fn default() -> Self {
+        Self {
+            top: POWER_MIN_SCALE,
+            peak_w: 0.0,
+            car: 0,
+        }
+    }
+}
+
+impl PowerScale {
+    /// Feeds one frame and returns the top figure.
+    fn update(&mut self, car: i32, watts: f32, throttle: f32, unit: PowerUnit, first: bool) -> f32 {
+        if first || car != self.car {
+            *self = Self { car, ..Self::default() };
+        }
+        if watts.is_finite() {
+            self.peak_w = self.peak_w.max(watts);
+        }
+        if first || throttle < POWER_RERANGE_THROTTLE {
+            let peak = power_in(self.peak_w, unit);
+            self.top = ((peak / POWER_STEP).ceil() * POWER_STEP).max(POWER_MIN_SCALE);
+        }
+        self.top
+    }
+}
+
 /// Engine power in the user's unit.
 fn power_in(watts: f32, unit: PowerUnit) -> f32 {
     let w = if watts.is_finite() { watts.max(0.0) } else { 0.0 };
@@ -909,7 +948,11 @@ pub struct RetroCyber {
     pedals: [usize; 2],
     slip: usize,
     power: usize,
-    power_scale: f32,
+    power_scale: PowerScale,
+    /// The mesh zones of the current view and tach scale ([`Geom::mesh_zones`]), rebuilt only
+    /// when either changes.
+    zones: [Rect; MESH_ZONES],
+    zones_key: (View, Scale),
     boost: usize,
     boot: Boot,
     mesh: Option<ImageId>,
@@ -992,7 +1035,9 @@ impl RetroCyber {
             pedals: [0; 2],
             slip: 0,
             power: 0,
-            power_scale: POWER_MIN_SCALE,
+            power_scale: PowerScale::default(),
+            zones: COCKPIT.mesh_zones(&scale),
+            zones_key: (View::Cockpit, scale),
             boost: 0,
             boot: Boot::default(),
             mesh,
@@ -1069,6 +1114,10 @@ impl Cluster for RetroCyber {
         // Tach scale, bars, bracket and the limiter cue. The bars show the peak of a bounce off
         // the limiter, and the rpm itself from the frame the gear changes.
         self.scale = Scale::new(sig.max_rpm, sig.shift_rpm, self.palette.stages[0]);
+        if self.zones_key != (self.view, self.scale) {
+            self.zones_key = (self.view, self.scale);
+            self.zones = geom(self.view).mesh_zones(&self.scale);
+        }
         if gear_changed {
             self.hold.release();
         }
@@ -1104,12 +1153,11 @@ impl Cluster for RetroCyber {
             steps_lit(sig.brake, 0.0, 1.0, PEDAL_ROWS),
         ];
         self.slip = steps_lit(sig.slip_deg.abs(), 0.0, SLIP_FULL_DEG, SLIP_STEPS);
-        let power = power_in(input.telemetry.power_watts, sig.power_unit);
-        let wanted = ((power / POWER_STEP).ceil() * POWER_STEP).max(POWER_MIN_SCALE);
-        if first || (wanted > self.power_scale && sig.throttle < POWER_RERANGE_THROTTLE) {
-            self.power_scale = wanted;
-        }
-        self.power = steps_lit(power, 0.0, self.power_scale, SLANT_STEPS);
+        let watts = input.telemetry.power_watts;
+        let power_top =
+            self.power_scale
+                .update(input.telemetry.car_ordinal, watts, sig.throttle, sig.power_unit, first);
+        self.power = steps_lit(power_in(watts, sig.power_unit), 0.0, power_top, SLANT_STEPS);
         self.boost = steps_lit(input.telemetry.boost_psi, BOOST_MIN_PSI, BOOST_MAX_PSI, SLANT_STEPS);
     }
 
@@ -1172,7 +1220,7 @@ impl Cluster for RetroCyber {
         // 6. Control-grid mesh and filaments, multiplied (they only modulate lit phosphor), then
         //    the scanlines.
         let windows = g.windows();
-        let zones = g.mesh_zones(&self.scale);
+        let zones = &self.zones;
         p.scoped(|p| {
             p.set_blend(BlendMode::Multiply);
             p.scoped(|p| {
@@ -1409,24 +1457,23 @@ impl RetroCyber {
             let start = pal.stages[0];
             pal.rev_stage(start + (i as f32 + 1.0) / PODS as f32 * (1.0 - start))
         };
-        let colour = |i: usize| if all { Some(stage(i)) } else { self.pod_color(i, pal) };
-        for i in 0..PODS {
-            if colour(i).is_none() {
-                let pts = g.pod(i, a, b);
-                p.fill(&Shape::Polygon { points: &pts }, ghost(stage(i)));
+        let colours: [Option<Color>; PODS] =
+            std::array::from_fn(|i| if all { Some(stage(i)) } else { self.pod_color(i, pal) });
+        let pods: [[Vec2; 4]; PODS] = std::array::from_fn(|i| g.pod(i, a, b));
+        for (i, pts) in pods.iter().enumerate() {
+            if colours[i].is_none() {
+                p.fill(&Shape::Polygon { points: pts }, ghost(stage(i)));
             }
         }
-        for i in 0..PODS {
-            if let Some(c) = colour(i) {
-                let pts = g.pod(i, a, b);
-                p.glow(&Shape::Polygon { points: &pts }, c, POD_GLOW);
+        for (pts, c) in pods.iter().zip(colours) {
+            if let Some(c) = c {
+                p.glow(&Shape::Polygon { points: pts }, c, POD_GLOW);
             }
         }
-        for i in 0..PODS {
-            if let Some(c) = colour(i) {
-                let pts = g.pod(i, a, b);
+        for (pts, c) in pods.iter().zip(colours) {
+            if let Some(c) = c {
                 p.fill(
-                    &Shape::Polygon { points: &pts },
+                    &Shape::Polygon { points: pts },
                     phosphor_paint(self.phosphor, c.intensity(PLATE_GAIN)),
                 );
             }
@@ -1435,16 +1482,16 @@ impl RetroCyber {
 
     /// Throttle and brake columns (rank 4: matte, no glow).
     fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, all: bool) {
-        let colors = [pal.roles.go, pal.roles.warning];
+        let colors = [pal.roles.go, pal.roles.warning].map(|c| (dimmed(c, RANK4_LEVEL), ghost(c)));
         for pass_lit in [false, true] {
-            for (col, color) in colors.into_iter().enumerate() {
+            for (col, (on, off)) in colors.into_iter().enumerate() {
                 let lit = if all { PEDAL_ROWS } else { self.pedals[col] };
                 for row in 0..PEDAL_ROWS {
                     if (row < lit) == pass_lit {
                         let paint = if pass_lit {
-                            phosphor_paint(self.phosphor, dimmed(color, RANK4_LEVEL))
+                            phosphor_paint(self.phosphor, on)
                         } else {
-                            ghost(color).into()
+                            off.into()
                         };
                         p.fill(&Shape::rect(g.pedal_cell(col, row)), paint);
                     }
@@ -1455,16 +1502,16 @@ impl RetroCyber {
 
     /// The slip bar (rank 4).
     fn draw_slip(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, all: bool) {
-        let color = pal.secondary;
+        let (on, off) = (dimmed(pal.secondary, RANK4_LEVEL), ghost(pal.secondary));
         let lit = if all { SLIP_STEPS } else { self.slip };
         for pass_lit in [false, true] {
             for j in 0..SLIP_STEPS {
                 if (j < lit) == pass_lit {
                     let pts = g.slip_cell(j);
                     let paint = if pass_lit {
-                        phosphor_paint(self.phosphor, dimmed(color, RANK4_LEVEL))
+                        phosphor_paint(self.phosphor, on)
                     } else {
-                        ghost(color).into()
+                        off.into()
                     };
                     p.fill(&Shape::Polygon { points: &pts }, paint);
                 }
@@ -1474,7 +1521,7 @@ impl RetroCyber {
 
     /// Power and boost slants (rank 4).
     fn draw_slants(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, all: bool) {
-        let color = pal.secondary;
+        let (on, off) = (dimmed(pal.secondary, RANK4_LEVEL), ghost(pal.secondary));
         for pass_lit in [false, true] {
             for (k, &v) in [self.power, self.boost].iter().enumerate() {
                 let lit = if all { SLANT_STEPS } else { v };
@@ -1482,9 +1529,9 @@ impl RetroCyber {
                     if (j < lit) == pass_lit {
                         let pts = g.slant_cell(k, j);
                         let paint = if pass_lit {
-                            phosphor_paint(self.phosphor, dimmed(color, RANK4_LEVEL))
+                            phosphor_paint(self.phosphor, on)
                         } else {
-                            ghost(color).into()
+                            off.into()
                         };
                         p.fill(&Shape::Polygon { points: &pts }, paint);
                     }
@@ -1574,12 +1621,12 @@ impl RetroCyber {
             ..figure
         };
         for (k, value, unit) in [
-            (0usize, self.power_scale as i64, power_unit),
+            (0usize, self.power_scale.top as i64, power_unit),
             (1, BOOST_MAX_PSI as i64, "psi"),
         ] {
             let (x0, w) = g.slant_base(k);
             let x = x0 + lean + w * 0.5;
-            p.number(vec2(x + 2.0, fy), value, 3, &figure_r, None);
+            p.number(vec2(x + 2.0, fy), value, 4, &figure_r, None);
             p.text(vec2(x + 6.0, fy), unit, &unit_l);
         }
         // Boost's zero: a tick and a 0 left of the bar, at the top of the last vacuum segment.
@@ -2045,6 +2092,34 @@ mod tests {
         assert_eq!(sector_level(0.16, 0), 1.0);
         assert_eq!(sector_level(0.16, 1), 0.0);
         assert!(sector_level(BOOT_S, 7) < 1e-4, "settled to ghost");
+    }
+
+    #[test]
+    fn the_power_scale_reranges_to_the_pull_on_the_lift() {
+        let mut ps = PowerScale::default();
+        let hp = WATTS_PER_HP;
+        assert_eq!(ps.update(7, 0.0, 0.0, PowerUnit::Hp, true), POWER_MIN_SCALE);
+        // A 640 hp pull keeps the scale until the throttle lifts, then shows 700.
+        assert_eq!(ps.update(7, 640.0 * hp, 1.0, PowerUnit::Hp, false), POWER_MIN_SCALE);
+        assert_eq!(ps.update(7, -20.0 * hp, 0.0, PowerUnit::Hp, false), 700.0);
+        // It never shrinks in the same car; the unit follows the user's setting.
+        assert_eq!(ps.update(7, 100.0 * hp, 0.0, PowerUnit::Hp, false), 700.0);
+        assert_eq!(ps.update(7, 0.0, 0.0, PowerUnit::Kw, false), 500.0);
+        // A new car starts again; bad telemetry never moves it.
+        assert_eq!(ps.update(9, f32::NAN, f32::NAN, PowerUnit::Hp, false), POWER_MIN_SCALE);
+        assert_eq!(ps.update(9, f32::INFINITY, 0.0, PowerUnit::Hp, false), POWER_MIN_SCALE);
+        // A hypercar's four-figure scale.
+        assert_eq!(ps.update(9, 1450.0 * hp, 0.05, PowerUnit::Hp, false), 1500.0);
+    }
+
+    #[test]
+    fn the_halo_reach_matches_the_tokens() {
+        // The mesh zones leave room for three sigma of the widest digit halo: the phosphor and
+        // soft lobes (speed, G and gear) must never be wider than HALO_SIGMA.
+        let t = Tokens::default();
+        let widest = |l: &[fh6_kit::tokens::GlowLobe]| l.iter().map(|l| l.sigma).fold(0.0, f32::max);
+        assert_eq!(widest(t.glow.phosphor.lobes()), HALO_SIGMA);
+        assert!(widest(t.glow.soft.lobes()) <= HALO_SIGMA);
     }
 
     #[test]

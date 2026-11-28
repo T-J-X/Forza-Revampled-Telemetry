@@ -396,7 +396,7 @@ impl Seg7Geometry {
 
     /// Glow sigma multiplier: the token lobes at [`GLOW_REFERENCE_HEIGHT`], proportional to the
     /// height (within [`GLOW_SCALE_RANGE`]) so the halo keeps its size relative to the stroke.
-    fn glow_scale(&self) -> f32 {
+    pub(crate) fn glow_scale(&self) -> f32 {
         let (min, max) = GLOW_SCALE_RANGE;
         (self.height / GLOW_REFERENCE_HEIGHT).clamp(min, max)
     }
