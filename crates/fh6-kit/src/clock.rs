@@ -1,6 +1,8 @@
 //! A monotonic stopwatch that is safe on every target: `std::time::Instant` natively, and a
-//! zero clock on `wasm32-unknown-unknown`, where `Instant::now` panics. Only statistics use it;
-//! animation time always comes from the host's `dt`.
+//! zero clock on `wasm32-unknown-unknown`, where `Instant::now` panics. Statistics use it, and
+//! so does the frame budget of a brand dial's upload (`logo::DialLoader::poll`), which has
+//! nothing to upload on `wasm32` (the decoding thread cannot start there). Animation time always
+//! comes from the host's `dt`.
 use std::time::Duration;
 
 /// A point in time to measure from.

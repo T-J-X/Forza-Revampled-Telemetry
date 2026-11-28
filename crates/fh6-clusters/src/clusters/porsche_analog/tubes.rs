@@ -514,13 +514,7 @@ impl PorscheAnalog {
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapMiddle);
         p.text(c + vec2(0.0, -40.0), "HELLO,", &hello);
-        let name: &str = if !self.driver.trim().is_empty() {
-            self.driver.trim()
-        } else if !self.logo.brand_name.trim().is_empty() {
-            self.logo.brand_name.trim()
-        } else {
-            "DRIVER 1"
-        };
+        let name = greeting_name(&self.driver, &self.logo);
         let style = TextStyle::new(self.faces.speed, GREET_CAP.0)
             .paint(pal.roles.ink.with_alpha(0.8))
             .align(Align::Center, VAlign::CapMiddle);
@@ -723,6 +717,19 @@ fn fixed(p: &mut Painter<'_>, centre: Vec2, value: f32, decimals: u32, style: &T
         }
     }
     fh6_kit::Rect::from_xywh(centre.x - width * 0.5, centre.y - style.cap * 0.5, width, style.cap)
+}
+
+/// The name the greeting shows: the config's driver name, else the car's brand, else
+/// "DRIVER 1". The brand is there while its dial is still loading ([`fh6_kit::Logo::loading`]), so a
+/// parked car greets its brand from the first frame and never "DRIVER 1" first.
+pub(super) fn greeting_name<'a>(driver: &'a str, logo: &'a fh6_kit::Logo) -> &'a str {
+    if !driver.trim().is_empty() {
+        driver.trim()
+    } else if !logo.brand_name.trim().is_empty() {
+        logo.brand_name.trim()
+    } else {
+        "DRIVER 1"
+    }
 }
 
 #[cfg(test)]

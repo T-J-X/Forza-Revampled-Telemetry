@@ -331,6 +331,12 @@ pub struct Logo {
     pub brand_name: String,
     /// The user's custom name (second fallback, and shown in name zones).
     pub custom_name: String,
+    /// The brand's image is on its way ([`crate::logo::CarLogo`]): a logo zone draws nothing
+    /// yet, so that it never shows the name first and the image a moment later. The names are
+    /// already set, for whatever else reads them (a greeting). A dash that draws its logo zone
+    /// with its own code draws nothing in it while this is set; [`crate::logo::draw`] does so
+    /// by itself.
+    pub loading: bool,
 }
 
 /// Fonts chosen for this frame (tokens roles, or the user's choice for `display`).
