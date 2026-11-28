@@ -146,7 +146,7 @@ pub(super) const HOOD: Geom = Geom {
     boost_bar: [-1.0, 2.0],
     boost_track: [51.0, 6.0],
     boost_groove: 9.0,
-    boost_label_top: 28.0,
+    boost_label_top: 34.0,
     boost_label_cap: 22.0,
     trip_c: vec2(-600.0, 108.0),
     trip_outer: vec2(208.0, 44.0),

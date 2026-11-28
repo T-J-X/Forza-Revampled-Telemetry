@@ -39,8 +39,8 @@
 //!   the `shift` colour at once; at the shift point the run strobes (10 Hz on the strip's own
 //!   clock, so it starts lit, with a fifth of the light kept in the dark phase) and the red
 //!   suggested-gear tile pops up naming the next gear. The tile itself never strobes.
-//! - **Gear change, the hand-over:** when the driver takes the suggested gear, the tile flashes
-//!   white for one frame and folds shut towards the gear in 100 ms, while the new gear rises into
+//! - **Gear change, the hand-over:** when the driver takes the suggested gear, the tile brightens
+//!   for one frame and folds shut towards the gear in 100 ms, while the new gear rises into
 //!   place with the tokens' gear motion (`common::hero_gear`). The tile stays away until the
 //!   revs have fallen below the shift point.
 //! - **Light:** lateral G swings the virtual light, and the plate's three renders cross-fade with
@@ -123,8 +123,9 @@ const TOP_GEAR: u8 = 10;
 const FOLD_S: f32 = 0.1;
 const FADE_TAU: f32 = 0.01;
 const POP: f32 = 0.08;
-/// The tile's face flash on the frame the driver takes the gear.
-const FLASH_ALPHA: f32 = 0.85;
+/// The tile's face brightens on the frame the driver takes the gear (a click of light, kept
+/// below the gear's own light so the new gear leads).
+const FLASH_ALPHA: f32 = 0.4;
 /// Hood keylines (tokens `type.keyline`: a black ring round the strokes, never a box, alpha
 /// 230): the ring's width per cap height, its narrowest and widest, and its coverage.
 const KEYLINE_PER_CAP: f32 = 0.08;
