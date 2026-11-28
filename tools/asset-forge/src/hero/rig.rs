@@ -148,7 +148,7 @@ impl Rig {
     /// so grain and weave read. The key sits 25° off the diagonal (at −160°), so a 2x2 twill's
     /// x and y tows catch it differently and a brushed or anisotropic finish shows its lobe (the
     /// hero rig's diagonal key lit both tow directions alike and the twill read flat grey); a
-    /// broad overhead sky gives flat faces a mid-tone to streak against, and a cool kicker from
+    /// faint overhead sky gives flat faces a mid-tone to streak against, and a cool kicker from
     /// the other side lifts the opposite flanks.
     #[must_use]
     pub fn swatch(span: f32) -> Self {
@@ -156,13 +156,16 @@ impl Rig {
         Self {
             lights: vec![
                 Light::soft("key", -160.0, 48.0, s * 12.0, s * 3.0, 1.1).tint([1.0, 0.97, 0.93]),
-                Light::soft("sky", -120.0, 82.0, s * 12.0, s * 9.0, 0.32),
+                Light::soft("sky", -120.0, 82.0, s * 12.0, s * 9.0, 0.08),
                 Light::soft("kick", -45.0, 40.0, s * 12.0, s * 2.0, 0.35).tint([0.88, 0.94, 1.0]),
             ],
-            hdri: 0.12,
+            hdri: 0.06,
             hdri_rot: -160.0,
             target: [0.0, 0.0, 0.0],
-            exposure: 0.0,
+            // A polished or brushed metal mirrors the overhead sky straight into the camera, so
+            // the sky stays faint and the whole rig sits a little under (batch 3: bright metals
+            // and the anodise clipped to white or mid-grey at 0 stops with a 0.32 sky).
+            exposure: -0.8,
         }
     }
 

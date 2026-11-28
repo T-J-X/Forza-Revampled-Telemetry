@@ -248,7 +248,9 @@ def mat_led(d):
     c = d.get('color', (1, 0, 0))
     glow = d.get('emit_strength', 0.0)
     if glow > 0:
-        setin(bs, 'Base Color', [0.6 + 0.4 * v for v in c])
+        # A dark die under the diffuser, so the emission alone sets the brightness and the hot
+        # centre reads over the rim instead of clipping flat (batch 3).
+        setin(bs, 'Base Color', [0.06 + 0.1 * v for v in c])
         setin(bs, 'Emission Color', d.get('emit', c))
         lk(nt, glow_strength(nt, d, glow), bs.inputs['Emission Strength'])
     else:

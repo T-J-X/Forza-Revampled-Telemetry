@@ -219,10 +219,10 @@ fn lamp_pair(
     ]
 }
 
-/// Emission strength of a lit LED or lamp cap at the rim; the centre runs 2.2 times hotter
+/// Emission strength of a lit LED or lamp cap at the rim (over a dark die); the centre runs 2.2 times hotter
 /// (`glow_strength` in the bpy builder). The cap is an opaque diffuser now, so the glow covers
 /// its face (batch 2: a transmissive lens rendered transparent and only its rim showed).
-const LED_ON_GLOW: f32 = 3.0;
+const LED_ON_GLOW: f32 = 0.45;
 
 /// ValkyrieLmp1's shoulder encoder (the dash thread's spec, 2026-11-28): a diamond-knurled ring
 /// from r59 to r73 round a turned cap of r53, in a piano-black well of r92, all in dark red
