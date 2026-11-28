@@ -15,8 +15,10 @@
 //! - **The Japanese label face** ([`FONT_FILE`]): Noto Sans JP Medium (OFL), vendored as a subset
 //!   (kana, 233 kanji, Basic Latin). The job checks the file and enters it in the ledger; how it was
 //!   made is in the dash's `ASSETS.md`.
-//! - **Asphalt plate** (ComfyUI: SDXL base 1.0 + 4x-UltraSharp): a dark road surface receding to a
-//!   central vanishing point, the road's texture between its edge lines.
+//! - **Tunnel lights plate** (ComfyUI: SDXL base 1.0 + 4x-UltraSharp): the ceiling lamps of a
+//!   Japanese expressway tunnel. Every lit car shot hangs it over the road as a light card, so the
+//!   glass roof and the paint carry the lamp rows. It is built first; the car jobs' fingerprints
+//!   include its bytes.
 //!
 //! Each keeps a procedural fallback in the cluster (`setup.assets` may be `None`).
 use crate::comfy::{self, Comfy};
@@ -454,6 +456,30 @@ def chase_cam(sc, shot):
     sc.camera = cam
 
 
+def night_card(path, gain):
+    """The Wangan's lamps over the car: the night plate as a light card above the road, its long
+    side along the road. The camera does not see it; the paint and the glass roof reflect it, and
+    its light tints the body. Without the file the car is lit by the studio alone."""
+    if not path or not os.path.isfile(path):
+        log('night plate missing, studio light only:', path)
+        return
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0.0, -14.0, 6.0))
+    card = bpy.context.active_object
+    card.rotation_euler = (0.0, 0.0, math.radians(90.0))
+    card.scale = (64.0, 64.0 / 2.4, 1.0)
+    m, nt = new_mat('night')
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = bpy.data.images.load(path, check_existing=True)
+    tex.extension = 'EXTEND'
+    e = nt.nodes.new('ShaderNodeEmission')
+    e.inputs['Strength'].default_value = gain
+    o = nt.nodes.new('ShaderNodeOutputMaterial')
+    nt.links.new(tex.outputs['Color'], e.inputs['Color'])
+    nt.links.new(e.outputs['Emission'], o.inputs['Surface'])
+    card.data.materials.append(m)
+    card.visible_camera = False
+
+
 def black_world(sc):
     w = bpy.data.worlds.new('void')
     sc.world = w
@@ -489,8 +515,11 @@ for shot in P['shots']:
     root.rotation_euler = (0.0, 0.0, math.radians(float(shot.get('yaw_deg', 0.0))))
     if lit:
         studio_world(sc, strength=float(P['world']), hdri='studio.exr', rotation=0.0, visible=False)
-        bpy.ops.mesh.primitive_plane_add(size=80.0, location=(0.0, 0.0, 0.0))
-        bpy.context.active_object.is_shadow_catcher = True
+        # The road under the car shades its underside and shows in the paint, but the camera does
+        # not see it. A shadow catcher would bake black-with-alpha round the car, and the overlay's
+        # 8-bit premultiplied output shows that as a lighter box over the faint road surface.
+        ground_plane(0.06).visible_camera = False
+        night_card(P.get('night'), float(P.get('night_gain', 0.0)))
         # Studio lights fixed to the world (the car turns under them). Driving: an overhead softbox,
         # two long strips for the highlight lines along the shoulders and a cool rim from ahead.
         # Parked: no softbox (it would fill the windscreen with one white patch); a long strip
@@ -575,20 +604,23 @@ const EGO_PAINT: [f32; 3] = [0.80, 0.81, 0.82];
 const TRAFFIC_PAINT: [f32; 3] = [0.42, 0.44, 0.47];
 const CAR_SEED: u64 = 152;
 
-const ASPHALT_PROMPT: &str = "photograph of an empty dark asphalt road at night seen from a low camera behind a car, the road surface fills the frame and recedes straight to a vanishing point at the top centre, fine aggregate texture, faint cold blue sheen, moody, minimal";
-const ASPHALT_NEGATIVE: &str = "lane markings, white lines, yellow lines, arrows, text, letters, watermark, logo, car, vehicle, people, buildings, trees, street lights, sky, sun, moon, lowres, blurry, jpeg artifacts, oversaturated";
-const ASPHALT_SEED: u64 = 1507;
-/// The shipped plate size (the cluster maps it over the road from the horizon to the band's
-/// bottom).
-const ASPHALT_SIZE: [usize; 2] = [2048, 680];
+/// The tunnel lights plate, relative to the repository root.
+pub const NIGHT_FILE: &str = "assets/clusters/tesla_adas/tunnel_lights.png";
+const NIGHT_PROMPT: &str = "long exposure photograph looking straight up at the ceiling of a Japanese expressway tunnel at night, two parallel horizontal rows of glowing orange sodium ceiling lamps running across the whole frame from left to right, a few cold white lights, dark concrete ceiling, soft glow, light haze, flat frontal view, symmetrical";
+const NIGHT_NEGATIVE: &str = "vanishing point, perspective, road, cars, vehicle, people, text, letters, signs, watermark, logo, daylight, sky, lowres, blurry, jpeg artifacts";
+const NIGHT_SEED: u64 = 6006;
+/// The shipped plate: the long side lies along the road.
+const NIGHT_SIZE: [usize; 2] = [4096, 1706];
+/// The card's emission strength in the car shots.
+const NIGHT_GAIN: f32 = 6.0;
 
 /// Builds the set.
 pub fn build(ctx: &mut Ctx) -> Result<()> {
     font(ctx)?;
+    night(ctx)?;
     ego(ctx)?;
     parked(ctx)?;
-    traffic(ctx)?;
-    asphalt(ctx)
+    traffic(ctx)
 }
 
 /// The Japanese label face, relative to the repository root.
@@ -624,7 +656,8 @@ fn studio() -> Value {
     json!({
         "seed": CAR_SEED, "world": 0.30, "metallic": 0.25, "rough": 0.30, "key": 520.0, "strip": 560.0,
         "rim": 320.0, "exposure": -0.7, "tail_running": 1.4, "tail_brake": 14.0, "head_running": 0.0,
-        "head_parked": 6.0, "glow_w": 1.9, "glow_l": 4.6, "glow_h": 0.14, "glow_energy": 520.0
+        "head_parked": 6.0, "glow_w": 1.9, "glow_l": 4.6, "glow_h": 0.14, "glow_energy": 520.0,
+        "night_gain": NIGHT_GAIN
     })
 }
 
@@ -655,15 +688,26 @@ fn chase(
     })
 }
 
-/// The job's fingerprint: the shared prelude, both scripts, the parameters and a version tag.
-fn car_fingerprint(params: &Value, tag: &[u8]) -> String {
+/// The job's fingerprint: the shared prelude, both scripts, the parameters, the tunnel lights
+/// plate as it is on disk and a version tag.
+fn car_fingerprint(ctx: &Ctx, params: &Value, tag: &[u8]) -> String {
+    let plate = std::fs::read(ctx.abs(NIGHT_FILE)).unwrap_or_default();
     fingerprint(&[
         recipes::PRELUDE.as_bytes(),
         CAR_LIB.as_bytes(),
         SHOTS.as_bytes(),
         params.to_string().as_bytes(),
+        &plate,
         tag,
     ])
+}
+
+/// A job's parameters with the paths only this machine knows: the scratch folder and the plate.
+fn with_paths(ctx: &Ctx, params: &Value, out: &std::path::Path) -> Value {
+    let mut p = params.clone();
+    p["out"] = json!(out.to_string_lossy());
+    p["night"] = json!(ctx.abs(NIGHT_FILE).to_string_lossy());
+    p
 }
 
 /// The ego atlas and its two light masks.
@@ -693,11 +737,10 @@ fn ego(ctx: &mut Ctx) -> Result<()> {
     }
     let mut params = studio();
     params["shots"] = json!(shots);
-    let fp = car_fingerprint(&params, b"ego-v2");
+    let fp = car_fingerprint(ctx, &params, b"ego-v2");
     ctx.job("tesla_adas/ego", &fp, |ctx| {
         let out = ctx.scratch("tesla_adas_ego")?;
-        let mut p = params.clone();
-        p["out"] = json!(out.to_string_lossy());
+        let p = with_paths(ctx, &params, &out);
         blender::run(&ctx.paths, "tesla_adas_ego", &script(), &p)?;
         let rows = EGO_YAWS.len().div_ceil(EGO_COLS);
         let mut atlas = Img::new(EGO_CELL[0] * EGO_COLS, EGO_CELL[1] * rows, 4);
@@ -765,11 +808,10 @@ fn parked(ctx: &mut Ctx) -> Result<()> {
         "rx": PARKED_SIZE[0], "ry": PARKED_SIZE[1], "loc": [-3.6, -6.9, 2.6], "target": [0.15, 0.2, 0.50],
         "lens": 64.0, "samples": 256, "file": "parked.png"
     }]);
-    let fp = car_fingerprint(&params, b"parked-v2");
+    let fp = car_fingerprint(ctx, &params, b"parked-v2");
     ctx.job("tesla_adas/parked", &fp, |ctx| {
         let out = ctx.scratch("tesla_adas_parked")?;
-        let mut p = params.clone();
-        p["out"] = json!(out.to_string_lossy());
+        let p = with_paths(ctx, &params, &out);
         blender::run(&ctx.paths, "tesla_adas_parked", &script(), &p)?;
         let image = img::load(&out.join("parked.png"))?;
         ctx.image(
@@ -815,11 +857,10 @@ fn traffic(ctx: &mut Ctx) -> Result<()> {
     }
     let mut params = studio();
     params["shots"] = json!(shots);
-    let fp = car_fingerprint(&params, b"traffic-v2");
+    let fp = car_fingerprint(ctx, &params, b"traffic-v2");
     ctx.job("tesla_adas/traffic", &fp, |ctx| {
         let out = ctx.scratch("tesla_adas_traffic")?;
-        let mut p = params.clone();
-        p["out"] = json!(out.to_string_lossy());
+        let p = with_paths(ctx, &params, &out);
         blender::run(&ctx.paths, "tesla_adas_traffic", &script(), &p)?;
         let cols = TRAFFIC_HEADINGS.len();
         for kind in TRAFFIC_KINDS {
@@ -919,83 +960,81 @@ fn feather(fx: f32, fy: f32) -> impl Fn(f32, f32) -> f32 {
     }
 }
 
-fn asphalt(ctx: &mut Ctx) -> Result<()> {
+/// The tunnel lights plate: SDXL's ceiling lamps, reduced to their light (the concrete between
+/// the lamps goes to black, so the card adds lamps and no grey haze).
+fn night(ctx: &mut Ctx) -> Result<()> {
     let wf_path = ctx.paths.forge_dir().join("workflows").join("sdxl_plate.json");
     let workflow = String::from_utf8_lossy(&crate::ctx::read(&wf_path)?).to_string();
     let gen_fp = fingerprint(&[
         workflow.as_bytes(),
-        ASPHALT_PROMPT.as_bytes(),
-        ASPHALT_NEGATIVE.as_bytes(),
-        &ASPHALT_SEED.to_le_bytes(),
+        NIGHT_PROMPT.as_bytes(),
+        NIGHT_NEGATIVE.as_bytes(),
+        &NIGHT_SEED.to_le_bytes(),
         b"1536x640",
     ]);
-    let fp = fingerprint(&[gen_fp.as_bytes(), b"asphalt-post-v4"]);
-    ctx.job("tesla_adas/asphalt", &fp, |ctx| {
-        let raw_path = ctx.scratch("comfy")?.join("tesla_adas_asphalt.png");
+    let fp = fingerprint(&[gen_fp.as_bytes(), b"night-post-v1"]);
+    ctx.job("tesla_adas/night", &fp, |ctx| {
+        let raw_path = ctx.scratch("comfy")?.join("tesla_adas_night.png");
         let raw_fp_path = raw_path.with_extension("fp");
         let cached = raw_path.exists() && std::fs::read_to_string(&raw_fp_path).map(|s| s == gen_fp).unwrap_or(false);
         if !cached {
             let c = Comfy::connect(&ctx.paths)?;
             let mut params = Map::new();
-            params.insert("prompt".into(), json!(ASPHALT_PROMPT));
-            params.insert("negative".into(), json!(ASPHALT_NEGATIVE));
-            params.insert("seed".into(), json!(ASPHALT_SEED));
+            params.insert("prompt".into(), json!(NIGHT_PROMPT));
+            params.insert("negative".into(), json!(NIGHT_NEGATIVE));
+            params.insert("seed".into(), json!(NIGHT_SEED));
             params.insert("steps".into(), json!(32));
             params.insert("cfg".into(), json!(6.5));
             params.insert("width".into(), json!(1536));
             params.insert("height".into(), json!(640));
-            params.insert("prefix".into(), json!("fh6_tesla_adas_asphalt"));
+            params.insert("prefix".into(), json!("fh6_tesla_adas_night"));
             let wf = comfy::patch(&workflow, &params)?;
             let images = c.run(&wf, Duration::from_secs(900))?;
             let bytes = images.first().ok_or_else(|| tool_err("comfyui", "no image"))?;
             img::write_file(&raw_path, bytes)?;
             img::write_file(&raw_fp_path, gen_fp.as_bytes())?;
         }
-        // 6144 x 2560 from the upscaler: the road below the horizon (at about 47%). SDXL painted a
-        // centre line despite the negative prompt, so keep the line-free left 46% and mirror it
-        // into a symmetric plate (the cluster draws its own lane lines).
+        // 6144 x 2560 from the upscaler. Keep the light: the median luminance (the ceiling) goes
+        // to black and the lamps' peak to full, each pixel keeping its colour.
         let raw = img::load(&raw_path)?;
-        let top = raw.h * 50 / 100;
-        let half = raw.w * 46 / 100;
-        let road = raw.crop(0, top, half, raw.h - top);
-        let sym = Img::from_fn(half * 2, road.h, road.c, |x, y| {
-            let sx = if x < half { x } else { 2 * half - 1 - x };
-            let mut px = [0.0; 4];
-            for (ch, v) in px.iter_mut().enumerate().take(road.c) {
-                *v = road.get(sx, y, ch);
-            }
-            px
-        });
-        let small = sym.resize(ASPHALT_SIZE[0], ASPHALT_SIZE[1], false);
-        // Texture only, the lighting comes from the cluster: near (bottom) full, far (top) 0.
-        let peak = percentile(&small, 0.997);
-        let mask = light_mask(&small, peak, 1, 0.0, 1.0, |u, v| {
-            img::smoothstep(0.0, 0.85, v)
-                * (1.0 - img::smoothstep(0.86, 1.0, v))
-                * img::smoothstep(0.0, 0.08, u)
-                * img::smoothstep(0.0, 0.08, 1.0 - u)
-        });
+        let small = raw.resize(NIGHT_SIZE[0], NIGHT_SIZE[1], false);
+        let (black, peak) = (percentile(&small, 0.5), percentile(&small, 0.999));
+        let plate = lights_only(&small, black, peak);
         ctx.image(
-            "tesla_adas/asphalt",
-            "assets/clusters/tesla_adas/asphalt.png",
-            &mask,
+            "tesla_adas/night",
+            NIGHT_FILE,
+            &plate,
             Format::Png8,
             Spec::new(
                 SET,
-                "mask",
+                "texture",
                 format!(
-                    "comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5, 1536 x 640) seed={ASPHALT_SEED} prompt=\"{ASPHALT_PROMPT}\""
+                    "comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5, 1536 x 640) seed={NIGHT_SEED} prompt=\"{NIGHT_PROMPT}\""
                 ),
                 CLUSTERS,
             )
-            .alpha("straight")
-            .space("linear")
             .licence("CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)")
             .qa(format!(
-                "the line-free left 46% of the lower half of the 6144 x 2560 upscale, mirrored into a symmetric plate, {} x {}; luminance → alpha over white (tinted live to near-black), a far-to-near fade and side feathers baked in",
-                ASPHALT_SIZE[0], ASPHALT_SIZE[1]
+                "the 6144 x 2560 upscale at {} x {}, its median luminance taken to black and its 99.9th percentile to full; a build input: every lit car shot hangs it 6 m over the road as a light card, long side along the road, emission x {NIGHT_GAIN}",
+                NIGHT_SIZE[0], NIGHT_SIZE[1]
             )),
         )
+    })
+}
+
+/// The light in `src`: luminance `black` and below goes to zero and `peak` and above to full,
+/// each pixel keeping its hue (its brightest channel carries the level).
+fn lights_only(src: &Img, black: f32, peak: f32) -> Img {
+    let span = (peak - black).max(1e-6);
+    Img::from_fn(src.w, src.h, 3, |x, y| {
+        let rgb = [
+            src.get(x, y, 0),
+            src.get(x, y, 1.min(src.c - 1)),
+            src.get(x, y, 2.min(src.c - 1)),
+        ];
+        let level = ((img::luma(rgb[0], rgb[1], rgb[2]) - black) / span).clamp(0.0, 1.0);
+        let k = img::srgb_encode(level) / rgb[0].max(rgb[1]).max(rgb[2]).max(1e-6);
+        [rgb[0] * k, rgb[1] * k, rgb[2] * k, 1.0]
     })
 }
 
@@ -1014,10 +1053,37 @@ mod tests {
     }
 
     #[test]
+    fn the_night_plate_keeps_lamps_and_drops_the_ceiling() {
+        let px = [
+            [0.10, 0.10, 0.10],
+            [0.05, 0.05, 0.05],
+            [0.80, 0.40, 0.10],
+            [0.40, 0.20, 0.05],
+        ];
+        let src = Img::from_fn(4, 1, 3, |x, _| [px[x][0], px[x][1], px[x][2], 0.0]);
+        let (black, peak) = (img::luma(0.10, 0.10, 0.10), img::luma(0.80, 0.40, 0.10));
+        let out = lights_only(&src, black, peak);
+        assert!(
+            out.get(0, 0, 0).abs() < 1e-6 && out.get(1, 0, 1).abs() < 1e-6,
+            "the ceiling is black"
+        );
+        assert!((out.get(2, 0, 0) - 1.0).abs() < 1e-5, "a lamp at the peak is full");
+        assert!(
+            (out.get(2, 0, 0) / out.get(2, 0, 2) - 8.0).abs() < 1e-3,
+            "a lamp keeps its hue"
+        );
+        let dim = out.get(3, 0, 0);
+        assert!(dim > 0.1 && dim < 0.9, "a dimmer lamp stays dimmer: {dim}");
+    }
+
+    #[test]
     fn a_light_mask_is_white_with_the_light_in_alpha() {
-        let src = Img::from_fn(8, 4, 3, |x, _| [x as f32, x as f32, x as f32, 0.0]);
+        let src = Img::from_fn(8, 4, 3, |x, _| {
+            let v = x as f32 / 7.0;
+            [v, v, v, 0.0]
+        });
         let peak = percentile(&src, 1.0);
-        assert!((peak - 7.0).abs() < 1e-5);
+        assert!((peak - 1.0).abs() < 1e-5);
         let mask = light_mask(&src, peak, 1, 0.0, 1.0, |_, _| 1.0);
         assert_eq!(mask.c, 4);
         assert!((mask.get(7, 0, 3) - 1.0).abs() < 1e-5);

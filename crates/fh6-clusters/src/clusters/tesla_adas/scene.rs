@@ -75,7 +75,6 @@ const DASH_PIECES: usize = 2;
 /// Lane paint and road surface levels (OLED: the road is a hint, not a plate).
 const LINE_ALPHA: f32 = 0.62;
 const EDGE_ALPHA: f32 = 0.46;
-const SURFACE_ALPHA: f32 = 0.030;
 
 /// From the ego's ground centre to its nose (m), and half the path band's width.
 const NOSE: f32 = 2.45;
@@ -107,8 +106,8 @@ const STOP_TEXT_FAR: (f32, f32) = (24.0, 32.0);
 const STOP_TEXT_CAP: f32 = 72.0;
 /// The slow-down dashes inside the ego lane's lines: width, length and period (m), and the
 /// deceleration at which they are fully solid (m/s²).
-const SLOW_W: f32 = 0.30;
-const SLOW_L: f32 = 1.25;
+const SLOW_W: f32 = 0.20;
+const SLOW_L: f32 = 1.0;
 const SLOW_PERIOD: f32 = 2.5;
 const SLOW_INSET: f32 = 0.38;
 const SLOW_MAX: usize = 26;
@@ -146,6 +145,10 @@ pub struct SceneGeom {
     pub horizon_y: f32,
     /// Where the parked car's image is drawn.
     pub parked: Rect,
+    /// The road surface's lift (ink alpha). 0 in the hood view: its legibility halo is already
+    /// the surface, and the overlay's 8-bit premultiplied output would turn a faint lift over a
+    /// dark halo into a grey panel.
+    pub surface: f32,
 }
 
 impl SceneGeom {
@@ -283,11 +286,13 @@ impl Traffic {
         };
         let lead = RoadUser {
             lane: 0,
-            z: LEAD_NEAR + 4.0 + (LEAD_FAR - LEAD_NEAR - 16.0) * rng.unit(),
+            z: LEAD_NEAR + 6.0 + 10.0 * rng.unit(),
             kind: lead_kind,
         };
         let span = WRAP_FAR - WRAP_NEAR;
-        let base = rng.unit() * span;
+        // The road opens with a slow car just ahead on the left and the passing car well ahead on
+        // the right, so the first seconds already show keep-left traffic.
+        let base = EGO_Z + 9.0 + 6.0 * rng.unit() - WRAP_NEAR;
         // The slow lane holds the kei box and a saloon, half the loop apart.
         let slow = if rng.unit() < 0.5 {
             [Kind::Kei, Kind::Sedan]
@@ -301,7 +306,7 @@ impl Traffic {
         };
         let right = RoadUser {
             lane: 1,
-            z: WRAP_NEAR + rng.unit() * span,
+            z: EGO_Z + 26.0 + 16.0 * rng.unit(),
             kind: Kind::Sport,
         };
         Self {
@@ -391,6 +396,7 @@ struct Frame {
     cam: Camera25,
     kappa: f32,
     vp: Rect,
+    surface: f32,
     z_near: f32,
     z_far: f32,
 }
@@ -412,6 +418,7 @@ impl Frame {
             cam,
             kappa,
             vp,
+            surface: g.surface,
             z_near: z_near.clamp(cam.eye.z + 1.0, EGO_Z),
             z_far: reach(kappa),
         }
@@ -481,20 +488,29 @@ impl Frame {
             let (Some(a), Some(b)) = (self.ground(offset, za), self.ground(offset, zb)) else {
                 continue;
             };
-            let alpha = self.fade((a + b) * 0.5, 0.5 * (za + zb));
-            if alpha < 0.01 {
+            // Each piece fades from its near end to its far end, so a long piece near the car
+            // shows no step where the scene dissolves.
+            let (fa, fb) = (self.fade(a, za), self.fade(b, zb));
+            if fa.max(fb) < 0.01 {
                 continue;
             }
-            p.fill(
-                &Shape::Line {
-                    a,
-                    b,
-                    width_a: self.paint_px(width_m, za),
-                    width_b: self.paint_px(width_m, zb),
-                    cap: Cap::Butt,
-                },
-                color.fade(alpha),
-            );
+            let piece = Shape::Line {
+                a,
+                b,
+                width_a: self.paint_px(width_m, za),
+                width_b: self.paint_px(width_m, zb),
+                cap: Cap::Butt,
+            };
+            if (fa - fb).abs() < 0.01 {
+                p.fill(&piece, color.fade(fa));
+            } else {
+                p.fill(
+                    &piece,
+                    Gradient::linear(a, b)
+                        .stop(0.0, color.fade(fa))
+                        .stop(1.0, color.fade(fb)),
+                );
+            }
         }
     }
 }
@@ -640,6 +656,9 @@ impl Scene {
 
     /// The road surface: a faint lift of the three lanes, dissolved toward the band's sides.
     fn draw_surface(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        if f.surface <= 0.0 {
+            return;
+        }
         let half = 1.5 * LANE_WIDTH + 0.4;
         let mut pts = [Vec2::ZERO; 2 * PATH_SAMPLES];
         let mut n = 0;
@@ -666,8 +685,8 @@ impl Scene {
             &Shape::Polygon { points: &pts },
             Gradient::linear(vec2(x0, y), vec2(x1, y))
                 .stop(0.0, ink.with_alpha(0.0))
-                .stop(0.22, ink.with_alpha(SURFACE_ALPHA))
-                .stop(0.78, ink.with_alpha(SURFACE_ALPHA))
+                .stop(0.22, ink.with_alpha(f.surface))
+                .stop(0.78, ink.with_alpha(f.surface))
                 .stop(1.0, ink.with_alpha(0.0)),
         );
     }
@@ -1079,6 +1098,7 @@ mod tests {
             focal: 700.0,
             horizon_y: -226.0,
             parked: Rect::from_xywh(-290.0, -150.0, 580.0, 330.0),
+            surface: 0.03,
         }
     }
 

@@ -16,9 +16,9 @@
 //! | 1 | gear (Noto Sans 600) | cap 160 at (490, −170) | cap 150 at (470, −110) |
 //! | 2 | speed (Noto Sans 500), unit under it | cap 96 at (490, 14) | cap 84 at (470, 46) |
 //! | 3 | power line: centre-zero, power to the right, negative power to the left in green | ±216 at y 226 | ±200 at y 170 |
-//! | 3 | rpm and power figures under their two-language labels | x −560 and −420, y 168 to 216 | x −530 and −410, y 116 to 158 |
+//! | 3 | rpm and power figures under their two-language labels | x −560 and −420, y 164 to 214 | x −530 and −410, y 114 to 158 |
 //! | 4 | road scene ([`scene`]) | 720 × 492 from (−360, −252) | 660 × 362 from (−330, −182) |
-//! | 4 | G-meter with its peak history | r 104 at (−490, −14) | r 76 at (−470, −28) |
+//! | 4 | G-meter with its peak history | r 96 at (−490, −22) | r 70 at (−470, −26) |
 //! | 5 | logo zone, card label, R · N · D row | left column top; right column foot | the same |
 //!
 //! The shift line is the only part that strobes (10 Hz at the shift point, 12 px tall). Below
@@ -69,15 +69,6 @@ const LATIN_CAP: f32 = 12.0;
 /// Directions the G-meter's peak history keeps.
 const PEAK_BINS: usize = 24;
 
-/// How a two-language label is set.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Sign {
-    /// Japanese above, Latin this far below (centre to centre), as on a guide sign.
-    Stacked(f32),
-    /// Both on one baseline with this gap, for the compact view.
-    Inline(f32),
-}
-
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Geom {
@@ -100,8 +91,9 @@ struct Geom {
     prnd_pitch: f32,
     prnd_cap: f32,
     logo: Rect,
+    /// The Track Mode label's Japanese line, and the drop to its Latin line.
     card: Vec2,
-    card_sign: Sign,
+    card_stack: f32,
     meter: Vec2,
     meter_r: f32,
     /// The two status cells' centres, and the y of their Japanese, Latin and value lines.
@@ -131,6 +123,7 @@ const COCKPIT: Geom = Geom {
         },
         focal: 700.0,
         horizon_y: -226.0,
+        surface: 0.030,
         parked: Rect {
             min: vec2(-290.0, -160.0),
             max: vec2(290.0, 170.0),
@@ -152,12 +145,12 @@ const COCKPIT: Geom = Geom {
         min: vec2(-600.0, -254.0),
         max: vec2(-380.0, -210.0),
     },
-    card: vec2(-490.0, -172.0),
-    card_sign: Sign::Stacked(22.0),
-    meter: vec2(-490.0, -14.0),
-    meter_r: 104.0,
+    card: vec2(-490.0, -174.0),
+    card_stack: 24.0,
+    meter: vec2(-490.0, -22.0),
+    meter_r: 96.0,
     status_x: [-560.0, -420.0],
-    status_y: [168.0, 189.0, 216.0],
+    status_y: [164.0, 187.0, 214.0],
     status_cap: 22.0,
     halos: [None; 4],
 };
@@ -174,6 +167,7 @@ const HOOD: Geom = Geom {
         },
         focal: 520.0,
         horizon_y: -160.0,
+        surface: 0.0,
         parked: Rect {
             min: vec2(-220.0, -110.0),
             max: vec2(220.0, 140.0),
@@ -195,12 +189,12 @@ const HOOD: Geom = Geom {
         min: vec2(-570.0, -192.0),
         max: vec2(-370.0, -152.0),
     },
-    card: vec2(-470.0, -128.0),
-    card_sign: Sign::Inline(12.0),
-    meter: vec2(-470.0, -28.0),
-    meter_r: 76.0,
+    card: vec2(-470.0, -136.0),
+    card_stack: 21.0,
+    meter: vec2(-470.0, -26.0),
+    meter_r: 70.0,
     status_x: [-530.0, -410.0],
-    status_y: [116.0, 135.0, 158.0],
+    status_y: [114.0, 135.0, 158.0],
     status_cap: 20.0,
     halos: [
         Some(Rect {
@@ -543,7 +537,7 @@ impl TeslaAdas {
 
     /// A two-language label, set like a Japanese guide sign. Without the Japanese face it is
     /// the Latin line alone, at the Japanese line's size.
-    fn sign(&self, p: &mut Painter<'_>, pos: Vec2, japanese: &str, latin: &str, sign: Sign, pal: &Palette) {
+    fn sign(&self, p: &mut Painter<'_>, pos: Vec2, japanese: &str, latin: &str, stack: f32, pal: &Palette) {
         let ink = pal.roles.ink_label;
         let latin_style = |cap: f32| TextStyle::new(self.faces.label, cap).paint(ink).tracking(self.tracking);
         let Some(kanji) = self.faces.kanji else {
@@ -551,31 +545,18 @@ impl TeslaAdas {
             return;
         };
         let jp_style = TextStyle::new(kanji, JP_CAP).paint(ink).tracking(0.06);
-        match sign {
-            Sign::Stacked(dy) => {
-                p.text(pos, japanese, &jp_style.align(Align::Center, VAlign::CapMiddle));
-                p.text(
-                    pos + vec2(0.0, dy),
-                    latin,
-                    &latin_style(LATIN_CAP).align(Align::Center, VAlign::CapMiddle),
-                );
-            }
-            Sign::Inline(gap) => {
-                let jp_style = jp_style.align(Align::Left, VAlign::Baseline);
-                let lat = latin_style(LATIN_CAP).align(Align::Left, VAlign::Baseline);
-                let (w_jp, w_lat) = (p.measure(japanese, &jp_style).width, p.measure(latin, &lat).width);
-                let x = pos.x - (w_jp + gap + w_lat) * 0.5;
-                let base = pos.y + JP_CAP * 0.5;
-                p.text(vec2(x, base), japanese, &jp_style);
-                p.text(vec2(x + w_jp + gap, base), latin, &lat);
-            }
-        }
+        p.text(pos, japanese, &jp_style.align(Align::Center, VAlign::CapMiddle));
+        p.text(
+            pos + vec2(0.0, stack),
+            latin,
+            &latin_style(LATIN_CAP).align(Align::Center, VAlign::CapMiddle),
+        );
     }
 
     /// The left card: the logo zone, the Track Mode label and the G-meter over its peak history.
     fn draw_card(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         logo_zone(p, g.logo, &self.logo, self.faces.wide, LogoVariant::Full, pal);
-        self.sign(p, g.card, "トラックモード", "TRACK MODE", g.card_sign, pal);
+        self.sign(p, g.card, "トラックモード", "TRACK MODE", g.card_stack, pal);
         let mut outline = [Vec2::ZERO; PEAK_BINS];
         if self.peaks.outline(g.meter, g.meter_r / RINGS_G[2], &mut outline) {
             p.fill(&Shape::Polygon { points: &outline }, pal.primary.with_alpha(0.16));
@@ -599,14 +580,7 @@ impl TeslaAdas {
             ("出力", self.power_unit, self.power_value, 4),
         ];
         for ((japanese, latin, number, digits), x) in cells.into_iter().zip(g.status_x) {
-            self.sign(
-                p,
-                vec2(x, y_label),
-                japanese,
-                latin,
-                Sign::Stacked(y_latin - y_label),
-                pal,
-            );
+            self.sign(p, vec2(x, y_label), japanese, latin, y_latin - y_label, pal);
             p.number(vec2(x, y_value), number, digits, &value, None);
         }
     }
@@ -616,17 +590,18 @@ impl TeslaAdas {
     fn draw_drive(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
         self.gear.draw(p, g.gear, self.faces.gear, g.gear_cap, pal);
-        self.speed
-            .draw(p, g.speed, self.faces.figure, g.speed_cap, roles.ink, None);
-        self.speed.draw_unit(
-            p,
-            vec2(g.speed.x, g.unit_y),
-            self.unit,
-            self.faces.label,
-            g.unit_cap,
-            self.tracking,
-            pal,
-        );
+        // The speed is a fixed three-cell field with no ghost 8s (the real display has none), so
+        // a short number sits at the field's right edge. The unit hangs from that same edge.
+        let digits = TextStyle::new(self.faces.figure, g.speed_cap)
+            .paint(roles.ink)
+            .align(Align::Center, VAlign::CapMiddle)
+            .tabular();
+        let field = p.number(g.speed, self.speed.value(), 3, &digits, None);
+        let unit = TextStyle::new(self.faces.label, g.unit_cap)
+            .paint(roles.ink_label)
+            .tracking(self.tracking)
+            .align(Align::Right, VAlign::CapTop);
+        p.text(vec2(field.max.x - g.speed_cap * 0.06, g.unit_y), self.unit, &unit);
         let current = match self.gear.gear() {
             Gear::Reverse => 0,
             Gear::Neutral => 1,
@@ -693,7 +668,11 @@ mod tests {
             // The left column, top to bottom: logo, label, meter (a ball at the limit reaches
             // 1.18 r), the G readout, then the status rows down to the envelope.
             assert!(g.card.y - JP_CAP * 0.5 >= g.logo.max.y + 8.0);
-            assert!(g.meter.y - g.meter_r * 1.06 >= g.card.y + JP_CAP * 0.5 + 8.0);
+            let label_foot = g.card.y + g.card_stack + LATIN_CAP * 0.5;
+            assert!(
+                g.meter.y - g.meter_r * 1.06 >= label_foot + 8.0,
+                "meter under the label"
+            );
             let readout = GBall::readout_baseline(g.meter, g.meter_r, t.type_scale.metric_secondary).y;
             assert!(
                 g.status_y[0] - JP_CAP * 0.5 >= readout + 8.0,
