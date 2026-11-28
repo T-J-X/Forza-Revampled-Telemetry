@@ -349,7 +349,13 @@ impl OsdController {
                 RemapOutcome::Cancelled => {
                     self.mode = Mode::Browse;
                     self.release_guard = true;
-                    self.say("No change: nothing was held for 1 second", now);
+                    self.say("No change: the OSD button is as it was", now);
+                    out.moved = true;
+                }
+                RemapOutcome::TimedOut => {
+                    self.mode = Mode::Browse;
+                    self.release_guard = true;
+                    self.say("No change: time ran out", now);
                     out.moved = true;
                 }
             },
@@ -684,6 +690,30 @@ mod tests {
         let o = r.frame(1416, 0, 0xF000 | VIEW | 0x0040);
         assert!(!o.close, "the release after a capture is not a back");
         assert!(!r.frame(1432, 0, 0).settings_focus);
+    }
+
+    #[test]
+    fn a_cancelled_remap_and_a_timed_out_one_say_different_things() {
+        let mut r = Rig::new();
+        let mask = r.cfg.osd_toggle_mask;
+        r.ctl.set_tab(Tab::Controls);
+        r.tap(0, RIGHT);
+        assert_eq!(r.ctl.mode(), Mode::Remap);
+        r.frame(200, LEFT, 0);
+        assert_eq!(r.ctl.mode(), Mode::Browse);
+        assert_eq!(r.ctl.notice(MS(216)), Some("No change: the OSD button is as it was"));
+        assert_eq!(r.cfg.osd_toggle_mask, mask);
+
+        let mut r = Rig::new();
+        r.ctl.set_tab(Tab::Controls);
+        r.tap(0, RIGHT);
+        // A lone bumper is refused, so nothing commits and the capture runs out.
+        r.frame(100, RB, 0);
+        r.frame(30_000, 0, 0);
+        r.frame(60_100, 0, 0);
+        assert_eq!(r.ctl.mode(), Mode::Browse);
+        assert_eq!(r.ctl.notice(MS(60_116)), Some("No change: time ran out"));
+        assert_eq!(r.cfg.osd_toggle_mask, mask);
     }
 
     #[test]

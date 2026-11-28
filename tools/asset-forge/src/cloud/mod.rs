@@ -860,7 +860,7 @@ fn hold_to_budget(
             Err(tool_err(
                 "cloud",
                 format!(
-                    "the cloud lane is closed: {}. TJX chose the local lane from here on: take `gpu.lock` (SKILLS.md section 5) and run the same command without `--lane cloud`",
+                    "the cloud lane is closed: {}. TJX chose the local lane from here on: queue for `gpu.lock` with `gpu-lock run` (SKILLS.md section 5) and run the same command without `--lane cloud`",
                     budget_line(config, spent)
                 ),
             ))
@@ -909,7 +909,7 @@ fn create_pod(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, spent: &
         return Err(tool_err(
             "cloud",
             format!(
-                "too little of the budget is left to start a pod: {}. TJX chose the local lane from here on: take `gpu.lock` (SKILLS.md section 5) and run the same command without `--lane cloud`",
+                "too little of the budget is left to start a pod: {}. TJX chose the local lane from here on: queue for `gpu.lock` with `gpu-lock run` (SKILLS.md section 5) and run the same command without `--lane cloud`",
                 budget_line(config, spent)
             ),
         ));

@@ -426,3 +426,86 @@ fn a_ripple_bends_only_where_it_stands() {
         assert_eq!(at(&still, pos), at(&rippled, pos), "{pos:?}");
     }
 }
+
+#[test]
+fn a_lens_drawn_band_by_band_under_clips_is_the_lens_drawn_once() {
+    // A glass draw under a clip is trimmed to the clip, but its optics still come from the whole
+    // shape. So a lens drawn once per tile, each tile under its own pixel-aligned clip, writes the
+    // pixels of the lens drawn once under a clip around all the tiles, while each draw rasterises
+    // only its own tile. Only rounding differs: the local position is interpolated across a
+    // smaller quad, which moves a steep rim's value by at most one 8-bit step at a few pixels. The tiles are a rim band split into strips plus the
+    // flat middle, as a dash draws a lens whose middle it leaves out. Both glass materials, over
+    // a scene with detail to refract.
+    let (ctx, mut kit) = setup();
+    let lens = Rect::from_xywh(-250.0, -150.0, 500.0, 300.0);
+    let band = 40.0;
+    let xs = [lens.min.x - 2.0, lens.min.x + band, lens.max.x - band, lens.max.x + 2.0];
+    let ys = [lens.min.y - 2.0, lens.min.y + band, lens.max.y - band, lens.max.y + 2.0];
+    let tiles: [Rect; 9] = std::array::from_fn(|i| {
+        let (c, r) = (i % 3, i / 3);
+        Rect::from_points(vec2(xs[c], ys[r]), vec2(xs[c + 1], ys[r + 1]))
+    });
+    let around = Rect::from_points(vec2(xs[0], ys[0]), vec2(xs[3], ys[3]));
+    let scene = |p: &mut Painter<'_>| {
+        p.fill(
+            &Shape::rect(FIELD),
+            Gradient::linear(vec2(FIELD.min.x, FIELD.min.y), vec2(FIELD.max.x, FIELD.max.y))
+                .stop(0.0, Color::rgb_u32(0x102040))
+                .stop(1.0, Color::rgb_u32(0xF0C060)),
+        );
+        for i in 0..12 {
+            let x = -275.0 + i as f32 * 50.0;
+            p.fill(&Shape::rect(Rect::from_xywh(x, -200.0, 6.0, 400.0)), Color::WHITE);
+        }
+    };
+    let mut optic = OpticalGlass::new(&Dispersion::SAPPHIRE).with_profile(Profile {
+        thickness: 18.0,
+        bevel: 30.0,
+        base: 6.0,
+        exponent: 2.0,
+    });
+    optic.absorption = [0.004, 0.002, 0.001];
+    let mut frosted = optic;
+    frosted.frost = 0.6;
+    // (name, paint, the layer's frost sigma): frost samples the backdrop well past the quad.
+    let paints: [(&str, fh6_kit::Paint, f32); 3] = [
+        ("optic", optic.into(), 0.0),
+        ("liquid", fh6_kit::Glass::default().into(), 0.0),
+        ("optic_frosted", frosted.into(), 12.0),
+    ];
+    for (name, paint, sigma) in paints {
+        let whole = render(&mut kit, &ctx, &format!("bands_whole_{name}"), |p| {
+            scene(p);
+            p.layer(LayerOptions::glass(sigma), |p| {
+                p.scoped(|p| {
+                    p.clip(around, 0.0);
+                    p.fill(&Shape::round_rect(lens, 36.0), paint);
+                });
+            });
+        });
+        let banded = render(&mut kit, &ctx, &format!("bands_tiled_{name}"), |p| {
+            scene(p);
+            p.layer(LayerOptions::glass(sigma), |p| {
+                for tile in tiles {
+                    p.scoped(|p| {
+                        p.clip(tile, 0.0);
+                        p.fill(&Shape::round_rect(lens, 36.0), paint);
+                    });
+                }
+            });
+        });
+        let (mut differ, mut worst) = (0_usize, 0_u8);
+        for (a, b) in whole.pixels.iter().zip(&banded.pixels) {
+            differ += usize::from(a != b);
+            worst = worst.max(a.abs_diff(*b));
+        }
+        assert!(
+            worst <= 1 && differ * 10_000 <= whole.pixels.len(),
+            "{name}: {differ} bytes differ between the tiled and whole lens, by up to {worst}"
+        );
+        // The lens really shows (so the check above is not vacuous).
+        let plain = render(&mut kit, &ctx, &format!("bands_plain_{name}"), |p| scene(p));
+        let moved = whole.pixels.iter().zip(&plain.pixels).filter(|(a, b)| a != b).count();
+        assert!(moved > 10_000, "{name}: the lens changed only {moved} bytes");
+    }
+}
