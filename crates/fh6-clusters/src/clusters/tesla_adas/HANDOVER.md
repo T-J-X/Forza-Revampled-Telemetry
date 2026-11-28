@@ -1,6 +1,6 @@
 # HANDOVER: Dash · TeslaAdas (catalog row 15, build #5, ADAS & HUD pattern-setter)
 
-**Thread / branch:** "Rebuild the Tesla ADAS dash", `claude/project-thread-r828zb`  **Date:** 2026-11-28  **Result:** ✓ closing review done, ready for merge (one open finding: the app's CPU p99 with this dash, see "GPU and CPU"; the old build's handover is in git history).
+**Thread / branch:** "Rebuild the Tesla ADAS dash", `claude/project-thread-r828zb`  **Date:** 2026-11-28  **Result:** ✓ closing review done, ready for merge (the old build's handover is in git history).
 
 Findings and yes/no answers only; there are no scores in this file.
 
@@ -169,7 +169,15 @@ Five-second test: first "the big 4", second "118 MPH", third the road with the w
   | Scaffold (AbyssalShearBloom) | 8189 (136 fps, 3496 packets) | 0.582 / 0.796 / 1.396 ms | 0.594 / 1.227 ms | 11.0 |
 
   The dash's own share (criterion 6): 0.729 − 0.582 = **0.147 ms p50, under the 0.3 ms limit.** Receive to present meets one display frame (3.33 ms) at p99.
-  **Finding, not fixed here: the app total is 1.317 ms CPU p99, over the 1 ms target, and the scaffold does not show it** (0.796 ms p99). The extra p99 sits in the per-frame GPU submission, not in the dash's code: upload, record and submit p99 0.769 against 0.477 ms (swapchain, encoder and finish 0.510 against 0.317; `Queue::submit` 0.277 against 0.191), the present call p99 0.476 against 0.303 (the 16 ms max is one present call), while the dash's own draw is p99 0.104 against 0.063 and the kit render 0.062 against 0.051. The dash issues 19 draw calls a frame against the scaffold's 11, because each car atlas (ego, its glow and brake layers, the parked car, three traffic atlases) is its own texture and the shadows and glows switch blend modes. The cheap fix is fewer texture switches: one atlas for the three traffic bodies and one for the ego's glow and brake layers (the recipe already builds the atlases), and drawing every multiply shadow, then every additive glow, together. That is a recipe-and-draw-order change of its own, with a cloud run, new goldens and a new bench, and is reported to the coordinator as a follow-up rather than done after the closing review.
+  The first run's app total, 1.317 ms CPU p99 with a 16 ms max, was over the 1 ms target, so the bench was run again (07:30–07:34 UTC, three runs back to back in one `gpu-lock.exe run`, same setup):
+
+  | | Frames | CPU per frame p50 / p99 / max | Receive to present p50 / p99 | Draw calls | p99: upload+record+submit / swapchain, encoder, finish / `Queue::submit` / present |
+  |---|---|---|---|---|---|
+  | TeslaAdas, run 2 | 8086 | 0.675 / 0.894 / 1.444 ms | 0.690 / 1.435 ms | 19.3 | 0.540 / 0.360 / 0.210 / 0.326 ms |
+  | BoschDdu (a finished dash whose lights also bloom) | 8051 | 0.623 / 0.829 / 1.371 ms | 0.629 / 1.298 ms | 13.5 | 0.504 / 0.335 / 0.197 / 0.306 ms |
+  | TeslaAdas, run 3 | 8332 | 0.664 / 0.850 / 1.341 ms | 0.675 / 1.426 ms | 19.3 | 0.510 / 0.344 / 0.203 / 0.315 ms |
+
+  **The app total is under 1 ms p99 in both repeat runs (0.894 and 0.850 ms).** The first run's p99 came from a few slow present calls (present max 15.36 ms there, 0.83 and 0.77 ms in the repeats). TeslaAdas costs 0.04–0.05 ms more than BoschDdu at p50 and p99; its own share against the scaffold is 0.082–0.093 ms p50 in the repeats. Draw calls: `preview-export` shows 10 at cruise (fewer than the scaffold) and 20–21 only in the states where something blooms; the difference is the kit's bloom dispatches, which run once per frame whenever any layer blooms (the shared shift lights included), so merging the car atlases would save almost nothing and was not done. `AppConfig` has no switch that turns bloom off, so no bloom-off run was made.
 
 ### Assets, masters and cloud spend
 
