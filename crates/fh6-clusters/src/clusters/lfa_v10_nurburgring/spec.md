@@ -1,9 +1,11 @@
 # LFA V10 Nürburgring (`LfaV10Nurburgring`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 10 (LfaV10Nurburgring — build #12 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 10) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Supercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 12
+
+**Category note.** The Lexus LFA's own instrument leads: its single central ring, its needle and its numerals, as step 1 finds them. This brief's ring is where the design starts, not where it ends.
 
 A hubless TFT tach in the LFA spirit. One Ø480 circular-grain titanium ring, 24 px wide, floats on true black with no pivot and no face. Rank 1: Saira Condensed 800 gear, cap 190, in the ring centre; 16 slim LED bars sit on a straight shelf above it, 26 × 760 px. Rank 2: tabular Saira Condensed 600 speed, cap 88, stacked directly under the gear. Rank 3: the needle is a light wedge from R 0.72 to R 0.95, a primary-colour core with a white edge, over Barlow Semi Condensed numerals on a scale rounded up from EngineMaxRpm. Above 180°/s it sheds up to four ghost wedges. Rank 4: a lap wing on the left (current, last and best lap in Titillium tabular figures) and a 4-step tyre-temperature quad on the right, both without glow. Rank 5: the crest, low inside the ring.
 

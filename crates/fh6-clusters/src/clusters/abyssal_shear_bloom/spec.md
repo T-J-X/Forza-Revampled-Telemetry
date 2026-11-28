@@ -1,9 +1,9 @@
 # Abyssal Shear Bloom (`AbyssalShearBloom`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 47 (AbyssalShearBloom — build #42 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 47) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** new · **View:** cockpit · **Build order:** 42
 
 A black lagoon, dark until disturbed: light is emitted only where water shears, like dinoflagellates. Two mirrored wake channels sweep up and out from the gear like gull wings (each 600×180, 1 px glass rims at alpha 28); a forcing jet runs centre-out in both to the rpm point, its tip the exact reading (rank 3, emissive), while shear along its flanks lights plankton in primary. Gear (Exo 2 800, cap 200) in a clear lens at (0,−80) on a dimming pad; speed (Exo 2 300, cap 112) at (0,+95). Thirteen 12×30 photophore lozenges form the shift strip at y −296. Beneath, a 900×80 lagoon holds four wheel paddles stirred by tyre slip; its light never blooms.
 

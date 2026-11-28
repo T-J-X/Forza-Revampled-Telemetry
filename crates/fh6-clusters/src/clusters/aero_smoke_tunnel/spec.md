@@ -1,9 +1,11 @@
 # Aero Smoke Tunnel (`AeroSmokeTunnel`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 35 (AeroSmokeTunnel — build #39 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 35) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Modern Digital 2027 (Design Council 3B), spec [docs/design/families/modern-digital.md](../../../../../docs/design/families/modern-digital.md), hero frames [docs/design/heroes/modern-digital/](../../../../../docs/design/heroes/modern-digital/)
-- **Kind:** new · **View:** cockpit · **Build order:** 39
+
+**Category note.** Psychedelic through a closed-form flow. Its family stays Modern Digital 2027.
 
 A calm top-down wind tunnel sits under the gear and speed. A brand-tinted 1 px plan silhouette (sedan, SUV or supercar by class, 180 px, heading up) sits in a 900×200 flow window with mask-dissolved edges. Smoke streamlines wrap it, drawn as contour lines of an analytic stream function: Joukowski potential flow round an ellipse, rotated by slip β, plus a yaw-rate vortex. They are 2 px, ink at ≤22% luminance, with dashes that drift with distance travelled. Above: Saira Condensed 800 gear, cap 200, at X 1920; Saira Condensed 600 speed, cap 112, at +320; a thin 1100 px crown ribbon tach (7→14 px) under modern11 diamonds. Titillium labels and a shy FLOW · MODEL tag.
 

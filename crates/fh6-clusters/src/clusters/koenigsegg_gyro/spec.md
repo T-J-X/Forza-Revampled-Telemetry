@@ -1,9 +1,9 @@
 # Koenigsegg Gyro (`KoenigseggGyro`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 11 (KoenigseggGyro — build #15 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 11) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 15
 
 The phantom wheel. This cockpit is wheel-less, so the cluster becomes the rim. A Ø540 carbon-and-titanium instrument ring rotates with steering input (±32° at full lock) while a gyro-held core inside it stays level, as on the Jesko. Rank 1: Saira Condensed 800 gear, cap 180, inside a fixed W-shaped reference symbol; 13 chevron pods sit on a level shelf (32 × 740 px) that never rotates. Rank 2: tabular B612 Mono Bold speed, cap 90, in a level window under the gear. Rank 3: a 9 px primary-colour rev arc with a white leading edge on the rotating ring, Barlow Semi Condensed numerals, and shift at the ring's 12 index. Rank 4: a horizon hairline and pitch ladder behind the core at ≤20% luminance. Rank 5: four level corner micro-labels, and the crest on the ring at 6.
 

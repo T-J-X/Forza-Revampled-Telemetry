@@ -1,9 +1,11 @@
 # Star Sail Origami (`StarSailOrigami`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 43 (StarSailOrigami — build #35 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 43) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 35
+
+**Category note.** Placed here by the category review of 2026-11-28: the sail's panels tilt at real depths behind a glass capsule, with parallax, in both views. The capsule is the kit's clear optical glass, and the fold follows its row in [Real geometry and maths](../../../../../program/phases/07-cluster-factory/CATALOG.md#real-geometry-and-maths). Its family stays Sci-Fi.
 
 A deployable light-sail. Behind the gear, a pleated parallelogram-fold sheet (2 rows x 24 panels) extends symmetrically from a 180 px folded stack to 1360 px wide. Its span is the rank-3 tach, over a hairline rpm scale. Each facet is a 1 px-rimmed quad shaded only by the G-driven light, so panels swap brightness as they open (fill at 35% luminance or less, rims up to 70% white). Rank 1: Saira 600 gear (cap 200) on the spacecraft bus, a squircle glass capsule (alpha 44, 1 px rim, crescent), under a 36 px 16-pod strip. Rank 2: Saira 300 tabular speed (cap 96) under the bus. Rank 4: an unglowing four-quadrant sun-sensor G meter under the speed.
 

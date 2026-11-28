@@ -59,6 +59,32 @@ pub enum ClusterTheme {
     IsochromaticLoadPath = 45,
     AbyssalShearBloom = 46,
     HarmonographDrive = 47,
+    // The 24 dashes of the 2026-11-28 re-cut (catalog rows 49-72), in the order of their catalog
+    // rows. Append only; never renumber.
+    AmgMbuxSupersport = 48,
+    SkylineR34Mfd = 49,
+    VisionPetals = 50,
+    AmgOneF1 = 51,
+    CarplayIsland = 52,
+    Gt3RsApogee = 53,
+    Gt7CockpitPro = 54,
+    LiquidMorph = 55,
+    AmgMbuxTrackPace = 56,
+    GtrNismoMfd = 57,
+    SimInputTrace = 58,
+    LorenzButterfly = 59,
+    AmgMbuxClassic = 60,
+    SuminagashiMarble = 61,
+    T50Floodlit = 62,
+    HakosukaS20 = 63,
+    SimPitWall = 64,
+    KaleidoscopeMirror = 65,
+    RevueltoCorsa = 66,
+    ZNismoSport = 67,
+    GoldenAngle = 68,
+    MclarenSlimDisplay = 69,
+    HopfFibration = 70,
+    HyperbolicTiles = 71,
 }
 
 impl ClusterTheme {
@@ -114,6 +140,30 @@ impl ClusterTheme {
             ClusterTheme::IsochromaticLoadPath => "IsochromaticLoadPath",
             ClusterTheme::AbyssalShearBloom => "AbyssalShearBloom",
             ClusterTheme::HarmonographDrive => "HarmonographDrive",
+            ClusterTheme::AmgMbuxSupersport => "AmgMbuxSupersport",
+            ClusterTheme::SkylineR34Mfd => "SkylineR34Mfd",
+            ClusterTheme::VisionPetals => "VisionPetals",
+            ClusterTheme::AmgOneF1 => "AmgOneF1",
+            ClusterTheme::CarplayIsland => "CarplayIsland",
+            ClusterTheme::Gt3RsApogee => "Gt3RsApogee",
+            ClusterTheme::Gt7CockpitPro => "Gt7CockpitPro",
+            ClusterTheme::LiquidMorph => "LiquidMorph",
+            ClusterTheme::AmgMbuxTrackPace => "AmgMbuxTrackPace",
+            ClusterTheme::GtrNismoMfd => "GtrNismoMfd",
+            ClusterTheme::SimInputTrace => "SimInputTrace",
+            ClusterTheme::LorenzButterfly => "LorenzButterfly",
+            ClusterTheme::AmgMbuxClassic => "AmgMbuxClassic",
+            ClusterTheme::SuminagashiMarble => "SuminagashiMarble",
+            ClusterTheme::T50Floodlit => "T50Floodlit",
+            ClusterTheme::HakosukaS20 => "HakosukaS20",
+            ClusterTheme::SimPitWall => "SimPitWall",
+            ClusterTheme::KaleidoscopeMirror => "KaleidoscopeMirror",
+            ClusterTheme::RevueltoCorsa => "RevueltoCorsa",
+            ClusterTheme::ZNismoSport => "ZNismoSport",
+            ClusterTheme::GoldenAngle => "GoldenAngle",
+            ClusterTheme::MclarenSlimDisplay => "MclarenSlimDisplay",
+            ClusterTheme::HopfFibration => "HopfFibration",
+            ClusterTheme::HyperbolicTiles => "HyperbolicTiles",
         }
     }
 }
@@ -176,6 +226,31 @@ impl ClusterTheme {
             ClusterTheme::IsochromaticLoadPath => (154, 216, 255),
             ClusterTheme::AbyssalShearBloom => (154, 216, 255),
             ClusterTheme::HarmonographDrive => (154, 216, 255),
+            // The re-cut's dashes: their family default primary, as for the concepts above.
+            ClusterTheme::AmgMbuxSupersport => (0, 210, 255),
+            ClusterTheme::SkylineR34Mfd => (255, 122, 26),
+            ClusterTheme::VisionPetals => (56, 189, 248),
+            ClusterTheme::AmgOneF1 => (0, 180, 255),
+            ClusterTheme::CarplayIsland => (56, 189, 248),
+            ClusterTheme::Gt3RsApogee => (255, 122, 26),
+            ClusterTheme::Gt7CockpitPro => (0, 210, 255),
+            ClusterTheme::LiquidMorph => (56, 189, 248),
+            ClusterTheme::AmgMbuxTrackPace => (0, 210, 255),
+            ClusterTheme::GtrNismoMfd => (0, 210, 255),
+            ClusterTheme::SimInputTrace => (0, 180, 255),
+            ClusterTheme::LorenzButterfly => (154, 216, 255),
+            ClusterTheme::AmgMbuxClassic => (0, 210, 255),
+            ClusterTheme::SuminagashiMarble => (154, 216, 255),
+            ClusterTheme::T50Floodlit => (255, 122, 26),
+            ClusterTheme::HakosukaS20 => (255, 122, 26),
+            ClusterTheme::SimPitWall => (0, 180, 255),
+            ClusterTheme::KaleidoscopeMirror => (154, 216, 255),
+            ClusterTheme::RevueltoCorsa => (0, 210, 255),
+            ClusterTheme::ZNismoSport => (0, 210, 255),
+            ClusterTheme::GoldenAngle => (154, 216, 255),
+            ClusterTheme::MclarenSlimDisplay => (0, 210, 255),
+            ClusterTheme::HopfFibration => (154, 216, 255),
+            ClusterTheme::HyperbolicTiles => (154, 216, 255),
         }
     }
 
@@ -229,6 +304,30 @@ impl ClusterTheme {
             ClusterTheme::IsochromaticLoadPath,
             ClusterTheme::AbyssalShearBloom,
             ClusterTheme::HarmonographDrive,
+            ClusterTheme::AmgMbuxSupersport,
+            ClusterTheme::SkylineR34Mfd,
+            ClusterTheme::VisionPetals,
+            ClusterTheme::AmgOneF1,
+            ClusterTheme::CarplayIsland,
+            ClusterTheme::Gt3RsApogee,
+            ClusterTheme::Gt7CockpitPro,
+            ClusterTheme::LiquidMorph,
+            ClusterTheme::AmgMbuxTrackPace,
+            ClusterTheme::GtrNismoMfd,
+            ClusterTheme::SimInputTrace,
+            ClusterTheme::LorenzButterfly,
+            ClusterTheme::AmgMbuxClassic,
+            ClusterTheme::SuminagashiMarble,
+            ClusterTheme::T50Floodlit,
+            ClusterTheme::HakosukaS20,
+            ClusterTheme::SimPitWall,
+            ClusterTheme::KaleidoscopeMirror,
+            ClusterTheme::RevueltoCorsa,
+            ClusterTheme::ZNismoSport,
+            ClusterTheme::GoldenAngle,
+            ClusterTheme::MclarenSlimDisplay,
+            ClusterTheme::HopfFibration,
+            ClusterTheme::HyperbolicTiles,
         ]
     }
 }
@@ -327,7 +426,9 @@ mod tests {
         assert_eq!(ClusterTheme::ShibuyaChromaticPrisma as u8, 28);
         assert_eq!(ClusterTheme::LumenEtch as u8, 29);
         assert_eq!(ClusterTheme::HarmonographDrive as u8, 47);
-        assert_eq!(ClusterTheme::all().len(), 48);
+        assert_eq!(ClusterTheme::AmgMbuxSupersport as u8, 48);
+        assert_eq!(ClusterTheme::HyperbolicTiles as u8, 71);
+        assert_eq!(ClusterTheme::all().len(), 72);
     }
 
     #[test]
@@ -350,6 +451,8 @@ mod tests {
             serde_json::from_str::<ClusterTheme>("\"mbux\"").ok(),
             Some(ClusterTheme::AmgMbuxSuperscreen)
         );
+        // The four later AMG dashes never take the short aliases.
+        assert_eq!("amg".parse::<ClusterTheme>(), Ok(ClusterTheme::AmgMbuxSuperscreen));
         let err = serde_json::from_str::<ClusterTheme>("\"NoSuchDash\"").map(|_| ());
         assert!(err.is_err(), "an unknown name is an error, never a silent default");
     }

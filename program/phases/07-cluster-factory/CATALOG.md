@@ -91,7 +91,7 @@ TJX, 2026-11-28: "the fluid ones i want real geomatry and maths going on", and t
 At the direction check and at the closing review, a `visual-review sheet` puts the dash's `02_mid_cruise` render beside every finished dash of its category (for an AMG dash, also beside every finished AMG dash). Two more yes or no lines are answered: the render shows what its category's line in the table says a render must show, and at thumbnail size the dash cannot be mistaken for a sibling.
 
 ## Build order
-One thread per dash, at most 4 at once (TJX, 2026-11-27; they share the GPU lanes, root `SKILLS.md` section 5). The seven pattern-setters lead, so every family's language is proven before its siblings. After build #10 every category but Abstract has a dash. From build #11 the order goes round the categories so that none lags: Supercar, Retro, Motorsport, Psychedelic, Abstract, Hypercar, Liquid Glass, Apple Vision, Sci-Fi. Abstract starts at build #15.
+One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they share the GPU lanes, root `SKILLS.md` section 5). The seven pattern-setters lead, so every family's language is proven before its siblings. After build #10 every category but Abstract has a dash. From build #11 the order goes round the categories so that none lags: Supercar, Retro, Motorsport, Psychedelic, Abstract, Hypercar, Liquid Glass, Apple Vision, Sci-Fi. Abstract starts at build #15.
 
 - **One table.** It replaces the older "Build order" and "Index" tables, which had drifted apart on five dashes. A status lives here and nowhere else, and only the dash chain writes it.
 - **Starting a thread.** The next dash to start is decided by [the auto-chain](#the-auto-chain), never read off this table by a person or a thread. A thread is started with its key: *"You are the dash thread for `<Name>` (build #`<n>`, catalog row `<r>`)"*.
@@ -110,82 +110,82 @@ One thread per dash, at most 4 at once (TJX, 2026-11-27; they share the GPU lane
 | 8 | 4 | [`AmgMbuxSuperscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) (wide glass panel) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
 | 9 | 13 | [`ValkyrieLmp1`](../../../crates/fh6-clusters/src/clusters/valkyrie_lmp1/) | Hypercar | recreation | Race Dash | cockpit+hood | ☐ |
 | 10 | 2 | [`VisionSpatialGlass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | Apple Vision | concept | Liquid Glass | cockpit | ☐ |
-| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ⧖ |
-| 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ⧖ |
+| 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
+| 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ☐ |
 | 13 | 5 | [`DriftGlass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | Motorsport | concept | Modern Digital 2027 | cockpit | ☐ |
 | 14 | 28 | [`CymaticResonanceField`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |
-| 15 | 51 | `VisionPetals` | Abstract | concept | Liquid Glass | cockpit | ⧖ |
-| 16 | 52 | `AmgOneF1` (F1 shift lights) | Hypercar | recreation | Race Dash | cockpit | ⧖ |
+| 15 | 51 | `VisionPetals` | Abstract | concept | Liquid Glass | cockpit | ☐ |
+| 16 | 52 | `AmgOneF1` (F1 shift lights) | Hypercar | recreation | Race Dash | cockpit | ☐ |
 | 17 | 31 | [`VernierLoupe`](../../../crates/fh6-clusters/src/clusters/vernier_loupe/) | Liquid Glass | concept | Liquid Glass | cockpit+hood | ☐ |
-| 18 | 53 | `CarplayIsland` | Apple Vision | inspired | Liquid Glass | cockpit | ⧖ |
+| 18 | 53 | `CarplayIsland` | Apple Vision | inspired | Liquid Glass | cockpit | ☐ |
 | 19 | 22 | [`ChronoEventHorizon`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 20 | 54 | `Gt3RsApogee` | Supercar | inspired | Classic Analog | cockpit | ⧖ |
+| 20 | 54 | `Gt3RsApogee` | Supercar | inspired | Classic Analog | cockpit | ☐ |
 | 21 | 6 | [`GlyphDotMatrix`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/) | Retro | concept | Modern Digital 2027 | cockpit | ☐ |
-| 22 | 55 | `Gt7CockpitPro` | Motorsport | inspired | Modern Digital 2027 | cockpit | ⧖ |
+| 22 | 55 | `Gt7CockpitPro` | Motorsport | inspired | Modern Digital 2027 | cockpit | ☐ |
 | 23 | 29 | [`ChronoMultiverse`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |
-| 24 | 56 | `LiquidMorph` | Abstract | concept | Liquid Glass | cockpit | ⧖ |
+| 24 | 56 | `LiquidMorph` | Abstract | concept | Liquid Glass | cockpit | ☐ |
 | 25 | 9 | [`BugattiTourbillon`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 26 | 26 | [`ShibuyaChromaticPrisma`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/) | Liquid Glass | concept | Sci-Fi | cockpit | ☐ |
 | 27 | 16 | [`WindshieldHud`](../../../crates/fh6-clusters/src/clusters/windshield_hud/) | Apple Vision | concept | ADAS & HUD | raised HUD | ☐ |
 | 28 | 18 | [`F35HelmetHmd`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/) | Sci-Fi | recreation | ADAS & HUD | cockpit+hood | ☐ |
-| 29 | 57 | `AmgMbuxTrackPace` (lap timer) | Supercar | recreation | Modern Digital 2027 | cockpit+hood | ⧖ |
-| 30 | 58 | `GtrNismoMfd` | Retro | inspired | Modern Digital 2027 | cockpit | ⧖ |
-| 31 | 59 | `SimInputTrace` | Motorsport | concept | Race Dash | cockpit+hood | ⧖ |
+| 29 | 57 | `AmgMbuxTrackPace` (lap timer) | Supercar | recreation | Modern Digital 2027 | cockpit+hood | ☐ |
+| 30 | 58 | `GtrNismoMfd` | Retro | inspired | Modern Digital 2027 | cockpit | ☐ |
+| 31 | 59 | `SimInputTrace` | Motorsport | concept | Race Dash | cockpit+hood | ☐ |
 | 32 | 45 | [`AuroraVeil`](../../../crates/fh6-clusters/src/clusters/aurora_veil/) | Psychedelic | concept | Sci-Fi | cockpit | ☐ |
-| 33 | 60 | `LorenzButterfly` | Abstract | concept | Fluid / Generative | cockpit+hood | ⧖ |
+| 33 | 60 | `LorenzButterfly` | Abstract | concept | Fluid / Generative | cockpit+hood | ☐ |
 | 34 | 8 | [`PaganiHorologerie`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 35 | 37 | [`SapphireMystery`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/) | Liquid Glass | concept | Classic Analog | cockpit | ☐ |
 | 36 | 17 | [`ArNavWayfinder`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 37 | 23 | [`NeuralCyberSynapse`](../../../crates/fh6-clusters/src/clusters/neural_cyber_synapse/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 38 | 61 | `AmgMbuxClassic` (two tube dials) | Supercar | recreation | Modern Digital 2027 | cockpit | ⧖ |
+| 38 | 61 | `AmgMbuxClassic` (two tube dials) | Supercar | recreation | Modern Digital 2027 | cockpit | ☐ |
 | 39 | 20 | [`SynthwaveOutrun`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/) | Retro | concept | Sci-Fi | cockpit+hood | ☐ |
 | 40 | 14 | [`Gt7ModularTripod`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/) | Motorsport | recreation | Race Dash | cockpit+hood | ☐ |
 | 41 | 48 | [`HarmonographDrive`](../../../crates/fh6-clusters/src/clusters/harmonograph_drive/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 42 | 62 | `SuminagashiMarble` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
-| 43 | 63 | `T50Floodlit` | Hypercar | inspired | Classic Analog | cockpit | ⧖ |
+| 42 | 62 | `SuminagashiMarble` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
+| 43 | 63 | `T50Floodlit` | Hypercar | inspired | Classic Analog | cockpit | ☐ |
 | 44 | 32 | [`DichroicLouvre`](../../../crates/fh6-clusters/src/clusters/dichroic_louvre/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 45 | 40 | [`GeodesicWell`](../../../crates/fh6-clusters/src/clusters/geodesic_well/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 46 | 24 | [`SolarisWarpCore`](../../../crates/fh6-clusters/src/clusters/solaris_warp_core/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
 | 47 | 10 | [`LfaV10Nurburgring`](../../../crates/fh6-clusters/src/clusters/lfa_v10_nurburgring/) | Supercar | recreation | Classic Analog | cockpit | ☐ |
-| 48 | 64 | `HakosukaS20` | Retro | inspired | Classic Analog | cockpit | ⧖ |
-| 49 | 65 | `SimPitWall` | Motorsport | concept | Race Dash | cockpit | ⧖ |
+| 48 | 64 | `HakosukaS20` | Retro | inspired | Classic Analog | cockpit | ☐ |
+| 49 | 65 | `SimPitWall` | Motorsport | concept | Race Dash | cockpit | ☐ |
 | 50 | 46 | [`IsochromaticLoadPath`](../../../crates/fh6-clusters/src/clusters/isochromatic_load_path/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 51 | 66 | `KaleidoscopeMirror` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 51 | 66 | `KaleidoscopeMirror` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 | 52 | 11 | [`KoenigseggGyro`](../../../crates/fh6-clusters/src/clusters/koenigsegg_gyro/) | Hypercar | recreation | Classic Analog | cockpit | ☐ |
 | 53 | 34 | [`ApertureNine`](../../../crates/fh6-clusters/src/clusters/aperture_nine/) | Liquid Glass | concept | Modern Digital 2027 | cockpit | ☐ |
 | 54 | 41 | [`Lightpainter`](../../../crates/fh6-clusters/src/clusters/lightpainter/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 55 | 25 | [`AeroPlasmaBlade`](../../../crates/fh6-clusters/src/clusters/aero_plasma_blade/) | Sci-Fi | concept | Sci-Fi | hood | ☐ |
-| 56 | 67 | `RevueltoCorsa` | Supercar | inspired | Modern Digital 2027 | cockpit | ⧖ |
-| 57 | 68 | `ZNismoSport` | Retro | inspired | Modern Digital 2027 | cockpit | ⧖ |
+| 56 | 67 | `RevueltoCorsa` | Supercar | inspired | Modern Digital 2027 | cockpit | ☐ |
+| 57 | 68 | `ZNismoSport` | Retro | inspired | Modern Digital 2027 | cockpit | ☐ |
 | 58 | 38 | [`RackFocus`](../../../crates/fh6-clusters/src/clusters/rack_focus/) | Motorsport | concept | Race Dash | cockpit+hood | ☐ |
 | 59 | 35 | [`AeroSmokeTunnel`](../../../crates/fh6-clusters/src/clusters/aero_smoke_tunnel/) | Psychedelic | concept | Modern Digital 2027 | cockpit | ☐ |
-| 60 | 69 | `GoldenAngle` | Abstract | concept | Fluid / Generative | cockpit+hood | ⧖ |
+| 60 | 69 | `GoldenAngle` | Abstract | concept | Fluid / Generative | cockpit+hood | ☐ |
 | 61 | 36 | [`RattrapanteSector`](../../../crates/fh6-clusters/src/clusters/rattrapante_sector/) | Hypercar | concept | Classic Analog | cockpit+hood | ☐ |
 | 62 | 30 | [`LumenEtch`](../../../crates/fh6-clusters/src/clusters/lumen_etch/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 63 | 42 | [`TreadSeismograph`](../../../crates/fh6-clusters/src/clusters/tread_seismograph/) | Apple Vision | concept | ADAS & HUD | cockpit+hood | ☐ |
 | 64 | 21 | [`EvaBioSync`](../../../crates/fh6-clusters/src/clusters/eva_bio_sync/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 65 | 70 | `MclarenSlimDisplay` | Supercar | inspired | Modern Digital 2027 | cockpit+hood | ⧖ |
+| 65 | 70 | `MclarenSlimDisplay` | Supercar | inspired | Modern Digital 2027 | cockpit+hood | ☐ |
 | 66 | 47 | [`AbyssalShearBloom`](../../../crates/fh6-clusters/src/clusters/abyssal_shear_bloom/) | Psychedelic | concept | Fluid / Generative | cockpit | ☐ |
-| 67 | 71 | `HopfFibration` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 67 | 71 | `HopfFibration` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 | 68 | 39 | [`BionicSpaceframe`](../../../crates/fh6-clusters/src/clusters/bionic_spaceframe/) | Hypercar | inspired | Race Dash | cockpit | ☐ |
 | 69 | 33 | [`FibreOpticCorona`](../../../crates/fh6-clusters/src/clusters/fibre_optic_corona/) | Liquid Glass | concept | Liquid Glass | cockpit | ☐ |
 | 70 | 43 | [`StarSailOrigami`](../../../crates/fh6-clusters/src/clusters/star_sail_origami/) | Apple Vision | concept | Sci-Fi | cockpit+hood | ☐ |
 | 71 | 44 | [`ArcLadderCascade`](../../../crates/fh6-clusters/src/clusters/arc_ladder_cascade/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
-| 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 
 ## The auto-chain
-TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 4 dashes are built at once (TJX, 2026-11-27), and a free slot is never left idle.
+TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 6 dashes are built at once (TJX, 2026-11-28, raised from 4), and a free slot is never left idle.
 
 ### Who does what
 - **The dash chain decides which dash starts next, and nobody else does.** It is a scheduled task named `Dash chain` that runs every hour in the chain thread (the project thread "Plan dash categories and auto-chain"). A `MERGED` message sent to that thread runs it at once, so a slot is refilled within minutes of a merge and the hourly run only catches what was missed.
-- **The coordinator creates threads.** It creates a dash thread only when the chain asks for one by name (`CHAIN START <Name>`) or when TJX asks in TJX's own words, for that one dash, and only after it has checked that no thread exists for that dash in any state and that fewer than 4 dashes are being built. It answers the chain with the new thread's id, or with the reason it started none. It titles the thread `Build <Name> dash` and starts it with the line in `CLUSTER_PROMPT.md`. No slot letters and no claims.
+- **The coordinator creates threads.** It creates a dash thread only when the chain asks for one by name (`CHAIN START <Name>`) or when TJX asks in TJX's own words, for that one dash, and only after it has checked that no thread exists for that dash in any state and that fewer than 6 dashes are being built. It answers the chain with the new thread's id, or with the reason it started none. It titles the thread `Build <Name> dash` and starts it with the line in `CLUSTER_PROMPT.md`. No slot letters and no claims.
 - **A dash thread builds its one dash.** It never names or starts the next dash, and it never edits this file.
 
 ### Words with one meaning
 - **Key:** the dash's theme name, for example `AmgMbuxSupersport`. A dash is its key. Build numbers and catalog rows are for people, so every chain message carries the key.
 - **Done:** on a freshly fetched `origin/main`, the folder `crates/fh6-clusters/src/clusters/<snake_name>/` holds both `RESEARCH.md` and `HANDOVER.md`, and its `mod.rs` does not contain `Scaffold::new`. That is "finished, reviewed and accepted by GitHub" in files: the dash, its research and its closing review are merged. Nothing else means done: not the Status cell, not a thread's state, not a merged pull request by itself.
 - **Bound:** the ledger holds the line `<Name> = <thread id>`. A thread belongs to a dash only through that line. A title is a hint, never proof.
-- **Holds a slot:** a dash that is not done and is bound or has an open start request. There are 4 slots.
+- **Holds a slot:** a dash that is not done and is bound or has an open start request. There are 6 slots.
 - **Startable:** not done, not bound, no open request, not set aside, and its module is on `origin/main` (its `mod.rs` exists and its key is in `catalog.rs`). A dash whose module is missing waits (⧖), whatever the table shows.
 - **Next:** the first startable dash in the Build # order of the table on `origin/main`.
 
@@ -198,7 +198,7 @@ TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, star
 3. **Settle the requests.** For each open request: if the coordinator has answered with a thread id, bind it and close the request. If it answered that it started none, close the request and log the reason. A request with no answer is sent once more after 2 hours. After 4 hours without an answer the run writes one line to TJX in the chain thread, once.
 4. **Find strays and doubles.** A thread whose title holds a dash's exact key and that is not in the ledger is read: if its introduction opens with `DASH <Name>`, it is bound and holds a slot (TJX or the coordinator started it by hand). If two live threads claim one key, start nothing for that key and tell the coordinator once.
 5. **Count.** Slots in use = bound dashes that are not done + open requests.
-6. **Start.** While fewer than 4 slots are in use and a startable dash exists: take the next one, write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
+6. **Start.** While fewer than 6 slots are in use and a startable dash exists: take the next one, write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
 7. **Mark.** Work out the Status cell each dash should show: ✅ done; ◐ bound and not done; ⧖ module missing; ☐ otherwise. If the table on `origin/main` differs, change only those cells in one commit (as `TJX <TJX@Ngage.com>`, no trailer) and get it onto `main`: a plain push, or a pull request merged at once where the push is refused. If neither works, drop the commit; the next run does it. No rule reads the Status cell. It is there for people.
 8. **Watch.** A bound thread that is failed or stopped, or has posted nothing for 2 hours, gets one message: `CHAIN CHECK <Name>`. If nothing has changed 2 hours later, the run asks the coordinator to restart the thread or to set the dash aside. A dash that posted `READY FOR MERGE` and is still not done 2 hours later: remind the coordinator, then every 4 hours, three times at most, then one line to TJX.
 9. **Save.** Write the ledger and bring the chain thread's checklist up to date. If nothing needs TJX, end without a message.
@@ -1296,7 +1296,7 @@ TJX, 2026-11-28: "the fluid ones i want real geomatry and maths going on". This 
 | `SynthwaveOutrun` (Retro) | Perspective of a ground-plane grid | A line at depth z sits f H_e ÷ z under the horizon. On a curve it shifts by κz² ÷ 2. | f = 900 px, eye height 1.2 m: lines at 5, 10, 20 and 40 m sit 216, 108, 54 and 27 px under the horizon. |
 
 ## Code re-cut
-This page is ahead of the code. The code still holds 48 dashes, no categories and the older build order. One Rust thread brings it level; the coordinator starts it, and it uses no dash slot. Until it merges, the 24 added dashes wait (⧖ in the table), because their modules do not exist. Dashes whose modules exist start and finish as usual meanwhile.
+The code re-cut brought the code level with this page on 2026-11-28: `catalog.rs` holds the 72 rows with their category, shelf, target and build number, and the 24 added dashes have their themes (48 to 71), scaffold modules, registry rows, goldens, telemetry-matrix rows and empty asset-forge recipes. It was one Rust thread, started by the coordinator, and used no dash slot. What it did, for the record:
 
 **The 24 added dashes.** Keys are final from the moment the re-cut is requested; afterwards only a display name or an OSD label may change. Theme values and catalog rows follow the build order of the added dashes.
 
@@ -1348,7 +1348,7 @@ This page is ahead of the code. The code still holds 48 dashes, no categories an
 
 ## What the setup chat (07-00) put in place
 - **Themes:** the 19 new concepts of Phase 3 are `ClusterTheme` variants 29–47, appended in the order of catalog rows 30–48 (`LumenEtch = 29` … `HarmonographDrive = 47`); the 29 existing values are unchanged. The 24 dashes of 2026-11-28 are appended as 48–71 by the [code re-cut](#code-re-cut).
-- **Catalog as data:** `crates/fh6-clusters/src/catalog.rs` mirrors the build-order table (module name, family, kind, views, build order, ★). The registry, the golden tests and the tools read it; tests keep it in step with `ClusterTheme` and the registry. Until the code re-cut merges it holds the first 48 in the older order.
+- **Catalog as data:** `crates/fh6-clusters/src/catalog.rs` mirrors the build-order table (module name, family, kind, views, build order, ★). The registry, the golden tests and the tools read it; tests keep it in step with `ClusterTheme` and the registry. Since the code re-cut it holds all 72 rows in this page's build order, with category, shelf and target.
 - **One directory per dash:** `crates/fh6-clusters/src/clusters/<snake_name>/` with `mod.rs` (the scaffold, replaced by the dash), `spec.md` (the brief, copied) and `README.md` (commands and ownership). The v1 tiny-skia originals moved to `src/legacy/`; Rust fix phase E removed them on 2026-11-27, so read one with `git show 21e8a06:crates/fh6-clusters/src/legacy/<snake_name>.rs`.
 - **Registry:** `registry::REGISTRY` has a row per catalog row, each pointing at `clusters::<snake_name>::make`. Only the code re-cut edits it.
 - **Shared components** (`crates/fh6-clusters/src/common/`, from [COMPONENTS.md](../../../docs/design/COMPONENTS.md)): HeroGear, TabularSpeed, ShiftLights pod optics and LimiterCue, GlassPlate (squircle, dimming pad, hood halo), the ribbon / light pipe, MicroLabel and LogoZone, the Tach variants (arc, bar, chevron), NeedleDial, Bezel, AdasRoad, GBall, TyreSlipQuad, SignedBar, AlarmColumn / DataTile, Seg7Digit, LiquidSurface, and the scaffold. Compose them; never fork them. A missing piece goes in your handover.

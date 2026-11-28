@@ -1,9 +1,9 @@
 # Fibre-Optic Corona (`FibreOpticCorona`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 33 (FibreOpticCorona — build #48 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 33) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Liquid Glass (Design Council 3A), spec [docs/design/families/liquid-glass.md](../../../../../docs/design/families/liquid-glass.md), hero frames [docs/design/heroes/liquid-glass/](../../../../../docs/design/heroes/liquid-glass/)
-- **Kind:** new · **View:** cockpit · **Build order:** 48
 
 96 drawn-glass fibres fan out of a polished ferrule that holds the gear. The 2 px cores sit unlit at alpha 30 and curve up and out as cubic Béziers to tips on a 210° elliptical arc (600×260). Rank 3: fibres light in rpm order, carrying light visibly from the ferrule to a polished bead tip (r 6); white is reserved for the tips. Rank 1: the gear (Saira Condensed 700, cap 200) on the 240 px ferrule face, a sapphire disc with a 1 px rim, plus a 15-pod strip (40 px) above the arc apex. Rank 2: speed left of the ferrule, Saira 300 cap 112, ghost 8s. Rank 4: a 37-cell close-packed fibre faceplate under the ferrule. Titillium Web labels.
 

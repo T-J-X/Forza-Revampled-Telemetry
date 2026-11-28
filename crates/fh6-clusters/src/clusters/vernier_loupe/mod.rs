@@ -1,7 +1,8 @@
-//! Vernier Loupe (`ClusterTheme::VernierLoupe`), catalog row 31: Liquid Glass, cockpit+hood, build #30.
+//! Vernier Loupe (`ClusterTheme::VernierLoupe`), catalog row 31.
+//! Liquid Glass category, Liquid Glass family, cockpit and hood.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

@@ -1,9 +1,9 @@
 # Neural Cyber Synapse (`NeuralCyberSynapse`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 23 (NeuralCyberSynapse — build #23 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 23) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 23
 
 A living neuron. The gear (Saira Condensed 800, cap 210) is the soma: a 260 px cell body with a 1 px membrane rim lit by the G light. A dendritic tree branches upward 1 -> 2 -> 4 -> 8 -> 16, Bezier fibres tapering 10 -> 2 px across 1300 px. Rank 3: the trunk and four branch levels are the tach, lighting root-outward up to 75% of shift rpm; dark fibres sit at alpha 22. Rank 1: the 16 terminal boutons form a straight 30 px shift strip on the crown, filling outside-in. Rank 2: Saira 200 speed (cap 100) right of the soma, beside the trunk. Rank 4: an unglowing three-channel EEG raster (throttle, brake, steer) under speed and soma. Fibres are primary; the signal front is primary lifted to white.
 
