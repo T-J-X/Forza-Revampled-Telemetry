@@ -103,7 +103,7 @@ rpm, the limiter, gear and speed.
 |---|---|---|
 | `LiquidGlass` | Liquid Glass | `race_on`, `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
 | `VisionSpatialGlass` | Vision Spatial Glass | `rpm`, `max_rpm`, `gear`, `speed` |
-| `Gt7HoodPro` | GT7 Hood Pro | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `Gt7HoodPro` | GT7 Hood Pro | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `g_long`, `velocity`, `boost` |
 | `AmgMbuxSuperscreen` | AMG MBUX Superscreen | `rpm`, `max_rpm`, `gear`, `speed` |
 | `DriftGlass` | Drift Glass | `rpm`, `max_rpm`, `gear`, `speed` |
 | `GlyphDotMatrix` | Glyph Dot Matrix | `rpm`, `max_rpm`, `gear`, `speed` |
