@@ -108,8 +108,8 @@ pub struct Config {
     pub max_hours: u32,
     /// The port on this PC that forwards to the pod's ComfyUI. The local ComfyUI keeps 8188.
     pub tunnel_port: u16,
-    /// The most the lane may cost in total, in USD. At this total no pod starts. Only TJX
-    /// raises it.
+    /// The most the lane may cost in total, in USD. At this total no pod starts, and every job
+    /// runs on the local lane: TJX chose that over raising it (2026-11-28). Only TJX raises it.
     pub budget_usd: f64,
     /// From this total on, every cloud job says how much of the budget is spent.
     pub budget_warn_usd: f64,
@@ -819,7 +819,7 @@ fn print_budget(config: &Config, spent: &Spent) {
         match config.budget(spent.counted(config)) {
             Budget::Fine => String::new(),
             Budget::Warn => format!("; that is over the ${:.2} warning line", config.budget_warn_usd),
-            Budget::Spent => "; it is used up, and no pod starts until TJX raises `budget_usd` in lane.json".to_owned(),
+            Budget::Spent => "; it is used up, so every job runs on the local lane, as TJX chose".to_owned(),
         }
     };
     println!("budget: {}{note}", budget_line(config, spent));
@@ -860,7 +860,7 @@ fn hold_to_budget(
             Err(tool_err(
                 "cloud",
                 format!(
-                    "the cloud lane is closed: {}. Only TJX raises `budget_usd` in lane.json. Run the job on the local lane",
+                    "the cloud lane is closed: {}. TJX chose the local lane from here on: take `gpu.lock` (SKILLS.md section 5) and run the same command without `--lane cloud`",
                     budget_line(config, spent)
                 ),
             ))
@@ -909,7 +909,7 @@ fn create_pod(api: &dyn Api, home: &Home, config: &Config, lock: &Lock, spent: &
         return Err(tool_err(
             "cloud",
             format!(
-                "too little of the budget is left to start a pod: {}. Only TJX raises `budget_usd` in lane.json. Run the job on the local lane",
+                "too little of the budget is left to start a pod: {}. TJX chose the local lane from here on: take `gpu.lock` (SKILLS.md section 5) and run the same command without `--lane cloud`",
                 budget_line(config, spent)
             ),
         ));
@@ -2438,6 +2438,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("the cloud lane is closed"), "{err}");
+        assert!(err.contains("run the same command without `--lane cloud`"), "{err}");
         assert_eq!(*fake.terminated.borrow(), ["up2"]);
         assert!(fake.created.borrow().is_empty());
         assert_eq!(home.state(), None);
@@ -2457,6 +2458,22 @@ mod tests {
         let deadline: u64 = fake.env_of(0, "FORGE_DEADLINE").unwrap().parse().unwrap();
         assert!(deadline >= now + 8000 && deadline <= clock::now() + 8000, "{deadline}");
         assert_eq!(home.state().unwrap().max_secs, 8000);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn with_under_ten_minutes_of_budget_left_the_job_is_sent_to_the_local_lane() {
+        let home = test_home("budget_short");
+        let fake = Fake::with(Vec::new());
+        // $0.10 left pays for 400 s at the $0.90 price cap, under the 10-minute minimum.
+        booked(&home, "old", 49.9);
+        let err = prepare(&fake, &home, &test_config(), &test_lock(), clock::now(), 0)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("too little of the budget is left to start a pod"), "{err}");
+        assert!(err.contains("run the same command without `--lane cloud`"), "{err}");
+        assert!(fake.created.borrow().is_empty());
+        assert_eq!(home.state(), None);
         cleanup(&home);
     }
 

@@ -228,6 +228,17 @@ Checked:
 
 Spend for this part: $0 of my own; the shared runs used the pods other threads had started.
 
+## 2026-11-28: the budget stays at $50, and the work moves to the local card after it
+
+At 03:43 UTC TJX wrote "yeah i threw in another 50". Runpod's balance was $47.73 at 03:47 and $47.60 at 04:19. That matches about $50 paid in over the account's life minus what Runpod had billed by 03:47 ($1.83 of GPU time over 11 pods, $0.32 of disk), so a new top-up had not arrived by then. Asked whether to raise the budget to $100, TJX answered: "nah when we run out we will work here instead only". What changed:
+
+- `budget_usd` stays at 50 and `budget_warn_usd` at 40.
+- When the budget is spent, asset-forge's two refusals (`the cloud lane is closed`, `too little of the budget is left to start a pod`) say that TJX chose the local lane from then on, and how to get there: take `gpu.lock` and run the same command without `--lane cloud`. `cloud status` and `cloud spend` say the same. Before, they said that only TJX raises the budget, which a thread could read as a reason to ask TJX.
+- `SKILLS.md` section 5, `AGENTS.md` directive 15 and `docs/cloud-gpu.md` say it too.
+- There is no automatic fall-back to the local card. A job that moved there by itself would skip `gpu.lock`, and the local card is shared with the kit's work.
+
+Checked in a clean copy of `main` (4a6838f) with its own target folder: `cargo fmt --all -- --check` passes; `cargo clippy -p asset-forge --all-targets -- -D warnings` passes; `cargo test -p asset-forge` passes 162 tests, one of them new (`with_under_ten_minutes_of_budget_left_the_job_is_sent_to_the_local_lane`), and the budget-stop test now also checks that the refusal names the way to the local lane; `cargo check --workspace` passes. No pod was started, so this part cost nothing.
+
 ## Code review
 
 A second agent reviewed the change against the requirements (the `requesting-code-review` skill; findings only, no score). It was still running when the lane was first committed (`d24ab34`, 16:40 UTC), because the pilot thread was waiting for the shared rule files. Its verdict was "with fixes". Every finding and what was done with it:

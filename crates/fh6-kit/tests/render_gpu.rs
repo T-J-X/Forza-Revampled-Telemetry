@@ -7,10 +7,12 @@
     reason = "test helpers: a GPU setup or readback that fails should stop the test with its message"
 )]
 
+use fh6_core::CarDatabase;
 use fh6_gpu::GpuContext;
+use fh6_kit::logo::{self, CarLogo, LogoIndex, LogoStyle};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    deg, vec2, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Painter, Rect, SegmentedBar, Shadow,
+    deg, vec2, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Logo, Painter, Rect, SegmentedBar, Shadow,
     Shape, Stroke, TextStyle, TickRing, Tokens, Vec2,
 };
 
@@ -350,4 +352,217 @@ fn a_file_loads_once_until_it_changes() {
     assert_ne!(changed, first);
     assert_eq!(kit.images().size(changed), Some((4, 2)));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The brand logo path the app takes on a car change: the index names the car's brand, its dial
+/// is decoded without a device (the app does that on its worker thread) and uploaded from 512 px
+/// down, and the logo zone draws that image instead of the wordmark.
+#[test]
+fn a_cars_brand_logo_decodes_uploads_and_draws() {
+    let (ctx, mut kit) = setup();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json")).expect("car_brands.json");
+    // The 2021 Porsche 911 GT3, and the 2019 911 (992) of the same brand.
+    let porsche = index.car_brand(&cars, 3667).logo.expect("the GT3 has a brand logo");
+    assert_eq!(index.car_brand(&cars, 3123).logo, Some(porsche), "one brand");
+    let chain = index.decode_dial(porsche).expect("the dial decodes");
+    let image = kit
+        .images_mut()
+        .upload_mips(&ctx.device, &ctx.queue, &chain, "PORSCHE")
+        .expect("the dial uploads");
+    let size = kit.images().size(image).expect("a loaded image has a size");
+    assert_eq!(size, chain.size());
+    assert!(size.0.max(size.1) <= logo::DIAL_TEXTURE_SIDE, "dial size {size:?}");
+    let source = kit.images().source_size(image).expect("and its picture's size");
+    assert_eq!(source, chain.source_size(), "the dial file's size, for the layout");
+    assert_eq!(
+        kit.images().mip_count(image) as usize,
+        chain.len(),
+        "every level down to 1 x 1"
+    );
+
+    let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(600.0, 200.0));
+    let style = LogoStyle::new(kit.font_choice(None).wide);
+    let shown = Logo {
+        image: Some(image),
+        brand_name: "Porsche".into(),
+        custom_name: "TJX".into(),
+        loading: false,
+    };
+    let mut used = Rect::from_center_size(vec2(0.0, 0.0), Vec2::ZERO);
+    let img = render_named(&mut kit, &ctx, "brand_logo", |p| {
+        used = logo::draw(p, zone, &shown, &style);
+    });
+    assert_eq!(used, logo::fit(zone, source), "the image path, not the wordmark");
+    let lit = (0..H)
+        .flat_map(|y| (0..W).map(move |x| (x, y)))
+        .filter(|&(x, y)| img.pixel(x, y).is_some_and(|px| px[3] > 128))
+        .count();
+    assert!(lit > 500, "the logo puts pixels on screen ({lit})");
+}
+
+/// A dial uploaded from 512 px down, a slice at a time, draws within 1 of 255 per channel of its
+/// full 1024 px chain uploaded a level at a time: the kit picks the mip level from the drawn size, so
+/// the dropped level is never sampled, and the zone is laid out by the dial file's size, so a
+/// dial with an odd side keeps its shape. Checked in Liquid Glass's 240 x 48 zone at user scale
+/// 1.0 and 1.4 (the widest use) and PorscheAnalog's 160 x 20 zone, in 4K pixels; in a 500 px
+/// zone, which samples the largest levels (the ones that go up in several slices); and in two
+/// very small zones, which sample the smallest. The dials are a wordmark, a roundel, the widest
+/// wordmark, one with an odd height (1024 x 95), one whose largest level takes four slices
+/// (1024 x 411) and a tall one with an odd width (955 x 1024).
+#[test]
+fn a_dial_from_512_px_down_draws_the_same_pixels_as_the_full_chain() {
+    let (ctx, mut kit) = setup();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
+    let style = LogoStyle::new(kit.font_choice(None).wide);
+    for key in ["PORSCHE", "BMW", "BAC", "HENNESSEY", "BMW_M", "ABARTH"] {
+        let brand = index
+            .resolve(key, "")
+            .unwrap_or_else(|| panic!("{key} is in the index"));
+        let path = index.dial_path(brand).expect("a dial path");
+        let bytes = std::fs::read(&path).expect("the dial file");
+        let full = kit
+            .images_mut()
+            .load_png(&ctx.device, &ctx.queue, &bytes, key)
+            .expect("the full chain");
+        let capped = index
+            .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, brand)
+            .expect("the 512 px chain");
+        assert_eq!(
+            kit.images().mip_count(full),
+            kit.images().mip_count(capped) + 1,
+            "{key}: only the 1024 px level is dropped"
+        );
+        assert_eq!(
+            kit.images().source_size(capped),
+            kit.images().size(full),
+            "{key}: laid out by the dial file's size"
+        );
+        // Zone sizes in 4K pixels; the test layout draws half a pixel per local unit.
+        for (w, h) in [
+            (240.0_f32, 48.0_f32),
+            (336.0, 67.2),
+            (160.0, 20.0),
+            (500.0, 500.0),
+            (40.0, 8.0),
+            (10.0, 2.0),
+        ] {
+            let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(w * 2.0, h * 2.0));
+            let only = |image| Logo {
+                image: Some(image),
+                ..Logo::default()
+            };
+            let (a_logo, b_logo) = (only(full), only(capped));
+            let a = render_named(&mut kit, &ctx, &format!("dial_full_{key}_{w}"), |p| {
+                logo::draw(p, zone, &a_logo, &style);
+            });
+            let b = render_named(&mut kit, &ctx, &format!("dial_512_{key}_{w}"), |p| {
+                logo::draw(p, zone, &b_logo, &style);
+            });
+            let worst = a
+                .pixels
+                .iter()
+                .zip(&b.pixels)
+                .map(|(x, y)| x.abs_diff(*y))
+                .max()
+                .unwrap_or(0);
+            assert!(worst <= 1, "{key} in a {w}x{h} zone: a channel differs by {worst}");
+            // The two smallest zones are a few pixels of logo, and only there for their levels.
+            if w >= 100.0 {
+                assert!(a.covered() > 20, "{key} in a {w}x{h} zone puts pixels on screen");
+            }
+        }
+    }
+}
+
+/// The live path, as the app runs it: `CarLogo` asks the worker thread for the car's dial, the
+/// zone is empty until it is in (the names are set, marked loading, and draw nothing), and the upload is spread over the frames that poll it, each
+/// frame's writes submitted before the next. The dial that shows is the same picture as one
+/// decoded and uploaded at once.
+#[test]
+fn a_cars_logo_loads_on_the_worker_and_uploads_over_frames() {
+    let (ctx, mut kit) = setup();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json")).expect("car_brands.json");
+    let style = LogoStyle::new(kit.font_choice(None).wide);
+    let zone = Rect::from_center_size(vec2(0.0, 0.0), vec2(1000.0, 1000.0));
+    let mut logo = CarLogo::start(&index);
+    // A 2015 BMW i8 (a square dial, the largest upload), a 2025 BMW M4 CS (an odd height) and a
+    // 2017 Abarth 124 Spider (a tall dial, whose rows are not a multiple of 256 bytes).
+    for ordinal in [2133, 4122, 2740] {
+        let brand = index.car_brand(&cars, ordinal);
+        let id = brand.logo.expect("a branded car");
+        let name = brand.name.clone();
+        let before = kit.images().len();
+        logo.show(Some(brand), "TJX");
+        assert!(logo.busy(), "{name}: the dial is on its way");
+        // The worker is decoding. This thread does the same work before it polls, so that the
+        // polls counted below are the upload's and not the wait for the decode.
+        let chain = index.decode_dial(id).expect("the dial decodes");
+        let waiting = Logo {
+            image: None,
+            brand_name: name.clone(),
+            custom_name: "TJX".into(),
+            loading: true,
+        };
+        assert_eq!(*logo.logo(), waiting, "{name}: the names, marked loading");
+        // With the names set and the dial on its way, the zone draws nothing: not the name
+        // first and the dial a moment later.
+        let empty = render_named(&mut kit, &ctx, &format!("car_logo_loading_{ordinal}"), |p| {
+            logo::draw(p, zone, &waiting, &style);
+        });
+        assert_eq!(empty.covered(), 0, "{name}: nothing in the zone while the dial loads");
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut polls = 0;
+        while logo.busy() && std::time::Instant::now() < until {
+            assert_eq!(*logo.logo(), waiting, "{name}: the zone is empty until the dial is in");
+            assert_eq!(kit.images().len(), before, "{name}: and no image is in the store");
+            logo.poll(kit.images_mut(), &ctx.device, &ctx.queue);
+            // The frame ends: what this poll wrote goes to the device before the next poll.
+            ctx.queue.submit(None);
+            polls += 1;
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(!logo.busy(), "{name}: loaded within 30 s");
+        // No machine copies a megabyte in the 0.05 ms a poll has, so the largest dial always
+        // takes more than one frame.
+        if chain.byte_len() > 1024 * 1024 {
+            assert!(polls > 1, "{name}: the whole dial went up in one poll");
+        }
+        let live = logo.logo().clone();
+        let image = live.image.expect("the dial shows");
+        assert_eq!(
+            (live.brand_name.as_str(), live.custom_name.as_str()),
+            (name.as_str(), "TJX")
+        );
+        assert_eq!(kit.images().len(), before + 1, "{name}: one image");
+        let at_once = index
+            .load_dial(kit.images_mut(), &ctx.device, &ctx.queue, id)
+            .expect("the dial loads at once");
+        assert_eq!(kit.images().size(image), kit.images().size(at_once));
+        assert_eq!(kit.images().source_size(image), kit.images().source_size(at_once));
+        assert_eq!(kit.images().mip_count(image), kit.images().mip_count(at_once));
+        let reference = Logo {
+            image: Some(at_once),
+            ..Logo::default()
+        };
+        let a = render_named(&mut kit, &ctx, &format!("car_logo_live_{ordinal}"), |p| {
+            logo::draw(p, zone, &live, &style);
+        });
+        let b = render_named(&mut kit, &ctx, &format!("car_logo_at_once_{ordinal}"), |p| {
+            logo::draw(p, zone, &reference, &style);
+        });
+        assert!(
+            a.pixels == b.pixels,
+            "{name}: the same pixels as the dial uploaded at once"
+        );
+        assert!(a.covered() > 500, "{name} puts pixels on screen");
+        // The next car of the brand has it at once, with no new image.
+        logo.show(Some(index.car_brand(&cars, ordinal)), "TJX");
+        assert_eq!(logo.logo().image, Some(image));
+        assert!(!logo.busy());
+    }
 }

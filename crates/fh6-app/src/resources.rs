@@ -1,6 +1,8 @@
 //! Files the render kit needs at startup: design tokens, the car/brand palette database, the
-//! `assets/` folder (Phase 6 fonts and textures) and the user's `fonts/` folder beside the exe.
+//! brand logo index, the `assets/` folder (Phase 6 fonts and textures) and the user's `fonts/`
+//! folder beside the exe.
 use fh6_core::CarDatabase;
+use fh6_kit::logo::LogoIndex;
 use fh6_kit::Tokens;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +18,8 @@ pub struct KitResources {
     pub tokens: Tokens,
     /// Brand palettes by car ordinal.
     pub cars: CarDatabase,
+    /// Which brand logo each car shows (empty when `assets/logos/logos.json` is missing).
+    pub logos: LogoIndex,
     /// The `assets/` folder, when found.
     pub assets: Option<PathBuf>,
     /// The user's `fonts/` folder beside the exe, when it exists.
@@ -57,6 +61,11 @@ impl KitResources {
             let a = d.join("assets");
             a.join(BRANDS_FILE).is_file().then_some(a)
         });
+        if assets.is_none() {
+            tracing::warn!(
+                "assets folder not found (no assets/{BRANDS_FILE} beside the app or above it); every car gets its dash's own palette and the logo zone shows the custom name"
+            );
+        }
         let cars = match assets.as_ref().map(|a| CarDatabase::load(a.join(BRANDS_FILE))) {
             Some(Ok(cars)) => {
                 tracing::info!(cars = cars.len(), brands = cars.brand_count(), "car database loaded");
@@ -66,15 +75,34 @@ impl KitResources {
                 let cause = std::error::Error::source(&err)
                     .map(ToString::to_string)
                     .unwrap_or_default();
-                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette");
+                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette and no brand logo or name");
                 CarDatabase::default()
             }
             None => CarDatabase::default(),
+        };
+        let logos = match assets.as_deref().map(LogoIndex::load) {
+            Some(Ok(index)) => {
+                if index.is_empty() {
+                    tracing::warn!("brand logo index lists no brands; the logo zone shows the car's brand name, or the custom name");
+                } else {
+                    tracing::info!(brands = index.len(), "brand logo index loaded");
+                }
+                index
+            }
+            Some(Err(err)) => {
+                tracing::warn!(
+                    error = %err,
+                    "brand logo index unreadable; the logo zone shows the car's brand name, or the custom name"
+                );
+                LogoIndex::default()
+            }
+            None => LogoIndex::default(),
         };
         let user_fonts = exe_dir.map(|d| d.join("fonts")).filter(|d| d.is_dir());
         Self {
             tokens,
             cars,
+            logos,
             assets,
             user_fonts,
         }
@@ -95,6 +123,7 @@ mod tests {
         let r = KitResources::resolve(&repo.join("data/config.json"));
         assert!(r.assets.is_some(), "assets/ found from data/config.json");
         assert!(r.cars.brand_count() > 0);
+        assert!(!r.logos.is_empty(), "assets/logos/logos.json loads");
         assert!(!r.tokens.family_defaults.is_empty());
     }
 }
