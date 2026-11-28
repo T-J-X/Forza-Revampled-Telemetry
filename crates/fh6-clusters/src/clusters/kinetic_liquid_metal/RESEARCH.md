@@ -189,3 +189,18 @@ A small three-cylinder idles as a slow oval and never gets past nine points. A V
 - A car change mid-session: cyl, idle and max all change together, and the drop re-forms with one ring.
 
 **Code-phase notes.** Add `cylinders` to the KineticLiquidMetal row of `docs/TELEMETRY_USAGE_MATRIX.md` in the same commit as the code that reads it, because the G2 gate fails on a listed input the dash does not read. Unit tests will cover: I4 at 900 → 3; V12 at 9000 → capped 24; cyl 0 → the fallback; cyl 40 → clamped; idle ≥ max → no panic.
+
+## The limiter, frame by frame (research figure 03)
+
+Figure `limiter_study.png` in the project files.
+
+**Source.** Eaker, Hight, O'Regan, Dickey and Daniels, "Oxidation-mediated fingering in liquid metals", arXiv 1703.03011 ([ar5iv](https://ar5iv.labs.arxiv.org/html/1703.03011)). A drop of gallium alloy in electrolyte stays a smooth sessile drop for 0.2 V < E < 0.8 V (their scale, against Ag/AgCl with a 1.5 V offset). Above 0.8 V it spreads and "becomes unstable to undulations along its perimeter" (their Regime B), reaching about 20× its first area. The outline is fractal, D = 1.30 ± 0.05 for every drop volume, "smaller than the value observed in viscous fingering (D = 1.7)". After about 10 s of spreading it contracts again at higher potentials, and pieces that lose electrical contact "bead up into a sphere". The paper gives no finger wavelength and no retraction speed.
+
+**What the dash takes from it.**
+- The limiter is the oxidising regime: tension falls towards zero and the star turns into fingers. The finger outline is drawn with a measured target, D ≈ 1.3, not by eye.
+- The study outline is r(θ) = R[1 + a cos 13θ + Σₖ k^−(H+½) cos(kθ + φₖ)] for k 14–159, with H 0.55 and fixed random phases (one seed per car, so it never flickers). It is floored softly above the gear void and rescaled so the area stays constant. Box counting on the drawn outline gives D 1.04 for the plain star, 1.15 at 40 ms, 1.25 at 80 ms and 1.24 at pinch-off. That is close to the measured 1.30 at this sampling, and well under viscous fingering's 1.7. So the shape reads as liquid metal, not as paint.
+- Timeline (a deliberate compression of the real 10 s): 0 ms star at n 13 (or the car's n), 40 ms points deepen, 80 ms fingers and tip-splitting, 120 ms the 13 longest tips pinch off as satellites of radius 1.89 × the neck. Each tip that leaves shortens by the satellite's volume.
+- The drop's area is held constant, against the real 20× spread, so it stays inside its zone and the gear void stays clear at every frame.
+- On the shift the satellites coalesce back within 300 ms (they "bead up" while apart, so they are drawn as true circles), and the drop returns to its stroboscopic star.
+
+**Cost note for the code phase.** 146 harmonics × 1024 angle samples is about 150k multiply-adds per frame, under the 0.3 ms CPU budget only if it runs during the limiter alone. The plan: bake r(θ) into a 1024 × 1 texture on the CPU, only while the limiter is active, with 48 harmonics (enough for D ≈ 1.25 at 4K, to be checked with the same box count in a unit test). The shader reads that texture for the outline.
