@@ -198,7 +198,7 @@ Not used: slip, suspension, tyre temperatures, fuel, laps and `Torque` (not veri
 | Reduced flash | the limiter's phase drift halves and the lamp strobe follows the kit's reduced-flash rule | house rule |
 | No assets (`setup.assets` is `None`) | the kit's studio environment (`Environment::Studio`) instead of the kit map; the metal still reads | closing review line 16 |
 
-## 7. Not yet checked
+## 12. Not yet checked
 
 - Faraday 1831, paras 106–110, were not readable verbatim; nothing from them is cited.
 - Edwards and Fauve eq. 23 and their §5.1 (order above p = 0.01) were read from a summary of the PDF, not verbatim.
