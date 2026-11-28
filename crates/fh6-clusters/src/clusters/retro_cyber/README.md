@@ -6,11 +6,11 @@ Catalog row 19 · `ClusterTheme::RetroCyber` (config value `"RetroCyber"`) · Sc
 
 ## Signature moments
 - **Ignition:** on the first observed `IsRaceOn` 0 → 1 after launch, the filaments warm for 150 ms, then 8 sectors light left to right (40 ms each) as an all-segments self-test and settle to ghost. Segments switch, they never fade. Gear and speed are live from frame 1.
-- **Shift light:** the red bracket over the red zone fills from the shift point, then strobes magenta on the limiter (10 Hz, or the reduced-flash breath); the gear turns magenta with it.
+- **Shift light:** the red bracket over the red zone fills from the shift point, then strobes magenta on the limiter (10 Hz, or the reduced-flash breath); the gear keeps its white phosphor and takes a soft glow, so it holds its 7:1 glance contrast.
 - **Glass:** the kit's optical lens (clear, smoked by absorption, crisp rims) shows the studio's reflections, and its light swings with lateral G.
 
 ## GPU budget
-The PC timed each layer (RTX 3070 Ti Laptop, 28 Nov): the surround's full-panel fills, the lens and the speed's bloom were the costs. So the surround's art, face, rims and the lens black are drawn on twelve rectangles that cover only its ring (`Geom::ring_cover`, about 17% of the panel; a test checks every ring pixel of both views), and the speed and gear glow with local halos (`Emission::Halo`, `Emission::SoftHalo`): no frame of this dash blooms, so the work rectangle never grows by the bloom margin.
+The PC timed each layer (RTX 3070 Ti Laptop, 28 Nov): the surround's full-panel fills, the lens and the speed's bloom were the costs. So the surround's art, face, rims and the lens black are drawn on twelve rectangles that cover only its ring (`Geom::ring_cover`, about 17% of the panel; a test checks every ring pixel of both views), and the speed and gear glow with local halos (`Emission::Halo`, `Emission::SoftHalo`): no frame of this dash blooms, so the work rectangle never grows by the bloom margin. The grid mesh and the scanlines go only where phosphor can light (`Geom::mesh_zones`: the side windows, the tach band in six steps along its curve, the speed and gear cells with their halos), not over the centre window's black. The lens glass stays whole: the kit draws glass over its full bounds even under a clip.
 
 ## Files
 - `mod.rs`: the zone tables for both views (`Geom`), the tach scale, the gauges, the boot, the cluster (`update`, `draw`) and its tests.
