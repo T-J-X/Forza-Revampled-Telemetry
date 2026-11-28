@@ -51,7 +51,7 @@ mod g {
     /// Corner fillet of the yoke outline.
     pub const YOKE_FILLET: f32 = 26.0;
     /// The OLED window (x0, y0, x1, y1) and its corner radius.
-    pub const WINDOW: [f32; 4] = [-440.0, -214.0, 440.0, 192.0];
+    pub const WINDOW: [f32; 4] = [-470.0, -214.0, 470.0, 192.0];
     /// See [`WINDOW`].
     pub const WINDOW_R: f32 = 28.0;
     /// The centre partition (x0, y0, x1, y1).

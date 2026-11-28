@@ -20,14 +20,22 @@
 //!    lights: 76 × 30 lenses, filling outside-in (the two shoulder singles first, then the eight's
 //!    pairs onto the centre) in `primary`, all ten in `shift` at the shift point, and at the
 //!    limiter only the strip strobes (10 Hz, `ShiftLights`).
-//! 2. Tabular speed (cap 112, ghost 8s at 2%) left of the dial, its unit under it.
-//! 3. The rev counter: a 240° arc of r 204 from 0 to the scale top (the car's limiter rounded up
+//! 2. Tabular speed (cap 104, ghost 8s at 2%) left of the dial, its unit under it.
+//! 3. The rev counter: a 240° arc of r 190 from 0 to the scale top (the car's limiter rounded up
 //!    to the next thousand: 12 on an 11,100 rpm car), lit in `primary`, numbered every thousand.
 //!    The band from the shift point to the scale top is `warning` at 55%; on the limiter it takes
 //!    a steady `shift` and the lit arc turns ink, so only the strip flashes.
-//! 4. Power (in `signals.power_unit`) and the engineer trace (throttle in `go`, brake in `warning`,
+//! 4. The rev tunnel inside the dial; the friction circle under the speed; power (in
+//!    `signals.power_unit`) and the engineer trace (throttle in `go`, brake in `warning`,
 //!    steer in ink, the last 4 s; 3 s in the hood view); the encoders' arcs.
 //! 5. The TC and ABS lamps (derived), the labels, the wheel face.
+//!
+//! What the game does not send, replaced (CLUSTER_PROMPT.md, The bar; Penpot board v2): the
+//! brief's predictive lap-delta crown and sector strip become the **rev tunnel**, seven rings
+//! that recede into the dial behind the gear and light from the back to the front as the revs
+//! climb to the limiter (a steady `shift` on the limiter); the tyre-temperature tags become the
+//! **friction circle**; the lap-delta readout becomes power; the TC/ABS and boost/fuel encoder
+//! arcs become the pedals and the power share.
 //!
 //! Telemetry: rpm (current, limiter, the shift point), gear, speed, pedals, steer, power, lateral
 //! and longitudinal G, body slip (from velocity) and drivetrain are decoded. Derived (labelled so
@@ -40,20 +48,23 @@
 //! | Zone | Element | Geometry |
 //! |---|---|---|
 //! | Z5 | wheel face | x ±560 at y −300, ±700 from −196 to 120, ±520 at 212 |
-//! | Z5 | window | x ±440, y −214..192, r 28; opaque black |
+//! | Z5 | window | x ±470, y −214..192, r 28; opaque black |
 //! | Z1 | partition + eight pods | x ±408, y −286..−240; pods 76 × 30 at x −350 + 100·i, y −263 |
 //! | Z1 | shoulder singles | (±560, −263), 76 × 30 |
-//! | Z3 | rev counter | centre (0, 14), r 204, width 16, from 150° over 240° clockwise |
-//! | Z3 | numerals | r 148, cap 26 |
+//! | Z3 | rev counter | centre (0, 14), r 190, width 16, from 150° over 240° clockwise; red band r 206 |
+//! | Z3 | numerals | r 134, cap 26 |
+//! | Z3 | rev tunnel | 7 rings round the dial centre, r 34..116 (power law 1.5) |
 //! | Z1 | gear | cap middle (0, 16), cap 176 |
-//! | Z2 | speed | cap middle (−341, 12), cap 112; unit cap top at y 78 |
-//! | Z4 | power | right edge x 396, cap middle −64, cap 56 |
-//! | Z4 | trace | x 252..416, y 18..132 |
+//! | Z2 | speed | cap middle (−337, 12), cap 104; unit cap top at y 74 |
+//! | Z4 | friction circle | centre (−337, 150), r 34 = 1.5 g |
+//! | Z4 | power | right edge x 404, cap middle −64, cap 56 |
+//! | Z4 | trace | x 236..450, y 18..132 |
 //! | Z5 | lamps | 88 × 36 at (±58, 166) |
 //! | Z4 | encoders | (±604, 4): knurl r 59..73, well r 92, data arc r 90 (brake r 78) |
 //!
 //! Hood: the same layout at [`HOOD_SCALE`] around the hood anchor; the wheel face is rendered at
 //! that scale into the hood envelope.
+use crate::common::bezel::on_screen;
 use crate::common::hero_gear::HeroGear;
 use crate::common::race::{AlarmColumn, AlarmLamp, AlarmSide};
 use crate::common::speed::TabularSpeed;
@@ -81,9 +92,9 @@ const LIMITER_PCT: f32 = 0.985;
 /// The red band's opacity below the limiter.
 const RED_BAND_ALPHA: f32 = 0.55;
 /// The speed's ghost 8s as seen on screen.
-const GHOST_8: f32 = 0.02;
+const GHOST_8: f32 = 0.03;
 /// Unlit lenses as seen on screen (the procedural face only; the render carries its own caps).
-const UNLIT_LENS: f32 = 9.0 / 255.0;
+const UNLIT_LENS: f32 = 22.0 / 255.0;
 /// The lit pods' share of the tokens' bloom intensity (an LED behind a lens).
 const POD_BLOOM: f32 = 0.4;
 /// Labels (RPM x1000, POWER, PEDALS) as seen on screen.
@@ -108,6 +119,18 @@ const POWER_STEP: f32 = 2.0;
 const PEAK_MIN_W: f32 = 1000.0;
 /// Watts per mechanical horsepower.
 const W_PER_HP: f32 = 745.7;
+/// Tunnel rings: lit opacity from the back ring to the front ring, unlit, and on the limiter.
+const TUNNEL_LIT: [f32; 2] = [0.14, 0.50];
+/// See [`TUNNEL_LIT`].
+const TUNNEL_UNLIT: f32 = 0.06;
+/// See [`TUNNEL_LIT`].
+const TUNNEL_LIMITER: f32 = 0.42;
+/// Friction circle: full scale (g), the comet's samples and span (s).
+const FC_FULL_G: f32 = 1.5;
+/// See [`FC_FULL_G`].
+const COMET: usize = 8;
+/// See [`FC_FULL_G`].
+const COMET_S: f32 = 0.5;
 /// Numerals by thousand (no formatting in the draw path).
 const NUMERALS: [&str; 21] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
@@ -150,8 +173,8 @@ mod g {
     ];
     /// The window and its corner radius.
     pub const WINDOW: Rect = Rect {
-        min: vec2(-440.0, -214.0),
-        max: vec2(440.0, 192.0),
+        min: vec2(-470.0, -214.0),
+        max: vec2(470.0, 192.0),
     };
     /// See [`WINDOW`].
     pub const WINDOW_R: f32 = 28.0;
@@ -173,7 +196,7 @@ mod g {
     /// The rev counter.
     pub const DIAL_C: Vec2 = vec2(0.0, 14.0);
     /// See [`DIAL_C`].
-    pub const DIAL_R: f32 = 204.0;
+    pub const DIAL_R: f32 = 190.0;
     /// See [`DIAL_C`].
     pub const DIAL_W: f32 = 16.0;
     /// Start (radians clockwise from 3 o'clock: lower left) and sweep, in degrees.
@@ -181,17 +204,17 @@ mod g {
     /// See [`DIAL_START`].
     pub const DIAL_SWEEP: f32 = 240.0;
     /// The red band outside the arc.
-    pub const RED_R: f32 = 220.0;
+    pub const RED_R: f32 = 206.0;
     /// See [`RED_R`].
     pub const RED_W: f32 = 5.0;
     /// Tick outer radius and lengths (major, minor).
-    pub const TICK_R: f32 = 192.0;
+    pub const TICK_R: f32 = 178.0;
     /// See [`TICK_R`].
     pub const TICK_MAJOR: f32 = 22.0;
     /// See [`TICK_R`].
     pub const TICK_MINOR: f32 = 12.0;
     /// Numerals.
-    pub const NUMERAL_R: f32 = 148.0;
+    pub const NUMERAL_R: f32 = 134.0;
     /// See [`NUMERAL_R`].
     pub const NUMERAL_CAP: f32 = 26.0;
     /// The RPM x1000 label (cap middle).
@@ -203,34 +226,45 @@ mod g {
     /// See [`GEAR`].
     pub const GEAR_CAP: f32 = 176.0;
     /// The speed (cap middle) and its unit (cap top).
-    pub const SPEED: Vec2 = vec2(-341.0, 12.0);
+    pub const SPEED: Vec2 = vec2(-337.0, 12.0);
     /// See [`SPEED`].
-    pub const SPEED_CAP: f32 = 112.0;
+    pub const SPEED_CAP: f32 = 104.0;
     /// See [`SPEED`].
-    pub const UNIT: Vec2 = vec2(-330.0, 78.0);
+    pub const UNIT: Vec2 = vec2(-337.0, 74.0);
     /// See [`SPEED`].
     pub const UNIT_CAP: f32 = 24.0;
     /// Power: right edge and cap middle of the value; the unit's left edge; the label (cap top).
-    pub const POWER: Vec2 = vec2(396.0, -64.0);
+    pub const POWER: Vec2 = vec2(404.0, -64.0);
     /// See [`POWER`].
     pub const POWER_CAP: f32 = 56.0;
     /// See [`POWER`].
-    pub const POWER_UNIT: Vec2 = vec2(408.0, -46.0);
+    pub const POWER_UNIT: Vec2 = vec2(414.0, -46.0);
     /// See [`POWER`].
     pub const POWER_UNIT_CAP: f32 = 20.0;
     /// See [`POWER`].
-    pub const POWER_LABEL: Vec2 = vec2(316.0, -128.0);
+    pub const POWER_LABEL: Vec2 = vec2(342.0, -128.0);
     /// The trace box.
     pub const TRACE: Rect = Rect {
-        min: vec2(252.0, 18.0),
-        max: vec2(416.0, 132.0),
+        min: vec2(236.0, 18.0),
+        max: vec2(450.0, 132.0),
     };
     /// The trace label (cap top).
-    pub const TRACE_LABEL: Vec2 = vec2(334.0, 146.0);
+    pub const TRACE_LABEL: Vec2 = vec2(343.0, 146.0);
     /// Lamps (centres) and lens size.
     pub const LAMPS: [Vec2; 2] = [vec2(-58.0, 166.0), vec2(58.0, 166.0)];
     /// See [`LAMPS`].
     pub const LAMP: Vec2 = vec2(88.0, 36.0);
+    /// The rev tunnel: rings from the innermost to the outermost radius, spaced by a power
+    /// law so they crowd toward the centre like a tunnel seen end on.
+    pub const TUNNEL_RINGS: usize = 7;
+    /// See [`TUNNEL_RINGS`].
+    pub const TUNNEL_R: [f32; 2] = [34.0, 116.0];
+    /// See [`TUNNEL_RINGS`].
+    pub const TUNNEL_POW: f32 = 1.5;
+    /// The friction circle: centre, radius (1.5 g) and the label's left edge offset.
+    pub const FC: Vec2 = vec2(-337.0, 150.0);
+    /// See [`FC`].
+    pub const FC_R: f32 = 34.0;
     /// Encoder centres.
     pub const ENC: [Vec2; 2] = [vec2(-604.0, 4.0), vec2(604.0, 4.0)];
     /// Knurl ring radii (inner, outer) and the well's radius.
@@ -258,6 +292,12 @@ mod g {
         }
         out[9] = vec2(SINGLE_X, POD_Y);
         out
+    }
+
+    /// The radius of tunnel ring `k`.
+    pub fn tunnel_r(k: usize) -> f32 {
+        let t = (k + 1) as f32 / TUNNEL_RINGS as f32;
+        TUNNEL_R[0] + (TUNNEL_R[1] - TUNNEL_R[0]) * t.powf(TUNNEL_POW)
     }
 
     /// The wheel face's bounds.
@@ -335,6 +375,59 @@ impl Trace {
     }
 }
 
+/// The friction circle's comet: lateral and longitudinal G sampled at a fixed rate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Comet {
+    samples: [Vec2; COMET],
+    head: usize,
+    since: f32,
+}
+
+impl Comet {
+    fn new() -> Self {
+        Self {
+            samples: [Vec2::ZERO; COMET],
+            head: 0,
+            since: 0.0,
+        }
+    }
+
+    fn period() -> f32 {
+        COMET_S / (COMET - 1) as f32
+    }
+
+    fn update(&mut self, g: Vec2, dt: f32) {
+        let g = vec2(
+            if g.x.is_finite() { g.x } else { 0.0 },
+            if g.y.is_finite() { g.y } else { 0.0 },
+        );
+        self.since += dt.max(0.0);
+        let mut steps = 0;
+        while self.since >= Self::period() && steps < COMET {
+            self.since -= Self::period();
+            self.head = (self.head + 1) % COMET;
+            self.samples[self.head] = g;
+            steps += 1;
+        }
+        if steps == COMET {
+            self.since = 0.0;
+        }
+        self.samples[self.head] = g;
+    }
+
+    /// Sample `k` back from the newest (0 = newest).
+    fn back(&self, k: usize) -> Vec2 {
+        self.samples[(self.head + COMET - k % COMET) % COMET]
+    }
+
+    fn moving(&self) -> bool {
+        let now = self.samples[self.head];
+        self.samples
+            .iter()
+            .any(|s| (s.x - now.x).abs() + (s.y - now.y).abs() > 1e-4)
+    }
+}
+
 /// The TC and ABS states (derived).
 fn lamp_conditions(sig: &Signals, drivetrain: i32, slip_rate: f32) -> [bool; 2] {
     let moving = sig.speed_ms > lamp::MIN_SPEED_MS;
@@ -384,6 +477,7 @@ pub struct ValkyrieLmp1 {
     lamps: AlarmColumn,
     prev_slip: f32,
     trace: Trace,
+    comet: Comet,
     /// The Blender wheel face per view (cockpit, hood), three light keys each, when all load.
     plates: [Option<[ImageId; 3]>; 2],
     envelopes: [Rect; 2],
@@ -437,6 +531,7 @@ impl ValkyrieLmp1 {
             lamps: AlarmColumn::new(t, AlarmSide::Bottom, &LAMPS),
             prev_slip: 0.0,
             trace: Trace::new(),
+            comet: Comet::new(),
             plates,
             envelopes: [t.layout.cockpit_envelope, t.layout.hood_envelope],
             tracking: t.type_scale.label_tracking,
@@ -506,6 +601,7 @@ impl Cluster for ValkyrieLmp1 {
         self.lamps
             .update(&lamp_conditions(&sig, input.telemetry.drivetrain_type, slip_rate), dt);
 
+        self.comet.update(vec2(sig.g_lat, sig.g_long), dt);
         let steer = f32::from(input.telemetry.steer) / 127.0;
         self.trace.update(
             [
@@ -538,7 +634,9 @@ impl Cluster for ValkyrieLmp1 {
             // The opaque black screen (the game never shows through it).
             p.fill(&Shape::round_rect(g::WINDOW, g::WINDOW_R), pal.roles.oled_black);
             self.draw_pods(p, &pal);
+            self.draw_tunnel(p, &pal);
             self.draw_rev_counter(p, &pal);
+            self.draw_friction_circle(p, &pal);
             self.draw_readouts(p, &pal);
             self.draw_trace(p, &pal);
             self.draw_lamps(p, &pal);
@@ -550,7 +648,11 @@ impl Cluster for ValkyrieLmp1 {
     }
 
     fn animating(&self) -> bool {
-        self.shift.animating() || self.gear.animating() || self.lamps.animating() || self.trace.moving()
+        self.shift.animating()
+            || self.gear.animating()
+            || self.lamps.animating()
+            || self.trace.moving()
+            || self.comet.moving()
     }
 }
 
@@ -599,12 +701,16 @@ impl ValkyrieLmp1 {
         );
         p.stroke(
             &Shape::round_rect(bezel, g::WINDOW_R + g::BEZEL),
-            ink.with_alpha(0.08),
+            ink.with_alpha(on_screen(0.08)),
             Stroke::rim_px(1.0),
         );
         let housing = |p: &mut Painter<'_>, r: Rect| {
             p.fill(&Shape::round_rect(r, 14.0), Color::srgb8(22, 23, 26, 255));
-            p.stroke(&Shape::round_rect(r, 14.0), ink.with_alpha(0.12), Stroke::rim_px(1.0));
+            p.stroke(
+                &Shape::round_rect(r, 14.0),
+                ink.with_alpha(on_screen(0.12)),
+                Stroke::rim_px(1.0),
+            );
         };
         housing(p, g::PARTITION);
         for x in [-g::SINGLE_X, g::SINGLE_X] {
@@ -612,7 +718,11 @@ impl ValkyrieLmp1 {
         }
         for c in g::ENC {
             p.fill(&Shape::circle(c, g::WELL_R), Color::srgb8(6, 6, 7, 255));
-            p.stroke(&Shape::circle(c, g::WELL_R), ink.with_alpha(0.08), Stroke::rim_px(1.0));
+            p.stroke(
+                &Shape::circle(c, g::WELL_R),
+                ink.with_alpha(on_screen(0.08)),
+                Stroke::rim_px(1.0),
+            );
             let mid = (g::KNURL[0] + g::KNURL[1]) * 0.5;
             p.fill(
                 &Shape::ring(c, mid, g::KNURL[1] - g::KNURL[0]),
@@ -622,7 +732,7 @@ impl ValkyrieLmp1 {
         }
         for c in g::pods() {
             let lens = Rect::from_center_size(c, g::POD);
-            p.fill(&Shape::round_rect(lens, 7.0), ink.with_alpha(UNLIT_LENS));
+            p.fill(&Shape::round_rect(lens, 7.0), ink.with_alpha(on_screen(UNLIT_LENS)));
         }
     }
 
@@ -660,6 +770,75 @@ impl ValkyrieLmp1 {
         }
     }
 
+    /// The rev tunnel (replaces the brief's predictive lap-delta crown and sector strip, which
+    /// need lap data the game does not send): rings recede into the dial behind the gear and
+    /// light from the back (the centre) to the front (the arc) as the revs climb to the limiter.
+    /// On the limiter every ring holds a steady `shift`; only the LED strip flashes.
+    fn draw_tunnel(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let roles = pal.roles;
+        let limiter = self.on_limiter();
+        let frac = if self.sig.max_rpm > 1.0 && self.sig.rpm.is_finite() {
+            (self.sig.rpm / (self.sig.max_rpm * LIMITER_PCT)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let n = g::TUNNEL_RINGS as f32;
+        for k in 0..g::TUNNEL_RINGS {
+            let depth = (k + 1) as f32 / n;
+            let width = 2.0 + 2.0 * depth;
+            let lit = limiter || frac * n > k as f32 + 0.5;
+            let color = if limiter {
+                pal.shift.with_alpha(on_screen(TUNNEL_LIMITER))
+            } else if lit {
+                pal.primary
+                    .with_alpha(on_screen(TUNNEL_LIT[0] + (TUNNEL_LIT[1] - TUNNEL_LIT[0]) * depth))
+            } else {
+                roles.ink.with_alpha(on_screen(TUNNEL_UNLIT))
+            };
+            p.fill(&Shape::ring(g::DIAL_C, g::tunnel_r(k), width), color);
+        }
+    }
+
+    /// The friction circle (replaces the brief's tyre-temperature tags, which the game does not
+    /// send): lateral and longitudinal G with a 0.5 s comet; braking moves the dot up.
+    fn draw_friction_circle(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let roles = pal.roles;
+        let c = g::FC;
+        let r = g::FC_R;
+        p.fill(&Shape::ring(c, r, 1.5), roles.ink.with_alpha(on_screen(0.14)));
+        p.fill(
+            &Shape::ring(c, r / FC_FULL_G, 1.0),
+            roles.ink.with_alpha(on_screen(0.07)),
+        );
+        p.fill(
+            &Shape::line(c - vec2(r, 0.0), c + vec2(r, 0.0), 1.0),
+            roles.ink.with_alpha(on_screen(0.07)),
+        );
+        p.fill(
+            &Shape::line(c - vec2(0.0, r), c + vec2(0.0, r), 1.0),
+            roles.ink.with_alpha(on_screen(0.07)),
+        );
+        let at = |gv: Vec2| {
+            let v = vec2(gv.x, -gv.y) * (1.0 / FC_FULL_G);
+            let len = v.length();
+            let v = if len > 1.0 { v * (1.0 / len) } else { v };
+            c + v * r
+        };
+        for k in (1..COMET).rev() {
+            let t = 1.0 - k as f32 / (COMET - 1) as f32;
+            p.fill(
+                &Shape::circle(at(self.comet.back(k)), 1.5 + 2.5 * t),
+                pal.primary.with_alpha(on_screen(0.1 + 0.25 * t)),
+            );
+        }
+        p.fill(&Shape::circle(at(self.comet.back(0)), 4.0), roles.ink);
+        let label = TextStyle::new(self.faces.label, 14.0)
+            .paint(roles.ink.with_alpha(on_screen(LABEL_ALPHA)))
+            .tracking(self.tracking)
+            .align(Align::Left, VAlign::Baseline);
+        p.text(c + vec2(r + 14.0, r), "G", &label);
+    }
+
     /// The round rev counter: track, red band, lit arc, ticks, numerals and the label.
     fn draw_rev_counter(&self, p: &mut Painter<'_>, pal: &Palette) {
         let roles = pal.roles;
@@ -681,7 +860,7 @@ impl ValkyrieLmp1 {
             let band = if limiter {
                 pal.shift
             } else {
-                roles.warning.with_alpha(RED_BAND_ALPHA)
+                roles.warning.with_alpha(on_screen(RED_BAND_ALPHA))
             };
             p.fill(
                 &Shape::arc(
@@ -705,14 +884,14 @@ impl ValkyrieLmp1 {
         // Ticks every 500 rpm, majors every thousand.
         p.fill(
             &Shape::Ticks(TickRing::new(g::DIAL_C, g::TICK_R, start, sweep, top * 2 + 1).minor(g::TICK_MINOR, 2.0)),
-            roles.ink.with_alpha(0.4),
+            roles.ink.with_alpha(on_screen(0.4)),
         );
         p.fill(
             &Shape::Ticks(TickRing::new(g::DIAL_C, g::TICK_R, start, sweep, top + 1).minor(g::TICK_MAJOR, 4.0)),
-            roles.ink.with_alpha(0.8),
+            roles.ink.with_alpha(on_screen(0.8)),
         );
         let numeral = TextStyle::new(self.faces.digits, g::NUMERAL_CAP)
-            .paint(roles.ink.with_alpha(NUMERAL_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(NUMERAL_ALPHA)))
             .align(Align::Center, VAlign::CapMiddle)
             .tabular();
         for (k, s) in NUMERALS.iter().enumerate().take(top as usize + 1) {
@@ -720,7 +899,7 @@ impl ValkyrieLmp1 {
             p.text(at, s, &numeral);
         }
         let label = TextStyle::new(self.faces.label, g::LABEL_CAP)
-            .paint(roles.ink.with_alpha(LABEL_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(LABEL_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapMiddle);
         p.text(g::RPM_LABEL, "RPM x1000", &label);
@@ -738,10 +917,10 @@ impl ValkyrieLmp1 {
             self.faces.digits,
             g::SPEED_CAP,
             roles.ink,
-            Some(roles.ink.with_alpha(GHOST_8)),
+            Some(roles.ink.with_alpha(on_screen(GHOST_8))),
         );
         let unit = TextStyle::new(self.faces.label, g::UNIT_CAP)
-            .paint(roles.ink.with_alpha(UNIT_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(UNIT_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
         p.text(g::UNIT, self.sig.unit.label(), &unit);
@@ -752,7 +931,7 @@ impl ValkyrieLmp1 {
             .tabular();
         p.number(g::POWER, self.power_value, 4, &value, None);
         let unit = TextStyle::new(self.faces.label, g::POWER_UNIT_CAP)
-            .paint(roles.ink.with_alpha(UNIT_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(UNIT_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Left, VAlign::CapMiddle);
         let unit_label = match self.sig.power_unit {
@@ -761,7 +940,7 @@ impl ValkyrieLmp1 {
         };
         p.text(g::POWER_UNIT, unit_label, &unit);
         let label = TextStyle::new(self.faces.label, g::LABEL_CAP)
-            .paint(roles.ink.with_alpha(LABEL_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(LABEL_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
         p.text(g::POWER_LABEL, "POWER", &label);
@@ -771,13 +950,17 @@ impl ValkyrieLmp1 {
     fn draw_trace(&self, p: &mut Painter<'_>, pal: &Palette) {
         let roles = pal.roles;
         let b = g::TRACE;
-        p.stroke(&Shape::rect(b), roles.ink.with_alpha(0.12), Stroke::rim_px(1.0));
+        p.stroke(
+            &Shape::rect(b),
+            roles.ink.with_alpha(on_screen(0.12)),
+            Stroke::rim_px(1.0),
+        );
         let vi = self.view_index();
         // Segments shown: the span over the sampling period.
         let segs = ((TRACE_S[vi] / Trace::period()).round() as usize).clamp(1, TRACE_POINTS - 1);
         let mut pts = [Vec2::ZERO; TRACE_POINTS];
         let channels: [(usize, Color, f32); 3] = [
-            (2, roles.ink.with_alpha(0.45), 2.0),
+            (2, roles.ink.with_alpha(on_screen(0.45)), 2.0),
             (0, roles.go, 3.0),
             (1, roles.warning, 3.0),
         ];
@@ -804,7 +987,7 @@ impl ValkyrieLmp1 {
             }
         }
         let label = TextStyle::new(self.faces.label, g::LABEL_CAP)
-            .paint(roles.ink.with_alpha(LABEL_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(LABEL_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
         let text = if vi == 1 {
@@ -825,7 +1008,10 @@ impl ValkyrieLmp1 {
             let (fill, ink) = if on {
                 (lamp.tone.color(pal), roles.oled_black)
             } else {
-                (Color::srgb8(11, 12, 14, 255), roles.ink.with_alpha(LAMP_LABEL_ALPHA))
+                (
+                    Color::srgb8(11, 12, 14, 255),
+                    roles.ink.with_alpha(on_screen(LAMP_LABEL_ALPHA)),
+                )
             };
             p.fill(&shape, fill);
             let style = TextStyle::new(self.faces.label, 18.0)
@@ -848,13 +1034,13 @@ impl ValkyrieLmp1 {
             }
         };
         let label = TextStyle::new(self.faces.label, g::LABEL_CAP)
-            .paint(roles.ink.with_alpha(LABEL_ALPHA))
+            .paint(roles.ink.with_alpha(on_screen(LABEL_ALPHA)))
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
         for (i, c) in g::ENC.into_iter().enumerate() {
             p.fill(
                 &Shape::arc(c, g::ARC_R[0], g::ARC_W, start, sweep, Cap::Butt),
-                roles.ink.with_alpha(0.1),
+                roles.ink.with_alpha(on_screen(0.1)),
             );
             if i == 0 {
                 arc(p, c, g::ARC_R[0], self.sig.throttle, roles.go);
@@ -938,9 +1124,23 @@ mod tests {
                 "{r:?} in the window"
             );
         }
-        let speed_right = g::SPEED.x + g::SPEED_CAP * 0.6 * 1.5;
+        // Three tabular Saira Condensed 700 cells are 2.13 caps wide.
+        let speed_right = g::SPEED.x + g::SPEED_CAP * 2.13 * 0.5;
         assert!(speed_right < g::DIAL_C.x - outer, "speed clear of the dial");
         assert!(g::TRACE.min.x > g::DIAL_C.x + outer, "trace clear of the dial");
+        assert!(
+            g::SPEED.x - g::SPEED_CAP * 2.13 * 0.5 > g::WINDOW.min.x,
+            "speed inside the window"
+        );
+        // The tunnel stays inside the numerals; the friction circle inside the window, below the
+        // speed's unit.
+        assert!(g::tunnel_r(g::TUNNEL_RINGS - 1) + 2.0 < g::NUMERAL_R - g::NUMERAL_CAP * 0.6);
+        let fc = Rect::from_center_size(g::FC, Vec2::splat(g::FC_R * 2.0));
+        assert!(g::WINDOW.contains(fc.min) && g::WINDOW.contains(fc.max));
+        assert!(
+            fc.min.y > g::UNIT.y + g::UNIT_CAP + 4.0,
+            "friction circle below the unit"
+        );
     }
 
     #[test]
@@ -966,6 +1166,28 @@ mod tests {
         // A long frame never loops forever.
         tr.update([0.0, 1.0, 0.0], 1.0e6);
         assert_eq!(tr.back(0), [0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn comet_follows_g_and_settles() {
+        let mut c = Comet::new();
+        c.update(vec2(0.8, -1.0), Comet::period() * 1.01);
+        assert!(c.moving());
+        for _ in 0..(COMET + 2) {
+            c.update(vec2(0.8, -1.0), Comet::period());
+        }
+        assert!(!c.moving());
+        c.update(vec2(f32::NAN, 0.2), 0.0);
+        assert_eq!(c.back(0), vec2(0.0, 0.2), "non-finite G reads as 0");
+    }
+
+    #[test]
+    fn tunnel_rings_crowd_toward_the_centre() {
+        let gaps: Vec<f32> = (1..g::TUNNEL_RINGS)
+            .map(|k| g::tunnel_r(k) - g::tunnel_r(k - 1))
+            .collect();
+        assert!(gaps.windows(2).all(|w| w[1] > w[0]), "{gaps:?}");
+        assert!((g::tunnel_r(g::TUNNEL_RINGS - 1) - g::TUNNEL_R[1]).abs() < 1e-3);
     }
 
     #[test]

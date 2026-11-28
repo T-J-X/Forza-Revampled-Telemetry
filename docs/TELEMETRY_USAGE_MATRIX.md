@@ -113,7 +113,7 @@ limiter, gear and speed.
 | `LfaV10Nurburgring` | LFA V10 Nürburgring | `rpm`, `max_rpm`, `gear`, `speed` |
 | `KoenigseggGyro` | Koenigsegg Gyro | `rpm`, `max_rpm`, `gear`, `speed` |
 | `BoschDdu` | Bosch DDU | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
-| `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `velocity`, `drivetrain`, `car_ordinal`, `power` |
+| `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `g_long`, `velocity`, `drivetrain`, `car_ordinal`, `power` |
 | `Gt7ModularTripod` | GT7 Modular Tripod | `rpm`, `max_rpm`, `gear`, `speed` |
 | `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity`, `power` |
 | `WindshieldHud` | Windshield HUD | `rpm`, `max_rpm`, `gear`, `speed` |
