@@ -182,6 +182,20 @@ pub fn carbon(tow: f32) -> Mat {
         .set("tow", tow)
 }
 
+/// Forged (chopped-fibre) carbon under a mirror clear coat, from a seamless texture (the ComfyUI
+/// macro of resin-cast chips): its luminance drives the colour between two dark levels, the
+/// fibre sparkle and the bump. `tile_px` is one texture tile in local px. Without the file the
+/// Blender side falls back to the procedural twill of [`carbon`].
+#[must_use]
+pub fn forged(texture: &str, tile_px: f32) -> Mat {
+    Mat::new("carbon", "forged_carbon")
+        .color([0.018, 0.018, 0.02])
+        .rough(0.42)
+        .set("tow", 10.0)
+        .set("texture", texture)
+        .set("tile_px", tile_px)
+}
+
 /// Piano black: black dielectric under a mirror clear coat.
 #[must_use]
 pub fn piano_black() -> Mat {
