@@ -530,10 +530,11 @@ def chase_cam(sc, shot):
     sc.camera = cam
 
 
-def night_card(path, gain):
+def night_card(path, gain, sat):
     """The Wangan's lamps over the car: the night plate as a light card above the road, its long
     side along the road. The camera does not see it; the paint and the glass roof reflect it, and
-    its light tints the body. Without the file the car is lit by the studio alone."""
+    its light tints the body. `sat` takes the sodium orange out of it, so the glass shows soft
+    neutral streaks, not orange bands. Without the file the car is lit by the studio alone."""
     if not path or not os.path.isfile(path):
         log('night plate missing, studio light only:', path)
         return
@@ -548,7 +549,10 @@ def night_card(path, gain):
     e = nt.nodes.new('ShaderNodeEmission')
     e.inputs['Strength'].default_value = gain
     o = nt.nodes.new('ShaderNodeOutputMaterial')
-    nt.links.new(tex.outputs['Color'], e.inputs['Color'])
+    hs = nt.nodes.new('ShaderNodeHueSaturation')
+    hs.inputs['Saturation'].default_value = sat
+    nt.links.new(tex.outputs['Color'], hs.inputs['Color'])
+    nt.links.new(hs.outputs['Color'], e.inputs['Color'])
     nt.links.new(e.outputs['Emission'], o.inputs['Surface'])
     card.data.materials.append(m)
     card.visible_camera = False
@@ -593,7 +597,7 @@ for shot in P['shots']:
         # not see it. A shadow catcher would bake black-with-alpha round the car, and the overlay's
         # 8-bit premultiplied output shows that as a lighter box over the faint road surface.
         ground_plane(0.06).visible_camera = False
-        night_card(P.get('night'), float(P.get('night_gain', 0.0)))
+        night_card(P.get('night'), float(P.get('night_gain', 0.0)), float(P.get('night_sat', 1.0)))
         # Studio lights fixed to the world (the car turns under them). Driving: an overhead softbox,
         # two long strips for the highlight lines along the shoulders and a cool rim from ahead.
         # Parked: no softbox (it would fill the windscreen with one white patch); a long strip
@@ -687,6 +691,9 @@ const NIGHT_SEED: u64 = 6006;
 const NIGHT_SIZE: [usize; 2] = [4096, 1706];
 /// The card's emission strength in the car shots.
 const NIGHT_GAIN: f32 = 2.5;
+/// The card's saturation in the car shots: the plate's sodium orange drawn in the rear glass read
+/// as wood grain to the cold reviewer twice, so the reflection is kept nearly neutral.
+const NIGHT_SAT: f32 = 0.15;
 
 /// Builds the set.
 pub fn build(ctx: &mut Ctx) -> Result<()> {
@@ -731,7 +738,7 @@ fn studio() -> Value {
         "seed": CAR_SEED, "world": 0.30, "metallic": 0.25, "rough": 0.30, "key": 520.0, "strip": 560.0,
         "rim": 320.0, "exposure": -0.7, "tail_running": 1.4, "tail_brake": 14.0, "head_running": 0.0,
         "head_parked": 6.0, "glow_w": 1.9, "glow_l": 4.6, "glow_h": 0.14, "glow_energy": 520.0,
-        "night_gain": NIGHT_GAIN
+        "night_gain": NIGHT_GAIN, "night_sat": NIGHT_SAT
     })
 }
 
@@ -1089,7 +1096,7 @@ fn night(ctx: &mut Ctx) -> Result<()> {
             )
             .licence("CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)")
             .qa(format!(
-                "the 6144 x 2560 upscale at {} x {}, its median luminance taken to black and its 99.9th percentile to full; a build input: every lit car shot hangs it 6 m over the road as a light card, long side along the road, emission x {NIGHT_GAIN}",
+                "the 6144 x 2560 upscale at {} x {}, its median luminance taken to black and its 99.9th percentile to full; a build input: every lit car shot hangs it 6 m over the road as a light card, long side along the road, emission x {NIGHT_GAIN}, saturation x {NIGHT_SAT}",
                 NIGHT_SIZE[0], NIGHT_SIZE[1]
             )),
         )
