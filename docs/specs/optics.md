@@ -44,6 +44,8 @@ $$B = \frac{n_d - 1}{V_d\,(\lambda_F^{-2} - \lambda_C^{-2})}, \qquad A = n_d - \
 
 Cauchy holds for normal dispersion in the visible range only [S6]. For N-BK7 it stays within 0.001 of the Sellmeier index from 440 to 660 nm (tested).
 
+**Borosilicate 3.3** (the tubes and the ampoule of `KineticLiquidMetal`, a lab instrument's glass) is known by its two catalogue lines only, so it uses the Cauchy fit above through `Dispersion::from_abbe(1.4714, 66.0)`. SCHOTT gives BOROFLOAT 33 an index $n_d$ = 1.47140 and a principal dispersion $n_F - n_C$ = 71.4 × 10⁻⁴, so $V_d$ = 0.47140 / 0.00714 = 66.0, and a density of 2.23 g cm⁻³ [S29]. Its $R_0$ is 3.6%.
+
 **Water** (the rippled surface that the liquid-light caustic of `tools/asset-forge` is traced through) is used at one index only, $n = 1.333$: the tabulated value at 550 and 575 nm for liquid water at 25 °C [S23]. The same table gives 1.339 at 400 nm and 1.331 at 700 nm; [§5](#5-dispersion) says why one index is enough there.
 
 ## 2. The surface comes from the outline
@@ -94,6 +96,20 @@ $$\cos\theta_t = \sqrt{1 - \frac{\sin^2\theta_i}{\eta^2}}, \quad r_\parallel = \
 - Sapphire reflects 7.7% face-on, the same at 45° to within a point, and everything at grazing incidence. That rise is what draws the rim of a piece.
 
 **Schlick's approximation** [S8], $F \approx R_0 + (1 - R_0)(1 - \cos\theta_i)^5$, is allowed only where the exact form is too costly. For the three materials above it is within 0.04 of the exact value, worst near 85° (tested). The glass shader uses the exact form.
+
+### Conductors: mercury
+
+A metal has a complex index $\tilde n = n + ik$, the square root of its permittivity $\varepsilon = \varepsilon_1 + i\varepsilon_2$. With $|\varepsilon| = \sqrt{\varepsilon_1^2 + \varepsilon_2^2}$ [S7]:
+
+$$n = \sqrt{\tfrac12\bigl(|\varepsilon| + \varepsilon_1\bigr)}, \qquad k = \sqrt{\tfrac12\bigl(|\varepsilon| - \varepsilon_1\bigr)}$$
+
+The Fresnel equations of the dielectric case hold with $\eta$ replaced by $\tilde n$ (complex arithmetic, unpolarised average of $|r_\parallel|^2$ and $|r_\perp|^2$); face-on they reduce to
+
+$$R_0 = \frac{(n - 1)^2 + k^2}{(n + 1)^2 + k^2}$$
+
+- Liquid mercury at 2.27 eV (546 nm, the green mercury line) has $\varepsilon = -18.46 + 13.50\,i$ [S30], so $n$ = 1.485, $k$ = 4.546 and $R_0$ = 0.779. The same paper's Drude fit gives 0.765 ± 0.008 there.
+- A conductor's reflectance dips only a little near its principal angle (no Brewster zero; mercury stays above 0.7) and reaches 1 at grazing incidence. `KineticLiquidMetal` weights the studio its mercury mirrors by this curve across the thread (78% head-on, 100% at the edge), so the metal is a mirror of a measured strength, never a flat grey.
+- Code and tests: `crates/fh6-clusters/src/clusters/kinetic_liquid_metal/physics.rs` (`index_from_permittivity`, `conductor_reflectance`, `mercury_reflectance`).
 
 ## 4. Refraction through a piece
 
@@ -281,6 +297,7 @@ All in `crates/fh6-kit/src/optics.rs` unless a file is named.
 | §2 surface waves | `a_ripple_is_a_packet_with_the_stated_slope`; `tests/glass_gpu.rs`: `a_ripple_bends_only_where_it_stands` | The slope is the derivative of the height; still three wavelengths away; the shader's displaced ramp against Snell's law within 0.012 |
 | §3 Fresnel | `fresnel_known_values`, `fresnel_matches_the_sine_tangent_form` | 4% at $n$ = 1.5; Brewster's angle; total internal reflection; the sine-tangent form |
 | §3 Schlick | `schlick_stays_within_its_stated_error` | Within 0.04 of exact |
+| §3 conductors | `physics.rs` (KineticLiquidMetal): `mercury_reflects_78_percent_head_on_and_all_at_grazing` | $n$ 1.485, $k$ 4.546 from $\varepsilon$; $R_0$ 0.779; above 0.7 at every angle |
 | §4 Snell | `refraction_obeys_snell` | $\eta\sin\theta_t = \sin\theta_i$; reversibility; the critical angle |
 | §4 contact model | `a_hemisphere_on_a_page_magnifies_by_its_index`, `the_flat_top_shows_what_is_under_it_unbent` | 1.77× magnification; zero displacement under the flat top; $b\sqrt{\eta^2 - 1}$ at the rim |
 | §5 dispersion | `index_falls_with_wavelength_in_the_visible`, `channel_wavelengths_are_the_srgb_dominant_wavelengths` | Blue > green > red; 611, 549 and 464 nm within 2 nm |
@@ -327,5 +344,8 @@ Read on 2026-11-27. Where a page's text extraction dropped Greek letters or frac
 - **[S26]** D. Gabor, "Theory of communication. Part 1: The analysis of information", Journal of the Institution of Electrical Engineers, Part III, 93(26), 429-441 (1946), https://doi.org/10.1049/ji-3-2.1946.0074 (harmonic oscillations modulated by a Gaussian "probability pulse").
 - **[S27]** H. Lamb, *Hydrodynamics*, 6th edition, Cambridge University Press (1932), chapter IX, "Surface waves" (pp. 363-475), which treats the waves that spread from a local disturbance (the Cauchy-Poisson problem).
 - **[S28]** E. Hecht, *Optics*, 5th edition, Pearson (2017), chapter 5, refraction at a spherical surface: a surface of radius $R$ from air into a medium of index $n$ brings parallel light to a focus $nR/(n - 1)$ behind it.
+
+- **[S29]** SCHOTT, "BOROFLOAT® technical details", optical data (reference values): refraction index $n_d$ (587.6 nm) 1.47140, dispersion $n_F - n_C$ 71.4 × 10⁻⁴; density 2.23 g/cm³ at 25 °C. https://www.schott.com/en-gb/products/borofloat/technical-details (read 2026-11-28).
+- **[S30]** H. Arakawa, T. Inagaki and M. W. Williams, "Optical properties of metals by spectroscopic ellipsometry", Surface Science 96, 248 (1980), quoting the liquid-mercury permittivity of R. S. Smith and R. R. Stromberg, J. Opt. Soc. Am. 56, 1539 (1966). https://www.osti.gov/servlets/purl/6018359 (read 2026-11-28).
 
 [S24] to [S28] are cited for the form of a function, not for a number. Their bibliographic records were checked on 2026-11-27 (for [S27], its chapter and pages, not its text).
