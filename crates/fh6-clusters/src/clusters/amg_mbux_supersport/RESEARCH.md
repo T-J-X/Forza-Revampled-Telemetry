@@ -103,6 +103,8 @@ Verified fields per `CATALOG.md` ("Flash and telemetry"): rpm (current, idle, ma
 
 ## Ideas for the board
 
+- **The burning, rippling fuse, made better** (TJS, 2026-11-28 09:22-09:23: "Can you see that almost fire spark it has on the line", "Rippling", "Intergaetr it and make it better"). The real line crackles; ours ripples as a travelling wave from the mesh out to the wall (wave speed and height from rpm), spits sparks whose rate follows throttle and whose drift follows lateral g, glows hotter (orange to yellow-white) as load rises, and leaves a short cooling afterglow when revs fall. On an upshift the sparks are sucked back into the mesh with the jet.
+
 Leads for step 2, each driven by verified telemetry. None is a design yet; the board chooses and draws.
 
 - **The tunnel is the rev counter, back to front.** This is the real display's own idea (the fire walls travel from the vanishing point to the viewer as rpm rises) and TJS's image at 08:18. Ours can go further: real depth for the walls (Blender), the front of the tunnel reaching the viewer exactly at the shift rpm, and the red segment as a gate the walls pass through.
