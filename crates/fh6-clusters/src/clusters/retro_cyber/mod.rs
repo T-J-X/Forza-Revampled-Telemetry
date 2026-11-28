@@ -289,11 +289,19 @@ impl Scale {
     /// limiter, red from the thousand nearest the shift point.
     fn new(max_rpm: f32, shift_rpm: f32, stage0: f32) -> Self {
         let max_rpm = if max_rpm.is_finite() { max_rpm.max(1.0) } else { 8000.0 };
-        let shift_rpm = if shift_rpm.is_finite() { shift_rpm.clamp(1.0, max_rpm) } else { max_rpm };
+        let shift_rpm = if shift_rpm.is_finite() {
+            shift_rpm.clamp(1.0, max_rpm)
+        } else {
+            max_rpm
+        };
         let top = (((max_rpm + 250.0) / 1000.0).ceil() as usize).clamp(MIN_THOUSANDS, MAX_THOUSANDS);
         let span = top as f32 * 1000.0;
         let red_from = ((shift_rpm / 1000.0).round() as usize).clamp(1, top);
-        let stage0 = if stage0.is_finite() { stage0.clamp(0.3, 0.99) } else { 0.75 };
+        let stage0 = if stage0.is_finite() {
+            stage0.clamp(0.3, 0.99)
+        } else {
+            0.75
+        };
         let a = (stage0 * shift_rpm / span).clamp(0.0, 1.0);
         let b = (shift_rpm / span).clamp(a, 1.0);
         Self {
@@ -403,7 +411,12 @@ impl Geom {
         let y1 = a.max.y - pitch * j as f32 - pitch * 0.15;
         let y0 = a.max.y - pitch * (j as f32 + 1.0) + pitch * 0.15;
         if j + 1 == SLIP_STEPS {
-            [vec2(x0, y1), vec2(x0 + w, y1), vec2(x0 + w, y0 + pitch * 0.35), vec2(x0, y0)]
+            [
+                vec2(x0, y1),
+                vec2(x0 + w, y1),
+                vec2(x0 + w, y0 + pitch * 0.35),
+                vec2(x0, y0),
+            ]
         } else {
             [vec2(x0, y1), vec2(x0 + w, y1), vec2(x0 + w, y0), vec2(x0, y0)]
         }
@@ -816,7 +829,8 @@ impl Cluster for RetroCyber {
         } else {
             Emission::Matte
         };
-        self.gear.draw(p, g.gear, &Seg7Geometry::new(g.gear_cap), &pal, emission);
+        self.gear
+            .draw(p, g.gear, &Seg7Geometry::new(g.gear_cap), &pal, emission);
         self.speed
             .draw(p, g.speed, &Seg7Geometry::new(g.speed_cap), &pal, Emission::Bloom);
 
@@ -926,7 +940,12 @@ impl RetroCyber {
         p.fill(&Shape::round_rect(outer, r_out), face);
         p.fill(&Shape::round_rect(g.lens, g.lens_r), roles.oled_black);
         let px = p.device_px();
-        let rim_out = lit_rim(c, light, roles.rim_specular.with_alpha(0.5), roles.hairline.with_alpha(0.05));
+        let rim_out = lit_rim(
+            c,
+            light,
+            roles.rim_specular.with_alpha(0.5),
+            roles.hairline.with_alpha(0.05),
+        );
         p.stroke(
             &Shape::round_rect(outer.inset(px * 0.5), r_out - px * 0.5),
             rim_out,
@@ -1140,7 +1159,10 @@ impl RetroCyber {
             align: Align::Left,
             ..figure
         };
-        for (k, value, unit) in [(0usize, self.power_scale as i64, power_unit), (1, BOOST_MAX_PSI as i64, "psi")] {
+        for (k, value, unit) in [
+            (0usize, self.power_scale as i64, power_unit),
+            (1, BOOST_MAX_PSI as i64, "psi"),
+        ] {
             let (x0, w) = g.slant_base(k);
             let x = x0 + lean + w * 0.5;
             p.number(vec2(x + 2.0, fy), value, 3, &figure_r, None);
@@ -1233,7 +1255,11 @@ mod tests {
     fn layout_stays_inside_the_view_envelopes() {
         let t = Tokens::default();
         for (g, env) in [(&COCKPIT, t.layout.cockpit_envelope), (&HOOD, t.layout.hood_envelope)] {
-            assert!(inside(env, g.lens.expand(g.surround)), "surround {:?} in {env:?}", g.lens);
+            assert!(
+                inside(env, g.lens.expand(g.surround)),
+                "surround {:?} in {env:?}",
+                g.lens
+            );
             let w = g.windows();
             for (i, a) in w.iter().enumerate() {
                 assert!(inside(g.lens.inset(8.0), *a), "{a:?} inside the lens");
@@ -1262,7 +1288,10 @@ mod tests {
             assert!(last[0].y < first[0].y, "the baseline rises");
             // The bracket clears the window's top, and the strobing strip is at most 42 px.
             for u in [0.0f32, 0.5, 1.0] {
-                assert!(g.pod_base_at(u) - g.pod_h - 5.0 > g.centre.min.y + 2.0, "bracket and rail at {u}");
+                assert!(
+                    g.pod_base_at(u) - g.pod_h - 5.0 > g.centre.min.y + 2.0,
+                    "bracket and rail at {u}"
+                );
             }
             assert!(g.pod_h <= 42.0);
             // The numerals sit above the bar tops and below the bracket.
@@ -1286,9 +1315,15 @@ mod tests {
                 // Clear of the tach baseline above it.
                 let u0 = ((b.min.x - g.tach_x.0) / (g.tach_x.1 - g.tach_x.0)).clamp(0.0, 1.0);
                 let u1 = ((b.max.x - g.tach_x.0) / (g.tach_x.1 - g.tach_x.0)).clamp(0.0, 1.0);
-                assert!(b.min.y > g.base_at(u0).max(g.base_at(u1)) + 20.0, "{b:?} under the bars");
+                assert!(
+                    b.min.y > g.base_at(u0).max(g.base_at(u1)) + 20.0,
+                    "{b:?} under the bars"
+                );
             }
-            assert!(!overlaps(gb, sb.expand(60.0)), "gear and speed apart (unit label between)");
+            assert!(
+                !overlaps(gb, sb.expand(60.0)),
+                "gear and speed apart (unit label between)"
+            );
             assert!(!overlaps(rb.expand(30.0), sb));
             // Rank: the gear is the largest figure, then the speed.
             assert!(g.gear_cap > g.speed_cap && g.speed_cap > 2.5 * g.numeral_cap);
