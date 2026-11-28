@@ -71,7 +71,7 @@ use fh6_kit::logo::LogoStyle;
 use fh6_kit::{
     vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, Hysteresis,
     ImageId, ImagePaint, ImageWrap, LayerOptions, Layout, Logo, OpticalGlass, Paint, Painter, Palette, Piece,
-    PowerUnit, Rect, Shape, Signals, Smoothed, TextStyle, Tokens, VAlign, Vec2, View,
+    PowerUnit, Rect, Shape, Signals, Smoothed, Strobe, TextStyle, Tokens, VAlign, Vec2, View,
 };
 
 /// Tach bars per 1,000 rpm (one per 250 rpm).
@@ -161,6 +161,11 @@ const RED_PRINT_LEVEL: f32 = 0.72;
 const RED_LINE_DROP: f32 = 6.0;
 /// Straight pieces of the red-zone line along the curved baseline.
 const RED_LINE_PARTS: usize = 6;
+/// Stroke of the red-zone line and of the limiter tick (device px): wide enough to read as the
+/// red zone at a glance (the closing cold reviewer could not find the limiter point at 3 px).
+const RED_LINE_PX: f32 = 5.0;
+/// See [`RED_LINE_PX`].
+const RED_TICK_PX: f32 = 6.0;
 /// The unlit bracket rail (the printed red line under the pods) as seen on screen.
 const RAIL_LEVEL: f32 = 0.18;
 /// The printed divider line as seen on screen (dimmer than the labels it sits over).
@@ -935,6 +940,10 @@ pub struct RetroCyber {
     cue: LimiterCue,
     scale: Scale,
     hold: LimiterHold,
+    /// Seconds on the limiter (0 off it), the clock of the bracket's strobe.
+    on_limiter: f32,
+    /// The bracket's strobe phase this frame (`None` in reduced-flash mode).
+    strobe: Option<bool>,
     bars_lit: usize,
     tip_duty: f32,
     gear: Seg7Digit,
@@ -1022,6 +1031,8 @@ impl RetroCyber {
             cue: LimiterCue::new(),
             scale,
             hold: LimiterHold::default(),
+            on_limiter: 0.0,
+            strobe: Some(false),
             bars_lit: 0,
             tip_duty: 0.0,
             gear,
@@ -1059,9 +1070,12 @@ impl RetroCyber {
     /// and follows the strip's strobe.
     fn pod_color(&self, i: usize, pal: &Palette) -> Option<Color> {
         if self.shift.over_shift() {
-            // `ShiftLights` owns the strobe clock: its outermost pod is lit exactly in the on
-            // phase (and always, as a breath, in reduced-flash mode).
-            return self.shift.color_of(0, pal);
+            // The strobe opens on the limiter with its on phase; reduced-flash mode takes
+            // `ShiftLights`' breath (its outermost pod, always lit).
+            return match self.strobe {
+                Some(on) => on.then_some(pal.shift),
+                None => self.shift.color_of(0, pal),
+            };
         }
         let level = self.shift.level();
         let rank = (i as f32 + 1.0) / PODS as f32;
@@ -1124,6 +1138,19 @@ impl Cluster for RetroCyber {
         (self.bars_lit, self.tip_duty) = self.scale.lit(self.hold.feed(sig.rpm, sig.max_rpm, dt));
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.cue.update(self.shift.over_shift(), 0.12, dt);
+        // The bracket's strobe is timed from the moment the limiter is reached, so it always
+        // opens with its on phase (the pods never go dark as the limiter arrives); in
+        // reduced-flash mode the strip's breath is used instead.
+        self.strobe = if input.reduced_flash {
+            None
+        } else {
+            Some(Strobe::LIMITER.on(self.on_limiter))
+        };
+        self.on_limiter = if self.shift.over_shift() {
+            self.on_limiter + dt.max(0.0)
+        } else {
+            0.0
+        };
 
         // Gear: white phosphor (soft glow while the limiter cue holds, drawn below), warning in
         // reverse, neutral at 72%. Segments switch on the frame the gear changes (a VFD has no
@@ -1567,11 +1594,11 @@ impl RetroCyber {
         for k in 0..RED_LINE_PARTS {
             let u0 = from + (1.0 - from) * k as f32 / RED_LINE_PARTS as f32;
             let u1 = from + (1.0 - from) * (k + 1) as f32 / RED_LINE_PARTS as f32;
-            p.fill(&Shape::line(under(u0), under(u1), px * 3.0), red);
+            p.fill(&Shape::line(under(u0), under(u1), px * RED_LINE_PX), red);
         }
         let limit = under(self.scale.limit);
         p.fill(
-            &Shape::line(limit, vec2(limit.x, limit.y + RED_LINE_DROP * 2.0), px * 4.0),
+            &Shape::line(limit, vec2(limit.x, limit.y + RED_LINE_DROP * 3.0), px * RED_TICK_PX),
             red,
         );
 
