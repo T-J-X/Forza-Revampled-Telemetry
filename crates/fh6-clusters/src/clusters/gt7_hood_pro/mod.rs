@@ -1,4 +1,4 @@
-//! GT7 Hood Pro (`ClusterTheme::Gt7HoodPro`), catalog row 3: the Modern Digital 2027 family's
+//! Bonnet Line (`ClusterTheme::Gt7HoodPro`), catalog row 3: the Modern Digital 2027 family's
 //! pattern-setter and the default hood theme (hood, build #2).
 //!
 //! Gran Turismo 7's Bonnet View meter (`RESEARCH.md`): one low band across the bottom of the
@@ -400,7 +400,7 @@ impl Tile {
     }
 }
 
-/// The GT7 Hood Pro cluster.
+/// The Bonnet Line cluster (`Gt7HoodPro`).
 #[derive(Debug, Clone)]
 pub struct Gt7HoodPro {
     faces: Faces,

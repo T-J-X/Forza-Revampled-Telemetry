@@ -683,7 +683,7 @@ pub fn theme_label(theme: ClusterTheme) -> &'static str {
         ClusterTheme::WindshieldHud => "Windshield HUD",
         ClusterTheme::TeslaAdas => "Tesla ADAS",
         ClusterTheme::RetroCyber => "Retro Cyber",
-        ClusterTheme::Gt7HoodPro => "GT7 Hood Pro",
+        ClusterTheme::Gt7HoodPro => "Bonnet Line",
         ClusterTheme::AmgMbuxSuperscreen => "AMG MBUX",
         ClusterTheme::LfaV10Nurburgring => "LFA V10",
         ClusterTheme::PaganiHorologerie => "Pagani Horologerie",

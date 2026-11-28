@@ -1,4 +1,4 @@
-# GT7 Hood Pro (`Gt7HoodPro`): brief
+# Bonnet Line (`Gt7HoodPro`): brief
 
 The brief of the rebuild (thread "Rebuild Gt7HoodPro dash", 2026-11-28). It replaces the catalog brief of Phase 7's setup (the gull-wing horizon with twin ribbons, in the git history), which invented a concept the real display does not have. The rule since 2026-11-23 is that a dash named after a real display must be recognisable as that display, so this one follows Gran Turismo 7. The research is in [RESEARCH.md](RESEARCH.md); the board is Penpot page `07 · Gt7HoodPro`.
 

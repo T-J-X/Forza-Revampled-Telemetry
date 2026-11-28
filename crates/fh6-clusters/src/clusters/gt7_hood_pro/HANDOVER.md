@@ -199,3 +199,7 @@ TJX answered in the thread, on `dc_board_before_after.png`: "i like what you mad
 | RC-4 | Two radii were bare literals the drift test could not see | | fixed: `TICK_R`, `SUG_R` named and checked (commit `59c8a0b`) |
 | HP-1 (refuter's new finding) | The red alert zone baked at LED 85 ignores the driver's OSD shift point | new | fixed: the zone is drawn live from the shift point; the plate's lenses are all smoked again (next rebuild) |
 | HP-2 (refuter's new finding) | The committed plate predates the recipe | new | the rebuild runs on the PC; a second rebuild follows for the live zone |
+
+### The user-facing name
+
+The OSD's cold reviewer, through the coordinator (05:46Z), flagged "GT7 Hood Pro" as a release risk: the name the user sees names another game. The dash is now shown as **Bonnet Line** (the low band of instruments that floats over the bonnet): `registry.rs`, `catalog.rs` (`display`), the OSD's theme names (`fh6-osd/src/model.rs`), `docs/TELEMETRY_USAGE_MATRIX.md`, and this module's README, spec and doc. The internal identifier stays `Gt7HoodPro` (theme, config value `"Gt7HoodPro"`, folder, assets and Penpot page), so saved configs and other threads are unaffected, and RESEARCH.md still names GT7 as the reference. CATALOG.md is the chain's file and is not edited here; its row keeps the identifier.

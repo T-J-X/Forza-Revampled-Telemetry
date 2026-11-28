@@ -122,7 +122,7 @@ pub static CATALOG: [CatalogEntry; 48] = [
         row: 3,
         theme: ClusterTheme::Gt7HoodPro,
         snake: "gt7_hood_pro",
-        display: "GT7 Hood Pro",
+        display: "Bonnet Line",
         family: Family::ModernDigital,
         kind: Kind::Rebuild,
         views: Views::HOOD,

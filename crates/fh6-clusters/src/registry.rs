@@ -25,7 +25,7 @@ pub static REGISTRY: &[ClusterEntry] = &[
     },
     ClusterEntry {
         theme: ClusterTheme::Gt7HoodPro,
-        name: "GT7 Hood Pro",
+        name: "Bonnet Line",
         family: Family::ModernDigital,
         make: clusters::gt7_hood_pro::make,
     },

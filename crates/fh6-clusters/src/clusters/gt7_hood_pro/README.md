@@ -1,4 +1,4 @@
-# GT7 Hood Pro
+# Bonnet Line (`Gt7HoodPro`)
 
 Catalog row 3 · `ClusterTheme::Gt7HoodPro` (config value `"Gt7HoodPro"`, the default hood theme) · Modern Digital 2027 · hood · ★ pattern-setter.
 
