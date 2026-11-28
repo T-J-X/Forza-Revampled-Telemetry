@@ -4,6 +4,8 @@
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
 //! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
+#[allow(dead_code)]
+mod physics;
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;
 use fh6_kit::cluster::Setup;
