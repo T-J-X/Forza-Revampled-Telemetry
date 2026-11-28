@@ -67,9 +67,9 @@ use fh6_kit::cluster::Setup;
 use fh6_kit::color::{linear_to_srgb, srgb_to_linear};
 use fh6_kit::logo::LogoStyle;
 use fh6_kit::{
-    vec2, Align, BlendMode, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, Hysteresis, ImageId,
-    ImagePaint, ImageWrap, LayerOptions, Layout, Logo, OpticalGlass, Paint, Painter, Palette, Piece, PowerUnit, Rect,
-    Shape, Signals, Smoothed, TextStyle, Tokens, VAlign, Vec2, View,
+    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, Hysteresis,
+    ImageId, ImagePaint, ImageWrap, LayerOptions, Layout, Logo, OpticalGlass, Paint, Painter, Palette, Piece,
+    PowerUnit, Rect, Shape, Signals, Smoothed, TextStyle, Tokens, VAlign, Vec2, View,
 };
 
 /// Tach bars per 1,000 rpm (one per 250 rpm).
@@ -108,6 +108,15 @@ const POWER_RERANGE_THROTTLE: f32 = 0.1;
 const WATTS_PER_HP: f32 = 745.7;
 /// Small readouts refresh at 5 Hz, like a car display.
 const READOUT_PERIOD_S: f32 = 0.2;
+/// Within this of the limiter (rpm), a drop smaller than this is a bounce off it and the tach
+/// holds the peak. A limiter at or below this counts as none known.
+const LIMITER_BAND: f32 = 200.0;
+/// A held peak stays exactly still for this long after the rpm last reached it (s): a limiter
+/// bounce comes back to its peak every frame or two.
+const BOUNCE_HOLD_S: f32 = 0.1;
+/// After [`BOUNCE_HOLD_S`] the held peak sinks this fast to the rpm (rpm/s), so the tach never
+/// reads high for long.
+const HOLD_DECAY: f32 = 400.0;
 /// Boot: filament warm-up (s).
 const FILAMENT_WARM_S: f32 = 0.15;
 /// Boot: ignition sectors, left to right.
@@ -192,6 +201,20 @@ const LENS_BLEND: f32 = 24.0;
 const HUMP_OVERLAP: f32 = 80.0;
 /// The lens's cross-section: thickness, rounded edge, glass below the rim (local px).
 const LENS_SECTION: (f32, f32, f32) = (7.0, 10.0, 5.0);
+/// How far inside the lens outline the surround's ring reaches (local px): the Blender ring
+/// starts 1 px inside it, and the fallback's inner rim and its anti-aliasing reach about as far.
+const RING_INSIDE: f32 = 3.0;
+/// Reach of the ring cover beyond the surround and its image margin (local px): the smooth
+/// union moves the outline by up to a pixel and a half close to a shoulder.
+const RING_SLACK: f32 = 3.0;
+/// Snapping the ring cover to device pixels moves an edge by up to half a device pixel: one
+/// local px at 1080p. The cover reaches this much further on both sides of the ring.
+const SNAP_SLACK: f32 = 1.0;
+/// How far along each edge from a shoulder (the concave corner where the raised part meets the
+/// strip) the smooth union bends the outline by more than half a pixel: five blend lengths.
+const SHOULDER_REACH: f32 = 5.0 * LENS_BLEND;
+/// Rectangles in the surround's ring cover ([`Geom::ring_cover`]).
+const RING_RECTS: usize = 12;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -510,6 +533,41 @@ impl Geom {
         [self.pedal, self.centre, self.slip, self.gauges]
     }
 
+    /// Twelve rectangles that together cover the surround's ring, from [`RING_INSIDE`] inside
+    /// the lens outline to the surround's outer edge and its image margin, and never overlap.
+    /// The surround's art, face and rims and the lens black are drawn on these and not over
+    /// the whole panel: a panel-sized fill costs about 0.05 ms at 4K. The pieces are the strip's
+    /// bottom edge with its corners, its sides, its top corners and the top edge each side of
+    /// the raised part, then a block over each side of the raised part (its top corner, its
+    /// side and the shoulder below it) and its top edge. A rectangle can be empty, and is then
+    /// skipped. Neighbours share their edges exactly, so snapped to device pixels the cover
+    /// tiles with no seam and no pixel drawn twice.
+    fn ring_cover(&self) -> [Rect; RING_RECTS] {
+        let l = self.lens;
+        let r = self.lens_r;
+        let i = RING_INSIDE + SNAP_SLACK;
+        let o = self.surround + SURROUND_MARGIN + RING_SLACK + SNAP_SLACK;
+        let st = self.strip_top;
+        let (h0, h1) = self.hump;
+        // A shoulder block reaches along the strip's top, but never into the strip's corners.
+        let left = SHOULDER_REACH.min(h0 - l.min.x - r);
+        let right = SHOULDER_REACH.min(l.max.x - r - h1);
+        [
+            rect(l.min.x - o, l.max.y - r, l.min.x + r, l.max.y + o),
+            rect(l.min.x + r, l.max.y - i, l.max.x - r, l.max.y + o),
+            rect(l.max.x - r, l.max.y - r, l.max.x + o, l.max.y + o),
+            rect(l.min.x - o, st + r, l.min.x + i, l.max.y - r),
+            rect(l.max.x - i, st + r, l.max.x + o, l.max.y - r),
+            rect(l.min.x - o, st - o, l.min.x + r, st + r),
+            rect(l.min.x + r, st - o, h0 - left, st + i),
+            rect(h1 + right, st - o, l.max.x - r, st + i),
+            rect(l.max.x - r, st - o, l.max.x + o, st + r),
+            rect(h0 - left, l.min.y - o, h0 + r, st + i),
+            rect(h0 + r, l.min.y - o, h1 - r, l.min.y + i),
+            rect(h1 - r, l.min.y - o, h1 + right, st + i),
+        ]
+    }
+
     /// Boot sector `k` (left to right) of the lens.
     fn sector(&self, k: usize) -> Rect {
         let b = self.lens;
@@ -655,6 +713,43 @@ impl SlowReadout {
     }
 }
 
+/// The rpm the tach shows: the rpm, or the peak of a bounce off the limiter. The limiter cuts
+/// and the engine comes back every frame or two, which would flicker the tip bar (lit by its
+/// duty) at 30 Hz. A gear change (the cluster calls [`LimiterHold::release`]), a drop of
+/// [`LIMITER_BAND`] or more, or a lift out of the band ends the hold at once.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct LimiterHold {
+    peak: f32,
+    /// Time since the rpm last reached the held peak (s).
+    since_peak: f32,
+}
+
+impl LimiterHold {
+    /// The rpm to show for `rpm` with the limiter at `limiter`.
+    fn feed(&mut self, rpm: f32, limiter: f32, dt: f32) -> f32 {
+        let rpm = if rpm.is_finite() { rpm.max(0.0) } else { 0.0 };
+        let dt = if dt.is_finite() { dt.max(0.0) } else { 0.0 };
+        // No limiter known (a menu, or a car that sends none): nothing is held.
+        let near = limiter.is_finite() && limiter > LIMITER_BAND && rpm >= limiter - LIMITER_BAND;
+        let drop = self.peak - rpm;
+        if near && drop > 0.0 && drop < LIMITER_BAND {
+            self.since_peak += dt;
+            if self.since_peak > BOUNCE_HOLD_S {
+                self.peak = (self.peak - HOLD_DECAY * dt).max(rpm);
+            }
+        } else {
+            self.peak = rpm;
+            self.since_peak = 0.0;
+        }
+        self.peak
+    }
+
+    /// Ends any hold at once: the rpm after a gear change is the new gear's, never a bounce.
+    fn release(&mut self) {
+        *self = Self::default();
+    }
+}
+
 /// The faces this cluster sets (resolved once in `new`; a user display font replaces them).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Faces {
@@ -681,6 +776,7 @@ pub struct RetroCyber {
     shift: ShiftLights,
     cue: LimiterCue,
     scale: Scale,
+    hold: LimiterHold,
     bars_lit: usize,
     tip_duty: f32,
     gear: Seg7Digit,
@@ -763,6 +859,7 @@ impl RetroCyber {
             shift: ShiftLights::new(PODS as u32),
             cue: LimiterCue::new(),
             scale,
+            hold: LimiterHold::default(),
             bars_lit: 0,
             tip_duty: 0.0,
             gear,
@@ -817,6 +914,7 @@ impl Cluster for RetroCyber {
         let sig = *input.signals;
         let first = self.first;
         self.first = false;
+        let gear_changed = self.sig.gear != sig.gear;
         self.sig = sig;
         self.palette = *input.palette;
         self.view = input.view;
@@ -849,9 +947,13 @@ impl Cluster for RetroCyber {
             self.parallax.update(dir, dt);
         }
 
-        // Tach scale, bars, bracket and the limiter cue.
+        // Tach scale, bars, bracket and the limiter cue. The bars show the peak of a bounce off
+        // the limiter, and the rpm itself from the frame the gear changes.
         self.scale = Scale::new(sig.max_rpm, sig.shift_rpm, self.palette.stages[0]);
-        (self.bars_lit, self.tip_duty) = self.scale.lit(sig.rpm);
+        if gear_changed {
+            self.hold.release();
+        }
+        (self.bars_lit, self.tip_duty) = self.scale.lit(self.hold.feed(sig.rpm, sig.max_rpm, dt));
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.cue.update(self.shift.over_shift(), 0.12, dt);
 
@@ -921,16 +1023,18 @@ impl Cluster for RetroCyber {
             }
         }
 
-        // 4. Live from frame 1: the gear (rank 1) and the speed (rank 2).
+        // 4. Live from frame 1: the gear (rank 1) and the speed (rank 2). Their halos are local
+        //    glows with no bloom pass: bloom would grow the whole frame's work rectangle and add
+        //    the bloom pyramid, about 0.09 ms of the 0.5 ms budget, for a wider haze.
         let emission = if self.cue.level() > 0.5 {
-            Emission::Soft
+            Emission::SoftHalo
         } else {
             Emission::Matte
         };
         self.gear
             .draw(p, g.gear, &Seg7Geometry::new(g.gear_cap), &pal, emission);
         self.speed
-            .draw(p, g.speed, &Seg7Geometry::new(g.speed_cap), &pal, Emission::Bloom);
+            .draw(p, g.speed, &Seg7Geometry::new(g.speed_cap), &pal, Emission::Halo);
 
         // 5. Boot self-test: every segment of the igniting sectors, then the phosphor decay.
         if let Some(t) = boot_t {
@@ -1019,8 +1123,9 @@ impl Cluster for RetroCyber {
 }
 
 impl RetroCyber {
-    /// The slim satin-graphite surround: an opaque black body under the lens, then the Blender
-    /// render (two key lights blended by lateral G), or without it the face shaded along the
+    /// The slim satin-graphite surround: an opaque black body under the lens, then on the ring
+    /// alone ([`Geom::ring_cover`]) the Blender render (two key lights blended by lateral G) and
+    /// the lens black over its inner edge, or without the render the face shaded along the
     /// light, a light-driven 1 px outer rim and a polished inner chamfer at the lens.
     fn draw_surround(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
@@ -1029,6 +1134,27 @@ impl RetroCyber {
         let body = g.lens_pieces(g.surround);
         let lens = g.lens_pieces(0.0);
         p.fill(&lens_shape(&body), roles.oled_black);
+        // The cover in target pixels: the cluster's transform only scales and moves, so each
+        // rectangle maps to a rectangle, and rounding its edges keeps shared edges shared.
+        let xf = p.current_transform();
+        let cover = g.ring_cover().map(|c| {
+            let t = xf.apply_rect(&c);
+            Rect::from_points(
+                vec2(t.min.x.round(), t.min.y.round()),
+                vec2(t.max.x.round(), t.max.y.round()),
+            )
+        });
+        // Runs `f` once per cover rectangle, clipped to it (the clip trims each quad to it).
+        let on_ring = |p: &mut Painter<'_>, f: &mut dyn FnMut(&mut Painter<'_>)| {
+            for c in cover.iter().filter(|c| !c.is_empty()) {
+                p.scoped(|p| {
+                    p.set_transform(Affine::IDENTITY);
+                    p.clip(*c, 0.0);
+                    p.set_transform(xf);
+                    f(p);
+                });
+            }
+        };
         let c = g.lens.center();
         let light = self.light.angle();
         let art = match self.view {
@@ -1036,21 +1162,25 @@ impl RetroCyber {
             View::Cockpit | View::Chase => self.surround[0],
         };
         if let Some(lights) = art {
-            // The two key lights (−160° → −110°) blended by the virtual light's azimuth; the
-            // render's centre is transparent, so the lens body stays black.
-            let image_rect = outer.expand(SURROUND_MARGIN);
+            // The two key lights (−160° → −110°) blended by the virtual light's azimuth, each
+            // drawn as the cover's rectangles (one batch per light); the render's centre is
+            // transparent, so the lens body stays black.
+            let image_rect = xf.apply_rect(&outer.expand(SURROUND_MARGIN));
             let lo = -160f32.to_radians();
             let k = ((light - lo) / 50f32.to_radians()).clamp(0.0, 1.0);
             for (img, share, blend) in [(lights[0], 1.0 - k, BlendMode::Normal), (lights[1], k, BlendMode::Add)] {
                 if share > 0.001 {
                     p.scoped(|p| {
+                        p.set_transform(Affine::IDENTITY);
                         p.set_blend(blend);
                         let paint = ImagePaint::new(img, image_rect).tint(Color::WHITE.with_alpha(share));
-                        p.fill(&Shape::rect(image_rect), paint);
+                        for c in cover.iter().filter(|c| !c.is_empty()) {
+                            p.fill(&Shape::rect(*c), paint);
+                        }
                     });
                 }
             }
-            p.fill(&lens_shape(&lens), roles.oled_black);
+            on_ring(p, &mut |p| p.fill(&lens_shape(&lens), roles.oled_black));
             return;
         }
         let l = Vec2::from_angle(light);
@@ -1058,10 +1188,6 @@ impl RetroCyber {
         let face = Gradient::linear(c + l * ext, c - l * ext)
             .stop(0.0, ink.with_alpha(on_screen(SURROUND_LIT)))
             .stop(1.0, ink.with_alpha(on_screen(SURROUND_DARK)));
-        // The face is the ring between the outer outline and the lens: the lens body is drawn
-        // black over it.
-        p.fill(&lens_shape(&body), face);
-        p.fill(&lens_shape(&lens), roles.oled_black);
         let px = p.device_px();
         let rim_out = lit_rim(
             c,
@@ -1069,22 +1195,22 @@ impl RetroCyber {
             roles.rim_specular.with_alpha(0.5),
             roles.hairline.with_alpha(0.05),
         );
-        p.stroke(
-            &lens_shape(&g.lens_pieces(g.surround - px * 0.5)),
-            rim_out,
-            fh6_kit::Stroke::new(px),
-        );
         let rim_in = lit_rim(
             c,
             light + core::f32::consts::PI,
             roles.rim_specular.with_alpha(0.4),
             roles.hairline.with_alpha(0.04),
         );
-        p.stroke(
-            &lens_shape(&g.lens_pieces(px * 1.5)),
-            rim_in,
-            fh6_kit::Stroke::new(px * 2.0),
-        );
+        let rim_out_at = g.lens_pieces(g.surround - px * 0.5);
+        let rim_in_at = g.lens_pieces(px * 1.5);
+        // The face is the ring between the outer outline and the lens: the lens body is drawn
+        // black over it. All four layers go in each rectangle in turn (one batch, one clip each).
+        on_ring(p, &mut |p| {
+            p.fill(&lens_shape(&body), face);
+            p.fill(&lens_shape(&lens), roles.oled_black);
+            p.stroke(&lens_shape(&rim_out_at), rim_out, fh6_kit::Stroke::new(px));
+            p.stroke(&lens_shape(&rim_in_at), rim_in, fh6_kit::Stroke::new(px * 2.0));
+        });
     }
 
     /// The printed divider of the A70's lens: one line under the windows, with a short riser in
@@ -1449,6 +1575,7 @@ pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fh6_kit::shape::blob_distance;
 
     fn inside(outer: Rect, inner: Rect) -> bool {
         outer.contains(inner.min) && outer.contains(inner.max)
@@ -1597,6 +1724,91 @@ mod tests {
         let silly = Scale::new(f32::NAN, f32::NAN, f32::NAN);
         assert!(silly.top >= MIN_THOUSANDS && silly.top <= MAX_THOUSANDS);
         assert_eq!(Scale::new(1e9, 1e9, 0.75).top, MAX_THOUSANDS);
+    }
+
+    #[test]
+    fn the_ring_cover_covers_the_surround_once_and_little_else() {
+        for g in [&COCKPIT, &HOOD] {
+            let cover: Vec<Rect> = g.ring_cover().into_iter().filter(|c| !c.is_empty()).collect();
+            let image = g.lens.expand(g.surround).expand(SURROUND_MARGIN);
+            // No pixel is drawn twice (that would double the second light's Add).
+            for (k, a) in cover.iter().enumerate() {
+                assert!(inside(image.expand(RING_SLACK + SNAP_SLACK), *a), "{a:?} strays");
+                for b in &cover[k + 1..] {
+                    assert!(!overlaps(*a, *b), "{a:?} overlaps {b:?}");
+                }
+            }
+            // Every pixel of the ring is covered, from RING_INSIDE inside the lens outline to the
+            // image margin outside the surround (the Blender ring's contours, and the grown
+            // body of the fallback), with one more pixel each side for snapping to the device.
+            let lens = g.lens_pieces(0.0);
+            let body = g.lens_pieces(g.surround);
+            let reach = g.surround + SURROUND_MARGIN + SNAP_SLACK;
+            let mut ring = 0usize;
+            let mut y = image.min.y - 1.5;
+            while y < image.max.y + 2.0 {
+                let mut x = image.min.x - 1.5;
+                while x < image.max.x + 2.0 {
+                    let q = vec2(x, y);
+                    let d = blob_distance(&lens, LENS_BLEND, q);
+                    let ds = blob_distance(&body, LENS_BLEND, q);
+                    if d >= -RING_INSIDE - SNAP_SLACK && (d <= reach || ds <= SURROUND_MARGIN + SNAP_SLACK) {
+                        ring += 1;
+                        assert!(cover.iter().any(|c| c.contains(q)), "{q:?} (d {d}) is not covered");
+                    }
+                    x += 1.0;
+                }
+                y += 1.0;
+            }
+            // And the cover is a small share of the panel.
+            let area: f32 = cover.iter().map(|c| c.width() * c.height()).sum();
+            let panel = image.width() * image.height();
+            assert!(ring > 0 && area < 0.2 * panel, "cover {area} of {panel} px2");
+        }
+    }
+
+    #[test]
+    fn the_tach_holds_the_peak_of_a_limiter_bounce() {
+        let dt = 1.0 / 60.0;
+        let limiter = 8700.0;
+        let mut h = LimiterHold::default();
+        // A pull to the limiter is shown as it is.
+        for rpm in [8300.0, 8500.0, 8690.0] {
+            assert_eq!(h.feed(rpm, limiter, dt), rpm);
+        }
+        // The bounce of the review sequence (8640 and 8690 on alternate frames) shows the peak.
+        for i in 0..12 {
+            let rpm = if i % 2 == 0 { 8640.0 } else { 8690.0 };
+            assert_eq!(h.feed(rpm, limiter, dt), 8690.0, "frame {i}");
+        }
+        // A gear change releases at once, even inside the band.
+        h.release();
+        assert_eq!(h.feed(8600.0, limiter, dt), 8600.0);
+        // So does a drop of the band or more, which also leaves the band.
+        let mut h = LimiterHold::default();
+        h.feed(8690.0, limiter, dt);
+        assert_eq!(h.feed(8480.0, limiter, dt), 8480.0);
+        // A bounce that stops: the peak stays for the hold time, then sinks to the rpm and
+        // never under it.
+        let mut h = LimiterHold::default();
+        h.feed(8690.0, limiter, dt);
+        for _ in 0..5 {
+            assert_eq!(h.feed(8600.0, limiter, dt), 8690.0);
+        }
+        let mut shown = 8690.0;
+        for _ in 0..30 {
+            let next = h.feed(8600.0, limiter, dt);
+            assert!(next <= shown && next >= 8600.0, "{next} after {shown}");
+            shown = next;
+        }
+        assert_eq!(shown, 8600.0);
+        // No limiter known, and bad input: nothing is held and nothing is NaN.
+        let mut h = LimiterHold::default();
+        h.feed(900.0, 0.0, dt);
+        assert_eq!(h.feed(850.0, 0.0, dt), 850.0);
+        assert_eq!(h.feed(f32::NAN, f32::NAN, dt), 0.0);
+        assert_eq!(h.feed(8650.0, limiter, f32::NAN), 8650.0);
+        assert_eq!(h.feed(8640.0, limiter, f32::NAN), 8650.0);
     }
 
     #[test]

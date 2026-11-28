@@ -175,6 +175,14 @@ pub enum Emission {
     /// limiter is active"): the single `glow.soft` lobe in a bloom layer, so a large white glyph
     /// keeps its edges and the ghosts around it stay readable.
     Soft,
+    /// The `glow.phosphor` lobes of [`Emission::Bloom`] as local glows in the current layer, with
+    /// no bloom: the halo stays inside the cavity and the frame needs no bloom pass, which grows
+    /// the whole work rectangle by the bloom margin and adds the bloom pyramid (about 0.09 ms at
+    /// 4K for a speed readout). For a dash whose GPU budget has no room for bloom.
+    Halo,
+    /// The single `glow.soft` lobe of [`Emission::Soft`], local, with no bloom (the hero gear on
+    /// the limiter of a dash that uses [`Emission::Halo`]).
+    SoftHalo,
     /// Ranks 4–5 (mini readouts, data tiles) and the hero gear off the limiter: lit segments with
     /// their core, no glow, no bloom.
     Matte,
@@ -793,7 +801,7 @@ impl<const N: usize> Seg7Number<N> {
                 lit_cell(p, geom, c, &cell.levels, &inks, emission);
             }
             if let Some(c) = colon {
-                let lobes = glow_lobes(p, geom, emission);
+                let lobes = glow_lobes(p.tokens(), geom, emission);
                 let core_half = geom.stroke * 0.5 * CORE_WIDTH;
                 for (dot, v) in geom.colon(c).iter().zip([-1.0, 1.0]) {
                     let core = geom.square(c, vec2(0.0, v * geom.height * COLON_DOT_V), core_half);
@@ -994,7 +1002,7 @@ fn phosphor_bloom(tokens: &Tokens, geom: &Seg7Geometry) -> Bloom {
 }
 
 /// Runs `f` in a phosphor bloom layer for [`Emission::Bloom`] and [`Emission::Soft`], in the
-/// current layer for [`Emission::Matte`].
+/// current layer for the others.
 fn emit<'f>(p: &mut Painter<'f>, geom: &Seg7Geometry, emission: Emission, f: impl FnOnce(&mut Painter<'f>)) {
     match emission {
         Emission::Bloom | Emission::Soft => {
@@ -1004,16 +1012,16 @@ fn emit<'f>(p: &mut Painter<'f>, geom: &Seg7Geometry, emission: Emission, f: imp
             };
             p.layer(options, f);
         }
-        Emission::Matte => f(p),
+        Emission::Halo | Emission::SoftHalo | Emission::Matte => f(p),
     }
 }
 
 /// The glow lobes for `emission` and their scale, or `None` for [`Emission::Matte`].
-fn glow_lobes(p: &Painter<'_>, geom: &Seg7Geometry, emission: Emission) -> Option<(GlowLevel, f32)> {
-    let glow = &p.tokens().glow;
+fn glow_lobes(tokens: &Tokens, geom: &Seg7Geometry, emission: Emission) -> Option<(GlowLevel, f32)> {
+    let glow = &tokens.glow;
     match emission {
-        Emission::Bloom => Some((glow.phosphor, geom.glow_scale())),
-        Emission::Soft => Some((glow.soft, geom.glow_scale())),
+        Emission::Bloom | Emission::Halo => Some((glow.phosphor, geom.glow_scale())),
+        Emission::Soft | Emission::SoftHalo => Some((glow.soft, geom.glow_scale())),
         Emission::Matte => None,
     }
 }
@@ -1073,7 +1081,7 @@ fn lit_cell(
     inks: &Inks,
     emission: Emission,
 ) {
-    let lobes = glow_lobes(p, geom, emission);
+    let lobes = glow_lobes(p.tokens(), geom, emission);
     let softness = geom.stroke * CORE_SOFTNESS;
     for (i, &level) in levels.iter().enumerate() {
         if level <= 0.0 || i == POINT_INDEX {
@@ -1508,6 +1516,17 @@ mod tests {
         assert_eq!(Seg7Geometry::new(5000.0).glow_scale(), GLOW_SCALE_RANGE.1);
         assert_eq!(speed.bloom_scale(), 1.0);
         assert!((Seg7Geometry::new(300.0).bloom_scale() - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn halo_modes_draw_the_bloom_modes_lobes() {
+        let t = Tokens::default();
+        let geom = Seg7Geometry::new(128.0);
+        let lobes = |e| glow_lobes(&t, &geom, e);
+        assert_eq!(lobes(Emission::Halo), lobes(Emission::Bloom));
+        assert_eq!(lobes(Emission::SoftHalo), lobes(Emission::Soft));
+        assert!(lobes(Emission::Halo).is_some() && lobes(Emission::SoftHalo).is_some());
+        assert_eq!(lobes(Emission::Matte), None);
     }
 
     #[test]
