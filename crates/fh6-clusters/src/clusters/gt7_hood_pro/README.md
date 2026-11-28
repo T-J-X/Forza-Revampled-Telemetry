@@ -26,7 +26,7 @@ Shared components it composes (`crate::common`): `HeroGear`, `TabularSpeed`, `Vi
 - `tests/golden/images/Gt7HoodPro_hood_*.png`
 - `assets/clusters/gt7_hood_pro/` and its ledger `ASSETS.md`: `plate_0.png` to `plate_2.png` and `suggest_0.png` to `suggest_2.png` (Blender, at the light's rest azimuth and its ±25° swing). The forged-carbon texture (ComfyUI) is rendered into the plate and has no runtime file. Without the files the cluster draws its procedural hardware.
 - `tools/asset-forge/src/recipes/gt7_hood_pro.rs` (builds all of them; the 4K masters go to the Drive folder `gt7_hood_pro\`)
-- Penpot page `07 · Gt7HoodPro` (`6fe75c5e-bb22-8084-8008-fd908bb325c8`): boards "Gt7HoodPro · <state> · zone table v2", hood 01 to 04, ids `347e5ae2-9e0b-80b1-8009-` + `035cbfdb5a2b`, `035cbfe8cb09`, `035cbff27163`, `035cbffb0be4`; the motion and material notes `347e5ae2-9e0b-80b1-8009-03626a7db219`; the old design's five boards are kept as "superseded · …". (The ids live here and in HANDOVER.md, not in CATALOG.md.)
+- Penpot page `07 · Gt7HoodPro` (`6fe75c5e-bb22-8084-8008-fd908bb325c8`): the v3 boards "Gt7HoodPro · <state>", hood 01 to 04, ids `347e5ae2-9e0b-80b1-8009-` + `03764221bdf2`, `03764325442f`, `0376442ccff0`, `0376456775b0` (the rail, thousand marks, live alert zone, tile chevron, BRK and THR, the speed unit, the trip and the closing spacing); the motion and material notes `347e5ae2-9e0b-80b1-8009-03626a7db219`; the v2 zone-table boards and the old design's five boards are kept as "superseded · …". (The ids live here and in HANDOVER.md, not in CATALOG.md.)
 
 ## Commands
 ```
