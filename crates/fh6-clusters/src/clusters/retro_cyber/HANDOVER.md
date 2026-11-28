@@ -39,7 +39,8 @@ Measured on the PC's RTX 3070 Ti Laptop GPU (median of three interleaved rounds 
 |---|---|---|---|---|
 | 7930b12 (first build after the direction check) | 0.66 to 0.74 ms | | 0.729 / 0.737 ms | |
 | 1b3ce71 (ring cover, no bloom, limiter hold, new surround art) | 0.518 to 0.536 ms | 0.471 to 0.484 ms | 0.529 / 0.845 ms | 0.392 ms |
-| 9447c0f (mesh zones) | *pending* | *pending* | *pending* | *pending* |
+| 9447c0f (mesh zones; preview-export now also draws a logo in the zone, +2 draws) | 0.482 / 0.489 / 0.501 / 0.490 ms | 0.433 / 0.438 / 0.447 / 0.439 ms | 0.492 / 0.501 ms | 0.391 ms |
+| (next) side-window zones on their segments | *pending* | *pending* | *pending* | *pending* |
 
 What the cuts were, from the per-layer timing at e003c20 (surround 0.221, glass 0.205, mesh and scanlines 0.128, speed bloom 0.094 ms): the surround's art, face, rims and lens black are drawn on twelve rectangles over its ring only (about 17% of the panel); the speed and gear glow with local halos and no frame blooms; the grid mesh and the scanlines go only where phosphor can light. Drawing the lens glass on its rim band alone was tried and dropped: the kit never trims a glass draw under a clip, so twelve clipped glass draws were twice as slow on lavapipe. The p99 spikes (single frames about 0.3 ms slower, seen only in variants with a glass layer) are the kit thread "Speed up the kit's glass layer"'s to explain.
 

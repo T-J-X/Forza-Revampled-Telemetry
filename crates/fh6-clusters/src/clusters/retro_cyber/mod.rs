@@ -221,6 +221,8 @@ const RING_RECTS: usize = 12;
 const TACH_CHUNKS: usize = 6;
 /// Mesh zones: the tach band's steps, the speed, the gear and the three side windows.
 const MESH_ZONES: usize = TACH_CHUNKS + 5;
+/// Room around the side windows' segments in their mesh zones (local px).
+const SIDE_MARGIN: f32 = 2.0;
 /// Room around the tach band's bars, numerals and pods for their halos (local px).
 const TACH_MARGIN: f32 = 12.0;
 /// The widest halo lobe of a seven-segment digit (tokens `glow.phosphor`, its outer lobe) at
@@ -616,9 +618,31 @@ impl Geom {
         for (k, d) in cells.into_iter().enumerate() {
             zones[TACH_CHUNKS + k] = rect(d.min.x, d.min.y.max(shared), d.max.x, d.max.y);
         }
-        zones[TACH_CHUNKS + 2] = self.pedal;
-        zones[TACH_CHUNKS + 3] = self.slip;
-        zones[TACH_CHUNKS + 4] = self.gauges;
+        // The side windows: the bounds of their segments (rank 4, no glow); the scale figures
+        // over them are print.
+        let bounds = |pts: &mut dyn Iterator<Item = Vec2>, window: Rect| {
+            let (lo, hi) = pts.fold((Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)), |(lo, hi), q| {
+                (lo.min(q), hi.max(q))
+            });
+            rect(
+                (lo.x - SIDE_MARGIN).floor(),
+                grid_up(lo.y - SIDE_MARGIN),
+                (hi.x + SIDE_MARGIN).ceil(),
+                grid_down(hi.y + SIDE_MARGIN),
+            )
+            .intersect(&window)
+        };
+        let pedal = (0..2).flat_map(|col| (0..PEDAL_ROWS).map(move |row| (col, row)));
+        zones[TACH_CHUNKS + 2] = bounds(
+            &mut pedal.flat_map(|(col, row)| {
+                let r = self.pedal_cell(col, row);
+                [r.min, r.max]
+            }),
+            self.pedal,
+        );
+        zones[TACH_CHUNKS + 3] = bounds(&mut (0..SLIP_STEPS).flat_map(|j| self.slip_cell(j)), self.slip);
+        let slants = (0..2).flat_map(|k| (0..SLANT_STEPS).map(move |j| (k, j)));
+        zones[TACH_CHUNKS + 4] = bounds(&mut slants.flat_map(|(k, j)| self.slant_cell(k, j)), self.gauges);
         zones
     }
 
@@ -1859,6 +1883,18 @@ mod tests {
                     for q in g.pod(i, scale.bracket.0, scale.bracket.1) {
                         assert!(covered(q), "pod {i} corner {q:?}");
                     }
+                }
+                for col in 0..2 {
+                    for row in 0..PEDAL_ROWS {
+                        let r = g.pedal_cell(col, row);
+                        assert!(covered(r.min) && covered(r.max), "pedal cell {col} {row}");
+                    }
+                }
+                for q in (0..SLIP_STEPS).flat_map(|j| g.slip_cell(j)) {
+                    assert!(covered(q), "slip corner {q:?}");
+                }
+                for q in (0..2).flat_map(|k| (0..SLANT_STEPS).flat_map(move |j| g.slant_cell(k, j))) {
+                    assert!(covered(q), "slant corner {q:?}");
                 }
                 for (at, cap, cells) in [(g.speed, g.speed_cap, 3.0), (g.gear, g.gear_cap, 1.0)] {
                     let sg = Seg7Geometry::new(cap);
