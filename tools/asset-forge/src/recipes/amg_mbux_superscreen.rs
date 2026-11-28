@@ -9,16 +9,19 @@
 //!   halftone of the real W214 Sporty display, on the tunnel wall, the disc and the crescents.
 //! - **Brushed metal (ComfyUI):** a macro of brushed anodised aluminium, grey and seamless; it
 //!   drives the roughness of the tunnel's ring lines and the scale bands' rims.
-//! - **Assembly (Blender, Cycles):** board v3 (measured from the W214 photos after TJS's note of
-//!   07:41, "It looks nothing like how it should"), modelled at 1 Blender unit per 4K px: a
-//!   shallow near-black funnel from the crescents' inner edge to the disc with a faint halftone
-//!   towards the light, five thin satin-grey ring lines, the light at the end of the tunnel (a
-//!   flat dotted disc cut at the horizon, brightest where it meets the road, one darker ring
-//!   inside), a black veil below the horizon, a dark road lit from the horizon with fading edge
-//!   and lane lines, the bright horizon lip and a dim cross line, and two dark plum-charcoal scale
-//!   bands with a polished rim on the outer edge and a dim lip on the inner one. Lit by a dim
-//!   studio HDRI and one key 38° up, rendered once per key azimuth (rest −115°, swung −65°); the
-//!   cluster cross-fades the two with lateral G.
+//! - **Sky (ComfyUI, SDXL + 4x-UltraSharp):** board v4, after TJS's note of 08:18 ("subtle
+//!   clouds and horizon tunnel background and the tunnel from the back to front being the rev
+//!   limiter"): a wide dusk sky with soft layered clouds, made seamless left to right (the cluster
+//!   scrolls it with the speed), darkened towards the top so the speed reads over it, with a pale
+//!   glow along its bottom edge where the horizon sits.
+//! - **Assembly (Blender, Cycles):** modelled at 1 Blender unit per 4K px: twelve thin
+//!   satin-graphite ring ribs from the far end of the tunnel to just inside the crescents (spaced
+//!   in perspective, nearly clear above the horizon so the sky shows through them; the cluster
+//!   lights them as the rev counter), the dark road lit from the horizon with fading edge lines,
+//!   and two dark plum-charcoal scale bands with a polished rim on the outer edge and a dim lip on
+//!   the inner one. The middle of the tunnel is left clear for the sky. Lit by a dim studio HDRI
+//!   and one key 38° up, rendered once per key azimuth (rest −115°, swung −65°); the cluster
+//!   cross-fades the two with lateral G.
 //! - **Crescents (Blender):** both crescent bodies, extruded and bevelled, a solid halftone a
 //!   little brighter at the outer edge; turned into a luminance plate (white, the light in alpha)
 //!   so the cluster tints it with the palette's primary (always lit, like the real display).
@@ -52,18 +55,19 @@ const LIGHTS: [f32; 2] = [-115.0, -65.0];
 /// The tunnel centre (`Geom::tunnel`, local 4K px, y down).
 const TUNNEL: (f32, f32) = (0.0, -36.0);
 /// The crescents: outer radius, width at 9 and 3 o'clock, half span (degrees).
-const CRESCENT: (f32, f32, f32) = (300.0, 80.0, 43.0);
-/// The disc (the light at the end of the tunnel): centre and radius.
-const DISC: (f32, f32, f32) = (0.0, -62.0, 88.0);
-/// The horizon (local y): the disc is cut here and the road starts here.
+const CRESCENT: (f32, f32, f32) = (300.0, 84.0, 48.0);
+/// The horizon (local y): the sky ends and the road starts here.
 const HORIZON: f32 = -58.0;
-/// Ring lines: count, the gap outside the disc, the gap inside the crescents, and the ease.
-const RINGS: usize = 5;
+/// The ring ribs: count, the far ring (`[cx, cy, r]`, by the horizon), the gap left inside the
+/// crescents by the near ring, and the perspective ease (near rings spread further apart).
+const RINGS: usize = 12;
 /// See [`RINGS`].
-const RING_GAPS: (f32, f32) = (18.0, 16.0);
+const RING_FAR: (f32, f32, f32) = (0.0, -60.0, 64.0);
 /// See [`RINGS`].
-const RING_EASE: f32 = 1.15;
-/// How far the disc sits behind the outermost ring line (px).
+const RING_INSET: f32 = 14.0;
+/// See [`RINGS`].
+const RING_EASE: f32 = 1.7;
+/// How far the far ring sits behind the near one (px).
 const DEPTH: f32 = 40.0;
 /// The road: top y, top half width, bottom y, bottom half width.
 const FLOOR: [f32; 4] = [HORIZON, 44.0, 200.0, 214.0];
@@ -73,13 +77,16 @@ const BAND: [f32; 4] = [312.0, 392.0, 150.0, 216.0];
 /// The plate rects (local px): min x, min y, max x, max y.
 const ASSEMBLY_RECT: [f32; 4] = [-404.0, -280.0, 404.0, 208.0];
 /// See [`ASSEMBLY_RECT`].
-const CRESCENT_RECT: [f32; 4] = [-304.0, -244.0, 304.0, 172.0];
+const CRESCENT_RECT: [f32; 4] = [-304.0, -262.0, 304.0, 190.0];
 /// The widgets' radius, and the margin each plate keeps round it (lens, gauge).
 const WIDGET_R: f32 = 76.0;
 /// See [`WIDGET_R`].
 const MARGINS: (f32, f32) = (12.0, 16.0);
 /// The halftone's tile on the wall (local px): 32 dots across, a 7 px pitch.
 const DOT_TILE: f32 = 224.0;
+/// The crescents' halftone is coarser than the wall's (bigger, brighter dots, as on the real
+/// display).
+const CRESCENT_DOT_SCALE: f32 = 1.6;
 /// The brushed metal's tile (local px).
 const METAL_TILE: f32 = 512.0;
 
@@ -98,6 +105,15 @@ const DOT_SEED: u64 = 1407;
 const METAL_PROMPT: &str = "extreme macro photograph of brushed anodised aluminium, fine straight parallel brush lines running horizontally, flat even studio lighting, seamless surface texture, monochrome grey, ultra detailed, sharp focus";
 const METAL_NEGATIVE: &str = "text, letters, numbers, watermark, logo, frame, border, vignette, perspective, scratches, dents, rust, colour, lowres, blurry, jpeg artifacts";
 const METAL_SEED: u64 = 1409;
+/// The dusk sky.
+const SKY_PROMPT: &str = "wide cinematic photograph of a calm dusk sky, soft layered stratus and altocumulus clouds lit from below by the last light, deep navy blue overhead fading to pale warm grey low down, no land, no sun disc, serene, high dynamic range, ultra detailed, sharp focus";
+const SKY_NEGATIVE: &str = "text, letters, watermark, logo, people, buildings, trees, mountains, land, ground, sea, birds, aircraft, sun, lens flare, frame, border, vignette, lowres, blurry, jpeg artifacts, oversaturated, neon";
+const SKY_SEED: u64 = 1410;
+/// The SDXL size for the sky (a supported wide bucket); the 4x upscale makes it 6144x2560.
+const SKY_GEN: (u32, u32) = (1536, 640);
+/// The shipped sky (px, 2 per local px): it wraps left to right; the cluster shows a window of
+/// about 424 x 194 local px of it inside the tunnel and scrolls it with the speed.
+const SKY_SIZE: (usize, usize) = (2048, 448);
 /// Shipped texture size, halftone dots across and hex rows (even, so the offset rows tile).
 const DOT_SIZE: usize = 1024;
 /// See [`DOT_SIZE`].
@@ -105,10 +121,9 @@ const DOTS_ACROSS: usize = 32;
 /// See [`DOT_SIZE`].
 const DOT_ROWS: usize = 36;
 
-/// The tunnel and the side scales. Params: `rect`, `scale`, `rings` (`[cx, cy, r]` from the disc
-/// out to the crescents), `disc` (`[cx, cy, r]`), `horizon`, `depth`, `floor`, `band` (`[cx, cy,
-/// r_in, r_out, from, to]`), `lights`, `samples`, `dots`, `dot_tile`, `metal` (path or ""),
-/// `metal_tile`, `world`, `prefix`.
+/// The ring ribs, the road and the side scales. Params: `rect`, `scale`, `rings` (`[cx, cy, r]`
+/// from the far end out to the crescents), `horizon`, `depth`, `floor`, `band` (`[cx, cy, r_in,
+/// r_out, from, to]`), `lights`, `samples`, `metal` (path or ""), `metal_tile`, `world`, `prefix`.
 pub const ASSEMBLY_BPY: &str = r#"
 sc = reset()
 gpu_cycles(sc, samples=ARGS.get('samples', 128), denoise=True, bounces=8)
@@ -162,21 +177,8 @@ def metal_mat(name, base, rough, aniso=0.5):
     lk(NT, b.outputs[0], o.inputs['Surface'])
     return m
 
-def dots_tex(NT, tile):
-    tc = node(NT, 'ShaderNodeTexCoord')
-    mp = node(NT, 'ShaderNodeMapping')
-    t = 1.0 / float(tile)
-    mp.inputs['Scale'].default_value = (t, t, 1.0)
-    lk(NT, tc.outputs['Object'], mp.inputs['Vector'])
-    tex = node(NT, 'ShaderNodeTexImage', interpolation='Cubic', extension='REPEAT')
-    tex.image = bpy.data.images.load(ARGS['dots'], check_existing=True)
-    tex.image.colorspace_settings.name = 'Non-Color'
-    lk(NT, mp.outputs[0], tex.inputs['Vector'])
-    return tex.outputs['Color']
 
-
-RINGS = ARGS['rings']          # [cx, cy, r] the thin ring lines, disc .. crescents
-dcx, dcy, dr = [float(v) for v in ARGS['disc']]
+RINGS = ARGS['rings']          # [cx, cy, r] the ring ribs, far end .. crescents
 HZ = float(ARGS['horizon'])
 DEPTH = float(ARGS['depth'])
 
@@ -205,128 +207,40 @@ def flat(name, pts, z, mat):
     ob.data.materials.append(mat)
     return ob
 
-# The tunnel wall: a shallow funnel from the crescents' inner edge down to the disc, glossy near
-# black with a faint halftone that glows towards the light.
+# The ring ribs: thin satin-graphite tori, the far ones deeper; nearly clear above the horizon so
+# the sky shows through (the cluster lights them as the rev counter and fades them the same way).
 n = len(RINGS)
-bm = bmesh.new()
-loops = []
-for k in range(n - 1, -1, -1):
-    cx, cy, r = RINGS[k]
-    z = -DEPTH * (1.0 - (k / max(n - 1, 1)))
-    loops.append([bm.verts.new(P(cx + r * math.cos(2 * math.pi * i / SEG), cy + r * math.sin(2 * math.pi * i / SEG), z)) for i in range(SEG)])
-inner = [bm.verts.new(P(dcx + (dr + 4) * math.cos(2 * math.pi * i / SEG), dcy + (dr + 4) * math.sin(2 * math.pi * i / SEG), -DEPTH - 2)) for i in range(SEG)]
-loops.append(inner)
-for a, b in zip(loops[:-1], loops[1:]):
-    for k in range(SEG):
-        bm.faces.new((a[k], a[(k + 1) % SEG], b[(k + 1) % SEG], b[k]))
-bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-for f in bm.faces:
-    if f.normal.z < -1e-4:
-        f.normal_flip()
-wall = mesh_obj('wall', bm)
-for p in wall.data.polygons:
-    p.use_smooth = True
-m, NT = new_mat('wall')
-bsdf = node(NT, 'ShaderNodeBsdfPrincipled')
-bsdf.inputs['Base Color'].default_value = (0.003, 0.003, 0.004, 1.0)
-bsdf.inputs['Roughness'].default_value = 0.55
-bsdf.inputs['Specular IOR Level'].default_value = 0.08
-glow, wsp = screen_y_mask(NT, dcy - RINGS[-1][2], HZ, 0.0, 0.06)
-wdx = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, wsp.outputs['X'], wdx.inputs[0]); wdx.inputs[1].default_value = dcx
-wdy = node(NT, 'ShaderNodeMath', operation='ADD'); lk(NT, wsp.outputs['Y'], wdy.inputs[0]); wdy.inputs[1].default_value = dcy
-wcv = node(NT, 'ShaderNodeCombineXYZ'); lk(NT, wdx.outputs[0], wcv.inputs[0]); lk(NT, wdy.outputs[0], wcv.inputs[1])
-wln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, wcv.outputs[0], wln.inputs[0])
-wfo = node(NT, 'ShaderNodeMapRange', clamp=True)
-wfo.inputs['From Min'].default_value = dr; wfo.inputs['From Max'].default_value = RINGS[-1][2]
-wfo.inputs['To Min'].default_value = 1.0; wfo.inputs['To Max'].default_value = 0.0
-lk(NT, wln.outputs['Value'], wfo.inputs['Value'])
-wg = node(NT, 'ShaderNodeMath', operation='MULTIPLY'); lk(NT, glow, wg.inputs[0]); lk(NT, wfo.outputs['Result'], wg.inputs[1])
-mul = node(NT, 'ShaderNodeMath', operation='MULTIPLY')
-lk(NT, dots_tex(NT, ARGS['dot_tile'] * 0.6), mul.inputs[0])
-lk(NT, wg.outputs[0], mul.inputs[1])
-lk(NT, mul.outputs[0], bsdf.inputs['Emission Strength'])
-bsdf.inputs['Emission Color'].default_value = (0.70, 0.78, 0.90, 1.0)
-out = node(NT, 'ShaderNodeOutputMaterial')
-lk(NT, bsdf.outputs[0], out.inputs['Surface'])
-wall.data.materials.append(m)
-
-# The ring lines: thin satin-grey tori lying on the wall, fainter towards the crescents.
 for k, (cx, cy, r) in enumerate(RINGS):
-    z = -DEPTH * (1.0 - (k / max(n - 1, 1)))
-    u = k / max(n - 1, 1)
-    w = 1.3 + 0.9 * u
+    u = (k + 1) / n
+    z = -DEPTH * (1.0 - u)
+    w = 1.3 + 2.2 * u
     bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=w * 0.5, major_segments=SEG, minor_segments=12, location=P(cx, cy, z + w * 0.3))
     tor = bpy.context.active_object
     tor.scale = (1.0, 1.0, 0.6)
     bpy.ops.object.shade_smooth()
-    g = 0.30 - 0.10 * u
-    tor.data.materials.append(metal_mat('ring%d' % k, (g, g * 1.02, g * 1.08), 0.45, 0.0))
+    g = 0.12 - 0.04 * u
+    m, NT = new_mat('ring%d' % k)
+    b = node(NT, 'ShaderNodeBsdfPrincipled')
+    b.inputs['Base Color'].default_value = (g, g * 1.02, g * 1.08, 1.0)
+    b.inputs['Metallic'].default_value = 1.0
+    lk(NT, metal_rough(NT, 0.65), b.inputs['Roughness'])
+    clear, _ = screen_y_mask(NT, HZ - 90.0, HZ - 2.0, 0.95, 0.0)
+    tr = node(NT, 'ShaderNodeBsdfTransparent')
+    mx = node(NT, 'ShaderNodeMixShader')
+    lk(NT, clear, mx.inputs['Fac']); lk(NT, b.outputs[0], mx.inputs[1]); lk(NT, tr.outputs[0], mx.inputs[2])
+    o = node(NT, 'ShaderNodeOutputMaterial'); lk(NT, mx.outputs[0], o.inputs['Surface'])
+    tor.data.materials.append(m)
 
-# The light at the end of the tunnel: a flat disc cut at the horizon, brightest where it meets
-# the road, a fine halftone over it and one darker ring line inside.
-bm = bmesh.new()
-pts = []
-for i in range(SEG + 1):
-    a = math.pi + math.pi * i / SEG
-    x, y = dcx + dr * math.cos(a), dcy + dr * math.sin(a)
-    pts.append((x, min(y, HZ)))
-if dcy < HZ:
-    half = math.sqrt(max(dr * dr - (HZ - dcy) ** 2, 0.0))
-    pts = [(-half + dcx, HZ)] + [p for p in pts if p[1] <= HZ] + [(half + dcx, HZ)]
-vv = [bm.verts.new(P(x, y, -DEPTH - 3)) for x, y in pts]
-bm.faces.new(vv)
-bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-for f in bm.faces:
-    if f.normal.z < 0:
-        f.normal_flip()
-disc = mesh_obj('disc', bm)
-m, NT = new_mat('disc')
-lit, sp = screen_y_mask(NT, dcy - dr, HZ, 0.0, 1.0)
-ramp = node(NT, 'ShaderNodeValToRGB')
-el = ramp.color_ramp.elements
-el[0].position = 0.0; el[0].color = (0.035, 0.042, 0.055, 1.0)
-el[1].position = 1.0; el[1].color = (0.92, 0.95, 1.0, 1.0)
-e2 = el.new(0.6); e2.color = (0.24, 0.29, 0.36, 1.0)
-lk(NT, lit, ramp.inputs['Fac'])
-dx = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, sp.outputs['X'], dx.inputs[0]); dx.inputs[1].default_value = dcx
-dy = node(NT, 'ShaderNodeMath', operation='ADD'); lk(NT, sp.outputs['Y'], dy.inputs[0]); dy.inputs[1].default_value = dcy
-cv = node(NT, 'ShaderNodeCombineXYZ'); lk(NT, dx.outputs[0], cv.inputs[0]); lk(NT, dy.outputs[0], cv.inputs[1])
-ln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, cv.outputs[0], ln.inputs[0])
-ring_d = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, ln.outputs['Value'], ring_d.inputs[0]); ring_d.inputs[1].default_value = dr * 0.64
-ring_a = node(NT, 'ShaderNodeMath', operation='ABSOLUTE'); lk(NT, ring_d.outputs[0], ring_a.inputs[0])
-ring_m = node(NT, 'ShaderNodeMapRange', clamp=True)
-ring_m.inputs['From Min'].default_value = 0.6; ring_m.inputs['From Max'].default_value = 2.2
-ring_m.inputs['To Min'].default_value = 0.35; ring_m.inputs['To Max'].default_value = 1.0
-lk(NT, ring_a.outputs[0], ring_m.inputs['Value'])
-dmix = node(NT, 'ShaderNodeMapRange', clamp=True)
-dmix.inputs['To Min'].default_value = 0.62; dmix.inputs['To Max'].default_value = 1.0
-lk(NT, dots_tex(NT, ARGS['dot_tile'] * 0.5), dmix.inputs['Value'])
-m1 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, ramp.outputs['Color'], m1.inputs[0]); lk(NT, ring_m.outputs['Result'], m1.inputs['Scale'])
-m2 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, m1.outputs[0], m2.inputs[0]); lk(NT, dmix.outputs['Result'], m2.inputs['Scale'])
-emission_out(NT, m2.outputs[0], strength=1.0)
-disc.data.materials.append(m)
-
-# Below the horizon the tunnel sinks into shadow: a black veil over the wall and rings.
-veil, VNT = new_mat('veil')
-fac, _ = screen_y_mask(VNT, HZ, HZ + 120.0, 0.7, 0.92)
-tr = node(VNT, 'ShaderNodeBsdfTransparent')
-bk = node(VNT, 'ShaderNodeEmission'); bk.inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)
-mx = node(VNT, 'ShaderNodeMixShader')
-lk(VNT, fac, mx.inputs['Fac']); lk(VNT, tr.outputs[0], mx.inputs[1]); lk(VNT, bk.outputs[0], mx.inputs[2])
-vo = node(VNT, 'ShaderNodeOutputMaterial'); lk(VNT, mx.outputs[0], vo.inputs['Surface'])
-vr = RINGS[-1][2] + 6.0
-flat('veil', [(-vr, HZ), (vr, HZ), (vr, 240.0), (-vr, 240.0)], 2.0, veil)
-
-# The road: a dark wedge lit from the horizon, bright edge lines that fade towards the viewer,
-# two lane lines, the bright horizon lip and a dim cross line.
+# The road: a dark wedge lit from the horizon and bright edge lines that fade towards the viewer
+# (the cluster draws the scrolling lane dashes and the horizon line, which leans with lateral G).
 ft, fth, fb, fbh = [float(v) for v in ARGS['floor']]
 m, NT = new_mat('road')
 rl, _ = screen_y_mask(NT, ft, fb, 0.0, 1.0)
 rr = node(NT, 'ShaderNodeValToRGB')
 fe = rr.color_ramp.elements
-fe[0].position = 0.0; fe[0].color = (0.030, 0.034, 0.040, 1.0)
+fe[0].position = 0.0; fe[0].color = (0.075, 0.085, 0.105, 1.0)
 fe[1].position = 1.0; fe[1].color = (0.0004, 0.0004, 0.0005, 1.0)
-e = fe.new(0.28); e.color = (0.0045, 0.005, 0.006, 1.0)
+e = fe.new(0.28); e.color = (0.010, 0.011, 0.014, 1.0)
 lk(NT, rl, rr.inputs['Fac'])
 emission_out(NT, rr.outputs['Color'], strength=1.0)
 flat('road', [(-fth, ft), (fth, ft), (fbh, fb), (-fbh, fb)], 3.0, m)
@@ -348,25 +262,6 @@ def fading(name, top, bottom, y0, y1):
 edge_m = fading('edge', 1.0, 0.12, ft, fb)
 strip('edge_l', (-fth, ft), (-fbh, fb), 2.2, 3.4, edge_m)
 strip('edge_r', (fth, ft), (fbh, fb), 2.2, 3.4, edge_m)
-lane_m = fading('lane', 0.35, 0.05, ft, fb)
-for sx in (-1.0, 1.0):
-    strip('lane', (sx * fth * 0.45, ft), (sx * fbh * 0.45, fb), 1.3, 3.3, lane_m)
-cross_m = fading('cross', 0.16, 0.16, ft, fb)
-strip('cross', (-fth - 70.0, 0.0), (fth + 70.0, 0.0), 1.4, 3.3, cross_m)
-
-hz_m, HNT = new_mat('horizon')
-geo = node(HNT, 'ShaderNodeNewGeometry'); hsp = node(HNT, 'ShaderNodeSeparateXYZ'); lk(HNT, geo.outputs['Position'], hsp.inputs[0])
-hab = node(HNT, 'ShaderNodeMath', operation='ABSOLUTE'); lk(HNT, hsp.outputs['X'], hab.inputs[0])
-hmr = node(HNT, 'ShaderNodeMapRange', clamp=True)
-hlen = RINGS[-1][2] - 12.0
-hmr.inputs['From Min'].default_value = 0.0; hmr.inputs['From Max'].default_value = hlen
-hmr.inputs['To Min'].default_value = 1.0; hmr.inputs['To Max'].default_value = 0.0
-lk(HNT, hab.outputs[0], hmr.inputs['Value'])
-hpw = node(HNT, 'ShaderNodeMath', operation='POWER'); lk(HNT, hmr.outputs['Result'], hpw.inputs[0]); hpw.inputs[1].default_value = 1.6
-hc = node(HNT, 'ShaderNodeRGB'); hc.outputs[0].default_value = (0.86, 0.93, 1.0, 1.0)
-hs = node(HNT, 'ShaderNodeVectorMath', operation='SCALE'); lk(HNT, hc.outputs[0], hs.inputs[0]); lk(HNT, hpw.outputs[0], hs.inputs['Scale'])
-emission_out(HNT, hs.outputs[0], strength=1.2)
-strip('horizon', (-hlen, HZ), (hlen, HZ), 2.6, 3.6, hz_m)
 
 # The side scales: dark plum-charcoal bands with a polished rim on the outer edge and a dim line
 # on the inner edge, mirrored.
@@ -505,10 +400,7 @@ lk(NT, tex.outputs['Color'], dm.inputs['Value'])
 mul = node(NT, 'ShaderNodeMath', operation='MULTIPLY'); lk(NT, pw.outputs[0], mul.inputs[0]); lk(NT, dm.outputs['Result'], mul.inputs[1])
 em = node(NT, 'ShaderNodeEmission'); lk(NT, mul.outputs[0], em.inputs['Strength'])
 em.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)
-gl = node(NT, 'ShaderNodeBsdfGlossy'); gl.inputs['Roughness'].default_value = 0.18
-gl.inputs['Color'].default_value = (0.25, 0.25, 0.25, 1.0)
-add = node(NT, 'ShaderNodeAddShader'); lk(NT, em.outputs[0], add.inputs[0]); lk(NT, gl.outputs[0], add.inputs[1])
-out = node(NT, 'ShaderNodeOutputMaterial'); lk(NT, add.outputs[0], out.inputs['Surface'])
+out = node(NT, 'ShaderNodeOutputMaterial'); lk(NT, em.outputs[0], out.inputs['Surface'])
 
 NA = 220
 for side in (-1.0, 1.0):
@@ -624,19 +516,18 @@ for i, az in enumerate(ARGS['lights']):
 done()
 "#;
 
-/// The ring lines (`[cx, cy, r]`) from the disc out to the crescents' inner edge: the centre
-/// slides from the disc to the tunnel centre and the radius grows with a slight ease, as in the
-/// cluster's `Geom::ring`.
+/// The ring ribs (`[cx, cy, r]`) from the far end of the tunnel out to the crescents' inner
+/// edge: the centre slides from the far ring's to the tunnel centre and the radius grows with the
+/// perspective ease, as in the cluster's `Geom::ring`.
 fn ring_table() -> Vec<[f32; 3]> {
-    let r0 = DISC.2 + RING_GAPS.0;
-    let r1 = CRESCENT.0 - CRESCENT.1 - RING_GAPS.1;
+    let r1 = CRESCENT.0 - CRESCENT.1 - RING_INSET;
     (1..=RINGS)
         .map(|k| {
-            let u = k as f32 / RINGS as f32;
+            let e = (k as f32 / RINGS as f32).powf(RING_EASE);
             [
-                DISC.0 + (TUNNEL.0 - DISC.0) * u,
-                DISC.1 + (TUNNEL.1 - DISC.1) * u,
-                r0 + (r1 - r0) * u.powf(RING_EASE),
+                RING_FAR.0 + (TUNNEL.0 - RING_FAR.0) * e,
+                RING_FAR.1 + (TUNNEL.1 - RING_FAR.1) * e,
+                RING_FAR.2 + (r1 - RING_FAR.2) * e,
             ]
         })
         .collect()
@@ -644,14 +535,27 @@ fn ring_table() -> Vec<[f32; 3]> {
 
 /// Runs one SDXL macro through `workflows/sdxl_plate.json`, cached in the scratch by its
 /// fingerprint, and returns the raw image.
-fn sdxl_macro(ctx: &Ctx, scratch: &Path, name: &str, prompt: &str, negative: &str, seed: u64) -> Result<Img> {
+fn sdxl_macro(
+    ctx: &Ctx,
+    scratch: &Path,
+    name: &str,
+    (prompt, negative, seed): (&str, &str, u64),
+    (width, height): (u32, u32),
+) -> Result<Img> {
     let wf_path = ctx.paths.forge_dir().join("workflows").join("sdxl_plate.json");
     let workflow = String::from_utf8_lossy(&crate::ctx::read(&wf_path)?).to_string();
+    // The square macros keep their old fingerprints (and so their cached renders).
+    let size = if (width, height) == (1024, 1024) {
+        Vec::new()
+    } else {
+        [width.to_le_bytes(), height.to_le_bytes()].concat()
+    };
     let gen_fp = fingerprint(&[
         workflow.as_bytes(),
         prompt.as_bytes(),
         negative.as_bytes(),
         &seed.to_le_bytes(),
+        &size,
     ]);
     let raw_path = scratch.join(format!("{name}_raw.png"));
     let raw_fp_path = raw_path.with_extension("fp");
@@ -668,8 +572,8 @@ fn sdxl_macro(ctx: &Ctx, scratch: &Path, name: &str, prompt: &str, negative: &st
         params.insert("seed".into(), json!(seed));
         params.insert("steps".into(), json!(32));
         params.insert("cfg".into(), json!(6.5));
-        params.insert("width".into(), json!(1024));
-        params.insert("height".into(), json!(1024));
+        params.insert("width".into(), json!(width));
+        params.insert("height".into(), json!(height));
         params.insert("prefix".into(), json!(format!("fh6_amg_mbux_{name}")));
         let wf = comfy::patch(&workflow, &params)?;
         let images = c.run(&wf, Duration::from_secs(900))?;
@@ -702,7 +606,13 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let sdxl = "comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5)";
 
     // ComfyUI: the grille macro -> the halftone.
-    let raw = sdxl_macro(ctx, &scratch, "grille", DOT_PROMPT, DOT_NEGATIVE, DOT_SEED)?;
+    let raw = sdxl_macro(
+        ctx,
+        &scratch,
+        "grille",
+        (DOT_PROMPT, DOT_NEGATIVE, DOT_SEED),
+        (1024, 1024),
+    )?;
     let dots = halftone_plate(&raw);
     let dots_rel = format!("{DIR}/halftone_dots.png");
     let bytes = img::save_png(&dots, &ctx.abs(&dots_rel), false, false)?;
@@ -714,7 +624,13 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     ));
 
     // ComfyUI: the brushed-metal macro -> the metal grain.
-    let raw = sdxl_macro(ctx, &scratch, "metal", METAL_PROMPT, METAL_NEGATIVE, METAL_SEED)?;
+    let raw = sdxl_macro(
+        ctx,
+        &scratch,
+        "metal",
+        (METAL_PROMPT, METAL_NEGATIVE, METAL_SEED),
+        (1024, 1024),
+    )?;
     let metal = metal_plate(&raw);
     let metal_rel = format!("{DIR}/metal_brushed.png");
     let bytes = img::save_png(&metal, &ctx.abs(&metal_rel), false, false)?;
@@ -723,6 +639,19 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         bytes / 1024,
         img::tile_seam_score(&metal),
         s = DOT_SIZE
+    ));
+    // ComfyUI: the dusk sky (seen through the tunnel, scrolled by the cluster).
+    let raw = sdxl_macro(ctx, &scratch, "sky", (SKY_PROMPT, SKY_NEGATIVE, SKY_SEED), SKY_GEN)?;
+    let sky = sky_plate(&raw);
+    let bytes = img::save_png(&sky, &ctx.abs(&format!("{DIR}/sky.png")), false, false)?;
+    rows.push(format!(
+        "| `sky.png` | colour, wraps left to right | {}x{} | {} KB | {sdxl} {}x{} seed={SKY_SEED} prompt=\"{SKY_PROMPT}\" → a {:.0}% band from the middle, made to wrap left to right, darkened towards the top (gain {SKY_TOP_GAIN} → 1), a pale glow along the bottom edge, 99th percentile luma at {SKY_PEAK} | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the sky inside the tunnel above the horizon, scrolled with the speed and leaned with lateral G |",
+        sky.w,
+        sky.h,
+        bytes / 1024,
+        SKY_GEN.0,
+        SKY_GEN.1,
+        SKY_BAND * 100.0,
     ));
     let dots_abs = ctx.abs(&dots_rel).to_string_lossy().to_string();
     let metal_abs = ctx.abs(&metal_rel).to_string_lossy().to_string();
@@ -734,15 +663,12 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "rect": ASSEMBLY_RECT,
         "scale": SCALE,
         "rings": ring_table(),
-        "disc": [DISC.0, DISC.1, DISC.2],
         "horizon": HORIZON,
         "depth": DEPTH,
         "floor": FLOOR,
         "band": [TUNNEL.0, TUNNEL.1, BAND[0], BAND[1], BAND[2], BAND[3]],
         "lights": LIGHTS,
         "samples": SAMPLES,
-        "dots": dots_abs,
-        "dot_tile": DOT_TILE,
         "metal": metal_abs,
         "metal_tile": METAL_TILE,
         "world": 0.30,
@@ -755,8 +681,8 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             ctx,
             &scratch,
             &format!("assembly_{i}.png"),
-            &format!("blender:amg_mbux_superscreen::ASSEMBLY_BPY shallow funnel {DEPTH} px deep, {RINGS} thin ring lines, dotted disc r={} cut at the horizon y={HORIZON}, black veil below it, road lit from the horizon, plum-charcoal scale bands r={}..{} with polished rims, studio 0.30 + key {az}° at 38°, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}", DISC.2, BAND[0], BAND[1]),
-            &format!("the tunnel and the side scales, x {:.0} .. {:.0}, y {:.0} .. {:.0}; cross-faded with the other light by lateral G", ASSEMBLY_RECT[0], ASSEMBLY_RECT[2], ASSEMBLY_RECT[1], ASSEMBLY_RECT[3]),
+            &format!("blender:amg_mbux_superscreen::ASSEMBLY_BPY {RINGS} satin-graphite ring ribs r={}..{} over {DEPTH} px of depth (clear above the horizon y={HORIZON}), the road lit from the horizon with fading edges, plum-charcoal scale bands r={}..{} with polished rims, studio 0.30 + key {az}° at 38°, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}", RING_FAR.2, CRESCENT.0 - CRESCENT.1 - RING_INSET, BAND[0], BAND[1]),
+            &format!("the ring ribs, the road and the side scales, x {:.0} .. {:.0}, y {:.0} .. {:.0}; cross-faded with the other light by lateral G", ASSEMBLY_RECT[0], ASSEMBLY_RECT[2], ASSEMBLY_RECT[1], ASSEMBLY_RECT[3]),
         )?);
     }
 
@@ -768,7 +694,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "scale": SCALE,
         "crescent": [TUNNEL.0, TUNNEL.1, CRESCENT.0, CRESCENT.1, CRESCENT.2],
         "dots": dots_abs,
-        "dot_tile": DOT_TILE,
+        "dot_tile": DOT_TILE * CRESCENT_DOT_SCALE,
         "samples": SAMPLES,
         "file": "crescents_render.png",
     });
@@ -778,7 +704,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let plate = luminance_plate(&render);
     let bytes = img::save_png(&plate, &ctx.abs(&format!("{DIR}/crescents.png")), false, true)?;
     rows.push(format!(
-        "| `crescents.png` | white, light in straight alpha | {}x{} | {} KB | blender:amg_mbux_superscreen::CRESCENT_BPY two extruded, bevelled crescents r={} w={} ±{}°, solid halftone emission a little brighter at the outer edge, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}; luminance → alpha, peak at {PLATE_PEAK} | MIT (asset-forge) | the crescents, always lit and tinted by the primary (the rpm runs up their outer edge as a drawn line); x {:.0} .. {:.0}, y {:.0} .. {:.0} |",
+        "| `crescents.png` | white, light in straight alpha | {}x{} | {} KB | blender:amg_mbux_superscreen::CRESCENT_BPY two extruded, bevelled crescents r={} w={} ±{}°, matte solid halftone emission (dots {CRESCENT_DOT_SCALE}x the wall's) a little brighter at the outer edge, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}; luminance → alpha, peak at {PLATE_PEAK} | MIT (asset-forge) | the crescents, always lit and tinted by the primary (the rpm runs up their outer edge as a drawn line); x {:.0} .. {:.0}, y {:.0} .. {:.0} |",
         plate.w,
         plate.h,
         bytes / 1024,
@@ -907,6 +833,60 @@ fn metal_plate(raw: &Img) -> Img {
     })
 }
 
+/// The share of the upscaled sky's height kept (a band from the middle, clear of any ground or
+/// sun the model adds), the top's gain, and the peak luma.
+const SKY_BAND: f32 = 0.42;
+/// See [`SKY_BAND`].
+const SKY_TOP_GAIN: f32 = 0.35;
+/// See [`SKY_BAND`].
+const SKY_PEAK: f32 = 0.80;
+
+/// The sky: a band from the middle of the SDXL render, made to wrap left to right (the right
+/// eighth cross-fades into the start), darkened towards the top so the speed reads over it, and a
+/// pale glow along the bottom edge where the horizon sits.
+fn sky_plate(raw: &Img) -> Img {
+    let (w, h) = SKY_SIZE;
+    let blend = w / 8;
+    let band_h = ((raw.h as f32 * SKY_BAND) as usize).clamp(1, raw.h);
+    let y0 = (raw.h - band_h) / 2;
+    let band = raw.crop(0, y0, raw.w, band_h).resize(w + blend, h, false);
+    let wrapped = Img::from_fn(w, h, 3, |x, y| {
+        let mut out = [0.0f32; 4];
+        let t = img::smoothstep(0.0, blend as f32, x as f32);
+        for (ch, o) in out.iter_mut().enumerate().take(3) {
+            let a = band.get(x, y, ch);
+            *o = if x < blend {
+                band.get(x + w, y, ch) * (1.0 - t) + a * t
+            } else {
+                a
+            };
+        }
+        out
+    });
+    let mut lumas: Vec<f32> = (0..w * h)
+        .map(|i| img::luma(wrapped.data[i * 3], wrapped.data[i * 3 + 1], wrapped.data[i * 3 + 2]))
+        .collect();
+    lumas.sort_by(f32::total_cmp);
+    let p99 = lumas
+        .get((lumas.len() as f32 * 0.99) as usize)
+        .copied()
+        .unwrap_or(1.0)
+        .max(1e-3);
+    let norm = SKY_PEAK / p99;
+    Img::from_fn(w, h, 3, |x, y| {
+        let v = y as f32 / (h - 1).max(1) as f32;
+        let gain = SKY_TOP_GAIN + (1.0 - SKY_TOP_GAIN) * v.powf(1.4);
+        let glow = img::smoothstep(0.78, 1.0, v).powi(2);
+        let tint = [0.90, 0.88, 0.86];
+        let mut out = [0.0f32; 4];
+        for (ch, o) in out.iter_mut().enumerate().take(3) {
+            let c = (wrapped.get(x, y, ch) * norm * gain).clamp(0.0, 1.0);
+            *o = c + (tint[ch] - c).max(0.0) * glow * 0.75;
+        }
+        out
+    })
+}
+
 /// Turns the emission-only crescent render into a white plate with its light in alpha: the 99.7th
 /// percentile of the light maps to [`PLATE_PEAK`], and the cluster tints it with the primary.
 fn luminance_plate(render: &Img) -> Img {
@@ -936,17 +916,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_ring_lines_run_from_the_disc_to_the_crescents_and_the_bands_sit_outside() {
+    fn the_ring_ribs_run_from_the_far_end_to_the_crescents_and_the_bands_sit_outside() {
         let t = ring_table();
         assert_eq!(t.len(), RINGS);
         assert!(t.windows(2).all(|w| w[1][2] > w[0][2]));
-        assert!(t[0][2] > DISC.2);
+        assert!((t[0][2] - RING_FAR.2) > 0.0 && t[0][2] < RING_FAR.2 + 8.0);
         // The last ring line ends on the tunnel centre, inside the crescents' inner edge.
         let last = t[RINGS - 1];
         assert!((last[0] - TUNNEL.0).abs() < 1e-3 && (last[1] - TUNNEL.1).abs() < 1e-3);
         assert!(last[2] < CRESCENT.0 - CRESCENT.1);
-        // The horizon cuts the disc below its top; the bands clear the crescents and fit the plate.
-        const { assert!(HORIZON > DISC.1 - DISC.2 && HORIZON < DISC.1 + DISC.2) };
+        // The far ring straddles the horizon; the bands clear the crescents and fit the plate.
+        const { assert!(HORIZON > RING_FAR.1 - RING_FAR.2 && HORIZON < RING_FAR.1 + RING_FAR.2) };
         const { assert!(BAND[0] > CRESCENT.0 && BAND[1] > BAND[0]) };
         const { assert!(BAND[1] + 8.0 <= -ASSEMBLY_RECT[0]) };
         const { assert!(FLOOR[2] <= ASSEMBLY_RECT[3]) };
@@ -966,6 +946,14 @@ mod tests {
         let render = Img::from_fn(32, 32, 4, |x, _| {
             [x as f32 / 31.0, x as f32 / 31.0, x as f32 / 31.0, 1.0]
         });
+        let sky = sky_plate(&raw);
+        assert_eq!((sky.w, sky.h), SKY_SIZE);
+        assert!(sky.data.iter().all(|v| (0.0..=1.0).contains(v)));
+        // It wraps: the first and last columns are close; the top is darker than the bottom.
+        let col = |x: usize| (0..sky.h).map(|y| sky.get(x, y, 1)).sum::<f32>() / sky.h as f32;
+        assert!((col(0) - col(sky.w - 1)).abs() < 0.03, "{} {}", col(0), col(sky.w - 1));
+        let row = |y: usize| (0..sky.w).map(|x| sky.get(x, y, 1)).sum::<f32>() / sky.w as f32;
+        assert!(row(0) < row(sky.h - 1));
         let plate = luminance_plate(&render);
         let max = (0..32).map(|x| plate.get(x, 0, 3)).fold(0.0f32, f32::max);
         assert!((max - PLATE_PEAK).abs() < 0.02, "{max}");
