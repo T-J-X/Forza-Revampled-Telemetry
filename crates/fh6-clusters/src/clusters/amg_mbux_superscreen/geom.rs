@@ -1,9 +1,10 @@
 //! The zone table of `AmgMbuxSuperscreen` as data (local 4K px round the cockpit anchor, y down).
 //!
-//! It follows Penpot board v3 (page "07 · AmgMbuxSuperscreen", boards "v3 · <state>"), which was
-//! measured from photos of the real W214 Sporty display. There is no housing: every part floats
-//! on OLED black inside the cockpit envelope (−720, −320, 1440 × 560) over a soft charcoal stage
-//! with no edge. Keep the plate geometry in step with
+//! It follows Penpot board v4 (page "07 · AmgMbuxSuperscreen", boards "v4 · <state>"): the W214
+//! Sporty display's crescents, side scales, widgets and selector stack round TJS's sky tunnel (a
+//! dusk sky inside the tunnel, and twelve rings that light from the far end towards the driver as
+//! the rev counter). There is no housing: every part floats on OLED black inside the cockpit
+//! envelope (−720, −320, 1440 × 560) over a soft charcoal stage with no edge. Keep the plate geometry in step with
 //! `tools/asset-forge/src/recipes/amg_mbux_superscreen.rs`.
 use fh6_kit::{deg, vec2, Rect, Vec2};
 
@@ -12,10 +13,14 @@ pub(super) const CRESCENT_SAMPLES: usize = 33;
 /// The crescents' taper: the width follows sin(πt) to this power (flat in the middle, pointed
 /// tips, as on the real display).
 pub(super) const CRESCENT_TAPER: f32 = 0.38;
-/// Shift segments on each side of the centre along the speed line (they fill outside-in).
-pub(super) const SHIFT_PER_SIDE: usize = 6;
-/// Thin ring lines of the tunnel (drawn by the Blender plate, or by the fallback).
-pub(super) const RINGS: usize = 5;
+/// The tunnel's rings (the rev counter): the ribs on the Blender plate, lit by the cluster.
+pub(super) const RINGS: usize = 12;
+/// The nearest rings, which light red (the shift zone) and strobe on the limiter.
+pub(super) const RED_RINGS: usize = 3;
+/// The rings' perspective ease: the near ones spread further apart.
+pub(super) const RING_EASE: f32 = 1.7;
+/// Points of the sky window's outline (the tunnel's circle above the horizon).
+pub(super) const SKY_SAMPLES: usize = 49;
 /// Ticks on a side scale (major every `SCALE_MAJOR_EVERY`).
 pub(super) const SCALE_TICKS: usize = 21;
 /// See [`SCALE_TICKS`].
@@ -36,41 +41,38 @@ pub(super) struct Geom {
     pub crescent_w: f32,
     /// Half the crescent's span round 9 (and 3) o'clock (radians).
     pub crescent_half: f32,
-    /// The light at the end of the tunnel: centre and radius (cut at the horizon).
-    pub disc: Vec2,
-    /// See [`Geom::disc`].
-    pub disc_r: f32,
-    /// The horizon (y): the disc is cut here and the road starts here.
+    /// The far ring (by the horizon): centre and radius.
+    pub ring_far: Vec2,
+    /// See [`Geom::ring_far`].
+    pub ring_far_r: f32,
+    /// The gap the near ring leaves inside the crescents.
+    pub ring_inset: f32,
+    /// The horizon (y): the sky ends and the road starts here.
     pub horizon: f32,
-    /// The ring lines run from this far outside the disc to this far inside the crescents.
-    pub ring_gaps: Vec2,
+    /// The rings fade over this height above the horizon, to this share of their light at the
+    /// top (the sky shows through them).
+    pub ceiling_fade: f32,
+    /// See [`Geom::ceiling_fade`].
+    pub ceiling_floor: f32,
+    /// The rect one turn of the sky plate covers (it wraps left to right; its bottom edge is the
+    /// horizon).
+    pub sky: Rect,
     /// The road: a trapezoid with these y values and half widths.
     pub floor_top_half: f32,
     /// See [`Geom::floor_top_half`].
     pub floor_bottom: f32,
     /// See [`Geom::floor_top_half`].
     pub floor_bottom_half: f32,
-    /// The inner red arcs on the first ring line: the left arc's start and end angles (screen
-    /// convention, clockwise from 3 o'clock); the right one mirrors it.
-    pub arc_from: f32,
-    /// See [`Geom::arc_from`].
-    pub arc_to: f32,
     /// Speed (cap middle) and its cap height.
     pub speed: Vec2,
     /// See [`Geom::speed`].
     pub speed_cap: f32,
-    /// Unit under the speed (cap middle).
+    /// The speed's unit, left-aligned to the right of three digits (cap middle of its start).
     pub speed_unit: Vec2,
-    /// The speed line under the speed (y), which carries the shift segments.
+    /// The thin speed line under the speed: its y and half length.
     pub line_y: f32,
-    /// Shift segments: inner and outer x (|x|), height, gap.
-    pub shift_inner: f32,
-    /// See [`Geom::shift_inner`].
-    pub shift_outer: f32,
-    /// See [`Geom::shift_inner`].
-    pub shift_h: f32,
-    /// See [`Geom::shift_inner`].
-    pub shift_gap: f32,
+    /// See [`Geom::line_y`].
+    pub line_half: f32,
     /// The rpm readout on the road (cap middle) and its cap height; its unit below.
     pub rpm: Vec2,
     /// See [`Geom::rpm`].
@@ -88,8 +90,10 @@ pub(super) struct Geom {
     pub scale_to: f32,
     /// The share of the band the scale uses (its zero and its top), inside the band's ends.
     pub scale_span: Vec2,
-    /// Radius of the scale numerals' centres (on the band, inside the ticks).
+    /// Radius of the scale numerals' centres (on the band, inside the ticks), and their cap.
     pub scale_numeral_r: f32,
+    /// See [`Geom::scale_numeral_r`].
+    pub scale_cap: f32,
     /// Live torque (left) and power (right) values (cap middle), their cap, and their units.
     pub torque_value: Vec2,
     /// See [`Geom::torque_value`].
@@ -141,25 +145,26 @@ impl Geom {
         stage_r: Vec2 { x: 760.0, y: 300.0 },
         tunnel: Vec2 { x: 0.0, y: -36.0 },
         crescent_r: 300.0,
-        crescent_w: 80.0,
-        crescent_half: 0.750_492, // 43°
-        disc: Vec2 { x: 0.0, y: -62.0 },
-        disc_r: 88.0,
+        crescent_w: 84.0,
+        crescent_half: 0.837_758, // 48°
+        ring_far: Vec2 { x: 0.0, y: -60.0 },
+        ring_far_r: 64.0,
+        ring_inset: 14.0,
         horizon: -58.0,
-        ring_gaps: Vec2 { x: 18.0, y: 16.0 },
+        ceiling_fade: 90.0,
+        ceiling_floor: 0.08,
+        sky: Rect {
+            min: Vec2 { x: -512.0, y: -282.0 },
+            max: Vec2 { x: 512.0, y: -58.0 },
+        },
         floor_top_half: 44.0,
         floor_bottom: 200.0,
         floor_bottom_half: 214.0,
-        arc_from: 2.932_153, // 168°
-        arc_to: 3.944_444,   // 226°
-        speed: Vec2 { x: 0.0, y: -187.0 },
-        speed_cap: 50.0,
-        speed_unit: Vec2 { x: 0.0, y: -141.0 },
+        speed: Vec2 { x: 0.0, y: -190.0 },
+        speed_cap: 58.0,
+        speed_unit: Vec2 { x: 90.0, y: -172.0 },
         line_y: -153.0,
-        shift_inner: 84.0,
-        shift_outer: 204.0,
-        shift_h: 7.0,
-        shift_gap: 5.0,
+        line_half: 150.0,
         rpm: Vec2 { x: 0.0, y: 56.0 },
         rpm_cap: 40.0,
         rpm_unit: Vec2 { x: 0.0, y: 92.0 },
@@ -168,7 +173,8 @@ impl Geom {
         scale_from: 2.617_994, // 150°
         scale_to: 3.769_911,   // 216°
         scale_span: Vec2 { x: 0.08, y: 0.92 },
-        scale_numeral_r: 346.0,
+        scale_numeral_r: 344.0,
+        scale_cap: 25.0,
         torque_value: Vec2 { x: -400.0, y: 161.0 },
         power_value: Vec2 { x: 400.0, y: 161.0 },
         value_cap: 30.0,
@@ -193,8 +199,8 @@ impl Geom {
             max: Vec2 { x: 404.0, y: 208.0 },
         },
         crescent_rect: Rect {
-            min: Vec2 { x: -304.0, y: -244.0 },
-            max: Vec2 { x: 304.0, y: 172.0 },
+            min: Vec2 { x: -304.0, y: -262.0 },
+            max: Vec2 { x: 304.0, y: 190.0 },
         },
         lens_margin: 12.0,
         gauge_margin: 16.0,
@@ -241,32 +247,47 @@ impl Geom {
         self.tunnel + vec2(a.cos(), a.sin()) * r
     }
 
-    /// The shift segment `i` (0 = outermost) on `side` (−1 left, +1 right), on the speed line.
-    pub(super) fn shift_segment(&self, i: usize, side: f32) -> Rect {
-        let n = SHIFT_PER_SIDE as f32;
-        let span = self.shift_outer - self.shift_inner;
-        let w = (span - self.shift_gap * (n - 1.0)) / n;
-        let outer = self.shift_outer - i as f32 * (w + self.shift_gap);
-        let (x0, x1) = if side < 0.0 {
-            (-outer, -outer + w)
-        } else {
-            (outer - w, outer)
-        };
-        Rect::from_points(
-            vec2(x0, self.line_y - self.shift_h * 0.5),
-            vec2(x1, self.line_y + self.shift_h * 0.5),
+    /// Centre and radius of ring `k` (0 = the far one, by the horizon; [`RINGS`] − 1 the near
+    /// one, just inside the crescents): the centre slides from the far ring's to the tunnel
+    /// centre and the radius grows with the perspective ease, as in the recipe's `ring_table`.
+    pub(super) fn ring(&self, k: usize) -> (Vec2, f32) {
+        let e = ((k as f32 + 1.0) / RINGS as f32).powf(RING_EASE);
+        let r1 = self.crescent_r - self.crescent_w - self.ring_inset;
+        (
+            self.ring_far + (self.tunnel - self.ring_far) * e,
+            self.ring_far_r + (r1 - self.ring_far_r) * e,
         )
     }
 
-    /// Centre and radius of ring line `k` (0 = the innermost, round the disc): the centre slides
-    /// from the disc to the tunnel centre and the radius grows with a slight ease, as in the
-    /// recipe's `ring_table`.
-    pub(super) fn ring(&self, k: usize) -> (Vec2, f32) {
-        let u = (k as f32 + 1.0) / RINGS as f32;
-        let r0 = self.disc_r + self.ring_gaps.x;
-        let r1 = self.crescent_r - self.crescent_w - self.ring_gaps.y;
-        let c = self.disc + (self.tunnel - self.disc) * u;
-        (c, r0 + (r1 - r0) * u.powf(1.15))
+    /// The point the sky and the horizon lean about with lateral G.
+    pub(super) fn horizon_pivot(&self) -> Vec2 {
+        vec2(self.tunnel.x, self.horizon)
+    }
+
+    /// The sky window: the near ring's circle above the horizon, in the frame leaned by `tilt`
+    /// about [`Geom::horizon_pivot`] (the circle stays put on screen; the horizon leans), into
+    /// `out`. Returns the number of points (0 when the horizon misses the circle).
+    pub(super) fn sky_window(&self, tilt: f32, out: &mut [Vec2; SKY_SAMPLES]) -> usize {
+        let (c, r) = self.ring(RINGS - 1);
+        let pivot = self.horizon_pivot();
+        let c = pivot + (c - pivot).rotate(-tilt);
+        let dy = self.horizon - c.y;
+        if dy.abs() >= r {
+            return 0;
+        }
+        let hx = (r * r - dy * dy).sqrt();
+        let a0 = dy.atan2(-hx);
+        let mut a1 = dy.atan2(hx);
+        // Run over the top (screen up is −90°).
+        if a1 < a0 {
+            a1 += core::f32::consts::TAU;
+        }
+        let n = SKY_SAMPLES;
+        for (i, p) in out.iter_mut().enumerate() {
+            let a = a0 + (a1 - a0) * i as f32 / (n - 1) as f32;
+            *p = c + vec2(a.cos(), a.sin()) * r;
+        }
+        n
     }
 
     /// The four corners of the road (clockwise from top left).

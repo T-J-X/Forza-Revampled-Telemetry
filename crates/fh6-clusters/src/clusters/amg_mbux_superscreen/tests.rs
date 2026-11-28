@@ -1,4 +1,4 @@
-use super::geom::{Geom, RINGS, SHIFT_PER_SIDE};
+use super::geom::{Geom, RINGS, SKY_SAMPLES};
 use super::hardware::{crescent_band, crescent_polygon};
 use super::*;
 use fh6_kit::Tokens;
@@ -43,8 +43,6 @@ fn every_part_floats_inside_the_cockpit_envelope() {
         circle_rect(g.gear, g.gear_cap * 0.6),
         circle_rect(g.stack_row(-1.0), g.stack_cap),
         circle_rect(g.stack_row(1.0), g.stack_cap),
-        g.shift_segment(0, -1.0),
-        g.shift_segment(0, 1.0),
         circle_rect(g.speed, g.speed_cap * 0.5),
     ];
     for z in zones {
@@ -67,27 +65,35 @@ fn every_part_floats_inside_the_cockpit_envelope() {
 #[test]
 fn the_tunnel_bands_and_widgets_never_collide() {
     let g = Geom::COCKPIT;
-    // The scale numerals (three digits at cap 20 are about 42 px wide) sit on the band, inside
+    // The scale numerals (three digits at cap 25 are about 50 px wide, but the band runs nearly
+    // upright, so a numeral spans about its cap height across the band) sit on the band, inside
     // the ticks (14 px majors, inward from the rim), as on the real display.
-    assert!(g.scale_numeral_r - 22.0 > g.band_in);
-    assert!(g.scale_numeral_r + 22.0 < g.band_out - 14.0);
+    assert!(g.scale_numeral_r - g.scale_cap > g.band_in);
+    assert!(g.scale_numeral_r + g.scale_cap < g.band_out - 14.0);
     // The bands clear the crescents, and the widgets clear the bands.
     assert!(g.band_in > g.crescent_r + 6.0);
     for w in [g.g_widget, g.boost_widget] {
         assert!((w - g.tunnel).length() - g.widget_r > g.band_out + 20.0, "{w:?}");
     }
-    // The ring lines grow from just outside the light to just inside the crescents.
+    // The rings grow from the far one by the horizon to just inside the crescents, spreading
+    // further apart towards the driver (perspective).
     let (c0, r0) = g.ring(0);
-    assert!((c0 - g.disc).length() + g.disc_r < r0);
+    assert!((c0 - g.ring_far).length() < 2.0 && r0 > g.ring_far_r && r0 < g.ring_far_r + 4.0);
     for k in 1..RINGS {
         assert!(g.ring(k).1 > g.ring(k - 1).1);
+    }
+    for k in 2..RINGS {
+        assert!(g.ring(k).1 - g.ring(k - 1).1 > g.ring(k - 1).1 - g.ring(k - 2).1);
     }
     let (c1, r1) = g.ring(RINGS - 1);
     assert!((c1 - g.tunnel).length() < 1e-3);
     assert!(r1 < g.crescent_r - g.crescent_w);
-    // The horizon cuts the light below its top and the road starts there.
-    assert!(g.horizon > g.disc.y - g.disc_r && g.horizon < g.disc.y + g.disc_r);
+    // The far ring straddles the horizon and the road starts there.
+    assert!(g.horizon > g.ring_far.y - r0 && g.horizon < g.ring_far.y + r0);
     assert!(g.floor()[0].y == g.horizon && g.floor_bottom > g.rpm.y + g.rpm_cap);
+    // The sky plate's turn covers the window above the horizon.
+    assert!(g.sky.max.y == g.horizon && g.sky.min.y < g.tunnel.y - r1 - 10.0);
+    assert!(g.sky.width() > 2.0 * r1 + 40.0);
     // The rpm sits on the road under the horizon, the speed above the speed line.
     assert!(g.rpm.y - g.rpm_cap * 0.5 > g.horizon + 40.0);
     assert!(g.speed.y + g.speed_cap * 0.5 < g.line_y - 4.0);
@@ -96,31 +102,34 @@ fn the_tunnel_bands_and_widgets_never_collide() {
 }
 
 #[test]
-fn the_shift_strip_runs_on_the_speed_line_inside_the_crescents() {
+fn the_sky_window_is_the_tunnel_above_the_horizon_and_leans_about_it() {
     let g = Geom::COCKPIT;
-    let inner = g.shift_segment(SHIFT_PER_SIDE - 1, 1.0);
-    let outer = g.shift_segment(0, 1.0);
-    assert!((inner.min.x - g.shift_inner).abs() < 1e-3, "{inner:?}");
-    assert!((outer.max.x - g.shift_outer).abs() < 1e-3, "{outer:?}");
-    assert!((outer.center().y - g.line_y).abs() < 1e-3);
-    // It leaves room under three digits of the speed (about 120 px).
-    assert!(g.shift_inner > 60.0);
-    // The crescents' inner edge at the speed line's height is outside the strip.
-    let mut nearest = (f32::MAX, 0.0_f32);
-    for k in 0..=400 {
-        let p = g.crescent_point(k as f32 / 400.0, 1.0, 1.0);
-        let d = (p.y - g.line_y).abs();
-        if d < nearest.0 {
-            nearest = (d, p.x);
+    let (c, r) = g.ring(RINGS - 1);
+    let pivot = g.horizon_pivot();
+    for tilt in [0.0_f32, 0.08, -0.14] {
+        let mut pts = [Vec2::ZERO; SKY_SAMPLES];
+        assert_eq!(g.sky_window(tilt, &mut pts), SKY_SAMPLES);
+        for p in pts {
+            // Leaned back onto the screen, every point is on the circle, on or above the horizon.
+            let screen = pivot + (p - pivot).rotate(tilt);
+            assert!(((screen - c).length() - r).abs() < 0.05, "{screen:?}");
+            assert!(p.y <= g.horizon + 0.05, "{p:?}");
+            assert!(p.x.is_finite() && p.y.is_finite());
         }
+        // The window's ends sit on the horizon, and it passes over the top of the circle.
+        assert!((pts[0].y - g.horizon).abs() < 0.05 && (pts[SKY_SAMPLES - 1].y - g.horizon).abs() < 0.05);
+        let top = pts.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+        assert!(top < g.horizon - r * 0.8);
     }
-    assert!(nearest.1 >= g.shift_outer - 2.0, "inner edge at x {}", nearest.1);
-    // Segments are mirrored.
-    for i in 0..SHIFT_PER_SIDE {
-        let l = g.shift_segment(i, -1.0);
-        let r = g.shift_segment(i, 1.0);
-        assert!((l.min.x + r.max.x).abs() < 1e-3 && (l.max.x + r.min.x).abs() < 1e-3);
-    }
+}
+
+#[test]
+fn the_speed_line_sits_under_the_speed_inside_the_tunnel() {
+    let g = Geom::COCKPIT;
+    let (c, r) = g.ring(RINGS - 1);
+    let dy = g.line_y - c.y;
+    assert!(g.line_half < (r * r - dy * dy).sqrt());
+    assert!(g.speed.y + g.speed_cap * 0.5 < g.line_y - 4.0);
 }
 
 #[test]

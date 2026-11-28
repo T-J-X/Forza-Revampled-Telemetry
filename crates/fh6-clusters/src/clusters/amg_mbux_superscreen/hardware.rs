@@ -1,10 +1,12 @@
 //! The rendered plates: Blender renders from `assets/clusters/amg_mbux_superscreen/` (recipe
-//! `tools/asset-forge/src/recipes/amg_mbux_superscreen.rs`, board v3) and the procedural
+//! `tools/asset-forge/src/recipes/amg_mbux_superscreen.rs`, board v4) and the procedural
 //! fallbacks drawn when a file is missing.
 //!
-//! - `assembly_0.png`, `assembly_1.png`: the tunnel (thin ring lines, the light at the end cut at
-//!   the horizon, the road) and the two side-scale bands, with the key light at rest and swung;
-//!   cross-faded by lateral G. They cover [`Geom::assembly_rect`] 1:1.
+//! - `sky.png`: the SDXL dusk sky seen through the tunnel. It wraps left to right; one turn
+//!   covers [`Geom::sky`], and the cluster scrolls it with the speed and leans it with lateral G.
+//! - `assembly_0.png`, `assembly_1.png`: the twelve ring ribs (nearly clear above the horizon),
+//!   the road and the two side-scale bands, with the key light at rest and swung; cross-faded by
+//!   lateral G. They cover [`Geom::assembly_rect`] 1:1.
 //! - `crescents.png`: both crescents' halftone as light in alpha (white), tinted by the
 //!   palette's primary at draw time, so a custom palette recolours it. It covers
 //!   [`Geom::crescent_rect`] 1:1.
@@ -18,20 +20,21 @@ use fh6_kit::{deg, vec2, Cap, Color, Gradient, ImageId, ImagePaint, Painter, Pal
 pub(super) const AZIMUTHS: usize = 2;
 /// The asset folder of this dash.
 const FOLDER: &str = "amg_mbux_superscreen";
-/// The procedural fallbacks' colours (sRGB 8-bit, from board v3).
+/// The procedural fallbacks' colours (sRGB 8-bit, from boards v3 and v4).
 const BAND_BODY: [u8; 3] = [36, 35, 44];
 const BAND_RIM: [u8; 3] = [201, 208, 217];
 const BAND_LIP: [u8; 3] = [74, 80, 91];
-const RING_LINE: [u8; 3] = [92, 99, 110];
-const DISC_TOP: [u8; 3] = [60, 68, 80];
-const DISC_LOW: [u8; 3] = [214, 224, 234];
+const RING_LINE: [u8; 3] = [58, 64, 73];
+const SKY_TOP: [u8; 3] = [10, 14, 26];
+const SKY_MID: [u8; 3] = [34, 42, 62];
+const SKY_LOW: [u8; 3] = [150, 150, 160];
 const ROAD_TOP: [u8; 3] = [38, 42, 48];
 const ROAD_EDGE: [u8; 3] = [213, 220, 229];
-const HORIZON_LINE: [u8; 3] = [242, 248, 255];
 
 /// Every loaded plate (`None` when its file is missing).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(super) struct Plates {
+    sky: Option<ImageId>,
     assembly: [Option<ImageId>; AZIMUTHS],
     crescents: Option<ImageId>,
     lens: [Option<ImageId>; AZIMUTHS],
@@ -80,6 +83,7 @@ impl Plates {
     /// Loads every plate once.
     pub fn load(setup: &mut Setup<'_>) -> Self {
         Self {
+            sky: load(setup, "sky.png"),
             assembly: [load(setup, "assembly_0.png"), load(setup, "assembly_1.png")],
             crescents: load(setup, "crescents.png"),
             lens: [load(setup, "lens_0.png"), load(setup, "lens_1.png")],
@@ -87,7 +91,28 @@ impl Plates {
         }
     }
 
-    /// The tunnel, the road and the side-scale bands: the rendered pair, or the procedural one.
+    /// The sky inside the sky window (the caller has leaned the frame), scrolled left by
+    /// `scroll` local px: the rendered plate, wrapping, or a procedural dusk gradient.
+    pub fn draw_sky(&self, p: &mut Painter<'_>, g: &Geom, window: &[Vec2], scroll: f32) {
+        let shape = Shape::Polygon { points: window };
+        if let Some(image) = self.sky {
+            let w = g.sky.width();
+            let x = -scroll.rem_euclid(w.max(1.0));
+            let rect = g.sky.translate(vec2(x, 0.0));
+            p.fill(&shape, ImagePaint::new(image, rect).repeat());
+            return;
+        }
+        p.fill(
+            &shape,
+            Gradient::linear(vec2(0.0, g.sky.min.y), vec2(0.0, g.horizon))
+                .stop(0.0, rgb(SKY_TOP))
+                .stop(0.7, rgb(SKY_MID))
+                .stop(1.0, rgb(SKY_LOW)),
+        );
+    }
+
+    /// The ring ribs, the road and the side-scale bands: the rendered pair, or the procedural
+    /// one.
     pub fn draw_assembly(&self, p: &mut Painter<'_>, g: &Geom, swing: f32) {
         if !lit_plate(p, self.assembly, g.assembly_rect, swing) {
             fallback_bands(p, g);
@@ -95,19 +120,32 @@ impl Plates {
         }
     }
 
-    /// The crescents, always lit: the rendered halftone tinted by the primary, or a procedural
-    /// body with the same light (brighter at the outer edge).
-    pub fn draw_crescents(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+    /// The road again, over the lit rings (they light the walls, never the road): the plate's
+    /// own road pixels, or the procedural road.
+    pub fn draw_road(&self, p: &mut Painter<'_>, g: &Geom) {
+        let f = g.floor();
+        if let Some(base) = self.assembly[0] {
+            p.fill(&Shape::Polygon { points: &f }, ImagePaint::new(base, g.assembly_rect));
+            return;
+        }
+        fallback_road(p, g);
+    }
+
+    /// The crescents at `heat` of their light (dim at low revs, full near the shift point): the
+    /// rendered halftone tinted by the primary, or a procedural body with the same light
+    /// (brighter at the outer edge).
+    pub fn draw_crescents(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, heat: f32) {
+        let red = pal.primary.intensity(heat.clamp(0.0, 1.0));
         if let Some(image) = self.crescents {
             let rect = g.crescent_rect;
-            p.fill(&Shape::rect(rect), ImagePaint::new(image, rect).tint(pal.primary));
+            p.fill(&Shape::rect(rect), ImagePaint::new(image, rect).tint(red));
             return;
         }
         let inner = (g.crescent_r - g.crescent_w) / g.crescent_r;
         let paint = Gradient::radial(g.tunnel, g.crescent_r)
-            .stop(inner, pal.primary.intensity(0.45))
-            .stop(1.0 - (1.0 - inner) * 0.2, pal.primary.intensity(0.82))
-            .stop(1.0, pal.primary);
+            .stop(inner, red.intensity(0.45))
+            .stop(1.0 - (1.0 - inner) * 0.2, red.intensity(0.82))
+            .stop(1.0, red);
         for side in [-1.0, 1.0] {
             let mut pts = [Vec2::ZERO; CRESCENT_SAMPLES * 2];
             let n = crescent_polygon(g, 0.0, 1.0, side, &mut pts);
@@ -171,44 +209,26 @@ fn fallback_bands(p: &mut Painter<'_>, g: &Geom) {
     }
 }
 
-/// The procedural tunnel: the ring lines (dim below the horizon), the light at the end cut at
-/// the horizon, the road with its edge and lane lines, the horizon line and the cross line.
+/// The procedural tunnel: the ring ribs (faint above the horizon, where the sky shows through
+/// them) and the road.
 fn fallback_tunnel(p: &mut Painter<'_>, g: &Geom) {
-    let (_, outer) = g.ring(RINGS - 1);
-    let above = Rect::from_points(
-        vec2(-outer - 8.0, g.tunnel.y - outer - 40.0),
-        vec2(outer + 8.0, g.horizon),
-    );
-    let below = Rect::from_points(vec2(-outer - 8.0, g.horizon), vec2(outer + 8.0, g.floor_bottom));
-    for (clip, level) in [(above, 0.85), (below, 0.25)] {
-        p.scoped(|p| {
-            p.clip(clip, 0.0);
-            for k in 0..RINGS {
-                let (c, r) = g.ring(k);
-                let u = k as f32 / (RINGS as f32 - 1.0).max(1.0);
-                p.fill(
-                    &Shape::ring(c, r, 1.6 + 0.9 * u),
-                    rgb(RING_LINE).intensity(level * (1.0 - 0.35 * u)),
-                );
-            }
-        });
+    let top = g.horizon - g.ceiling_fade;
+    for k in 0..RINGS {
+        let (c, r) = g.ring(k);
+        let u = (k as f32 + 1.0) / RINGS as f32;
+        let line = rgb(RING_LINE).intensity(0.9 - 0.3 * u);
+        p.fill(
+            &Shape::ring(c, r, 1.3 + 2.2 * u),
+            Gradient::linear(vec2(0.0, top), vec2(0.0, g.horizon))
+                .stop(0.0, line.fade(g.ceiling_floor))
+                .stop(1.0, line),
+        );
     }
-    // The light at the end, brightest where it meets the road.
-    p.scoped(|p| {
-        p.clip(above, 0.0);
-        p.fill(
-            &Shape::circle(g.disc, g.disc_r),
-            Gradient::linear(vec2(0.0, g.disc.y - g.disc_r), vec2(0.0, g.horizon))
-                .stop(0.0, rgb(DISC_TOP))
-                .stop(0.6, rgb(DISC_TOP).lerp(rgb(DISC_LOW), 0.5))
-                .stop(1.0, rgb(DISC_LOW)),
-        );
-        p.fill(
-            &Shape::ring(g.disc, g.disc_r * 0.64, 2.0),
-            Color::srgb8(62, 70, 80, 255),
-        );
-    });
-    // The road.
+    fallback_road(p, g);
+}
+
+/// The procedural road: lit from the horizon, with edge lines that fade towards the viewer.
+fn fallback_road(p: &mut Painter<'_>, g: &Geom) {
     let f = g.floor();
     p.fill(
         &Shape::Polygon { points: &f },
@@ -222,35 +242,6 @@ fn fallback_tunnel(p: &mut Painter<'_>, g: &Geom) {
         .stop(1.0, rgb(ROAD_EDGE).intensity(0.2));
     p.fill(&Shape::line(f[0], f[3], 2.0), edge);
     p.fill(&Shape::line(f[1], f[2], 2.0), edge);
-    for sx in [-1.0, 1.0] {
-        p.fill(
-            &Shape::line(
-                vec2(sx * g.floor_top_half * 0.45, g.horizon),
-                vec2(sx * g.floor_bottom_half * 0.45, g.floor_bottom),
-                1.2,
-            ),
-            Color::srgb8(143, 152, 163, 255).intensity(0.45),
-        );
-    }
-    p.fill(
-        &Shape::line(
-            vec2(-g.floor_top_half - 70.0, 0.0),
-            vec2(g.floor_top_half + 70.0, 0.0),
-            1.4,
-        ),
-        Color::srgb8(89, 96, 107, 255).intensity(0.7),
-    );
-    let half = outer - 12.0;
-    p.fill(
-        &Shape::rect(Rect::from_points(
-            vec2(-half, g.horizon - 1.25),
-            vec2(half, g.horizon + 1.25),
-        )),
-        Gradient::linear(vec2(-half, 0.0), vec2(half, 0.0))
-            .stop(0.0, Color::TRANSPARENT)
-            .stop(0.5, rgb(HORIZON_LINE))
-            .stop(1.0, Color::TRANSPARENT),
-    );
 }
 
 /// The outline of the left (`side` −1) or right crescent between fills `t0` and `t1`, at
@@ -286,7 +277,8 @@ pub(super) fn crescent_polygon(g: &Geom, t0: f32, t1: f32, side: f32, out: &mut 
 #[cfg(test)]
 #[allow(dead_code)]
 pub(super) fn all_loaded(plates: &Plates) -> bool {
-    plates.assembly.iter().all(Option::is_some)
+    plates.sky.is_some()
+        && plates.assembly.iter().all(Option::is_some)
         && plates.crescents.is_some()
         && plates.lens.iter().all(Option::is_some)
         && plates.gauge.iter().all(Option::is_some)

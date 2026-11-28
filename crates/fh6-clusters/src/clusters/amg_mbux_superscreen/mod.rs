@@ -1,42 +1,44 @@
 //! AMG MBUX Superscreen (`ClusterTheme::AmgMbuxSuperscreen`), catalog row 4: the driver display
 //! of the E-Class generation that carries the MBUX Superscreen (W214, 2023 on, and the
-//! Mercedes-AMG E 53), in its Sport (press: "Sporty") style. Supercar category, Modern Digital
-//! 2027 family, cockpit. Research: `RESEARCH.md`. Board: Penpot board v3 (page
-//! "07 · AmgMbuxSuperscreen", boards "v3 · <state>"), measured from photos of the real display.
+//! Mercedes-AMG E 53), in its Sport (press: "Sporty") style, made "MBUX but better". Supercar
+//! category, Modern Digital 2027 family, cockpit. Research: `RESEARCH.md`. Board: Penpot board v4
+//! (page "07 · AmgMbuxSuperscreen", boards "v4 · <state>").
 //!
 //! There is no housing (TJS, 2026-11-28: "can be outside of a slab ... what MBUX is but better"):
-//! every part floats on OLED black over a soft charcoal stage with no edge, as close to the real
-//! Sporty display as the cockpit gap allows. Zone table (local 4K px round the cockpit anchor;
-//! `geom.rs` holds it as data):
+//! every part floats on OLED black over a soft charcoal stage with no edge. The real display's
+//! signatures stay (the red crescents, the side scales, G-Force and Engine data, the selector
+//! stack); the middle is TJS's sky tunnel (08:18: "subtle clouds and horizon tunnel background and
+//! the tunnel from the back to front being the rev limiter"). Zone table (local 4K px round the
+//! cockpit anchor; `geom.rs` holds it as data):
 //!
 //! | Zone | Where | Size | Holds |
 //! |---|---|---|---|
 //! | Stage | ellipse round (0, −36) | 760 × 300 | a soft charcoal glow that ties the parts together, no edge |
-//! | Crescents | round (0, −36), r 300 | 80 px at 9 and 3 o'clock, pointed tips, ±43° | always lit halftone red, as on the real display; rank 3: the rpm runs up their outer edge as a white-hot line, with a tick at the shift point |
-//! | Tunnel | ring lines from the disc out to r 204 | 5 lines | the tunnel: thin grey ring lines, two red arcs on the first one, a black veil below the horizon (Blender plate, or procedural) |
-//! | Light | (0, −62), cut at the horizon y −58 | r 88 | the light at the end of the tunnel, brightest at the horizon; it glows a little brighter towards the shift point |
-//! | Road | trapezoid y −58 .. 200, half widths 44 .. 214 | – | the road out of the tunnel, lit from the horizon; the rpm readout, cap 40, at (0, 56) |
-//! | Speed | (0, −187) | cap 50 | rank 2: the speed above the speed line; its unit under it |
-//! | Shift strip | on the speed line y −153, x ±84 .. ±204 | 6 segments a side, 7 px tall | rank 1: filling outside-in; on the limiter the outer two stay lit and the inner four strobe |
-//! | Side scales | bands r 312 .. 392 round the tunnel centre, 150° .. 216° (mirrored right) | 21 ticks inward from the rim, numerals at r 346 | rank 4: torque (left) and power (right), the live fill along the rim, each live value under its band |
+//! | Crescents | round (0, −36), r 300 | 84 px at 9 and 3 o'clock, pointed tips, ±48° | halftone red, at half light at low revs and full near the shift point |
+//! | Sky | the near ring's circle above the horizon y −58 | r 202 | a dusk sky with soft clouds (SDXL plate) that drift with the distance driven, warming to sunset near the shift point; it leans with lateral G (5° a g) about the horizon's centre |
+//! | Rings | from (0, −60) r 64 out to the tunnel centre r 202 | 12, spaced in perspective | rank 1: the rev counter, lighting from the far end towards the driver; the nearest three red; faint above the horizon so the sky shows through |
+//! | Road | trapezoid y −58 .. 200, half widths 44 .. 214 | – | the road out of the tunnel with lane dashes that run with the distance driven, a red wash under braking, the horizon line on top; the rpm readout, cap 40, at (0, 56) |
+//! | Speed | (0, −190) | cap 58 | rank 2: the speed above the thin speed line (y −153, ±150), on a soft dark halo; its unit to the right of it |
+//! | Side scales | bands r 312 .. 392 round the tunnel centre, 150° .. 216° (mirrored right) | 21 ticks inward from the rim, numerals at r 344 | rank 4: torque (left) and power (right), the live fill along the rim, each live value under its band |
 //! | G-Force | (−500, −52) | r 76 | rank 4: the felt force as a dot on red rings and a crosshair, over the rendered lens |
 //! | Engine data | (500, −52) | r 76 | rank 4: boost on a round gauge |
 //! | Gear | (660, 170), the selector stack at x 584 | cap 84; neighbours cap 18 | rank 1: the engaged gear, with the gears either side and a red `M` in a column, like the real selector |
 //! | Logo | x −686 .. −506, y 164 .. 208 | – | rank 5: the car's logo or the custom name |
 //!
-//! Brightness follows the rank: the lit shift segments and the rpm line bloom; the gear and the
-//! speed are the brightest type, in full ink without a glow; everything that never changes
-//! (labels, scale ticks and numerals, units, the speed line, the logo) stays at the tokens' cap
-//! for static parts (`STATIC_LUMA`), dimmed by its light and never by its alpha.
+//! Brightness follows the rank: the lit rings bloom; the gear and the speed are the brightest
+//! type, in full ink without a glow; everything that never changes (labels, scale ticks and
+//! numerals, units, the speed line, the logo) stays at the tokens' cap for static parts
+//! (`STATIC_LUMA`), dimmed by its light and never by its alpha.
 //!
 //! Signature moments:
-//! - **Limiter:** from the shift point the shift segments turn the shift colour: the outer two a
-//!   side hold steady and the inner four strobe at 10 Hz on their own clock, which starts lit (a
-//!   still frame never reads as "no shift"). The rpm line holds full with a white-hot top above
-//!   the shift tick. Nothing else flashes.
+//! - **Limiter:** the three red rings turn the shift colour: the farthest holds steady and the
+//!   two nearest strobe at 10 Hz on their own clock, which starts lit (a still frame never reads
+//!   as "no shift"). The sky glows sunset orange. Nothing else flashes.
 //! - **Upshift:** the new gear enters on the tokens' motion (`common::HeroGear`) and a ring of
-//!   light runs once down the tunnel, from the light out to the crescents, in 320 ms.
-//! - **Reduced flash:** the strobe becomes the tokens' 2 Hz breath, and the tunnel ring is left
+//!   light runs once down the tunnel towards the driver, in 320 ms.
+//! - **Braking:** the horizon turns red and a red wash runs down the road, like brake lights
+//!   ahead.
+//! - **Reduced flash:** the strobe becomes the tokens' 2 Hz breath, and the upshift ring is left
 //!   out.
 //!
 //! Palette: the AMG MBUX dashes have their own default palette (tokens
@@ -45,7 +47,8 @@
 //! random palette replaces it.
 //!
 //! Telemetry is native or derived exactly: rpm (current and limiter), the tokens' shift point,
-//! gear, speed, power and boost, acceleration (G), and torque derived from power and rpm
+//! gear, speed (and the distance driven from it), brake, power and boost, acceleration (G), and
+//! torque derived from power and rpm
 //! (τ = P · 60 / (2π · rpm), rpm held at least at idle).
 mod geom;
 mod hardware;
@@ -54,14 +57,14 @@ mod tests;
 
 use crate::common::hero_gear::HeroGear;
 use crate::common::label::{logo_zone, LogoVariant};
-use geom::{Geom, CRESCENT_SAMPLES, SCALE_MAJOR_EVERY, SCALE_TICKS, SHIFT_PER_SIDE};
+use geom::{Geom, CRESCENT_SAMPLES, RED_RINGS, RINGS, SCALE_MAJOR_EVERY, SCALE_TICKS, SKY_SAMPLES};
 use hardware::{crescent_band, Plates};
 
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    deg, vec2, Affine, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, Hysteresis,
-    LayerOptions, Layout, Logo, Painter, Palette, PaletteSource, PowerUnit, Rect, Shape, SpeedUnit, Spring, Strobe,
-    TextStyle, TickRing, VAlign, Vec2,
+    vec2, Affine, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, Hysteresis, LayerOptions,
+    Layout, Logo, Painter, Palette, PaletteSource, PowerUnit, Rect, Shape, SpeedUnit, Spring, Strobe, TextStyle,
+    TickRing, VAlign, Vec2,
 };
 
 /// The tokens' family key of the AMG MBUX default palette.
@@ -69,8 +72,8 @@ const PALETTE_KEY: &str = "amgMbux";
 /// The numeral face: a light, open grotesk close to the real display's corporate sans (OFL).
 const NUMERAL_FAMILY: &str = "Barlow Semi Condensed";
 /// Weights: the gear, the other numerals, the labels.
-const GEAR_WEIGHT: u16 = 400;
-const NUMERAL_WEIGHT: u16 = 300;
+const GEAR_WEIGHT: u16 = 500;
+const NUMERAL_WEIGHT: u16 = 400;
 const LABEL_WEIGHT: u16 = 500;
 /// The real display sets its speed and rpm in a slightly sloped light face (synthetic slant).
 const NUMERAL_SLANT: f32 = 0.10;
@@ -79,30 +82,48 @@ const NUMERAL_SLANT: f32 = 0.10;
 const STATIC_LUMA: f32 = 0.19;
 /// Relative luminance of the tokens' ink (#F4F7FB), to turn [`STATIC_LUMA`] into a light level.
 const INK_LUMA: f32 = 0.92;
-/// The rpm line up the crescents' outer edge: its share of the crescent's width, how far it leans
-/// to the ink below the shift tick, and above it (white-hot).
-const HOT_W: f32 = 0.10;
-const HOT_MIX: f32 = 0.82;
-const HOTTER_MIX: f32 = 0.95;
-/// Light of the two red arcs on the first ring line (share of the primary).
-const ARC_LEVEL: f32 = 0.78;
-/// Light of the halo round the light at the end of the tunnel, at rest and at the shift point.
-const DISC_REST: f32 = 0.05;
-const DISC_SHIFT: f32 = 0.12;
+/// The crescents' light at rest and how it rises to full near the shift point (fill shares).
+const CRESCENT_REST: f32 = 0.5;
+const HEAT_FROM: f32 = 0.55;
+const HEAT_TO: f32 = 0.95;
+/// The sky: how far the clouds drift per metre driven (local px), and how far the horizon leans
+/// per g of lateral force (radians, 5°), at most [`TILT_MAX`].
+const SKY_DRIFT: f32 = 0.5;
+const TILT_PER_G: f32 = 0.087_266;
+const TILT_MAX: f32 = 0.14;
+/// The sky warms towards sunset from this fill share; the warm veil's strongest opacity.
+const WARM_FROM: f32 = 0.72;
+const WARM_LEVEL: f32 = 0.55;
+/// The road's lane dashes: how many on each side, the metres between two, and each dash's share
+/// of the gap.
+const LANE_DASHES: usize = 7;
+const LANE_SPACING_M: f32 = 10.0;
+const LANE_LEN: f32 = 0.45;
+/// The red wash on the road and the horizon under braking, at full brake.
+const BRAKE_WASH: f32 = 0.45;
+/// A lit ring's soft halo: widths (times the line) and opacities, widest first.
+const RING_HALO: [(f32, f32); 2] = [(6.0, 0.07), (3.0, 0.16)];
+/// The rings' light when lit, far to near (share of the ink).
+const RING_FAR_LIGHT: f32 = 0.55;
+const RING_NEAR_LIGHT: f32 = 0.95;
 /// The stage's light at its centre and at 60% of its radii (sRGB 8-bit).
-const STAGE_CORE: [u8; 3] = [27, 26, 34];
-const STAGE_MID: [u8; 3] = [16, 16, 22];
-/// Shift segments that hold steady on the limiter (the outermost on each side).
-const STEADY_SEGMENTS: usize = 2;
-/// Share of the shift colour's light the segments keep in the strobe's dark phase.
+const STAGE_CORE: [u8; 3] = [30, 26, 40];
+const STAGE_MID: [u8; 3] = [17, 15, 25];
+/// How much of the crescents goes into the bloom layer (their soft glow).
+const CRESCENT_GLOW: f32 = 0.30;
+/// The lavender glow on the scale bands (alpha at the rim).
+const BAND_GLOW: f32 = 0.10;
+/// Red rings that hold steady on the limiter (the farthest of them); the nearer ones strobe.
+const STEADY_RINGS: usize = 1;
+/// Share of the shift colour's light the strobing rings keep in the strobe's dark phase.
 const STROBE_FLOOR: f32 = 0.2;
 /// Added to the strobe's clock (s), so a phase edge that falls on a frame lands the same way.
 const STROBE_LEAD: f32 = 1e-4;
 /// The upshift ring: how long it runs down the tunnel (s) and its peak light.
 const PULSE_S: f32 = 0.32;
 const PULSE_LEVEL: f32 = 0.55;
-/// Backlash of the crescent fill (rpm): wider than the engine's bounce on the limiter (about
-/// 50 rpm a frame), so the crescents hold still there; a pull is drawn at most half of it behind.
+/// Backlash of the ring fill (rpm): wider than the engine's bounce on the limiter (about 50 rpm
+/// a frame), so the rings hold still there; a pull is drawn at most half of it behind.
 const REV_BAND: f32 = 60.0;
 /// How far a readout's raw input must move before its digits change (the speed's 0.6 rule):
 /// rpm; torque and power in their units; boost in tenths of a psi or hundredths of a bar.
@@ -192,14 +213,19 @@ struct Drive {
     power_unit: PowerUnit,
     speed_unit: SpeedUnit,
     gear: Gear,
-    /// Fill of the crescents (0 = empty, 1 = the limiter) and the shift notch on the same scale.
+    /// Fill of the rings (0 = empty, 1 = the limiter).
     fill: f32,
-    notch: f32,
-    /// Shift segments lit, from 0 to [`SHIFT_PER_SIDE`] (fractional).
-    shift_level: f32,
     over_shift: bool,
-    /// Light of the strobing shift segments (1 on, the floor off; the breath in reduced flash).
+    /// Light of the strobing rings (1 on, the floor off; the breath in reduced flash).
     strobe_light: f32,
+    /// How far the horizon leans (radians), the brake (0..1), and the sky's scroll (local px)
+    /// and the lane dashes' phase (0..1).
+    tilt: f32,
+    brake: f32,
+    scroll: f32,
+    lanes: f32,
+    /// True while the car moves (the clouds and the dashes scroll).
+    moving: bool,
     /// The felt force (screen convention) on the G widget, in g.
     g: Vec2,
     /// 0..1 progress of the upshift ring, or `None`.
@@ -216,9 +242,12 @@ pub struct AmgMbuxSuperscreen {
     own_palette: Palette,
     palette: Palette,
     logo: Logo,
-    /// The crescent fill, on the tokens' ribbon spring with feed-forward.
+    /// The ring fill, on the tokens' ribbon spring with feed-forward.
     fill: Spring,
-    /// The rpm the crescents follow after the backlash.
+    /// The sky's scroll (local px) and the lane dashes' phase.
+    scroll: f32,
+    lanes: f32,
+    /// The rpm the rings follow after the backlash.
     rev: f32,
     gear: HeroGear,
     readouts: Readouts,
@@ -267,6 +296,8 @@ impl AmgMbuxSuperscreen {
             palette: own_palette,
             logo: Logo::default(),
             fill: Spring::new(t.springs.ribbon, 0.0),
+            scroll: 0.0,
+            lanes: 0.0,
             rev: 0.0,
             gear: HeroGear::new(t),
             readouts: Readouts::new(),
@@ -280,10 +311,13 @@ impl AmgMbuxSuperscreen {
                 speed_unit: SpeedUnit::default(),
                 gear: Gear::Neutral,
                 fill: 0.0,
-                notch: 1.0,
-                shift_level: 0.0,
                 over_shift: false,
                 strobe_light: 1.0,
+                tilt: 0.0,
+                brake: 0.0,
+                scroll: 0.0,
+                lanes: 0.0,
+                moving: false,
                 g: Vec2::ZERO,
                 pulse: None,
             },
@@ -346,6 +380,12 @@ fn grown(full: f32, value: f32) -> f32 {
     full
 }
 
+/// Hermite smoothstep of `x` between `e0` and `e1`.
+fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// A light level that keeps `color`'s coverage and puts it at relative luminance `luma`.
 fn static_ink(ink: Color, luma: f32) -> Color {
     ink.intensity((luma / INK_LUMA).clamp(0.0, 1.0))
@@ -362,7 +402,7 @@ impl Cluster for AmgMbuxSuperscreen {
         self.logo.clone_from(input.logo);
         self.reduced_flash = input.reduced_flash;
 
-        // The crescents: rpm through a backlash, then the ribbon spring with feed-forward.
+        // The rings: rpm through a backlash, then the ribbon spring with feed-forward.
         let rpm = s.rpm.max(0.0);
         if rpm > self.rev + REV_BAND * 0.5 {
             self.rev = rpm - REV_BAND * 0.5;
@@ -375,11 +415,8 @@ impl Cluster for AmgMbuxSuperscreen {
             .fill
             .update_tracking(target, s.rpm_rate / max_rpm, dt)
             .clamp(0.0, 1.0);
-        let notch = (s.shift_rpm / max_rpm).clamp(0.05, 1.0);
 
-        // Shift segments: they light outside-in from the first rev stage to the shift point.
-        let start = self.palette.stages[0];
-        let level = ((s.shift_fraction - start) / (1.0 - start).max(1e-3)).clamp(0.0, 1.0);
+        // The limiter: the near red rings strobe on their own clock while above the shift point.
         let over_shift = s.shift_fraction >= 1.0;
         self.strobe_t = if over_shift { self.strobe_t + dt } else { 0.0 };
         let strobe_light = if self.reduced_flash {
@@ -406,16 +443,27 @@ impl Cluster for AmgMbuxSuperscreen {
         let g = vec2(self.g_x.update(felt.x, dt), self.g_y.update(felt.y, dt));
         self.swing = (s.g_lat.abs() / G_RING).clamp(0.0, 1.0);
 
+        // The sky drifts and the dashes run with the distance driven; the horizon leans with the
+        // felt lateral force.
+        let metres = s.speed_ms.max(0.0) * dt;
+        let turn = self.geom.sky.width().max(1.0);
+        self.scroll = (self.scroll + metres * SKY_DRIFT).rem_euclid(turn);
+        self.lanes = (self.lanes + metres / LANE_SPACING_M).rem_euclid(1.0);
+        let tilt = (g.x * TILT_PER_G).clamp(-TILT_MAX, TILT_MAX);
+
         self.update_readouts(input);
         self.drive = Drive {
             power_unit: s.power_unit,
             speed_unit: s.unit,
             gear: s.gear,
             fill,
-            notch,
-            shift_level: level * SHIFT_PER_SIDE as f32,
             over_shift,
             strobe_light,
+            tilt,
+            brake: s.brake.clamp(0.0, 1.0),
+            scroll: self.scroll,
+            lanes: self.lanes,
+            moving: s.speed_ms > 0.05,
             g,
             pulse,
         };
@@ -433,26 +481,31 @@ impl Cluster for AmgMbuxSuperscreen {
         };
 
         self.draw_stage(p);
+        self.draw_sky(p, &pal);
         self.plates.draw_assembly(p, g, self.swing);
-        self.draw_disc_glow(p, &pal);
-        self.draw_arcs(p, &pal);
-        self.plates.draw_crescents(p, g, &pal);
-        self.draw_shift_tick(p, &pal);
+        self.plates.draw_crescents(p, g, &pal, self.heat());
         self.draw_scales(p, &pal, numerals);
         self.draw_widgets(p, &pal, numerals);
         self.draw_speed_line(p, &pal);
         logo_zone(p, g.logo, &self.logo, self.faces.wide, LogoVariant::Full, &pal);
+        // The rev counter, outside the bloom layer: the bloom resolves over everything drawn
+        // after it, so the rings' glow would shine through the road. Each lit ring carries its
+        // own soft halo instead, and the road below covers both.
+        self.draw_rings(p, &pal);
 
-        // Rank 1 to 3 light, in one bloom layer: the rpm lines, the scales' live fills, the
-        // upshift ring, the lit shift segments and the G dot.
+        // Rank 1 to 3 light, in one bloom layer: the crescents' soft red glow, the scales' live
+        // fills and the G dot.
         p.layer(LayerOptions::bloom(), |p| {
-            self.draw_rpm_line(p, &pal);
+            self.draw_crescent_glow(p, &pal);
             self.draw_scale_fills(p, &pal);
-            self.draw_pulse(p, &pal);
-            self.draw_shift(p, &pal);
             let dot = g.g_widget + self.drive.g * (g.widget_r / G_RING);
             p.fill(&Shape::circle(dot, 7.0), pal.primary_text);
         });
+        // The road over the rings (they light the tunnel walls, never the road), its dashes and
+        // the horizon.
+        self.plates.draw_road(p, g);
+        self.draw_lanes(p, &pal);
+        self.draw_horizon(p, &pal);
         // The gear is the brightest type, outside the bloom: its glow would spill past the
         // envelope's corner, and the real display's gear does not glow.
         self.gear.draw_with(p, g.gear, gear_face, g.gear_cap, pal.roles.ink);
@@ -466,6 +519,7 @@ impl Cluster for AmgMbuxSuperscreen {
             || self.gear.animating()
             || self.drive.over_shift
             || self.drive.pulse.is_some()
+            || self.drive.moving
             || !self.g_x.settled(self.g_x.value(), 1e-4)
             || !self.g_y.settled(self.g_y.value(), 1e-4)
     }
@@ -490,118 +544,215 @@ impl AmgMbuxSuperscreen {
         });
     }
 
-    /// The halo round the light at the end of the tunnel, a translucent veil of light over the
-    /// plate, a little brighter towards the shift point (steady, never a flash), above the
-    /// horizon only.
-    fn draw_disc_glow(&self, p: &mut Painter<'_>, pal: &Palette) {
+    /// The crescents' light: dim at low revs, full red near the shift point.
+    fn heat(&self) -> f32 {
+        let k = smoothstep(HEAT_FROM, HEAT_TO, self.drive.fill);
+        CRESCENT_REST + (1.0 - CRESCENT_REST) * k
+    }
+
+    /// The sky through the tunnel, leaned with lateral G: the clouds, a warm veil near the shift
+    /// point and a vignette towards the tunnel's rim.
+    fn draw_sky(&self, p: &mut Painter<'_>, pal: &Palette) {
         let g = &self.geom;
-        let k = (self.drive.fill / self.drive.notch.max(1e-3)).clamp(0.0, 1.0);
-        let light = DISC_REST + (DISC_SHIFT - DISC_REST) * k;
-        let r = g.disc_r + 24.0;
+        let d = &self.drive;
+        let mut window = [Vec2::ZERO; SKY_SAMPLES];
+        let n = g.sky_window(d.tilt, &mut window);
+        if n < 3 {
+            return;
+        }
+        let window = &window[..n];
+        let pivot = g.horizon_pivot();
         p.scoped(|p| {
-            p.clip(
-                Rect::from_points(vec2(g.disc.x - r, g.disc.y - r), vec2(g.disc.x + r, g.horizon)),
-                0.0,
-            );
+            p.rotate_about(d.tilt, pivot);
+            self.plates.draw_sky(p, g, window, d.scroll);
+            let shape = Shape::Polygon { points: window };
+            let warm = smoothstep(WARM_FROM, 1.0, d.fill) * WARM_LEVEL;
+            if warm > 1e-3 {
+                let top = g.horizon - g.ring(RINGS - 1).1 * 2.0;
+                p.fill(
+                    &shape,
+                    Gradient::linear(vec2(0.0, top), vec2(0.0, g.horizon))
+                        .stop(0.0, Color::TRANSPARENT)
+                        .stop(0.7, Color::srgb8(194, 50, 30, 255).with_alpha(0.7 * warm))
+                        .stop(1.0, Color::srgb8(255, 122, 58, 255).with_alpha(warm)),
+                );
+            }
+            let (c, r) = g.ring(RINGS - 1);
+            let c = pivot + (c - pivot).rotate(-d.tilt);
             p.fill(
-                &Shape::circle(g.disc, r),
-                Gradient::radial(g.disc, r)
-                    .stop(0.6, pal.roles.ink.with_alpha(light))
+                &shape,
+                Gradient::radial(c + vec2(0.0, r * 0.24), r)
+                    .stop(0.45, Color::TRANSPARENT)
+                    .stop(0.85, Color::BLACK.with_alpha(0.55))
+                    .stop(1.0, Color::BLACK.with_alpha(0.9)),
+            );
+        });
+        let _ = pal;
+    }
+
+    /// The paint of a ring line in `color`: faint above the horizon, where the sky shows through.
+    fn ring_paint(&self, color: Color) -> Gradient {
+        let g = &self.geom;
+        Gradient::linear(vec2(0.0, g.horizon - g.ceiling_fade), vec2(0.0, g.horizon))
+            .stop(0.0, color.fade(g.ceiling_floor))
+            .stop(1.0, color)
+    }
+
+    /// The rev counter: the rings light from the far end towards the
+    /// driver as the revs climb, the nearest [`RED_RINGS`] red; on the limiter they turn the
+    /// shift colour, the farthest of them steady and the nearer ones strobing.
+    fn draw_rings(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let d = &self.drive;
+        let lit = d.fill * RINGS as f32;
+        for k in 0..RINGS {
+            let red = k >= RINGS - RED_RINGS;
+            let share = (lit - k as f32 + 0.5).clamp(0.0, 1.0);
+            let u = (k as f32 + 1.0) / RINGS as f32;
+            let color = if d.over_shift && red {
+                let light = if k < RINGS - RED_RINGS + STEADY_RINGS {
+                    1.0
+                } else {
+                    d.strobe_light
+                };
+                pal.shift.intensity(light)
+            } else if share > 1e-3 {
+                if red {
+                    pal.primary_text.intensity(share)
+                } else {
+                    pal.roles
+                        .ink
+                        .intensity(share * (RING_FAR_LIGHT + (RING_NEAR_LIGHT - RING_FAR_LIGHT) * u))
+                }
+            } else {
+                continue;
+            };
+            let (c, r) = self.geom.ring(k);
+            let w = (1.3 + 2.2 * u) * if d.over_shift && red { 1.6 } else { 1.0 };
+            for (width, alpha) in RING_HALO {
+                p.fill(&Shape::ring(c, r, w * width), self.ring_paint(color.fade(alpha)));
+            }
+            p.fill(&Shape::ring(c, r, w), self.ring_paint(color));
+        }
+        self.draw_pulse(p, pal);
+    }
+
+    /// The lane dashes on the road, in perspective, running towards the driver with the
+    /// distance driven.
+    fn draw_lanes(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let g = &self.geom;
+        let span = g.floor_bottom - g.horizon;
+        let half = |s: f32| g.floor_top_half + (g.floor_bottom_half - g.floor_top_half) * s * s;
+        for i in 0..LANE_DASHES {
+            let s0 = (i as f32 + self.drive.lanes) / LANE_DASHES as f32;
+            let s1 = (s0 + LANE_LEN / LANE_DASHES as f32).min(1.0);
+            if s1 <= s0 {
+                continue;
+            }
+            let (y0, y1) = (g.horizon + span * s0 * s0, g.horizon + span * s1 * s1);
+            // Fade in at the horizon and out at the bottom edge, so no dash pops.
+            let light = (0.75 - 0.5 * s0) * smoothstep(0.0, 0.08, s0) * (1.0 - smoothstep(0.9, 1.0, s1));
+            if light <= 1e-3 {
+                continue;
+            }
+            let color = Color::srgb8(174, 182, 192, 255).intensity(light);
+            for sx in [-1.0, 1.0] {
+                p.fill(
+                    &Shape::line(
+                        vec2(sx * half(s0) * 0.5, y0),
+                        vec2(sx * half(s1) * 0.5, y1),
+                        1.2 + 1.6 * s0,
+                    ),
+                    color,
+                );
+            }
+        }
+        // Under braking a red wash runs down the road from the horizon, like brake lights ahead.
+        let brake = self.drive.brake * BRAKE_WASH;
+        if brake > 1e-3 {
+            let f = g.floor();
+            p.fill(
+                &Shape::Polygon { points: &f },
+                Gradient::linear(vec2(0.0, g.horizon), vec2(0.0, g.floor_bottom))
+                    .stop(0.0, pal.primary_text.with_alpha(brake))
+                    .stop(0.4, pal.primary_text.with_alpha(brake * 0.18))
+                    .stop(1.0, Color::TRANSPARENT),
+            );
+        }
+    }
+
+    /// The horizon line, leaned with lateral G; it warms red under braking.
+    fn draw_horizon(&self, p: &mut Painter<'_>, pal: &Palette) {
+        let g = &self.geom;
+        let d = &self.drive;
+        let half = g.ring(RINGS - 1).1 - 4.0;
+        let color = Color::srgb8(242, 248, 255, 255).lerp(pal.primary_text.lerp(pal.roles.ink, 0.35), d.brake);
+        p.scoped(|p| {
+            p.rotate_about(d.tilt, g.horizon_pivot());
+            p.fill(
+                &Shape::rect(Rect::from_points(
+                    vec2(-half, g.horizon - 1.25),
+                    vec2(half, g.horizon + 1.25),
+                )),
+                Gradient::linear(vec2(-half, 0.0), vec2(half, 0.0))
+                    .stop(0.0, Color::TRANSPARENT)
+                    .stop(0.5, color)
                     .stop(1.0, Color::TRANSPARENT),
             );
         });
     }
 
-    /// The two red arcs on the first ring line, rising from the horizon at 9 and 3 o'clock.
-    fn draw_arcs(&self, p: &mut Painter<'_>, pal: &Palette) {
+    /// A faint copy of the crescents in the bloom layer: their soft red glow into the black, as
+    /// the real display's crescents bleed light.
+    fn draw_crescent_glow(&self, p: &mut Painter<'_>, pal: &Palette) {
         let g = &self.geom;
-        let (c, r) = g.ring(0);
-        let sweep = g.arc_to - g.arc_from;
-        for (start, sw) in [(g.arc_from, sweep), (deg(180.0) - g.arc_from, -sweep)] {
-            p.fill(
-                &Shape::arc(c, r, 8.0, start, sw, Cap::Round),
-                pal.primary.intensity(ARC_LEVEL),
-            );
-        }
-    }
-
-    /// The shift point: a short tick just outside each crescent's outer edge.
-    fn draw_shift_tick(&self, p: &mut Painter<'_>, pal: &Palette) {
-        let g = &self.geom;
-        let a = g.crescent_angle(self.drive.notch);
-        for side in [-1.0, 1.0] {
-            let dir = vec2(if side < 0.0 { a.cos() } else { -a.cos() }, a.sin());
-            p.fill(
-                &Shape::line(
-                    g.tunnel + dir * (g.crescent_r + 3.0),
-                    g.tunnel + dir * (g.crescent_r + 13.0),
-                    2.5,
-                ),
-                static_ink(pal.roles.ink, STATIC_LUMA),
-            );
-        }
-    }
-
-    /// The rpm line up the crescents' outer edge (inside the bloom layer); white-hot above the
-    /// shift tick.
-    fn draw_rpm_line(&self, p: &mut Painter<'_>, pal: &Palette) {
-        let g = &self.geom;
-        let fill = self.drive.fill;
-        if fill <= 1e-3 {
-            return;
-        }
-        let below = fill.min(self.drive.notch);
         let mut pts = [Vec2::ZERO; CRESCENT_SAMPLES * 2];
         for side in [-1.0, 1.0] {
-            let n = crescent_band(g, 0.0, below, HOT_W, side, &mut pts);
-            if n > 2 {
-                p.fill(
-                    &Shape::Polygon { points: &pts[..n] },
-                    pal.primary.lerp(pal.roles.ink, HOT_MIX),
-                );
-            }
-            if fill > self.drive.notch {
-                let n = crescent_band(g, self.drive.notch, fill, HOT_W * 1.4, side, &mut pts);
-                if n > 2 {
-                    p.fill(
-                        &Shape::Polygon { points: &pts[..n] },
-                        pal.primary.lerp(pal.roles.ink, HOTTER_MIX),
-                    );
-                }
-            }
+            let n = crescent_band(g, 0.0, 1.0, 1.0, side, &mut pts);
+            p.fill(
+                &Shape::Polygon { points: &pts[..n] },
+                pal.primary.with_alpha(CRESCENT_GLOW * self.heat()),
+            );
         }
     }
 
-    /// The ring that runs down the tunnel after an upshift, above the horizon.
+    /// The ring of light that runs once from the far end of the tunnel to the driver after an
+    /// upshift (the road covers its lower part).
     fn draw_pulse(&self, p: &mut Painter<'_>, pal: &Palette) {
         let Some(t) = self.drive.pulse else {
             return;
         };
         let g = &self.geom;
         let e = 1.0 - (1.0 - t).powi(3);
-        let (c1, r1) = g.ring(geom::RINGS - 1);
-        let c = g.disc + (c1 - g.disc) * e;
-        let r = g.disc_r + (r1 - g.disc_r) * e;
+        let (c1, r1) = g.ring(RINGS - 1);
+        let c = g.ring_far + (c1 - g.ring_far) * e;
+        let r = g.ring_far_r + (r1 - g.ring_far_r) * e;
         let light = PULSE_LEVEL * (1.0 - t).powf(1.5);
-        p.scoped(|p| {
-            p.clip(
-                Rect::from_points(vec2(-r1 - 8.0, g.tunnel.y - r1 - 8.0), vec2(r1 + 8.0, g.horizon)),
-                0.0,
-            );
-            p.fill(
-                &Shape::ring(c, r, (5.0 * (1.0 - t) + 1.5).max(1.0)),
-                pal.primary.lerp(pal.roles.ink, 0.3).with_alpha(light),
-            );
-        });
+        p.fill(
+            &Shape::ring(c, r, (5.0 * (1.0 - t) + 1.5).max(1.0)),
+            self.ring_paint(pal.primary.lerp(pal.roles.ink, 0.3).with_alpha(light)),
+        );
     }
 
     /// The scales: ticks inward from the band's rim, numerals on the band and each live value
     /// with its unit under its band (the bands themselves are on the assembly plate).
     fn draw_scales(&self, p: &mut Painter<'_>, pal: &Palette, numerals: FontId) {
         let g = &self.geom;
+        // The real bands glow a faint lavender from their rim inwards.
+        let mid = (g.band_in + g.band_out) * 0.5;
+        for side in [-1.0_f32, 1.0] {
+            let a0 = g.band_angle(0.0, side);
+            let a1 = g.band_angle(1.0, side);
+            p.fill(
+                &Shape::arc(g.tunnel, mid, g.band_out - g.band_in, a0, a1 - a0, Cap::Butt),
+                Gradient::radial(g.tunnel, g.band_out)
+                    .stop(g.band_in / g.band_out, Color::TRANSPARENT)
+                    .stop(1.0, Color::srgb8(170, 150, 225, 255).with_alpha(BAND_GLOW)),
+            );
+        }
         let r = &self.readouts;
         let ink = static_ink(pal.roles.ink, STATIC_LUMA);
-        let num_style = TextStyle::new(numerals, g.label_cap).paint(ink).tabular();
+        let mut num_style = TextStyle::new(self.faces.labels, g.scale_cap).paint(ink).tabular();
+        num_style.slant = NUMERAL_SLANT;
         let unit_style = TextStyle::new(self.faces.labels, g.unit_cap)
             .paint(ink)
             .tracking(0.04)
@@ -723,20 +874,24 @@ impl AmgMbuxSuperscreen {
         p.text(c + vec2(0.0, rw + 29.0), "Boost", &small);
     }
 
-    /// The speed line under the speed, which carries the shift segments.
+    /// The thin speed line under the speed, fading out at its ends.
     fn draw_speed_line(&self, p: &mut Painter<'_>, pal: &Palette) {
         let g = &self.geom;
+        let ink = static_ink(pal.roles.ink, STATIC_LUMA * 0.9);
         p.fill(
             &Shape::rect(Rect::from_points(
-                vec2(-g.shift_outer, g.line_y - 0.8),
-                vec2(g.shift_outer, g.line_y + 0.8),
+                vec2(-g.line_half, g.line_y - 0.8),
+                vec2(g.line_half, g.line_y + 0.8),
             )),
-            static_ink(pal.roles.ink, STATIC_LUMA * 0.9),
+            Gradient::linear(vec2(-g.line_half, 0.0), vec2(g.line_half, 0.0))
+                .stop(0.0, Color::TRANSPARENT)
+                .stop(0.5, ink)
+                .stop(1.0, Color::TRANSPARENT),
         );
     }
 
     /// The selector stack: the gears either side of the engaged one in a column, with a red `M`
-    /// between them (the engaged gear itself is drawn large in the bloom layer).
+    /// between them (the engaged gear itself is drawn large beside it).
     fn draw_stack(&self, p: &mut Painter<'_>, pal: &Palette) {
         let g = &self.geom;
         let style = TextStyle::new(self.faces.labels, g.stack_cap)
@@ -748,43 +903,29 @@ impl AmgMbuxSuperscreen {
         p.text(g.stack_row(1.0), down, &style);
     }
 
-    /// The lit shift segments (inside the bloom layer).
-    fn draw_shift(&self, p: &mut Painter<'_>, pal: &Palette) {
-        let g = &self.geom;
-        for i in 0..SHIFT_PER_SIDE {
-            let Some(color) = self.segment_color(i, pal) else {
-                continue;
-            };
-            for side in [-1.0, 1.0] {
-                let r = g.shift_segment(i, side);
-                p.fill(&Shape::round_rect(r, 2.0), color);
-            }
-        }
-    }
-
-    /// The colour of shift segment `i` (0 = outermost), or `None` when it is unlit.
-    fn segment_color(&self, i: usize, pal: &Palette) -> Option<Color> {
-        let d = &self.drive;
-        if d.over_shift {
-            let light = if i < STEADY_SEGMENTS { 1.0 } else { d.strobe_light };
-            return Some(pal.shift.intensity(light));
-        }
-        (d.shift_level > i as f32 + 1e-4).then(|| {
-            let k = (i as f32 + 1.0) / SHIFT_PER_SIDE as f32;
-            pal.primary.intensity(0.7 + 0.3 * k)
-        })
-    }
-
     /// The speed and its unit.
     fn draw_speed(&self, p: &mut Painter<'_>, pal: &Palette, numerals: FontId) {
         let g = &self.geom;
+        // A soft dark halo behind the digits keeps them clear of the rings and the sky.
+        p.scoped(|p| {
+            p.translate(g.speed);
+            p.transform(&Affine::scale_xy(g.speed_cap * 3.3, g.speed_cap * 1.15));
+            p.fill(
+                &Shape::circle(Vec2::ZERO, 1.0),
+                Gradient::radial(Vec2::ZERO, 1.0)
+                    .stop(0.0, Color::srgb8(0, 0, 0, 230))
+                    .stop(0.55, Color::srgb8(0, 0, 0, 170))
+                    .stop(1.0, Color::TRANSPARENT),
+            );
+        });
         let mut style = TextStyle::new(numerals, g.speed_cap).paint(pal.roles.ink).tabular();
         style.slant = NUMERAL_SLANT;
         let v = self.readouts.speed_shown;
         p.number(g.speed, v, digits(v), &style, None);
         let unit = TextStyle::new(self.faces.labels, g.unit_cap)
             .paint(static_ink(pal.roles.ink, STATIC_LUMA))
-            .tracking(0.04);
+            .tracking(0.04)
+            .align(Align::Left, VAlign::CapMiddle);
         p.text(g.speed_unit, speed_unit(self.drive.speed_unit), &unit);
     }
 
