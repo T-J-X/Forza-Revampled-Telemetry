@@ -196,20 +196,20 @@ TJS, 2026-11-28: "Do this more so also for dashes not made yet", "if each has it
 | 23 | `ChronoMultiverse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/RESEARCH.md) | [`chrono_multiverse\references\`](https://drive.google.com/drive/folders/1at7Atuv89bfMM7sWIgKPOkOLuuaAaPW8) with `SOURCES.md` | written |
 | 24 | `LiquidMorph` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/liquid_morph/RESEARCH.md) | [`liquid_morph\references\`](https://drive.google.com/drive/folders/1esuFLdxQgqRhBxSaUaJvOjIXNLFpSC4l) with `SOURCES.md` | written |
 | 25 | `BugattiTourbillon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/RESEARCH.md) | [`bugatti_tourbillon\references\`](https://drive.google.com/drive/folders/1VYgiiOSChCkI7oYRlXsvDS8oL5nUUBnJ) with `SOURCES.md` | written |
-| 26 | `ShibuyaChromaticPrisma` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/RESEARCH.md) | `shibuya_chromatic_prisma\references\SOURCES.md` | researching |
-| 27 | `WindshieldHud` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/windshield_hud/RESEARCH.md) | `windshield_hud\references\SOURCES.md` | researching |
-| 28 | `F35HelmetHmd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/RESEARCH.md) | `f35_helmet_hmd\references\SOURCES.md` | researching |
-| 29 | `AmgMbuxTrackPace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_track_pace/RESEARCH.md) | `amg_mbux_track_pace\references\SOURCES.md` | researching |
+| 26 | `ShibuyaChromaticPrisma` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/RESEARCH.md) | [`shibuya_chromatic_prisma\references\`](https://drive.google.com/drive/folders/15PdjRJh_S_yZcEPAeHsAzQnvt-otvVoi) with `SOURCES.md` | written |
+| 27 | `WindshieldHud` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/windshield_hud/RESEARCH.md) | [`windshield_hud\references\`](https://drive.google.com/drive/folders/10sqCEtvdW1nt2gETAxoqjmy4LmxPXH-q) with `SOURCES.md` | written |
+| 28 | `F35HelmetHmd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/RESEARCH.md) | [`f35_helmet_hmd\references\`](https://drive.google.com/drive/folders/1dm7hCqjKcMTlh98BuBOBtl-_U7sQOW93) with `SOURCES.md` | written |
+| 29 | `AmgMbuxTrackPace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_track_pace/RESEARCH.md) | [`amg_mbux_track_pace\references\`](https://drive.google.com/drive/folders/1KI9uhfS3Um2DMvHYS2sIybgKC48OnXWx) with `SOURCES.md` | written |
 | 30 | `GtrNismoMfd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gtr_nismo_mfd/RESEARCH.md) | `gtr_nismo_mfd\references\SOURCES.md` | researching |
-| 31 | `SimInputTrace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sim_input_trace/RESEARCH.md) | `sim_input_trace\references\SOURCES.md` | researching |
-| 32 | `AuroraVeil` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aurora_veil/RESEARCH.md) | `aurora_veil\references\SOURCES.md` | researching |
+| 31 | `SimInputTrace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sim_input_trace/RESEARCH.md) | [`sim_input_trace\references\`](https://drive.google.com/drive/folders/1nN_hXAx0nuLtMF6kjJrl-rXeVRQM6wNA) with `SOURCES.md` | written |
+| 32 | `AuroraVeil` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aurora_veil/RESEARCH.md) | [`aurora_veil\references\`](https://drive.google.com/drive/folders/16YxqscXV85I3EK_4TQLsj_0w-jdhLsNZ) with `SOURCES.md` | written |
 | 33 | `LorenzButterfly` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lorenz_butterfly/RESEARCH.md) | `lorenz_butterfly\references\SOURCES.md` | researching |
-| 34 | `PaganiHorologerie` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/RESEARCH.md) | `pagani_horologerie\references\SOURCES.md` | queued |
-| 35 | `SapphireMystery` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/RESEARCH.md) | `sapphire_mystery\references\SOURCES.md` | queued |
-| 36 | `ArNavWayfinder` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/RESEARCH.md) | `ar_nav_wayfinder\references\SOURCES.md` | queued |
-| 37 | `NeuralCyberSynapse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/neural_cyber_synapse/RESEARCH.md) | `neural_cyber_synapse\references\SOURCES.md` | queued |
-| 38 | `AmgMbuxClassic` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_classic/RESEARCH.md) | `amg_mbux_classic\references\SOURCES.md` | queued |
-| 39 | `SynthwaveOutrun` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/RESEARCH.md) | `synthwave_outrun\references\SOURCES.md` | queued |
+| 34 | `PaganiHorologerie` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/RESEARCH.md) | `pagani_horologerie\references\SOURCES.md` | researching |
+| 35 | `SapphireMystery` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/RESEARCH.md) | `sapphire_mystery\references\SOURCES.md` | researching |
+| 36 | `ArNavWayfinder` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/RESEARCH.md) | `ar_nav_wayfinder\references\SOURCES.md` | researching |
+| 37 | `NeuralCyberSynapse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/neural_cyber_synapse/RESEARCH.md) | `neural_cyber_synapse\references\SOURCES.md` | researching |
+| 38 | `AmgMbuxClassic` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_classic/RESEARCH.md) | `amg_mbux_classic\references\SOURCES.md` | researching |
+| 39 | `SynthwaveOutrun` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/RESEARCH.md) | `synthwave_outrun\references\SOURCES.md` | researching |
 | 40 | `Gt7ModularTripod` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/RESEARCH.md) | `gt7_modular_tripod\references\SOURCES.md` | queued |
 | 41 | `HarmonographDrive` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/harmonograph_drive/RESEARCH.md) | `harmonograph_drive\references\SOURCES.md` | queued |
 | 42 | `SuminagashiMarble` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/suminagashi_marble/RESEARCH.md) | `suminagashi_marble\references\SOURCES.md` | queued |
