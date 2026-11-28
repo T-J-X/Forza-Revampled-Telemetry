@@ -41,7 +41,7 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 ## State of the code (after Rust fix phase D, 2026-11-27)
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | ✅ 933 passed, 0 failed (1 ignored; `golden_images` all pass, `PorscheAnalog_01_idle.png` re-rendered) |
+| `cargo test --workspace` | ✅ 941 passed, 0 failed (1 ignored; `golden_images` all pass, `PorscheAnalog_01_idle.png` re-rendered) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
 | `cargo fmt --all -- --check` | ✅ clean |
 | `parity-dump tests/golden/packets` | ✅ 20/20 OK |
@@ -223,6 +223,8 @@ What exists:
 16. The OLED idle dim cannot dim bloom: the kit adds bloom after every draw. A dimmed frame is drawn without bloom, so a glowing part's halo cuts off when the dim starts. The dim itself is a fill of about 1.6 million pixels: 0.07 ms more GPU on a dimmed frame, and a slow-frame tail on the dimmed Bosch DDU (p99 up to 2.7 ms offscreen; `program/phases/fix-b-oled-palette-guard/HANDOVER.md`). The fix for both is a light gain in the kit's resolve (`Kit::set_light_gain`, beside `set_underlay`), which replaces the fill.
 17. ~~The live bench's "CPU per frame" leaves out recording the frame: the scrim, the cluster's `draw()` and the OSD are recorded between the end of `build` and the start of `render_with`, and neither counts them. The 0.3 ms dash share of `AGENTS.md` directive 7 is measured with it.~~ Fixed in the host CPU phase: "CPU per frame" is the render thread's whole iteration less the frame-latency wait, and the report breaks it into the loop's checks, build, draw, kit render, `finish`, `submit`, `present` and the staging hand-back.
 18. Only a panic on the render thread is caught. A render thread that hangs without panicking is not detected, and a panic on another thread is logged while the app carries on. `panic = "abort"` for release builds would cover every thread; it is TJX's decision (it skips the OSD's pending save).
+19. The OSD's power unit row (HP or kW) changes nothing on the three dashes that exist: Bosch DDU and PorscheAnalog pick power from the speed unit, and Liquid Glass always shows hp. Each reads `signals.power_unit` when it is rebuilt (Rust fix phase D gave every dash the unit and edited none).
+20. `--cluster <Name>` forces the style in the live config, and the OSD copies that config for editing, so an OSD edit during such a run saves the forced style into all three style keys (found by the fix phase D review; not fixed there).
 
 ## Backlog (not yet scheduled)
 **Pre-05A: Liquid Glass OSD and cockpit optics**
@@ -407,3 +409,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-27 | `CarDatabase` is keyed by `i32` ordinal with brand keys normalised once at load, and `load` returns a `Result`; car profiles are keyed by `i32` | Finding 14: a lookup no longer allocates, and a broken file is logged instead of silently empty |
 | 2026-11-27 | `Family` moves from `fh6-clusters` to `fh6_kit::Family`, and the 48 registry rows use it; `Palette::family` still takes the family key as `&str` | Finding 12. The kit's palette engine owns the families; changing `Palette::family`'s ~40 callers waits for the catalog re-cut |
 | 2026-11-27 | The golden harness sets `CustomDriverName` to "TJX", as `preview-export` does; `PorscheAnalog_01_idle.png` is re-rendered (its parked greeting showed the old default name with missing CJK glyphs) | A golden should not change when a default does |
+| 2026-11-27 | `fh6-core`'s `serde_json` enables `preserve_order` | The app already had it through `fh6-win`, so `fh6-core`'s tests ran on a different map from the one the app ships (key order decided which of two spellings won) |
+| 2026-11-27 | `FOV_RANGE` (40 to 110 degrees, the game's `MinFOV` / `MaxFOV`) moves from `fh6-win::camera_patcher` to `fh6_core::config`; the config clamps the six FOVs to it and the OSD slider uses it | One range for the file, the OSD and the camera patch |
+| 2026-11-27 | `car_profiles.json` loads car by car: a car whose key or profile does not load is skipped with a warning | One bad value used to drop every car's fit |
+| 2026-11-27 | `parity-dump` compares a golden's values, not its text, and writes new goldens with sorted keys | With `preserve_order` on in `fh6-core`, its keys came out in insertion order and every golden "mismatched" while every value matched |
