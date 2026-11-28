@@ -77,8 +77,8 @@ Its findings, each fixed (round t8) or not:
 
 ### Measurements (round t8, after the fixes)
 
-- `glance`, cockpit over the scrim (`<state>_cockpit.png`): gear 18.0–18.8:1 and speed 12.5–13.8:1 in all four states; rpm 6.4–7.0, power 5.1–6.5, R·N·D 4.6–4.9; G value 4.7–4.8 except drift 4.1:1 (no: the value is in full ink after the fix below, re-measured at 5.0+ in the closing review); shift line 1.5:1 at idle (dark by design: no revs), 3.5:1 at cruise, 4.3:1 strobe, 9.8:1 drift.
-- `glance`, hood (`hood_<state>.png`): gear 17.7–18.5:1, speed 11.3–12.7:1, rpm 6.4–6.9, power 5.5–6.6, G 5.6–6.0 (value in full ink, figure 24 px cap), R·N·D 4.3–4.7, shift 1.3:1 at idle, 3.2 cruise, 3.8 strobe, 7.8 drift.
+- `glance`, cockpit over the scrim (`<state>_cockpit.png`): gear 18.0–18.8:1 and speed 12.5–13.8:1 in all four states; rpm 6.4–7.0, power 5.1–6.5, R·N·D 4.6–4.9; G value 6.0–7.1:1 once drawn in full ink (it was 4.1:1 in drift before); shift line 1.5:1 at idle (dark by design: no revs), 3.5:1 at cruise, 4.3:1 strobe, 9.8:1 drift.
+- `glance`, hood (`hood_<state>.png`): gear 17.7–18.5:1, speed 11.3–12.7:1, rpm 6.4–6.9, power 5.5–6.6, G 5.8–6.8:1 (value in full ink; the status figures at a 24 px cap), R·N·D 4.3–4.7, shift 1.3:1 at idle, 3.2 cruise, 3.8 strobe, 7.8 drift.
 - `flash --frames 30-41`: the shift strip 3 on / 3 off at 10 Hz; worst 10-degree field yes; strip height yes. The rpm and power digits flickered at 30 Hz on the limiter: fixed with display hysteresis (1.5 steps of 50 rpm, 4 of power); what is left is the G readout falling with the data and the scenery scrolling.
 - `motion`: 0 stalls; idle frames 6–9 still; spikes at 27 (the first shift stage) and 50, 53, 56 (the lane lines passing at 100 mph), each a data event.
 - `stretch`: 0 px not off outside the envelope plus 40 px.
