@@ -73,6 +73,22 @@ a column. In a field list, `_fr` repeats the previous field's stem.
 | `position` | position_x, position_y, position_z |
 | `power` | power_watts |
 | `boost` | boost_psi |
+| `pitch_roll_rate` | angular_velocity_x, angular_velocity_z |
+| `tyre_slip_ratio` | tire_slip_ratio_fl, _fr, _rl, _rr |
+| `wheel_speed` | wheel_rotation_speed_fl, _fr, _rl, _rr |
+| `rumble_strip` | wheel_on_rumble_strip_fl, _fr, _rl, _rr |
+| `puddle` | wheel_in_puddle_fl, _fr, _rl, _rr |
+| `surface_rumble` | surface_rumble_fl, _fr, _rl, _rr |
+| `tyre_combined_slip` | tire_combined_slip_fl, _fr, _rl, _rr |
+| `car_class` | car_class, car_performance_index |
+| `cylinders` | num_cylinders |
+| `car_group` | car_group |
+| `smashable` | smashable_vel_diff, smashable_mass |
+| `torque` | torque |
+| `tyre_temp` | tire_temp_fl, _fr, _rl, _rr |
+| `fuel` | fuel |
+| `race_progress` | distance_traveled, best_lap, last_lap, current_lap, current_race_time, lap_number, race_position |
+| `driving_line` | normalized_driving_line, normalized_ai_brake_difference |
 
 ## Scenarios
 

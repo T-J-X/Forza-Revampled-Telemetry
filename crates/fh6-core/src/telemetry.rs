@@ -2,6 +2,11 @@
 //! Field offsets are fixed by the game's packet format; check any change against
 //! `tests/golden/packets` (97% rule).
 //!
+//! `decode` reads every field of the official FH6 Data Out list (support.forza.net article
+//! 51744149102611), at the offsets its field order gives: the 88 fields fill bytes 0 to 322. The
+//! page states 324 bytes but its fields add up to 323, so byte 323 is read by nothing. The golden
+//! packets cover only the fields `mock-udp` writes; the rest wait on real-game check C.
+//!
 //! [`decode`] is the one place hostile floats are handled: every float it returns is finite and
 //! within `±`[`MAX_ABS`], so nothing downstream (the smoother, the dashes, the OSD) needs its own
 //! NaN guard for packet data. Zero and tiny values pass through as sent (a corrupt packet becomes
@@ -51,6 +56,83 @@ pub struct FH6TelemetryData {
     pub hand_brake: u8,
     pub gear: u8,
     pub steer: i8,
+    // The fields below complete the official FH6 Data Out list (support.forza.net article
+    // 51744149102611). The 20 golden packets hold 0 in all of them, so their offsets follow the
+    // documented field order only; real-game check C confirms them on a capture. Units the page
+    // does not state are not assumed.
+    /// `AngularVelocityX` (44), rad/s about the car's x axis.
+    pub angular_velocity_x: f32,
+    /// `AngularVelocityZ` (52), rad/s about the car's z axis.
+    pub angular_velocity_z: f32,
+    /// `TireSlipRatio*` (84-96): 0 is full grip, above 1 is loss of grip.
+    pub tire_slip_ratio_fl: f32,
+    pub tire_slip_ratio_fr: f32,
+    pub tire_slip_ratio_rl: f32,
+    pub tire_slip_ratio_rr: f32,
+    /// `WheelRotationSpeed*` (100-112), rad/s.
+    pub wheel_rotation_speed_fl: f32,
+    pub wheel_rotation_speed_fr: f32,
+    pub wheel_rotation_speed_rl: f32,
+    pub wheel_rotation_speed_rr: f32,
+    /// `WheelOnRumbleStrip*` (116-128): 1 on a rumble strip, 0 off.
+    pub wheel_on_rumble_strip_fl: i32,
+    pub wheel_on_rumble_strip_fr: i32,
+    pub wheel_on_rumble_strip_rl: i32,
+    pub wheel_on_rumble_strip_rr: i32,
+    /// `WheelInPuddle*` (132-144): 1 in a puddle, 0 out. A flag, not a depth.
+    pub wheel_in_puddle_fl: i32,
+    pub wheel_in_puddle_fr: i32,
+    pub wheel_in_puddle_rl: i32,
+    pub wheel_in_puddle_rr: i32,
+    /// `SurfaceRumble*` (148-160): the force-feedback rumble of the surface under each wheel.
+    pub surface_rumble_fl: f32,
+    pub surface_rumble_fr: f32,
+    pub surface_rumble_rl: f32,
+    pub surface_rumble_rr: f32,
+    /// `TireCombinedSlip*` (180-192): 0 is full grip, above 1 is loss of grip.
+    pub tire_combined_slip_fl: f32,
+    pub tire_combined_slip_fr: f32,
+    pub tire_combined_slip_rl: f32,
+    pub tire_combined_slip_rr: f32,
+    /// `CarClass` (216): the class index, lowest first. The index-to-letter mapping is unverified.
+    pub car_class: i32,
+    /// `CarPerformanceIndex` (220): the PI number.
+    pub car_performance_index: i32,
+    /// `NumCylinders` (228).
+    pub num_cylinders: i32,
+    /// `CarGroup` (232), Horizon only. The page does not list the values.
+    pub car_group: u32,
+    /// `SmashableVelDiff` (236), Horizon only: the speed change when the car hits a smashable.
+    pub smashable_vel_diff: f32,
+    /// `SmashableMass` (240), Horizon only: the mass of the smashable hit.
+    pub smashable_mass: f32,
+    /// `Torque` (264). The page states no unit (Forza Motorsport sends N·m).
+    pub torque: f32,
+    /// `TireTemp*` (268-280). The page states no unit (Forza titles have sent Fahrenheit).
+    pub tire_temp_fl: f32,
+    pub tire_temp_fr: f32,
+    pub tire_temp_rl: f32,
+    pub tire_temp_rr: f32,
+    /// `Fuel` (288).
+    pub fuel: f32,
+    /// `DistanceTraveled` (292).
+    pub distance_traveled: f32,
+    /// `BestLap` (296), seconds.
+    pub best_lap: f32,
+    /// `LastLap` (300), seconds.
+    pub last_lap: f32,
+    /// `CurrentLap` (304), seconds.
+    pub current_lap: f32,
+    /// `CurrentRaceTime` (308), seconds.
+    pub current_race_time: f32,
+    /// `LapNumber` (312).
+    pub lap_number: u16,
+    /// `RacePosition` (314).
+    pub race_position: u8,
+    /// `NormalizedDrivingLine` (321).
+    pub normalized_driving_line: i8,
+    /// `NormalizedAIBrakeDifference` (322).
+    pub normalized_ai_brake_difference: i8,
 }
 
 impl FH6TelemetryData {
@@ -99,6 +181,30 @@ impl FH6TelemetryData {
     pub fn rear_tire_slip_angle_rad(&self) -> f32 {
         (self.tire_slip_angle_rl + self.tire_slip_angle_rr) * 0.5
     }
+    /// How many wheels the game flags as in a puddle (0 to 4). Any non-zero flag counts.
+    pub fn wheels_in_puddle(&self) -> u8 {
+        [
+            self.wheel_in_puddle_fl,
+            self.wheel_in_puddle_fr,
+            self.wheel_in_puddle_rl,
+            self.wheel_in_puddle_rr,
+        ]
+        .into_iter()
+        .map(|f| u8::from(f != 0))
+        .sum()
+    }
+    /// How many wheels the game flags as on a rumble strip (0 to 4). Any non-zero flag counts.
+    pub fn wheels_on_rumble_strip(&self) -> u8 {
+        [
+            self.wheel_on_rumble_strip_fl,
+            self.wheel_on_rumble_strip_fr,
+            self.wheel_on_rumble_strip_rl,
+            self.wheel_on_rumble_strip_rr,
+        ]
+        .into_iter()
+        .map(|f| u8::from(f != 0))
+        .sum()
+    }
     pub fn gear_string(&self) -> String {
         if self.gear == 0 {
             "R".to_string()
@@ -143,6 +249,10 @@ fn le_i32(b: &[u8; PACKET_LEN], off: usize) -> i32 {
 
 fn le_u32(b: &[u8; PACKET_LEN], off: usize) -> u32 {
     u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+fn le_u16(b: &[u8; PACKET_LEN], off: usize) -> u16 {
+    u16::from_le_bytes([b[off], b[off + 1]])
 }
 
 /// Decodes one 324-byte little-endian packet. Every float in the result is finite with
@@ -196,12 +306,59 @@ pub fn decode(buf: &[u8]) -> Result<FH6TelemetryData, TelemetryError> {
         hand_brake: b[318],
         gear: b[319],
         steer: i8::from_le_bytes([b[320]]),
+        angular_velocity_x: le_f32(b, 44),
+        angular_velocity_z: le_f32(b, 52),
+        tire_slip_ratio_fl: le_f32(b, 84),
+        tire_slip_ratio_fr: le_f32(b, 88),
+        tire_slip_ratio_rl: le_f32(b, 92),
+        tire_slip_ratio_rr: le_f32(b, 96),
+        wheel_rotation_speed_fl: le_f32(b, 100),
+        wheel_rotation_speed_fr: le_f32(b, 104),
+        wheel_rotation_speed_rl: le_f32(b, 108),
+        wheel_rotation_speed_rr: le_f32(b, 112),
+        wheel_on_rumble_strip_fl: le_i32(b, 116),
+        wheel_on_rumble_strip_fr: le_i32(b, 120),
+        wheel_on_rumble_strip_rl: le_i32(b, 124),
+        wheel_on_rumble_strip_rr: le_i32(b, 128),
+        wheel_in_puddle_fl: le_i32(b, 132),
+        wheel_in_puddle_fr: le_i32(b, 136),
+        wheel_in_puddle_rl: le_i32(b, 140),
+        wheel_in_puddle_rr: le_i32(b, 144),
+        surface_rumble_fl: le_f32(b, 148),
+        surface_rumble_fr: le_f32(b, 152),
+        surface_rumble_rl: le_f32(b, 156),
+        surface_rumble_rr: le_f32(b, 160),
+        tire_combined_slip_fl: le_f32(b, 180),
+        tire_combined_slip_fr: le_f32(b, 184),
+        tire_combined_slip_rl: le_f32(b, 188),
+        tire_combined_slip_rr: le_f32(b, 192),
+        car_class: le_i32(b, 216),
+        car_performance_index: le_i32(b, 220),
+        num_cylinders: le_i32(b, 228),
+        car_group: le_u32(b, 232),
+        smashable_vel_diff: le_f32(b, 236),
+        smashable_mass: le_f32(b, 240),
+        torque: le_f32(b, 264),
+        tire_temp_fl: le_f32(b, 268),
+        tire_temp_fr: le_f32(b, 272),
+        tire_temp_rl: le_f32(b, 276),
+        tire_temp_rr: le_f32(b, 280),
+        fuel: le_f32(b, 288),
+        distance_traveled: le_f32(b, 292),
+        best_lap: le_f32(b, 296),
+        last_lap: le_f32(b, 300),
+        current_lap: le_f32(b, 304),
+        current_race_time: le_f32(b, 308),
+        lap_number: le_u16(b, 312),
+        race_position: b[314],
+        normalized_driving_line: i8::from_le_bytes([b[321]]),
+        normalized_ai_brake_difference: i8::from_le_bytes([b[322]]),
     })
 }
 
 /// Encodes `t` as the game would send it: the inverse of [`decode`] for every packet whose
-/// floats are within `±`[`MAX_ABS`] and whose rpm is not negative. Bytes `decode` does not read
-/// are zero. For tools and tests (`mock-udp`-style packets, the robustness gate's byte sweeps).
+/// floats are within `±`[`MAX_ABS`] and whose rpm is not negative. Byte 323, which `decode`
+/// does not read, is zero. For tools and tests (`mock-udp`-style packets, the robustness gate's byte sweeps).
 #[must_use]
 pub fn encode(t: &FH6TelemetryData) -> [u8; PACKET_LEN] {
     let mut b = [0u8; PACKET_LEN];
@@ -240,17 +397,68 @@ pub fn encode(t: &FH6TelemetryData) -> [u8; PACKET_LEN] {
         (256, t.speed_ms),
         (260, t.power_watts),
         (284, t.boost_psi),
+        (44, t.angular_velocity_x),
+        (52, t.angular_velocity_z),
+        (84, t.tire_slip_ratio_fl),
+        (88, t.tire_slip_ratio_fr),
+        (92, t.tire_slip_ratio_rl),
+        (96, t.tire_slip_ratio_rr),
+        (100, t.wheel_rotation_speed_fl),
+        (104, t.wheel_rotation_speed_fr),
+        (108, t.wheel_rotation_speed_rl),
+        (112, t.wheel_rotation_speed_rr),
+        (148, t.surface_rumble_fl),
+        (152, t.surface_rumble_fr),
+        (156, t.surface_rumble_rl),
+        (160, t.surface_rumble_rr),
+        (180, t.tire_combined_slip_fl),
+        (184, t.tire_combined_slip_fr),
+        (188, t.tire_combined_slip_rl),
+        (192, t.tire_combined_slip_rr),
+        (236, t.smashable_vel_diff),
+        (240, t.smashable_mass),
+        (264, t.torque),
+        (268, t.tire_temp_fl),
+        (272, t.tire_temp_fr),
+        (276, t.tire_temp_rl),
+        (280, t.tire_temp_rr),
+        (288, t.fuel),
+        (292, t.distance_traveled),
+        (296, t.best_lap),
+        (300, t.last_lap),
+        (304, t.current_lap),
+        (308, t.current_race_time),
     ] {
         put(off, v.to_le_bytes());
     }
     put(212, t.car_ordinal.to_le_bytes());
     put(224, t.drivetrain_type.to_le_bytes());
+    for (off, v) in [
+        (116, t.wheel_on_rumble_strip_fl),
+        (120, t.wheel_on_rumble_strip_fr),
+        (124, t.wheel_on_rumble_strip_rl),
+        (128, t.wheel_on_rumble_strip_rr),
+        (132, t.wheel_in_puddle_fl),
+        (136, t.wheel_in_puddle_fr),
+        (140, t.wheel_in_puddle_rl),
+        (144, t.wheel_in_puddle_rr),
+        (216, t.car_class),
+        (220, t.car_performance_index),
+        (228, t.num_cylinders),
+    ] {
+        put(off, v.to_le_bytes());
+    }
+    put(232, t.car_group.to_le_bytes());
+    b[312..314].copy_from_slice(&t.lap_number.to_le_bytes());
+    b[314] = t.race_position;
     b[315] = t.accel;
     b[316] = t.brake;
     b[317] = t.clutch;
     b[318] = t.hand_brake;
     b[319] = t.gear;
     b[320] = t.steer.to_le_bytes()[0];
+    b[321] = t.normalized_driving_line.to_le_bytes()[0];
+    b[322] = t.normalized_ai_brake_difference.to_le_bytes()[0];
     b
 }
 
@@ -329,6 +537,53 @@ mod tests {
             hand_brake: _,
             gear: _,
             steer: _,
+            angular_velocity_x,
+            angular_velocity_z,
+            tire_slip_ratio_fl,
+            tire_slip_ratio_fr,
+            tire_slip_ratio_rl,
+            tire_slip_ratio_rr,
+            wheel_rotation_speed_fl,
+            wheel_rotation_speed_fr,
+            wheel_rotation_speed_rl,
+            wheel_rotation_speed_rr,
+            wheel_on_rumble_strip_fl: _,
+            wheel_on_rumble_strip_fr: _,
+            wheel_on_rumble_strip_rl: _,
+            wheel_on_rumble_strip_rr: _,
+            wheel_in_puddle_fl: _,
+            wheel_in_puddle_fr: _,
+            wheel_in_puddle_rl: _,
+            wheel_in_puddle_rr: _,
+            surface_rumble_fl,
+            surface_rumble_fr,
+            surface_rumble_rl,
+            surface_rumble_rr,
+            tire_combined_slip_fl,
+            tire_combined_slip_fr,
+            tire_combined_slip_rl,
+            tire_combined_slip_rr,
+            car_class: _,
+            car_performance_index: _,
+            num_cylinders: _,
+            car_group: _,
+            smashable_vel_diff,
+            smashable_mass,
+            torque,
+            tire_temp_fl,
+            tire_temp_fr,
+            tire_temp_rl,
+            tire_temp_rr,
+            fuel,
+            distance_traveled,
+            best_lap,
+            last_lap,
+            current_lap,
+            current_race_time,
+            lap_number: _,
+            race_position: _,
+            normalized_driving_line: _,
+            normalized_ai_brake_difference: _,
         } = *t;
         vec![
             ("engine_max_rpm", engine_max_rpm),
@@ -362,6 +617,37 @@ mod tests {
             ("speed_ms", speed_ms),
             ("power_watts", power_watts),
             ("boost_psi", boost_psi),
+            ("angular_velocity_x", angular_velocity_x),
+            ("angular_velocity_z", angular_velocity_z),
+            ("tire_slip_ratio_fl", tire_slip_ratio_fl),
+            ("tire_slip_ratio_fr", tire_slip_ratio_fr),
+            ("tire_slip_ratio_rl", tire_slip_ratio_rl),
+            ("tire_slip_ratio_rr", tire_slip_ratio_rr),
+            ("wheel_rotation_speed_fl", wheel_rotation_speed_fl),
+            ("wheel_rotation_speed_fr", wheel_rotation_speed_fr),
+            ("wheel_rotation_speed_rl", wheel_rotation_speed_rl),
+            ("wheel_rotation_speed_rr", wheel_rotation_speed_rr),
+            ("surface_rumble_fl", surface_rumble_fl),
+            ("surface_rumble_fr", surface_rumble_fr),
+            ("surface_rumble_rl", surface_rumble_rl),
+            ("surface_rumble_rr", surface_rumble_rr),
+            ("tire_combined_slip_fl", tire_combined_slip_fl),
+            ("tire_combined_slip_fr", tire_combined_slip_fr),
+            ("tire_combined_slip_rl", tire_combined_slip_rl),
+            ("tire_combined_slip_rr", tire_combined_slip_rr),
+            ("smashable_vel_diff", smashable_vel_diff),
+            ("smashable_mass", smashable_mass),
+            ("torque", torque),
+            ("tire_temp_fl", tire_temp_fl),
+            ("tire_temp_fr", tire_temp_fr),
+            ("tire_temp_rl", tire_temp_rl),
+            ("tire_temp_rr", tire_temp_rr),
+            ("fuel", fuel),
+            ("distance_traveled", distance_traveled),
+            ("best_lap", best_lap),
+            ("last_lap", last_lap),
+            ("current_lap", current_lap),
+            ("current_race_time", current_race_time),
         ]
     }
 
@@ -422,10 +708,16 @@ mod tests {
         assert_eq!(data.position_y, -MAX_ABS);
     }
 
-    /// Byte offsets of the 31 floats `decode` reads.
-    const FLOAT_OFFSETS: [usize; 31] = [
+    /// Byte offsets of the 62 floats `decode` reads, in the order [`floats`] lists them.
+    const FLOAT_OFFSETS: [usize; 62] = [
         8, 12, 16, 20, 24, 28, 32, 36, 40, 48, 56, 60, 64, 68, 72, 76, 80, 164, 168, 172, 176, 196, 200, 204, 208, 244,
-        248, 252, 256, 260, 284,
+        248, 252, 256, 260, 284, 44, 52, 84, 88, 92, 96, 100, 104, 108, 112, 148, 152, 156, 160, 180, 184, 188, 192,
+        236, 240, 264, 268, 272, 276, 280, 288, 292, 296, 300, 304, 308,
+    ];
+
+    /// Byte offsets of the 4-byte integers `decode` reads.
+    const INT_OFFSETS: [usize; 16] = [
+        0, 4, 116, 120, 124, 128, 132, 136, 140, 144, 212, 216, 220, 224, 228, 232,
     ];
 
     /// A packet with every field `decode` reads set to its own value and every other byte zero.
@@ -438,8 +730,114 @@ mod tests {
         b[4..8].copy_from_slice(&123_456_789u32.to_le_bytes());
         b[212..216].copy_from_slice(&(-2_200i32).to_le_bytes());
         b[224..228].copy_from_slice(&2i32.to_le_bytes());
-        b[315..321].copy_from_slice(&[201, 202, 203, 204, 7, (-77i8).to_le_bytes()[0]]);
+        for (i, off) in [116, 120, 124, 128, 132, 136, 140, 144].into_iter().enumerate() {
+            b[off..off + 4].copy_from_slice(&(i as i32 + 1).to_le_bytes());
+        }
+        b[216..220].copy_from_slice(&5i32.to_le_bytes());
+        b[220..224].copy_from_slice(&897i32.to_le_bytes());
+        b[228..232].copy_from_slice(&8i32.to_le_bytes());
+        b[232..236].copy_from_slice(&0x8000_0011u32.to_le_bytes());
+        b[312..314].copy_from_slice(&0x0302u16.to_le_bytes());
+        b[314] = 6;
+        b[315..323].copy_from_slice(&[201, 202, 203, 204, 7, (-77i8).to_le_bytes()[0], 127, 0x81]);
         b
+    }
+
+    /// Every byte but 323 belongs to exactly one decoded field: the documented list is complete.
+    #[test]
+    fn decoded_fields_tile_bytes_0_to_322() {
+        let mut owner = [0u8; PACKET_LEN];
+        let fields = FLOAT_OFFSETS
+            .into_iter()
+            .chain(INT_OFFSETS)
+            .map(|off| off..off + 4)
+            .chain(std::iter::once(312..314)) // LapNumber (U16)
+            .chain((314..323).map(|off| off..off + 1)); // RacePosition to NormalizedAIBrakeDifference
+        for range in fields {
+            for o in &mut owner[range] {
+                *o += 1;
+            }
+        }
+        let wrong: Vec<usize> = (0..PACKET_LEN - 1).filter(|&i| owner[i] != 1).collect();
+        assert!(wrong.is_empty(), "bytes read by no field or by two: {wrong:?}");
+        assert_eq!(owner[PACKET_LEN - 1], 0);
+    }
+
+    /// Crafted packets for the fields the 20 synthetic goldens leave at 0 (they hold 0 there).
+    #[test]
+    fn decodes_the_documented_fields_the_goldens_leave_at_zero() {
+        let mut b = [0u8; PACKET_LEN];
+        b[44..48].copy_from_slice(&0.25f32.to_le_bytes());
+        b[52..56].copy_from_slice(&(-0.5f32).to_le_bytes());
+        b[84..88].copy_from_slice(&1.5f32.to_le_bytes());
+        b[100..104].copy_from_slice(&88.0f32.to_le_bytes());
+        b[116..120].copy_from_slice(&1i32.to_le_bytes()); // rumble strip FL
+        b[136..140].copy_from_slice(&1i32.to_le_bytes()); // puddle FR
+        b[144..148].copy_from_slice(&1i32.to_le_bytes()); // puddle RR
+        b[148..152].copy_from_slice(&0.75f32.to_le_bytes());
+        b[192..196].copy_from_slice(&2.0f32.to_le_bytes());
+        b[216..220].copy_from_slice(&4i32.to_le_bytes()); // CarClass
+        b[220..224].copy_from_slice(&800i32.to_le_bytes()); // CarPerformanceIndex
+        b[228..232].copy_from_slice(&12i32.to_le_bytes()); // NumCylinders
+        b[232..236].copy_from_slice(&3u32.to_le_bytes()); // CarGroup
+        b[236..240].copy_from_slice(&4.5f32.to_le_bytes());
+        b[240..244].copy_from_slice(&120.0f32.to_le_bytes());
+        b[264..268].copy_from_slice(&720.0f32.to_le_bytes()); // Torque
+        b[280..284].copy_from_slice(&185.0f32.to_le_bytes()); // TireTemp RR
+        b[288..292].copy_from_slice(&0.6f32.to_le_bytes());
+        b[292..296].copy_from_slice(&15_000.0f32.to_le_bytes());
+        b[296..300].copy_from_slice(&92.5f32.to_le_bytes());
+        b[300..304].copy_from_slice(&93.25f32.to_le_bytes());
+        b[304..308].copy_from_slice(&12.0f32.to_le_bytes());
+        b[308..312].copy_from_slice(&197.75f32.to_le_bytes());
+        b[312..314].copy_from_slice(&3u16.to_le_bytes());
+        b[314] = 2;
+        b[321] = (-64i8).to_le_bytes()[0];
+        b[322] = 100;
+        let t = decode(&b).expect("decode");
+        assert_eq!((t.angular_velocity_x, t.angular_velocity_z), (0.25, -0.5));
+        assert_eq!((t.tire_slip_ratio_fl, t.wheel_rotation_speed_fl), (1.5, 88.0));
+        assert_eq!((t.surface_rumble_fl, t.tire_combined_slip_rr), (0.75, 2.0));
+        assert_eq!(t.wheel_on_rumble_strip_fl, 1);
+        assert_eq!(t.wheels_on_rumble_strip(), 1);
+        assert_eq!(
+            [
+                t.wheel_in_puddle_fl,
+                t.wheel_in_puddle_fr,
+                t.wheel_in_puddle_rl,
+                t.wheel_in_puddle_rr
+            ],
+            [0, 1, 0, 1]
+        );
+        assert_eq!(t.wheels_in_puddle(), 2);
+        assert_eq!((t.car_class, t.car_performance_index), (4, 800));
+        assert_eq!((t.num_cylinders, t.car_group), (12, 3));
+        assert_eq!((t.smashable_vel_diff, t.smashable_mass), (4.5, 120.0));
+        assert_eq!((t.torque, t.tire_temp_rr, t.fuel), (720.0, 185.0, 0.6));
+        assert_eq!(t.distance_traveled, 15_000.0);
+        assert_eq!((t.best_lap, t.last_lap, t.current_lap), (92.5, 93.25, 12.0));
+        assert_eq!(t.current_race_time, 197.75);
+        assert_eq!((t.lap_number, t.race_position), (3, 2));
+        assert_eq!(
+            (t.normalized_driving_line, t.normalized_ai_brake_difference),
+            (-64, 100)
+        );
+        // The fields beside them still read as before.
+        assert_eq!((t.car_ordinal, t.drivetrain_type, t.boost_psi, t.accel), (0, 0, 0.0, 0));
+    }
+
+    /// A flag of any non-zero value counts as set; the game documents 1.
+    #[test]
+    fn wheel_counts_treat_any_non_zero_flag_as_set() {
+        let t = FH6TelemetryData {
+            wheel_in_puddle_fl: -1,
+            wheel_in_puddle_fr: 7,
+            wheel_in_puddle_rl: 1,
+            wheel_in_puddle_rr: 1,
+            ..FH6TelemetryData::default()
+        };
+        assert_eq!(t.wheels_in_puddle(), 4);
+        assert_eq!(t.wheels_on_rumble_strip(), 0);
     }
 
     #[test]
