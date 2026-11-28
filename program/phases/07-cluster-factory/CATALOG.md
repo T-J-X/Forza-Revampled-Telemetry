@@ -112,7 +112,7 @@ One thread per dash, at most 8 at once (TJX, 2026-11-28, raised from 4 to 6, the
 | 10 | 2 | [`VisionSpatialGlass`](../../../crates/fh6-clusters/src/clusters/vision_spatial_glass/) | Apple Vision | concept | Liquid Glass | cockpit | ◐ |
 | 11 | 49 | `AmgMbuxSupersport` (round rev counter) | Supercar | recreation | Modern Digital 2027 | cockpit | ◐ |
 | 12 | 50 | `SkylineR34Mfd` | Retro | inspired | Classic Analog | cockpit | ◐ |
-| 13 | 5 | [`DriftGlass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | Motorsport | concept | Modern Digital 2027 | cockpit | ☐ |
+| 13 | 5 | [`DriftGlass`](../../../crates/fh6-clusters/src/clusters/drift_glass/) | Motorsport | concept | Modern Digital 2027 | cockpit | ◐ |
 | 14 | 28 | [`CymaticResonanceField`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/) | Psychedelic | concept | Fluid / Generative | cockpit+hood | ☐ |
 | 15 | 51 | `VisionPetals` | Abstract | concept | Liquid Glass | cockpit | ☐ |
 | 16 | 52 | `AmgOneF1` (F1 shift lights) | Hypercar | recreation | Race Dash | cockpit | ☐ |
