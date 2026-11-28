@@ -1,9 +1,11 @@
 # Pagani Horologerie (`PaganiHorologerie`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 8 (PaganiHorologerie — build #13 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 8) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 13
+
+**Category note.** The Pagani Huayra is in the game and the Utopia is not. Step 1 names the Pagani whose dials this dash recreates.
 
 An atelier chronograph. Two Ø420 dials, speed on the left and tach on the right, sit inside a tonneau case drawn only as a 1 px polished chamfer (50% lit, 15% shadow) around true black. Between them, on X = 1920, a twin-disc grande-date window holds the gear. Clous-de-Paris guilloché shows only where the G-driven light rakes it. Rank 1: Saira Condensed 700 gear, cap 170, in the window, under 12 lume cartouches set in a straight bridge rail (34 × 800 px) that joins the dial crowns. Rank 2: tabular Saira Condensed 600 speed, cap 96, low in the speed dial and 360 px from the gear. Rank 3: openworked primary-colour hands over Barlow Semi Condensed 500 numerals; the tach bezel is set per car so the shift rpm sits at 12. Rank 4: twin retrograde pedal fans under the window. Rank 5: the machined chamfers, and the crest under the tach's 6.
 

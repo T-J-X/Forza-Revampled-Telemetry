@@ -1,9 +1,11 @@
 # Tread Seismograph (`TreadSeismograph`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 42 (TreadSeismograph — build #45 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 42) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 45
+
+**Category note.** The four road ribbons are graphics anchored in the world behind the car, which is the category's trait; no glass panes. The per-wheel fields this brief calls real are not verified yet: see its row in [Real geometry and maths](../../../../../program/phases/07-cluster-factory/CATALOG.md#real-geometry-and-maths).
 
 The car writes the road. A low chase camera looks forward over a 1 px chassis footprint, and from each contact patch a strip-chart ribbon runs back toward the viewer: a 256-sample seismograph of what that wheel felt. Height is suspension travel (≤40 px), fine teeth are surface rumble, a mirror-glass segment with a fresnel rim is puddle depth, and lateral smear is slip angle, so a slide literally draws sideways. Z1: ten 48×14 px stylus pods at y −292, filling outside-in. Gear centre (Saira Condensed 800, cap 170), speed left (Saira Light, cap 112). Rank 3 is a horizontal rpm scale whose glowing stylus head trails a 1.5 s ink trace that scrolls up like chart paper. Tracks are hairline neutral ink; colour appears only for slip and lock.
 

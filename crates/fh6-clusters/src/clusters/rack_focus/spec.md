@@ -1,9 +1,9 @@
 # Rack Focus (`RackFocus`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 38 (RackFocus — build #33 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 38) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Motorsport · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** Race Dash (Design Council 3B), spec [docs/design/families/race-dash.md](../../../../../docs/design/families/race-dash.md), hero frames [docs/design/heroes/race-dash/](../../../../../docs/design/heroes/race-dash/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 33
 
 An obsidian monolith with three focal planes and no frame: a 1400×500 slab implied only by a 1 px `light`-driven top rim and an 18/255 crescent along its upper edge. Plane 0 (sharp, no parallax): 10 slim 34 px pods, the `race` 800 gear at cap 250, speed in `display` 600 at cap 112 beside it. Plane 1 (±2 px): a 60-segment bar with per-car numerals. Plane 2 (±4 px): corner-ticked Titillium Web tiles for laps, tyres, G-ball and inputs, plus shy alarm lamps. Depth is optical, not boxed: planes separate by parallax and a 10% dimming step, never by plates. Only ranks 1–3 glow.
 

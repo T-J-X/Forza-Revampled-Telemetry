@@ -1,9 +1,9 @@
 # Chrono Multiverse (`ChronoMultiverse`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 29 (ChronoMultiverse — build #29 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 29) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 29
 
 Ferrofluid is black, so on OLED only its highlights exist: bodies are true #000 and form is drawn purely by G-moved specular env-band reflections and 1 px rims. A ferrofluid pool runs along a 1300 px crown arc (rise 50, apex y −200); Rosensweig spikes stand up along it from the left to the rpm front (rank 3), the lead spike tallest with a primary-tinted ridge. The gear (Exo 2 800, cap 200, ink) is a polished pole piece at (0,−20) whose outline bristles with micro-spikes; speed (Exo 2 300, cap 112) at (+290,−10). Twelve 30 px pole caps are the shift strip at y −292. Under gear and speed, four ferro-drops in a car footprint read tyre slip.
 

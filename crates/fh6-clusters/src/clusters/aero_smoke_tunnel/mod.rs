@@ -1,7 +1,8 @@
-//! Aero Smoke Tunnel (`ClusterTheme::AeroSmokeTunnel`), catalog row 35: Modern Digital 2027, cockpit, build #39.
+//! Aero Smoke Tunnel (`ClusterTheme::AeroSmokeTunnel`), catalog row 35.
+//! Psychedelic category, Modern Digital 2027 family, cockpit.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

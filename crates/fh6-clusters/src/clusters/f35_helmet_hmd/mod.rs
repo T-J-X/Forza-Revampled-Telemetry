@@ -1,7 +1,8 @@
-//! F-35 Helmet HMD (`ClusterTheme::F35HelmetHmd`), catalog row 18: ADAS & HUD, cockpit+hood, build #19.
+//! F-35 Helmet HMD (`ClusterTheme::F35HelmetHmd`), catalog row 18.
+//! Sci-Fi category, ADAS & HUD family, cockpit and hood.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

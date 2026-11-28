@@ -69,7 +69,7 @@ Unlit pods are **neutral** (white at alpha 22 or less), never a dim version of t
 - `proximity`: 3 steps grey → amber → red. `assists`: on / off / intervening (GT7 code).
 - `lume`: Super-LumiNova night and day colours for analog markers.
 - `adas`: neutral object grey at 70%, in-path blue `#3BA7FF`, imminent red, cones; at most 2 saturated objects, 6 road users and 3 lanes.
-- `budget`: base hue ≥ 80% of lit pixels, white ≤ 15%, red ≤ 5% (except at the limiter); red is never structural. Checked with a lit-pixel histogram per mockup.
+- `budget`: base hue ≥ 80% of lit pixels, white ≤ 15%, red ≤ 5% (except at the limiter); red is never structural. Checked with a lit-pixel histogram per mockup. For a Psychedelic or Abstract dash the budget is measured outside its rank-4 figure, whose hue follows the colour law in `CATALOG.md` (2026-11-28).
 
 ### Palette modes (`paletteModes`)
 - **Factory:** `assets/car_brands/car_brands.json` → `BrandPalettes[brand]`: `PrimaryHex → primary`, `SecondaryHex → secondary`, `AccentHex → accent`, `ShiftFlashHex → shift`. Unknown brand → `DEFAULT`, then the family default.
