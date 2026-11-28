@@ -76,9 +76,10 @@ impl Plates {
         if let Some(image) = self.tunnel {
             let rect = g.tunnel_rect();
             p.fill(&Shape::rect(rect), ImagePaint::new(image, rect).tint(pal.primary));
-            return;
+        } else {
+            fallback_rings(p, g, pal);
         }
-        fallback_tunnel(p, g, pal);
+        draw_floor(p, g, pal);
     }
 }
 
@@ -113,9 +114,8 @@ fn fallback_housing(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
     );
 }
 
-/// A procedural tunnel: [`RINGS`] receding rings dimming towards the disc, and the floor as a
-/// dark wedge with its two edges.
-fn fallback_tunnel(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+/// The procedural rings: [`RINGS`] receding rings dimming towards the disc.
+fn fallback_rings(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
     for k in 0..RINGS {
         let (c, r) = g.ring(k);
         let depth = k as f32 / (RINGS as f32 - 1.0).max(1.0);
@@ -123,6 +123,10 @@ fn fallback_tunnel(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let width = 3.0 - 1.5 * depth;
         p.fill(&Shape::ring(c, r, width), pal.primary.intensity(level));
     }
+}
+
+/// The floor, over the rings (rendered or procedural): a dark wedge with its edges.
+fn draw_floor(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
     // The floor: a dark wedge that hides the rings behind it, lit faintly along its top edge,
     // with red edges running down from the disc's side.
     let f = g.floor();
