@@ -28,8 +28,8 @@ snapshot of 2026-11-19, which covered the v1 tiny-skia clusters.
   prints the observed row; copy it only after checking that each change is one the dash means
   to make (the module docs list the telemetry a dash claims).
 - An input the dash reads only together with another (a lamp with two conditions, a rate) needs
-  a scenario where the other conditions hold: add it to `DASH_SCENARIOS` in the test. Bosch DDU's
-  four are the example.
+  a scenario where the other conditions hold: add it to `DASH_SCENARIOS` in the test. No dash needs
+  one today (the earlier Bosch DDU's four alarm lamps were the first).
 - `car_ordinal` reaches every dash through the palette and the logo's brand name, which the host
   picks (`fh6-app` `render_loop.rs`, `ensure_palette` and `Logo.brand_name`); the gate gives each
   dash a fixed palette and the default logo, so a row lists `car_ordinal` only when the dash reads
@@ -88,10 +88,8 @@ Dash scenarios (`DASH_SCENARIOS`):
 
 | Dash | Scenario | Makes reachable |
 |---|---|---|
-| Bosch DDU | launch, nothing held | `brake`, `clutch` (LNCH: standing, throttle over 50% and something held) |
-| Bosch DDU | launch, brake held, throttle off | `throttle` (LNCH) |
-| Bosch DDU | threshold braking, brake off | `brake` (ABS: brake over 30% at 0.85 g deceleration) |
-| Bosch DDU | power oversteer, front drive | `drivetrain` (TC: throttle and growing body slip, not front drive) |
+
+None today: every dash's inputs are reachable in the common scenarios.
 
 ## Dashes
 
@@ -113,7 +111,7 @@ limiter, gear and speed.
 | `BugattiTourbillon` | Bugatti Tourbillon | `rpm`, `max_rpm`, `gear`, `speed` |
 | `LfaV10Nurburgring` | LFA V10 Nürburgring | `rpm`, `max_rpm`, `gear`, `speed` |
 | `KoenigseggGyro` | Koenigsegg Gyro | `rpm`, `max_rpm`, `gear`, `speed` |
-| `BoschDdu` | Bosch DDU | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `clutch`, `handbrake`, `g_lat`, `g_long`, `velocity`, `drivetrain`, `power`, `boost` |
+| `BoschDdu` | Bosch DDU | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
 | `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed` |
 | `Gt7ModularTripod` | GT7 Modular Tripod | `rpm`, `max_rpm`, `gear`, `speed` |
 | `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity`, `power` |
