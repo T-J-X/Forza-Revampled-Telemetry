@@ -172,7 +172,7 @@ One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they sha
 | 70 | 43 | [`StarSailOrigami`](../../../crates/fh6-clusters/src/clusters/star_sail_origami/) | Apple Vision | concept | Sci-Fi | cockpit+hood | ☐ |
 | 71 | 44 | [`ArcLadderCascade`](../../../crates/fh6-clusters/src/clusters/arc_ladder_cascade/) | Sci-Fi | concept | Sci-Fi | cockpit | ☐ |
 | 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
-| 73 | 73 | `FaradayMandala` | Abstract | concept | Fluid / Generative | cockpit | ⧖ |
+| 73 | 73 | `FaradayMandala` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 
 ## The auto-chain
 TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 6 dashes are built at once (TJX, 2026-11-28, raised from 4), and a free slot is never left idle.
