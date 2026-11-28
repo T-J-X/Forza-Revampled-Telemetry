@@ -109,7 +109,7 @@ impl OsdHost {
             let (mut global, mut car) = (model::Line::new(), model::Line::new());
             model::format_value(row, self.ctl.ctx(base, fit), &mut global);
             model::format_value(row, self.ctl.ctx(effective, fit), &mut car);
-            global.as_str() != car.as_str() || model::toggle_value(row, base) != model::toggle_value(row, effective)
+            global.as_str() != car.as_str() || model::toggle_value(row, base, self.ctl.edit.view) != model::toggle_value(row, effective, self.ctl.edit.view)
         });
         self.ctl.edit.profile_override = overridden;
         self.ctl.edit.live_anchor_y = Some(match self.ctl.edit.view {
