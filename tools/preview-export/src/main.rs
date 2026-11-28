@@ -1,7 +1,7 @@
 //! Headless 4K preview exporter on `fh6-kit`.
 //!
-//! For every cluster in `fh6_clusters::registry::REGISTRY` and each of the four review states it
-//! warms the cluster up through `update` with a real `dt` (springs settle, strobes run), renders
+//! For every dash, in the catalog's browse order (`fh6_clusters::catalog::in_browse_order`), and
+//! each of the four review states it warms the cluster up through `update` with a real `dt` (springs settle, strobes run), renders
 //! one 3840x2160 frame on the GPU exactly as the overlay would, and writes:
 //! - `mockups/kit/<Cluster>/<state>.png`: the 4K frame over OLED black;
 //! - `mockups/_thumbs/kit/<Cluster>/<state>.png`: a 960x540 box-downsample of that frame;
@@ -32,7 +32,7 @@ mod gallery;
 mod osd;
 mod states;
 
-use fh6_clusters::registry::REGISTRY;
+use fh6_clusters::{catalog, registry};
 use fh6_core::{AppConfig, CarDatabase};
 use fh6_gpu::GpuContext;
 use fh6_kit::logo::{BrandId, LogoIndex};
@@ -202,7 +202,9 @@ fn run() -> Result<()> {
     let fonts = kit.font_choice(None);
     let mut renders = Vec::new();
 
-    for entry in REGISTRY {
+    // The one browse order: category in TJX's order, then shelf.
+    for cat in catalog::in_browse_order() {
+        let entry = registry::resolve(cat.theme);
         let name = entry.theme.to_string();
         let palette = Palette::family(&tokens, entry.family.key());
         for state in &STATES {
@@ -279,7 +281,8 @@ fn run() -> Result<()> {
             let (cx, cy) = (layout.anchor.x as u32, layout.anchor.y as u32);
             let crop = shown.crop(cx.saturating_sub(800), cy.saturating_sub(450), 1600, 760);
             crop.save_png(&out.join("kit").join(&name).join(format!("{}_crop.png", state.name)))?;
-            let badges = Badges::compute(&img, &palette, &tokens, &stats, gpu_ms);
+            let figure = cluster::figure_pixels(cat, cluster.as_ref(), &layout);
+            let badges = Badges::compute(&img, &palette, &tokens, &stats, gpu_ms, figure);
             println!(
                 "{name:<22} {:<18} {:>6.3} ms GPU  {:>3} draws  {:>4} instances  ({:.1} s)",
                 state.name,
@@ -290,7 +293,7 @@ fn run() -> Result<()> {
             );
             renders.push(Render {
                 cluster: name.clone(),
-                display: entry.name.to_string(),
+                display: format!("{} · {} · catalog row {}", cat.display, cat.category.label(), cat.row),
                 state: state.name.to_string(),
                 full: rel(&out, &full),
                 thumb: rel(&out, &thumb),

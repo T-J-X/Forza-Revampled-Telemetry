@@ -409,6 +409,15 @@ pub trait Cluster {
     fn animating(&self) -> bool {
         false
     }
+
+    /// The zone of the dash's rank-4 figure in local px under `layout` (the rect its `Geom` table
+    /// names for `layout.view`), or `None`. Only a Psychedelic or Abstract dash names one:
+    /// `preview-export` measures its colour budget outside this zone, where the colour law of
+    /// CATALOG.md lets the figure's hue follow its model. Never called per frame by the host.
+    fn figure_zone(&self, layout: &Layout) -> Option<Rect> {
+        let _ = layout;
+        None
+    }
 }
 
 /// One row of the cluster registry (the table the Phase 7 setup chat generates).

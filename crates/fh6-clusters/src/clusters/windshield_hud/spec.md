@@ -1,9 +1,11 @@
 # Windshield HUD (`WindshieldHud`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 16 (WindshieldHud — build #18 · raised HUD) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 16) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** rebuild · **View:** raised HUD
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** rebuild · **View:** raised HUD · **Build order:** 18
+
+**Category note.** The category trait is the virtual image placed 10 m out in the world. The collimated strokes stay; no glass panes.
 
 Civil AR-HUD virtual image at (1920,1595), focused 10 m out: no plate, only a feathered #000 dimming pad (alpha ≤150, 48 px feather) hugging the symbology so it reads against bright sky. Vertical stack on X=1920: Z1 crown of 21 slender 8×22 px staves on a 16 px-sag arc spanning 960 px; beneath, a full-width 1 px horizon whose 3 px rpm core (rank 3) grows centre-out. Gear (Saira Condensed 700, cap 160) sits in a 1 px four-tick reticle, speed beneath in B612 Mono (cap 96), then Z4: a flat perspective map ribbon with the trail behind and a dashed κ prediction 3 s ahead, stepped accent/caution/warning braking zones and an ego chevron. Near symbols take ±4 px G parallax; the ribbon stays fixed.
 

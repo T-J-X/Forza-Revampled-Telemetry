@@ -1,9 +1,11 @@
 # Glyph Dot Matrix (`GlyphDotMatrix`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 6 (GlyphDotMatrix — build #11 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 6) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Retro · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Modern Digital 2027 (Design Council 3B), spec [docs/design/families/modern-digital.md](../../../../../docs/design/families/modern-digital.md), hero frames [docs/design/heroes/modern-digital/](../../../../../docs/design/heroes/modern-digital/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 11
+
+**Category note.** Retro through the LED dot-matrix displays and scoreboards of the 1980s. The dot optics of this brief stay; the phone in its references is a benchmark for the dots, not the subject.
 
 'Micro-LED field': every element is made of round SDF dots (2-stop core 40% toward white, 1 px rim at 35%, a sheen moved by the virtual light). Unlit dots exist only inside glyph cells and bar tracks at inkGhost, never as a full-field grid. Rank 1: 11 outside-in super-dots (30 px), and the gear as an original procedural 5×7 dot glyph on a 30 px pitch (cap 210) at X 1920. Rank 2: speed in three 5×7 cells on a 16 px pitch (cap 112), 280 px right, with ghost 8s as dim dots. Rank 3: a 64×3 dot bar (18 px pitch, 1152 px). Rank 4: a live dyno dot plot under gear and speed at ≤30% luminance. Titillium Web micro-labels.
 

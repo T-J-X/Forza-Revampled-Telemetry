@@ -1,9 +1,9 @@
 # Lumen Etch (`LumenEtch`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 30 (LumenEtch — build #43 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 30) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Liquid Glass (Design Council 3A), spec [docs/design/families/liquid-glass.md](../../../../../docs/design/families/liquid-glass.md), hero frames [docs/design/heroes/liquid-glass/](../../../../../docs/design/heroes/liquid-glass/)
-- **Kind:** new · **View:** cockpit · **Build order:** 43
 
 A frameless, untinted 1200×500 crystal slab, seen only through two 1 px polished face edges offset 6 px to show its thickness. Every graphic is laser-etched frost lit by a virtual LED bar in the bottom edge. Etch brightness therefore falls with height, I = exp(−h/λ), with a 70% floor inside the gear and speed. Rank 1: the gear (Saira Condensed 800, cap 210) as solid frosted etch with a crisp 1 px cut line, plus a 40 px strip of 17 etched dots fed by a top-edge LED bar. Rank 2: speed on the left, Saira 300 cap 112, ghost 8s. Rank 3: 40 radial etched lines on a 200° arch, one LED each. Rank 4: an etched tyre plan under the gear. Titillium Web labels.
 
