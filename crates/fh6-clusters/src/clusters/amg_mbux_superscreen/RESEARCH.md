@@ -142,6 +142,22 @@ Study chart: `/mnt/project-files/amg_mbux_superscreen/research/rain_physics_stud
 
 This is the dash's own data-driven idea for the rain. When you pull away the rain falls straight down, and as you speed up its source sinks towards the horizon and the streaks fan out into a warp. In a drift the source slides sideways by f·tan(slip) (83 px at 15°, 180 px at 30°), so the rain shows where the car is actually going, not where it points. Streak length follows the drop's speed across the screen over one frame of persistence, so streaks are short at the source and long at the tunnel's edge. Inputs: `speed_ms`, `velocity_x`, `velocity_z` (or `car_slip_angle_rad()`, already in fh6-core).
 
+**Rain motion timing (3D particle simulation, 28 Nov 11:10).** I simulated drops 0.6 to 30 m ahead falling at 6.5 m/s, projected with f = 312 px and counted only inside the tunnel circle (`research/rain_motion_study.png`; script in the thread's scratchpad, synthetic, not game data).
+
+| speed | median life | 90th % life | median streak per frame | 95th % streak |
+|---|---|---|---|---|
+| 10 mph | 0.52 s | 0.97 s | 2 px | 7 px |
+| 40 mph | 0.38 s | 0.83 s | 3 px | 12 px |
+| 60 mph | 0.32 s | 0.72 s | 4 px | 22 px |
+| 100 mph | 0.23 s | 0.48 s | 7 px | 37 px |
+| 130 mph | 0.18 s | 0.37 s | 10 px | 51 px |
+| 200 mph | 0.13 s | 0.25 s | 14 px | 84 px |
+
+What follows for the draw plan:
+- A one-frame streak is too short to read as rain below about 60 mph. The eye and a camera both integrate over more than one frame, so the dash draws each streak over **3 frames of persistence** (1/20 s). That's 6 to 43 px median, and the 60 px cap only bites on the longest outliers above about 100 mph.
+- A drop lives 0.13 to 0.5 s, so to keep about 70 streaks on screen the fixed 72-slot array recycles a slot as soon as its streak leaves the circle. That spawns about 140 per second at 10 mph and about 550 per second at 200 mph. No allocation: it's the same array with a new seed per slot.
+- Each slot's phase advances by real projection (z falls by v·dt, the head is at f·(x, y)/z). It is not a fixed screen speed, so near-edge streaks accelerate the way real ones do, and the fan matches the source-elevation table above.
+
 **Wet road: darker, and a mirror near the horizon.**
 - Darker: Ångström's measurements, quoted by Lekner and Dorf ("Why some things are darker when wet", Applied Optics 27(7), 1988), put dry sand at 0.182 and wet sand at 0.091 albedo, and black mould at 0.141 dry and 0.084 wet. So the wet road plate is about 0.5 to 0.6 times as bright as the dry one.
 - Mirror: a water film reflects by Fresnel (n 1.333, unpolarised). With the same f = 312 px, the reflectance at a given depth below the horizon is:
