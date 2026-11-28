@@ -6,7 +6,8 @@
 //!   surround's roughness and micro bump, so the satin face breaks the key light up like real
 //!   blasted metal instead of a flat gradient.
 //! - **Surround (Blender, Cycles):** the slim surround round the lens, modelled in 3D from the
-//!   cluster's `Geom` (the lens's rounded rectangle and the surround width): a polished inner
+//!   cluster's `Geom` (the lens's stepped outline, a low strip with a raised part joined by the
+//!   kit's smooth union, and the surround width): a polished inner
 //!   chamfer where the lens sits, a flat satin-graphite face and a rounded outer edge. It is
 //!   rendered top-down and orthographic at 2 px per 4K px, once per view (cockpit and hood) and
 //!   once per key-light azimuth (−160° and −110°, the virtual light's ±25° swing), with a
@@ -42,12 +43,46 @@ const MARGIN: f32 = 4.0;
 /// Blender seed.
 const BLENDER_SEED: u64 = 1907;
 
-/// The two views: (name, lens width, lens height, lens corner radius, surround width), as in
-/// the cluster's `Geom` (`lens`, `lens_r`, `surround`).
-const VIEWS: [(&str, f32, f32, f32, f32); 2] = [
-    ("cockpit", 1400.0, 514.0, 36.0, 12.0),
-    ("hood", 1732.0, 358.0, 30.0, 10.0),
+/// One view's lens outline, as in the cluster's `Geom` (`lens`, `lens_r`, `surround`,
+/// `strip_top`, `hump`), in 4K local px.
+struct ViewShape {
+    name: &'static str,
+    /// The lens's bounds: width and height.
+    size: (f32, f32),
+    /// Corner radius.
+    r: f32,
+    /// Surround width.
+    ring: f32,
+    /// The low strip's top edge, measured down from the lens's top.
+    strip_drop: f32,
+    /// The raised part's left and right edges, measured from the lens's centre.
+    hump: (f32, f32),
+}
+
+const VIEWS: [ViewShape; 2] = [
+    ViewShape {
+        name: "cockpit",
+        size: (1400.0, 514.0),
+        r: 36.0,
+        ring: 12.0,
+        strip_drop: 132.0,
+        hump: (-550.0, 340.0),
+    },
+    ViewShape {
+        name: "hood",
+        size: (1732.0, 358.0),
+        r: 30.0,
+        ring: 10.0,
+        strip_drop: 68.0,
+        hump: (-722.0, 442.0),
+    },
 ];
+/// Blend length of the outline's smooth union (the cluster's `LENS_BLEND`).
+const LENS_BLEND: f32 = 24.0;
+/// How far the raised part reaches into the strip (the cluster's `HUMP_OVERLAP`).
+const HUMP_OVERLAP: f32 = 80.0;
+/// Points on each ring of the surround's outline.
+const OUTLINE_POINTS: u32 = 1440;
 
 /// The phosphor plate.
 const PLATE_PROMPT: &str = "extreme macro photograph of the lit phosphor coating of a vacuum fluorescent display segment, fine powdery granular phosphor grain, soft mottled uneven glow, flat even lighting, monochrome grey, seamless surface texture, ultra detailed";
@@ -65,9 +100,11 @@ const GRAIN_SEED: u64 = 2708;
 /// Grain texture size (a build input; Blender tiles it about every 40 local px).
 const GRAIN_SIZE: usize = 1024;
 
-/// The surround: a rounded-rectangle frame round the lens. Params: `w`, `h`, `r` (the lens),
-/// `ring`, `margin`, `scale`, `lights` (list of `[name, azimuth_deg]`), `samples`, `prefix`,
-/// `grain` (path of the ComfyUI grain, or empty for procedural noise).
+/// The surround: a frame round the lens's stepped outline. Params: `w`, `h`, `r` (the lens's
+/// bounds and corner radius), `strip_drop`, `hump` (`[x0, x1]`), `blend`, `overlap`, `points`
+/// (the outline: the kit's smooth union of two rounded rectangles, `fh6_kit::shape`), `ring`,
+/// `margin`, `scale`, `lights` (list of `[name, azimuth_deg]`), `samples`, `prefix`, `grain`
+/// (path of the ComfyUI grain, or empty for procedural noise).
 pub const HOUSING: &str = r#"
 sc = reset()
 gpu_cycles(sc, samples=ARGS.get('samples', 96), denoise=True, bounces=6)
@@ -75,16 +112,85 @@ sc.render.film_transparent = True
 view(sc, 'Standard')
 W, H, R = float(ARGS['w']), float(ARGS['h']), float(ARGS['r'])
 RING, MARGIN, S = float(ARGS['ring']), float(ARGS['margin']), float(ARGS['scale'])
-SEGS = 16
+DROP, K, OVERLAP = float(ARGS['strip_drop']), float(ARGS['blend']), float(ARGS['overlap'])
+HX0, HX1 = float(ARGS['hump'][0]), float(ARGS['hump'][1])
+POINTS = int(ARGS['points'])
+# Screen coordinates (y down) round the lens's centre: the low strip and the raised part.
+STRIP = (-W * 0.5, -H * 0.5 + DROP, W * 0.5, H * 0.5)
+HUMP = (HX0, -H * 0.5, HX1, -H * 0.5 + DROP + OVERLAP)
+
+def sd_rrect(x, y, b):
+    hx, hy = (b[2] - b[0]) * 0.5, (b[3] - b[1]) * 0.5
+    r = min(R, hx, hy)
+    qx = abs(x - (b[0] + b[2]) * 0.5) - hx + r
+    qy = abs(y - (b[1] + b[3]) * 0.5) - hy + r
+    return math.hypot(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - r
+
+def sdf(x, y):
+    a, b = sd_rrect(x, y, STRIP), sd_rrect(x, y, HUMP)
+    return min(a, b) - K * math.log1p(math.exp(-abs(a - b) / K))
+
+# The outline at signed distance d: both pieces are convex and hold the origin O, so every ray
+# from O crosses it once. The rays aim at points spaced evenly along the sharp-cornered outline,
+# so corners and the far ends of the strip get as many points as the long edges. Bisection along
+# each ray; y is flipped for Blender (y up).
+OX, OY = (HX0 + HX1) * 0.5, (STRIP[1] + min(HUMP[3], STRIP[3])) * 0.5
+CORNERS = [(STRIP[0], STRIP[3]), (STRIP[2], STRIP[3]), (STRIP[2], STRIP[1]), (HX1, STRIP[1]), (HX1, HUMP[1]),
+           (HX0, HUMP[1]), (HX0, STRIP[1]), (STRIP[0], STRIP[1])]
+
+def ray_angles():
+    edges = [(CORNERS[i], CORNERS[(i + 1) % len(CORNERS)]) for i in range(len(CORNERS))]
+    step = sum(math.dist(a, b) for (a, b) in edges) / POINTS
+    out = []
+    for (a, b) in edges:
+        n = max(1, round(math.dist(a, b) / step))
+        for j in range(n):
+            x, y = a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n
+            out.append(math.atan2(-(y - OY), x - OX))
+    return sorted(out)
+
+def trace(angles, d):
+    pts = []
+    reach = W + H
+    for t in angles:
+        dx, dy = math.cos(t), -math.sin(t)
+        lo, hi = 0.0, reach
+        for _ in range(40):
+            mid = (lo + hi) * 0.5
+            if sdf(OX + dx * mid, OY + dy * mid) < d:
+                lo = mid
+            else:
+                hi = mid
+        m = (lo + hi) * 0.5
+        pts.append((OX + dx * m, OY + dy * m))
+    return pts
+
+def even_angles(angles, d):
+    # Rays aimed at points spaced evenly along the outline at distance d (a ray that meets an
+    # edge at a shallow angle lands far along it once the outline is offset).
+    pts = trace(angles, d)
+    n = len(pts)
+    step = sum(math.dist(pts[i], pts[(i + 1) % n]) for i in range(n)) / POINTS
+    out = []
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        parts = max(1, math.ceil(math.dist(a, b) / step))
+        for j in range(parts):
+            x, y = a[0] + (b[0] - a[0]) * j / parts, a[1] + (b[1] - a[1]) * j / parts
+            out.append(math.atan2(-(y - OY), x - OX))
+    return out
+
+BASE = ray_angles()
+ALL = sorted(BASE + even_angles(BASE, RING) + even_angles(BASE, -1.0))
+ANGLES, last = [], None
+for (t, q) in zip(ALL, trace(ALL, 0.0)):
+    # Points closer than this on the lens outline would make sliver faces.
+    if last is None or math.dist(q, last) > 0.8:
+        ANGLES.append(t)
+        last = q
 
 def rrect(d):
-    a, b, r = W * 0.5 + d, H * 0.5 + d, max(R + d, 0.5)
-    pts = []
-    for (cx, cy, a0) in ((a - r, b - r, 0.0), (-a + r, b - r, 90.0), (-a + r, -b + r, 180.0), (a - r, -b + r, 270.0)):
-        for i in range(SEGS + 1):
-            t = math.radians(a0 + 90.0 * i / SEGS)
-            pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
-    return pts
+    return [(x, -y) for (x, y) in trace(ANGLES, d)]
 
 # Profile from the lens edge outwards: (offset, z, polished). A polished chamfer rolls down to
 # the lens, the satin face is flat, the outer edge is rounded over into a short wall.
@@ -245,11 +351,14 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     );
 
     // Blender: the surround per view and light, its satin face broken up by the grain.
-    for (view, w, h, r, ring) in VIEWS {
+    for v in &VIEWS {
+        let (view, (w, h), r, ring) = (v.name, v.size, v.r, v.ring);
         let params = json!({
             "out": scratch.to_string_lossy(),
             "seed": BLENDER_SEED,
             "w": w, "h": h, "r": r, "ring": ring,
+            "strip_drop": v.strip_drop, "hump": [v.hump.0, v.hump.1],
+            "blend": LENS_BLEND, "overlap": HUMP_OVERLAP, "points": OUTLINE_POINTS,
             "margin": MARGIN, "scale": SCALE,
             "samples": 96,
             "prefix": format!("surround_{view}"),
@@ -264,7 +373,10 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             let rel = format!("{DIR}/{file}");
             let bytes = img::save_png(&im, &ctx.abs(&rel), false, true)?;
             rows.push(format!(
-                "| `{file}` | colour, straight alpha | {}x{} | {} KB | blender:retro_cyber::HOUSING view={view} lens={w}x{h} r={r} ring={ring} light={az}° scale={SCALE} samples=96 seed={BLENDER_SEED}; {grain_note} | MIT (asset-forge); grain CreativeML Open RAIL++-M output (SDXL) | the surround; blended with the other light by lateral G |",
+                "| `{file}` | colour, straight alpha | {}x{} | {} KB | blender:retro_cyber::HOUSING view={view} lens={w}x{h} r={r} strip_drop={} hump={}..{} blend={LENS_BLEND} ring={ring} light={az}° scale={SCALE} samples=96 seed={BLENDER_SEED}; {grain_note} | MIT (asset-forge); grain CreativeML Open RAIL++-M output (SDXL) | the surround; blended with the other light by lateral G |",
+                v.strip_drop,
+                v.hump.0,
+                v.hump.1,
                 im.w,
                 im.h,
                 bytes / 1024

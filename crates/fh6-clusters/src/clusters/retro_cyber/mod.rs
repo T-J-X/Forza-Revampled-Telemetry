@@ -185,14 +185,25 @@ const SURROUND_MARGIN: f32 = 4.0;
 /// The lens is polished: a broad satin lobe lit the whole flat face grey; a polished face keeps
 /// the key light's highlight to the rims, whose normals turn towards it.
 const LENS_ROUGHNESS: f32 = 0.015;
+/// Blend length of the smooth union that joins the lens's strip and its raised part (local px):
+/// the shoulders get a fillet of about 2.4 times this.
+const LENS_BLEND: f32 = 24.0;
+/// How far the raised part reaches down into the strip (local px).
+const HUMP_OVERLAP: f32 = 80.0;
 /// The lens's cross-section: thickness, rounded edge, glass below the rim (local px).
 const LENS_SECTION: (f32, f32, f32) = (7.0, 10.0, 5.0);
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Geom {
+    /// The lens's bounds. Its outline is the A70's stepped panel: a low strip across the whole
+    /// width with a raised part over the centre window ([`Geom::lens_pieces`]).
     lens: Rect,
     lens_r: f32,
+    /// The top edge of the low strip (the side windows sit under it).
+    strip_top: f32,
+    /// The raised part's left and right edges.
+    hump: (f32, f32),
     surround: f32,
     pedal: Rect,
     centre: Rect,
@@ -232,6 +243,8 @@ const fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
 const COCKPIT: Geom = Geom {
     lens: rect(-700.0, -304.0, 700.0, 210.0),
     lens_r: 36.0,
+    strip_top: -172.0,
+    hump: (-550.0, 340.0),
     surround: 12.0,
     pedal: rect(-680.0, -150.0, -548.0, 160.0),
     centre: rect(-528.0, -294.0, 318.0, 160.0),
@@ -260,6 +273,8 @@ const COCKPIT: Geom = Geom {
 const HOOD: Geom = Geom {
     lens: rect(-866.0, -208.0, 866.0, 150.0),
     lens_r: 30.0,
+    strip_top: -140.0,
+    hump: (-722.0, 442.0),
     surround: 10.0,
     pedal: rect(-850.0, -120.0, -720.0, 106.0),
     centre: rect(-700.0, -200.0, 420.0, 106.0),
@@ -353,6 +368,18 @@ impl Scale {
 }
 
 impl Geom {
+    /// The lens outline grown by `grow` (negative shrinks): the low strip and the raised part,
+    /// joined by a smooth union of [`LENS_BLEND`] ([`Shape::Blob`]). The raised part reaches
+    /// [`HUMP_OVERLAP`] into the strip and no further, so the two never share an edge (a smooth
+    /// union bulges where they would).
+    fn lens_pieces(&self, grow: f32) -> [Piece; 2] {
+        let b = self.lens;
+        let r = (self.lens_r + grow).max(0.5);
+        let strip = rect(b.min.x, self.strip_top, b.max.x, b.max.y).expand(grow);
+        let hump = rect(self.hump.0, b.min.y, self.hump.1, self.strip_top + HUMP_OVERLAP).expand(grow);
+        [Piece::round_rect(strip, r), Piece::round_rect(hump, r)]
+    }
+
     fn x_at(&self, u: f32) -> f32 {
         self.tach_x.0 + (self.tach_x.1 - self.tach_x.0) * u
     }
@@ -488,6 +515,14 @@ impl Geom {
         let b = self.lens;
         let w = b.width() / SECTORS as f32;
         rect(b.min.x + w * k as f32, b.min.y, b.min.x + w * (k + 1) as f32, b.max.y)
+    }
+}
+
+/// The lens outline (or the surround's, from grown pieces) as a shape.
+fn lens_shape(pieces: &[Piece; 2]) -> Shape<'_> {
+    Shape::Blob {
+        pieces,
+        smooth: LENS_BLEND,
     }
 }
 
@@ -878,7 +913,10 @@ impl Cluster for RetroCyber {
         if let Some(t) = boot_t {
             for k in 0..SECTORS {
                 if t < sector_start(k) {
-                    p.fill(&Shape::rect(g.sector(k)), pal.roles.oled_black);
+                    p.scoped(|p| {
+                        p.clip(g.sector(k), 0.0);
+                        p.fill(&lens_shape(&g.lens_pieces(0.0)), pal.roles.oled_black);
+                    });
                 }
             }
         }
@@ -965,17 +1003,9 @@ impl Cluster for RetroCyber {
 
         // 7. The lens: one piece of optical glass over the whole panel.
         let (thick, bevel, base) = LENS_SECTION;
-        let lens = [Piece::round_rect(g.lens, g.lens_r).section(thick, bevel, base)];
+        let lens = g.lens_pieces(0.0).map(|piece| piece.section(thick, bevel, base));
         let glass = self.glass;
-        p.layer(LayerOptions::glass(0.0), |p| {
-            p.fill(
-                &Shape::Blob {
-                    pieces: &lens,
-                    smooth: 0.0,
-                },
-                glass,
-            );
-        });
+        p.layer(LayerOptions::glass(0.0), |p| p.fill(&lens_shape(&lens), glass));
     }
 
     fn animating(&self) -> bool {
@@ -996,8 +1026,9 @@ impl RetroCyber {
         let roles = pal.roles;
         let ink = roles.ink;
         let outer = g.lens.expand(g.surround);
-        let r_out = g.lens_r + g.surround;
-        p.fill(&Shape::round_rect(outer, r_out), roles.oled_black);
+        let body = g.lens_pieces(g.surround);
+        let lens = g.lens_pieces(0.0);
+        p.fill(&lens_shape(&body), roles.oled_black);
         let c = g.lens.center();
         let light = self.light.angle();
         let art = match self.view {
@@ -1015,11 +1046,11 @@ impl RetroCyber {
                     p.scoped(|p| {
                         p.set_blend(blend);
                         let paint = ImagePaint::new(img, image_rect).tint(Color::WHITE.with_alpha(share));
-                        p.fill(&Shape::round_rect(outer.expand(1.0), r_out + 1.0), paint);
+                        p.fill(&Shape::rect(image_rect), paint);
                     });
                 }
             }
-            p.fill(&Shape::round_rect(g.lens, g.lens_r), roles.oled_black);
+            p.fill(&lens_shape(&lens), roles.oled_black);
             return;
         }
         let l = Vec2::from_angle(light);
@@ -1029,8 +1060,8 @@ impl RetroCyber {
             .stop(1.0, ink.with_alpha(on_screen(SURROUND_DARK)));
         // The face is the ring between the outer outline and the lens: the lens body is drawn
         // black over it.
-        p.fill(&Shape::round_rect(outer, r_out), face);
-        p.fill(&Shape::round_rect(g.lens, g.lens_r), roles.oled_black);
+        p.fill(&lens_shape(&body), face);
+        p.fill(&lens_shape(&lens), roles.oled_black);
         let px = p.device_px();
         let rim_out = lit_rim(
             c,
@@ -1039,7 +1070,7 @@ impl RetroCyber {
             roles.hairline.with_alpha(0.05),
         );
         p.stroke(
-            &Shape::round_rect(outer.inset(px * 0.5), r_out - px * 0.5),
+            &lens_shape(&g.lens_pieces(g.surround - px * 0.5)),
             rim_out,
             fh6_kit::Stroke::new(px),
         );
@@ -1050,7 +1081,7 @@ impl RetroCyber {
             roles.hairline.with_alpha(0.04),
         );
         p.stroke(
-            &Shape::round_rect(g.lens.expand(px * 1.5), g.lens_r + px * 1.5),
+            &lens_shape(&g.lens_pieces(px * 1.5)),
             rim_in,
             fh6_kit::Stroke::new(px * 2.0),
         );
@@ -1437,8 +1468,14 @@ mod tests {
                 g.lens
             );
             let w = g.windows();
+            // The side windows sit under the strip, the centre window under the raised part.
+            let strip = rect(g.lens.min.x, g.strip_top, g.lens.max.x, g.lens.max.y);
+            let hump = rect(g.hump.0, g.lens.min.y, g.hump.1, g.lens.max.y);
+            assert!(g.strip_top > g.lens.min.y + g.lens_r && g.hump.0 > g.lens.min.x + g.lens_r);
+            assert!(g.hump.1 < g.lens.max.x - g.lens_r);
             for (i, a) in w.iter().enumerate() {
-                assert!(inside(g.lens.inset(8.0), *a), "{a:?} inside the lens");
+                let home = if i == 1 { hump } else { strip };
+                assert!(inside(home.inset(8.0), *a), "{a:?} inside the lens");
                 for b in &w[i + 1..] {
                     assert!(!overlaps(a.expand(8.0), *b), "windows {a:?} and {b:?} stay apart");
                 }
