@@ -204,3 +204,31 @@ Figure `limiter_study.png` in the project files.
 - On the shift the satellites coalesce back within 300 ms (they "bead up" while apart, so they are drawn as true circles), and the drop returns to its stroboscopic star.
 
 **Cost note for the code phase.** 146 harmonics × 1024 angle samples is about 150k multiply-adds per frame, under the 0.3 ms CPU budget only if it runs during the limiter alone. The plan: bake r(θ) into a 1024 × 1 texture on the CPU, only while the limiter is active, with 48 harmonics (enough for D ≈ 1.25 at 4K, to be checked with the same box count in a unit test). The shader reads that texture for the outline.
+
+## The gear void, made physically honest
+
+The board punches the gear numeral through the drop as a void with a bright lip. Free liquid will not hold a hole like that, so this works out what keeps one open.
+
+**What real liquid does with a hole.**
+- Holes in a layer of liquid have a critical size. Taylor and Michael (1973), "On making holes in a sheet of fluid", J. Fluid Mech. 58 ([cambridge.org](https://www.cambridge.org/core/journals/journal-of-fluid-mechanics/article/on-making-holes-in-a-sheet-of-fluid/EE136E61382830357E5A9694172166AB)), blew holes in water and mercury layers with air jets: "there exists a critical hole size above which larger holes grow and below which smaller holes heal" (as summarised by Bostwick, Dijksman and Shearer, "Wetting dynamics of a collapsing fluid hole", [arXiv 1512.07826](https://arxiv.org/pdf/1512.07826)). The size is of the order of the layer's depth. My estimate for galinstan on glass, at a 140° contact angle, is a depth of 2ℓ_c sin(θ ÷ 2) = 5.5 mm, close to the drop's own radius. A free hole in this drop would either heal or tear the drop into a ring.
+- A ring of liquid is unstable too. Yao and Bowick, "The shrinking instability of toroidal liquid droplets in the Stokes flow regime" ([ar5iv 1011.3437](https://ar5iv.labs.arxiv.org/html/1011.3437)): "the torus shrinks to close its interior hole, eventually becoming a single ball", unless the Rayleigh instability gets there first and splits a thin ring into droplets.
+
+**The honest fix: a glass boss.** The gear sits on a clear, flat-topped glass boss at the centre of the drop. Galinstan under its acid film does not wet glass (θ ≈ 140°, the mercury-on-glass figure already in the sources), so the metal wraps around the boss and pulls back from it with a convex, rolled meniscus, the same roll as the drop's outer edge. The void is real: it is the boss's footprint, held open by the solid. Nothing about it needs a deliberate change.
+
+**What the lip looks like, and why it is bright.**
+- The rolled edge turns the surface normal from straight up, on the drop's top, through horizontal, to past horizontal where it meets the glass. A narrow band of the edge therefore reflects every elevation of the studio, from the ceiling down to the floor, and the softbox lands on it as a thin, bright line. This is the "bright meniscus lip" on the board, and it has the same physical cause as the bright outer rim of any mercury puddle.
+- The roll is about ℓ_c wide (2.9 mm, about half the drop's radius at the real scale). The softbox highlight inside it is much narrower: about ℓ_c × (the softbox's angular size ÷ 90°). For a 15° softbox that is about a sixth of the roll. On a lip about 40 px wide on the 4K canvas, that gives a highlight line of 6–7 px.
+- Mercury's reflectance rises from 0.78 head-on towards 1 at grazing (the kit's conductor Fresnel), so the outer, more grazing part of the roll is the brightest. The lip's line sits on the side of the roll towards the boss.
+- Seen through the boss, the glass top shows the OLED black and the gear numeral. The numeral is drawn on the boss itself, so it never moves with the drop. The drop's lean and slide move the metal around the boss, and the lip thins on one side and fattens on the other. That reads as weight, and the numeral stays still for reading.
+- Limit: the drop's lean must never uncover the boss on one side (that would happen past about a 0.6 R slide). The slide is clamped there; at −1 g lateral the 44° lean slides it about 0.5 R, so it fits.
+
+## Reference index for the Penpot board session
+
+Look at these before designing, by topic:
+- Star-shaped drops and their mode shapes: Dong et al., arXiv 1812.10630 (complete star modes and the half-frequency response); Ma and Burton, arXiv 1802.06136, Fig. 1 (star-shaped Leidenfrost drops seen from above).
+- Liquid metal changing shape with voltage: Song, Daniels, Kiani, Rashidnadimi and Dickey, arXiv 2102.02383 (tension falling with oxidation); Micro and Nano Systems Letters 3:4 (2015), doi 10.1186/s40486-015-0017-z (electrocapillary shape change).
+- The limiter's fingers: Eaker et al., arXiv 1703.03011 (fractal fingering, D 1.30).
+- The beating heart (a drop pulsing between shapes): Wikipedia, "Mercury beating heart"; Indiana University's gallium beating heart demo.
+- The edge and lip, and the puddle's height: Yim, Bouillant, Quéré and Gallaire, arXiv 2012.10408; MIT 18.357 lecture 11 (puddles and ℓ_c).
+- Thin-film colour on the metal: figure 02 in the project files, and the kit's `oil_on_mercury_film` table.
+- Figures from this research: `star_modes_study.png`, `film_and_ringdown.png`, `limiter_study.png` in the project files under kinetic_liquid_metal/research/.
