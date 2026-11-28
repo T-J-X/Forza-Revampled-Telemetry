@@ -8,7 +8,8 @@
 //! - `mockups/index.html`: a script-free gallery with badges computed from the renders (GPU time,
 //!   draw calls, colour budget shares);
 //! - `mockups/osd/`: the kit OSD (every tab, focus, slider, keyboard and remap states) with
-//!   GPU timings; `--backdrop PNG` also writes each state composited over a game frame;
+//!   GPU timings and its product page `index.html`; `--backdrop PNG` also writes each state
+//!   composited over a game frame;
 //! - the OEM scrim at 0/50/100% on the kit (`fit::scrims`).
 //!
 //! `--fit` renders only the Phase 8 cockpit fit review into `mockups/fit/` (see `fit.rs`).
@@ -171,6 +172,10 @@ fn run() -> Result<()> {
         let only = args.osd_state.as_deref();
         let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), only)?;
         verify_osd(&out, &osd_renders)?;
+        // The product page lists every state, so a run of some of them leaves it alone.
+        if only.is_none() {
+            osd::write_page(&out, &osd_renders, ctx.adapter_summary().to_string().as_str())?;
+        }
         println!(
             "OSD: {} states written to {}",
             osd_renders.len(),
@@ -282,7 +287,9 @@ fn run() -> Result<()> {
 
     let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), None)?;
     fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
-    gallery::write_index(&out, &renders, &osd_renders, ctx.adapter_summary().to_string().as_str())?;
+    let adapter = ctx.adapter_summary().to_string();
+    gallery::write_index(&out, &renders, &osd_renders, &adapter)?;
+    osd::write_page(&out, &osd_renders, &adapter)?;
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())

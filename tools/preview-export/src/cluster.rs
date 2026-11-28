@@ -322,7 +322,7 @@ fn pct(v: f32) -> String {
 
 /// The look of the page: the tokens of `docs/design/CONFIGURATOR_DIRECTION.md` (the page grows
 /// into the catalog the configurator serves). No script; the motion reel is a CSS animation.
-const PAGE_CSS: &str = "\
+pub(crate) const PAGE_CSS: &str = "\
 @font-face{font-family:'Titillium Web';src:url('../../assets/fonts/titillium-web/TitilliumWeb-Regular.ttf')}\
 @font-face{font-family:'Titillium Web';font-weight:600;src:url('../../assets/fonts/titillium-web/TitilliumWeb-SemiBold.ttf')}\
 @font-face{font-family:'Michroma';src:url('../../assets/fonts/michroma/Michroma-Regular.ttf')}\
@@ -370,7 +370,7 @@ td:first-child,th:first-child{text-align:left}\
 
 /// Escapes text for HTML and renders the inline Markdown the dash READMEs use: `[text](target)`
 /// keeps its text, `` `code` `` becomes `<code>`, and `**` marks are dropped.
-fn inline_html(md: &str) -> String {
+pub(crate) fn inline_html(md: &str) -> String {
     let mut out = String::with_capacity(md.len() + 16);
     let mut rest = md;
     let mut code = false;

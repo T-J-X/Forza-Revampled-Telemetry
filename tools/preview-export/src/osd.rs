@@ -1,6 +1,8 @@
 //! 4K kit renders of the OSD: every tab, focus and slider states, the keyboard and the
-//! remapper, plus GPU timings for `docs/perf/osd.md`. The OSD is driven through the same
-//! `OsdHost` the overlay uses, with the live dyno feeding the live cluster and the carousel.
+//! remapper, plus GPU timings for `docs/perf/osd.md`, and the OSD's product page
+//! (`osd/index.html`, no script). The OSD is driven through the same `OsdHost` the overlay
+//! uses, with the live dyno feeding the live cluster and the carousel.
+use crate::cluster::{inline_html, PAGE_CSS};
 use crate::{rel, Result, DT, H, THUMB_FACTOR, W};
 use fh6_clusters::registry;
 use fh6_core::{AppConfig, CarDatabase, ScrimFit};
@@ -11,6 +13,7 @@ use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, Vi
 use fh6_osd::model::{self, RowId, Tab};
 use fh6_osd::nav::{NavInput, LB, RIGHT, VIEW};
 use fh6_osd::{draw, ConfigOnlyFit, Frame, LiveDynoGenerator, LiveStatus, OsdHost};
+use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -25,8 +28,16 @@ const TIMED_FRAMES: u32 = 20;
 struct OsdState {
     name: &'static str,
     caption: &'static str,
+    /// The state shows the driving position; the product page features a 1:1 crop of it.
+    drive: bool,
     setup: fn(&mut OsdHost, &mut AppConfig) -> Duration,
 }
+
+/// The 1:1 crop of the live zone the product page shows for the driving-position states (4K
+/// px: x, y, width, height): the lifted echo and the view under it, at 16:9.
+const DRIVE_CROP: [u32; 4] = [630, 400, 1120, 1060];
+/// The OSD's GPU budget for a whole frame at 4K (ms).
+const BUDGET_MS: f64 = 1.5;
 
 fn focus(host: &mut OsdHost, cfg: &AppConfig, tab: Tab, row: RowId) {
     if !host.focus_row(tab, row, cfg) {
@@ -50,6 +61,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "01_cluster_carousel",
         caption: "Cluster tab · carousel focused (live thumbnails)",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Cluster, RowId::Cluster);
             Duration::ZERO
@@ -58,6 +70,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "02_cluster_hood_view",
         caption: "Cluster tab · editing the Hood view (live view follows)",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Cluster, RowId::EditView);
             press(h, c, 0, RIGHT, RIGHT);
@@ -67,6 +80,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "03_colour_custom_hue",
         caption: "Colour tab · custom palette, hue slider focused",
+        drive: false,
         setup: |h, c| {
             c.color_mode = "Custom".into();
             focus(h, c, Tab::Colour, RowId::Hue);
@@ -76,6 +90,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "04_colour_random",
         caption: "Colour tab · random palette with re-roll and lock",
+        drive: false,
         setup: |h, c| {
             c.color_mode = "Random".into();
             c.extra.insert(model::KEY_SEED.into(), 4242.into());
@@ -86,6 +101,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "05_type_logo",
         caption: "Type & logo tab · font choice focused",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Type, RowId::Font);
             Duration::ZERO
@@ -94,6 +110,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "06_fit_fov",
         caption: "Fit & camera · cockpit FOV: the echo lifts over the rendered driving position",
+        drive: true,
         setup: |h, c| {
             focus(h, c, Tab::Fit, RowId::FovCockpit);
             Duration::ZERO
@@ -102,6 +119,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "07_fit_cluster_height",
         caption: "Fit & camera · cluster height slider and default-height line",
+        drive: false,
         setup: |h, c| {
             c.cockpit_height_offset_px = 64.0;
             focus(h, c, Tab::Fit, RowId::ClusterHeight);
@@ -111,6 +129,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "08_fit_dash_blocker",
         caption: "Fit & camera · dash blocker rows (scrolled)",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Fit, RowId::Scrim(1));
             Duration::ZERO
@@ -119,6 +138,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "09_controls",
         caption: "Controls tab · hold time slider",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Controls, RowId::HoldTime);
             Duration::ZERO
@@ -127,6 +147,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "10_keyboard",
         caption: "On-screen keyboard for the custom name",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Type, RowId::CustomName);
             h.ctl.start_keyboard(c);
@@ -138,6 +159,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "11_remap",
         caption: "OSD button remapper mid-capture (View + L3 held)",
+        drive: false,
         setup: |h, c| {
             focus(h, c, Tab::Controls, RowId::OsdButton);
             h.ctl.start_remap(Duration::ZERO);
@@ -149,6 +171,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "12_fit_seat_height",
         caption: "Fit & camera · seat height raised 20 mm: the seat lit from its rim, the eye off its default ring",
+        drive: true,
         setup: |h, c| {
             c.driver_seat_height_m = 0.020;
             focus(h, c, Tab::Fit, RowId::SeatHeight);
@@ -158,6 +181,7 @@ const STATES: &[OsdState] = &[
     OsdState {
         name: "13_fit_wheel_offset",
         caption: "Fit & camera · wheel offset lowered to -70 mm: the wheel lit from its rim",
+        drive: true,
         setup: |h, c| {
             c.steering_wheel_offset_y_m = -0.070;
             focus(h, c, Tab::Fit, RowId::WheelOffset);
@@ -176,6 +200,10 @@ pub struct OsdRender {
     pub full: String,
     /// Thumbnail.
     pub thumb: String,
+    /// The frame over the game capture and its thumbnail (with `--backdrop`).
+    pub over: Option<(String, String)>,
+    /// The 1:1 crop of the driving position (the states that show it).
+    pub drive: Option<String>,
     /// Median GPU time of the whole OSD frame (live cluster included), ms.
     pub gpu_ms: Option<f64>,
     /// Fastest of the timed frames (closest to an uncontended GPU), ms.
@@ -375,9 +403,25 @@ pub fn render_all(
         let shown = img.over([0, 0, 0]);
         shown.save_png(&full)?;
         shown.downsample(THUMB_FACTOR).save_png(&thumb)?;
-        if let Some(bg) = &backdrop {
-            over_image(&img, bg).save_png(&out.join("osd").join(format!("{}_over_game.png", state.name)))?;
-        }
+        let over_game = backdrop.as_ref().map(|bg| over_image(&img, bg));
+        let over = match &over_game {
+            Some(o) => {
+                let full = out.join("osd").join(format!("{}_over_game.png", state.name));
+                let thumb = out.join("_thumbs/osd").join(format!("{}_over_game.png", state.name));
+                o.save_png(&full)?;
+                o.downsample(THUMB_FACTOR).save_png(&thumb)?;
+                Some((rel(out, &full), rel(out, &thumb)))
+            }
+            None => None,
+        };
+        let drive = if state.drive {
+            let [x, y, w, h] = DRIVE_CROP;
+            let path = out.join("osd").join(format!("{}_drive.png", state.name));
+            over_game.as_ref().unwrap_or(&shown).crop(x, y, w, h).save_png(&path)?;
+            Some(rel(out, &path))
+        } else {
+            None
+        };
         println!(
             "OSD {:<24} {:>6.3} ms GPU median  {:>6.3} min  {:>3} draws  {:>2} passes  {:>2} segments",
             state.name,
@@ -392,10 +436,127 @@ pub fn render_all(
             caption: state.caption,
             full: rel(out, &full),
             thumb: rel(out, &thumb),
+            over,
+            drive,
             gpu_ms,
             gpu_min_ms,
             draws,
         });
     }
     Ok(renders)
+}
+
+/// A path relative to the export folder, as `osd/index.html` links it.
+fn from_page(p: &str) -> String {
+    p.strip_prefix("osd/").map_or_else(|| format!("../{p}"), str::to_owned)
+}
+
+/// Writes `osd/index.html`: the OSD's product page (no script). A hero with the OSD over the
+/// game, the driving position the camera rows show, every state as a card, and the GPU table.
+pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::Result<()> {
+    let ms = |v: Option<f64>| v.map_or_else(|| "n/a".to_string(), |v| format!("{v:.3} ms"));
+    let worst = renders.iter().filter_map(|r| r.gpu_ms).reduce(f64::max);
+    let shown = |r: &OsdRender| match &r.over {
+        Some((full, thumb)) => (from_page(full), from_page(thumb)),
+        None => (from_page(&r.full), from_page(&r.thumb)),
+    };
+    let hero = renders.first().map(shown).unwrap_or_default();
+    let mut h = String::new();
+    let _ = write!(
+        h,
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <title>Liquid Glass OSD · FH6 WheelDash</title><style>{PAGE_CSS}\
+         .grid3{{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}}\
+         @media (max-width:1200px){{.grid3{{grid-template-columns:1fr}}}}</style></head><body>\
+         <header class=\"bar\"><span class=\"mark\">FH6 WHEELDASH</span>\
+         <span class=\"crumb\">Settings menu</span><span class=\"pill\">Liquid Glass</span></header><main>\
+         <section class=\"hero\"><div><p class=\"eyebrow\">Settings menu · controller first</p>\
+         <h1>Liquid Glass OSD</h1><p class=\"lede\">Hold View to open it over the paused game: the live \
+         cluster on the left, five tabs of clear synthetic sapphire on the right, and every change lands on the \
+         live view at once. It reads the D-pad, LB, RB, View and Menu only; A, B, X and Y stay with your \
+         gearbox.</p><dl class=\"facts\">\
+         <div><dt>GPU at 4K</dt><dd>{worst}</dd><dd class=\"sub\">slowest of {n} states · budget {BUDGET_MS} ms</dd></div>\
+         <div><dt>Tabs</dt><dd>5</dd></div><div><dt>Opens with</dt><dd>View, held</dd></div></dl></div>\
+         <a class=\"stage\" href=\"{full}\"><img src=\"{thumb}\" alt=\"The OSD over the paused game\"></a></section>",
+        worst = ms(worst),
+        n = renders.len(),
+        full = hero.0,
+        thumb = hero.1,
+    );
+    let drives: Vec<&OsdRender> = renders.iter().filter(|r| r.drive.is_some()).collect();
+    if !drives.is_empty() {
+        h.push_str(
+            "<section><h2>Driving position</h2><p class=\"note\">On the camera rows the focus echo lifts and \
+             the driving position comes up under it: Blender renders of a carbon bucket seat, the wheel and the \
+             dash, at your seat height and wheel offset, with your eye, the default eye and the cockpit FOV&#8217;s \
+             fan. The part the focused row moves is outlined in the accent. These crops are 1:1.</p><div class=\"grid3\">",
+        );
+        for r in drives {
+            let _ = write!(
+                h,
+                "<figure><a href=\"{full}\"><img src=\"{crop}\" alt=\"{cap}\"></a>\
+                 <figcaption><b>{cap}</b></figcaption></figure>",
+                full = shown(r).0,
+                crop = r.drive.as_deref().map(from_page).unwrap_or_default(),
+                cap = inline_html(r.caption.split(" · ").nth(1).unwrap_or(r.caption)),
+            );
+        }
+        h.push_str("</div></section>");
+    }
+    h.push_str("<section><h2>States</h2><div class=\"grid\">");
+    for r in renders {
+        let (full, thumb) = shown(r);
+        let _ = write!(
+            h,
+            "<figure><a href=\"{full}\"><img src=\"{thumb}\" alt=\"{cap}\"></a>\
+             <figcaption><b>{cap}</b><span>{gpu}</span></figcaption></figure>",
+            cap = inline_html(r.caption),
+            gpu = ms(r.gpu_ms),
+        );
+    }
+    h.push_str(
+        "</div></section><section><h2>Review data</h2><details><summary>GPU per state (whole frame, live \
+         cluster included)</summary><table><tr><th>State</th><th>GPU median</th><th>GPU min</th><th>Draws</th></tr>",
+    );
+    for r in renders {
+        let ok = r
+            .gpu_ms
+            .map(|g| if g < BUDGET_MS { "ok" } else { "bad" })
+            .unwrap_or_default();
+        let _ = write!(
+            h,
+            "<tr><td>{name}</td><td class=\"{ok}\">{gpu}</td><td>{min}</td><td>{draws}</td></tr>",
+            name = r.name,
+            gpu = ms(r.gpu_ms),
+            min = ms(r.gpu_min_ms),
+            draws = r.draws,
+        );
+    }
+    let _ = writeln!(
+        h,
+        "</table></details><p class=\"note\" style=\"margin-top:18px\">Spec: <code>docs/design/OSD.md</code>. \
+         Rendered on {adapter} at 3840 × 2160; GPU times count only from a real GPU.</p></section></main></body></html>",
+        adapter = inline_html(adapter),
+    );
+    std::fs::write(out.join("osd").join("index.html"), h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_page_links_files_from_its_own_folder() {
+        assert_eq!(from_page("osd/06_fit_fov.png"), "06_fit_fov.png");
+        assert_eq!(from_page("_thumbs/osd/06_fit_fov.png"), "../_thumbs/osd/06_fit_fov.png");
+    }
+
+    #[test]
+    fn the_drive_states_are_the_camera_rows_that_show_it() {
+        let drive: Vec<&str> = STATES.iter().filter(|s| s.drive).map(|s| s.name).collect();
+        assert_eq!(drive, ["06_fit_fov", "12_fit_seat_height", "13_fit_wheel_offset"]);
+        let [x, y, w, h] = DRIVE_CROP;
+        assert!(x + w <= W && y + h <= H);
+    }
 }
