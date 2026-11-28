@@ -128,13 +128,13 @@ const TRIP_OUTER: [f32; 2] = [208.0, 44.0];
 const TRIP_FACE: [f32; 2] = [200.0, 36.0];
 
 /// The suggested-gear tile: centre, outer size, face size.
-const SUG_C: [f32; 2] = [211.0, 49.0];
+const SUG_C: [f32; 2] = [280.0, 49.0];
 const SUG_OUTER: [f32; 2] = [94.0, 86.0];
 const SUG_FACE: [f32; 2] = [88.0, 80.0];
 /// The tile face's corner radius (its base's is 3 px more).
 const SUG_R: f32 = 11.0;
 /// Its sprite's frame (local px).
-const SUG_FRAME: [f32; 4] = [156.0, -2.0, 110.0, 102.0];
+const SUG_FRAME: [f32; 4] = [225.0, -2.0, 110.0, 102.0];
 /// The tile's enamel base colour: the palette's fixed `warning` role (#FF2D3A) in linear light,
 /// so the rendered tile and the vector fallback share a hue. The render's light and clear coat
 /// shade it, so its pixels are near that red, not equal to it (the code audit, RC-3).
@@ -201,7 +201,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         (
             suggest(),
             "suggest",
-            "the suggested-gear tile: red enamel on a black-chrome base; covers x 156..266, y -2..100",
+            "the suggested-gear tile: red enamel on a black-chrome base; covers x 225..335, y -2..100",
         ),
     ];
     for (scene, stem, what) in &jobs {

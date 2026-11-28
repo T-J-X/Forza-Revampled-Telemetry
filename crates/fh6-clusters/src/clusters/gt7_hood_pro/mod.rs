@@ -15,9 +15,9 @@
 //! |---|---|---|---|
 //! | Rev bar | 95 LEDs in a black-glass light bar, lit from the left with the revs | x −380..380, LEDs y −60..−34, bar 788 × 46 at y −47 | 1 (shift light) and 3 (tach) |
 //! | Steering dot | a dot that slides with the steering | y −94, r 8, ±340 | 4 |
-//! | Speed · gear | the tabular speed right-aligned to a thin divider on the centre line, the gear right of it | speed cap 58 ending at x −26, divider x 0, gear cap 88 from x 30 | 2 · 1 |
+//! | Speed · gear | the tabular speed right-aligned to a thin divider on the centre line, the gear right of it | speed cap 58 ending at x −62, divider x 0, gear cap 88 from x 44 | 2 · 1 |
 //! | Unit | `mph` / `km/h` under the speed | cap 22 at y 82 | 5 |
-//! | Suggested gear | a red key tile naming the next gear at the shift point | 94 × 86 at (211, 49), digit cap 52 | 1 |
+//! | Suggested gear | a red key tile naming the next gear at the shift point | 94 × 86 at (280, 49), digit cap 42 | 1 |
 //! | Pedals | brake (left) and throttle (right) fills in black-glass slots | x ∓442, 16 × 150 | 4 |
 //! | Tyre diagram | carbon car chip, four tyre lenses lit by tyre load | chip (−795, 18) 70 × 160 | 4 |
 //! | Boost gauge | polished scale, a fill from 0 (−1..2 bar) and its label | (−600, 6), r 60 | 4 |
@@ -159,8 +159,8 @@ const FOLD_S: f32 = 0.1;
 const FADE_TAU: f32 = 0.01;
 const POP: f32 = 0.08;
 /// The hand-over: the tile slides this far towards the gear and loses this share of its size
-/// while it fades, whole, with its digit.
-const HAND_SLIDE: f32 = 90.0;
+/// while it fades, whole, with its digit (it lands where it did when the tile sat at x 211).
+const HAND_SLIDE: f32 = 159.0;
 const HAND_SHRINK: f32 = 0.45;
 /// The tile's digit keeps this far from the face's sides.
 const TILE_MARGIN: f32 = 10.0;
