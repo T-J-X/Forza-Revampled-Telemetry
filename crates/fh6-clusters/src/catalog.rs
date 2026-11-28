@@ -1,7 +1,7 @@
 //! The Phase 7 dash catalog as data: one row per dash in
-//! `program/phases/07-cluster-factory/CATALOG.md` (74 dashes in 9 categories: eight in each, and
-//! nine in Psychedelic and Abstract; the 48 of the first catalog, the 24 added on 2026-11-28 and
-//! the two liquid-metal dashes added later that morning), with its module name, display name, category,
+//! `program/phases/07-cluster-factory/CATALOG.md` (73 dashes in 9 categories: eight in each, and
+//! nine in Abstract; the 48 of the first catalog, the 24 added on 2026-11-28 and the liquid-metal
+//! dash added later that morning), with its module name, display name, category,
 //! shelf, family, target, views, build order and pattern-setter flag.
 //!
 //! This table is the only source of display names: the registry, the OSD, the golden tests,
@@ -13,7 +13,7 @@ use fh6_core::ClusterTheme;
 pub use fh6_kit::Family;
 
 /// Number of dashes in the catalog.
-pub const COUNT: usize = 74;
+pub const COUNT: usize = 73;
 
 /// Whether the catalog row rebuilds a v1 theme or is new.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -103,12 +103,12 @@ impl Category {
         }
     }
 
-    /// How many dashes the category holds: eight, and nine in Psychedelic and Abstract (TJX,
-    /// 2026-11-28 08:23, one liquid-metal dash added to each).
+    /// How many dashes the category holds: eight, and nine in Abstract (TJX, 2026-11-28: the
+    /// liquid-metal dash `FaradayMandala`).
     #[must_use]
     pub const fn size(self) -> u8 {
         match self {
-            Category::Psychedelic | Category::Abstract => 9,
+            Category::Abstract => 9,
             _ => 8,
         }
     }
@@ -170,7 +170,7 @@ impl Views {
 /// One catalog row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CatalogEntry {
-    /// Catalog row in CATALOG.md (1..=74): permanent, unlike the build order.
+    /// Catalog row in CATALOG.md (1..=73): permanent, unlike the build order.
     pub row: u8,
     /// The config identifier (the dash's key).
     pub theme: ClusterTheme,
@@ -204,7 +204,7 @@ impl CatalogEntry {
     }
 }
 
-/// Every catalog row, in CATALOG.md order (catalog rows 1 to 74).
+/// Every catalog row, in CATALOG.md order (catalog rows 1 to 73).
 pub static CATALOG: [CatalogEntry; COUNT] = [
     CatalogEntry {
         row: 1,
@@ -1216,20 +1216,6 @@ pub static CATALOG: [CatalogEntry; COUNT] = [
     },
     CatalogEntry {
         row: 73,
-        theme: ClusterTheme::OilSlickChrome,
-        snake: "oil_slick_chrome",
-        display: "Oil-Slick Chrome",
-        category: Category::Psychedelic,
-        shelf: 9,
-        family: Family::FluidGenerative,
-        kind: Kind::New,
-        target: Target::Concept,
-        views: Views::COCKPIT,
-        build_order: 73,
-        pattern_setter: false,
-    },
-    CatalogEntry {
-        row: 74,
         theme: ClusterTheme::FaradayMandala,
         snake: "faraday_mandala",
         display: "Faraday Mandala",
@@ -1239,7 +1225,7 @@ pub static CATALOG: [CatalogEntry; COUNT] = [
         kind: Kind::New,
         target: Target::Concept,
         views: Views::COCKPIT,
-        build_order: 74,
+        build_order: 73,
         pattern_setter: false,
     },
 ];
@@ -1308,7 +1294,7 @@ mod tests {
         for (i, e) in CATALOG.iter().enumerate() {
             assert_eq!(usize::from(e.row), i + 1, "{}", e.theme);
         }
-        // Rows 30 to 74 were appended in theme order; the first 29 keep their v1 values.
+        // Rows 30 to 73 were appended in theme order; the first 29 keep their v1 values.
         for e in &CATALOG[29..] {
             assert_eq!(usize::from(e.row), e.theme as usize + 1, "{}", e.theme);
         }
@@ -1375,7 +1361,7 @@ mod tests {
     #[test]
     fn the_re_cut_dashes_are_new_and_follow_their_build_order() {
         let added = &CATALOG[48..];
-        assert_eq!(added.len(), 26);
+        assert_eq!(added.len(), 25);
         assert!(added.iter().all(|e| e.kind == Kind::New && !e.pattern_setter));
         // Theme values and catalog rows follow the build order of the added dashes.
         for pair in added.windows(2) {

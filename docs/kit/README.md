@@ -308,7 +308,7 @@ ClusterEntry { theme: ClusterTheme::BoschDdu, name: "Bosch DDU", family: "raceDa
 |---|---|
 | `cargo run --release -p preview-export -- --cluster <Theme>` | one cluster's review set in `mockups/<Theme>/`: 4 states per view at 4K, 1:1 crops, the cockpit composite over the reference photo with the scrim, the 60-frame sequence (idle → redline strobe → gear change) with GPU p50 / p99, and `index.html` with the badges |
 | `cargo run --release -p preview-export` | `mockups/kit/<Theme>/<state>.png` (4K over OLED black), `<state>_crop.png` (1:1 cluster), `_thumbs/` (box-downsampled 960x540), `index.html` with measured badges: GPU ms, CPU ms, draws, instances, colour budget (base hue ≥ 80%, white ≤ 15%, red ≤ 5%), transparent outside |
-| `cargo test -p fh6-clusters <snake_name>` | that cluster's golden test: every view and review state against `tests/golden/images/<Theme>[_hood]_<state>.png` (OKLab ΔE > 3 on at most 0.5% of pixels). `FH6_UPDATE_GOLDEN=1` rewrites them; review the PNGs before committing. `--test golden_images` runs all 74 |
+| `cargo test -p fh6-clusters <snake_name>` | that cluster's golden test: every view and review state against `tests/golden/images/<Theme>[_hood]_<state>.png` (OKLab ΔE > 3 on at most 0.5% of pixels). `FH6_UPDATE_GOLDEN=1` rewrites them; review the PNGs before committing. `--test golden_images` runs all 73 |
 | `cargo run --release -p bench-render -- --frames 600` | CPU and GPU per scenario at 4K |
 | `FH6_WheelDash --demo --cluster <Theme> --stats` | the live overlay with synthetic telemetry, that cluster forced in every view, and latency/CPU lines |
 | `web-preview` | the same cluster in a browser (WebGPU) |

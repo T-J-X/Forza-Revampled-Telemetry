@@ -1,4 +1,4 @@
-//! Faraday Mandala (`ClusterTheme::FaradayMandala`), catalog row 74.
+//! Faraday Mandala (`ClusterTheme::FaradayMandala`), catalog row 73.
 //! Abstract category, Fluid / Generative family, cockpit.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the

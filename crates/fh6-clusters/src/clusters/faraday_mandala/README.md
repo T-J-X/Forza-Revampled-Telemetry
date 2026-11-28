@@ -1,6 +1,6 @@
 # Faraday Mandala
 
-Catalog row 74 · `ClusterTheme::FaradayMandala` (config value `"FaradayMandala"`) · Abstract category · target `concept` · Fluid / Generative family · cockpit.
+Catalog row 73 · `ClusterTheme::FaradayMandala` (config value `"FaradayMandala"`) · Abstract category · target `concept` · Fluid / Generative family · cockpit.
 
 Status: **scaffold**. `mod.rs` draws the shared under-construction frame from `common::scaffold` until the dash thread replaces it. Its place in the build queue is in [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#build-order), the only place that records it.
 

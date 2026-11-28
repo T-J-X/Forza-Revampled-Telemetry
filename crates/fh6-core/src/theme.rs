@@ -85,9 +85,8 @@ pub enum ClusterTheme {
     MclarenSlimDisplay = 69,
     HopfFibration = 70,
     HyperbolicTiles = 71,
-    // The two liquid-metal dashes added later on 2026-11-28 (catalog rows 73-74).
-    OilSlickChrome = 72,
-    FaradayMandala = 73,
+    // The liquid-metal dash added later on 2026-11-28 (catalog row 73).
+    FaradayMandala = 72,
 }
 
 impl ClusterTheme {
@@ -167,7 +166,6 @@ impl ClusterTheme {
             ClusterTheme::MclarenSlimDisplay => "MclarenSlimDisplay",
             ClusterTheme::HopfFibration => "HopfFibration",
             ClusterTheme::HyperbolicTiles => "HyperbolicTiles",
-            ClusterTheme::OilSlickChrome => "OilSlickChrome",
             ClusterTheme::FaradayMandala => "FaradayMandala",
         }
     }
@@ -256,7 +254,6 @@ impl ClusterTheme {
             ClusterTheme::MclarenSlimDisplay => (0, 210, 255),
             ClusterTheme::HopfFibration => (154, 216, 255),
             ClusterTheme::HyperbolicTiles => (154, 216, 255),
-            ClusterTheme::OilSlickChrome => (154, 216, 255),
             ClusterTheme::FaradayMandala => (154, 216, 255),
         }
     }
@@ -335,7 +332,6 @@ impl ClusterTheme {
             ClusterTheme::MclarenSlimDisplay,
             ClusterTheme::HopfFibration,
             ClusterTheme::HyperbolicTiles,
-            ClusterTheme::OilSlickChrome,
             ClusterTheme::FaradayMandala,
         ]
     }
@@ -437,8 +433,8 @@ mod tests {
         assert_eq!(ClusterTheme::HarmonographDrive as u8, 47);
         assert_eq!(ClusterTheme::AmgMbuxSupersport as u8, 48);
         assert_eq!(ClusterTheme::HyperbolicTiles as u8, 71);
-        assert_eq!(ClusterTheme::FaradayMandala as u8, 73);
-        assert_eq!(ClusterTheme::all().len(), 74);
+        assert_eq!(ClusterTheme::FaradayMandala as u8, 72);
+        assert_eq!(ClusterTheme::all().len(), 73);
     }
 
     #[test]
