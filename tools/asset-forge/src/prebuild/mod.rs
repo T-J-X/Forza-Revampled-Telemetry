@@ -282,9 +282,9 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         let half = span * 0.5;
         let fr = Frame::rect(-half, -half, span, span).scaled(MASTER as f32 / span * scale);
         let mut sc = Scene::new(&format!("prebuild_{snake}_{}", s.name), fr);
-        // Near-even light: the hero rig sized to sixteen spans, so the key's falloff across the
-        // tile is about 2.5% (make_seamless takes care of the rest at the edges).
-        sc.rig = Rig::hero(span * 16.0, -135.0);
+        // Near-even but asymmetric light (`Rig::swatch`): every light twelve spans away, the key
+        // off the diagonal so weave and grain read (make_seamless takes care of the edges).
+        sc.rig = Rig::swatch(span);
         sc.swing.clear();
         sc.samples = samples;
         sc.passes = Passes {
