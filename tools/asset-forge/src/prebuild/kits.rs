@@ -149,12 +149,16 @@ fn led_pair(name_off: &'static str, name_on: &'static str, d: f32, use_: &'stati
         Sprite {
             name: name_on,
             size: d + 8.0,
-            parts: vec![bezel(), cap(1.0, "led_on")],
+            parts: vec![bezel(), cap(LED_ON_GLOW, "led_on")],
             swing: false,
             use_,
         },
     ]
 }
+
+/// Emission strength of a lit LED or lamp cap: bright enough to read lit through the lens at the
+/// rest key (strength 1 barely lifted the white diffuser above the unlit cap in batch 1).
+const LED_ON_GLOW: f32 = 6.0;
 
 /// A domed cap of diameter `d` and height `h`.
 fn cap(name: &'static str, d: f32, h: f32, mats: [Mat; 2], use_: &'static str) -> Sprite {
@@ -193,21 +197,16 @@ pub fn kit(snake: &str) -> Option<Kit> {
             build: 9,
             textures: vec![tex(
                 "forged_carbon_marble",
-                "macro photograph of forged carbon composite, marbled chopped carbon fibre flakes of mixed size swirled under clear glossy resin, black and charcoal with fine silvery fibre glints, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                "woven, twill, checker pattern, grid, objects, lighting falloff, perspective, seams, blur, cartoon",
-                90_001,
+                "macro photograph of a flat polished forged carbon fibre composite panel, smooth glossy clear resin surface, thin flattened black and dark grey carbon fibre strands in a swirling marbled pattern, satin sheen on the fibres, flat top-down view, even diffuse light, seamless tileable texture, material scan",
+                "woven, twill, checker pattern, grid, rocks, stones, coal, crumpled, rough relief, cracks, beige, brown, white specks, objects, lighting falloff, perspective, seams, blur, cartoon",
+                90_002,
                 "the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance",
-            )],
-            swatches: vec![disc(
-                "knurled_anodised_disc",
-                mat::knurled(metal::ALUMINIUM, 5.0, false).set("coat", 1.0).set("coat_rough", 0.18).set("coat_tint", serde_json::json!([0.30, 0.02, 0.02])),
-                "diamond knurl round an axis (pitch 5 px proposed) for the shoulder encoder rings; unwrap the outer band into the brief's 2048x64 strip",
             )],
             deferred: vec![
                 "the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board",
-                "the encoder ring sprites: their diameter is not in the brief",
+                "the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)",
             ],
-            notes: "Forged carbon is SDXL (chopped-fibre marble is organic); the knurl is Blender.",
+            notes: "Forged carbon is SDXL (chopped-fibre marble is organic); the knurl is Blender, on the ring itself. Seed 90002 replaced 90001, which drew rough coal-like chunks with beige specks, not flat resin.",
             ..Kit::default()
         },
         "skyline_r34_mfd" => Kit {
@@ -283,10 +282,10 @@ pub fn kit(snake: &str) -> Option<Kit> {
                     ),
                     tex(
                         "heat_shield_tile_coating",
-                        "macro photograph of the black glassy ceramic coating of a spacecraft thermal protection tile, fine pitting and subtle mottled matte-to-satin variation, charcoal black, flat top-down view, even diffuse light, seamless tileable texture",
-                        "tile gaps, grid, grout lines, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                        200_002,
-                        "surface of the side parts; the tile grid itself is geometry",
+                        "macro photograph of a continuous black glassy ceramic coating, fine pitting and subtle mottled matte-to-satin variation across one uninterrupted surface, charcoal black, flat top-down view, even diffuse light, seamless tileable texture, material scan",
+                        "tiles, squares, panels, gaps, grid, grout lines, borders, edges, text, objects, lighting falloff, perspective, seams, blur, cartoon",
+                        200_004,
+                        "surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)",
                     ),
                     tex(
                         "star_field_tile",

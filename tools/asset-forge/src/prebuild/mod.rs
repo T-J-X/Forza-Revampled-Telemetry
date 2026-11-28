@@ -374,7 +374,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
                 img::box_down(&big, k)
             };
             let rel = format!("{repo_rel}/sprites/{}_{i}.png", sp.name);
-            let abs = paths.root.join(&rel);
+            let abs = repo.join("sprites").join(format!("{}_{i}.png", sp.name));
             if let Some(parent) = abs.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
             }
@@ -429,7 +429,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
     if let Some(m) = &masters {
         copy_into(&mpath, m)?;
     }
-    println!("  wrote {repo_rel}/ ({} items)", rows.len());
+    println!("  wrote {} ({} items)", repo.display(), rows.len());
     Ok(())
 }
 
