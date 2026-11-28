@@ -451,6 +451,15 @@ fn from_page(p: &str) -> String {
     p.strip_prefix("osd/").map_or_else(|| format!("../{p}"), str::to_owned)
 }
 
+/// `s` with its first letter in upper case (a state's caption after its tab, as a card title).
+fn capitalised(s: &str) -> String {
+    let mut chars = s.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
 /// Writes `osd/index.html`: the OSD's product page (no script). A hero with the OSD over the
 /// game, the driving position the camera rows show, every state as a card, and the GPU table.
 pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::Result<()> {
@@ -490,7 +499,8 @@ pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::
             "<section><h2>Driving position</h2><p class=\"note\">On the camera rows the focus echo lifts and \
              the driving position comes up under it: Blender renders of a carbon bucket seat, the wheel and the \
              dash, at your seat height and wheel offset, with your eye, the default eye and the cockpit FOV&#8217;s \
-             fan. The part the focused row moves is outlined in the accent. These crops are 1:1.</p><div class=\"grid3\">",
+             fan. The part the focused row moves lights along its edges in the accent. These crops are 1:1.</p>\
+             <div class=\"grid3\">",
         );
         for r in drives {
             let _ = write!(
@@ -499,7 +509,7 @@ pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::
                  <figcaption><b>{cap}</b></figcaption></figure>",
                 full = shown(r).0,
                 crop = r.drive.as_deref().map(from_page).unwrap_or_default(),
-                cap = inline_html(r.caption.split(" · ").nth(1).unwrap_or(r.caption)),
+                cap = inline_html(&capitalised(r.caption.split(" · ").nth(1).unwrap_or(r.caption))),
             );
         }
         h.push_str("</div></section>");
@@ -550,6 +560,16 @@ mod tests {
     fn the_page_links_files_from_its_own_folder() {
         assert_eq!(from_page("osd/06_fit_fov.png"), "06_fit_fov.png");
         assert_eq!(from_page("_thumbs/osd/06_fit_fov.png"), "../_thumbs/osd/06_fit_fov.png");
+    }
+
+    #[test]
+    fn a_card_title_starts_with_a_capital() {
+        assert_eq!(
+            capitalised("cockpit FOV: the echo lifts"),
+            "Cockpit FOV: the echo lifts"
+        );
+        assert_eq!(capitalised("éclat"), "Éclat");
+        assert_eq!(capitalised(""), "");
     }
 
     #[test]
