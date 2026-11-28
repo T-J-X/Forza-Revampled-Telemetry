@@ -1,6 +1,6 @@
 # HANDOVER: Dash · Gt7HoodPro (catalog row 3)
 
-**Thread / branch:** "Rebuild Gt7HoodPro dash", `claude/project-thread-h7qahw`, draft pull request #10  **Date:** 2026-11-28  **Result:** ready for merge (closing review done; the Penpot PNG re-export of the moved tile and speed follows in the next Penpot slot)
+**Thread / branch:** "Rebuild Gt7HoodPro dash", `claude/project-thread-h7qahw`, draft pull request #10  **Date:** 2026-11-28  **Result:** ready for merge (closing review done; the v3 boards re-exported at 07:39Z)
 
 This replaces the handover of the 2026-11-23 build (the gull-wing ribbons; that file is in the git history). The dash is rebuilt from the ground up as Gran Turismo 7's Bonnet View meter. Findings and yes/no answers only; there are no scores in this file.
 
@@ -329,7 +329,7 @@ Renders on lavapipe in the cloud container at `b3f3039` (identical to `dae1263` 
 | V13 | no, cannot be fixed afterwards | unprompted, logo masked: "Don't know." GT7's bonnet band has few cues of its own, and the dash gives up two on purpose (RESEARCH.md, "Deliberate changes"); the layout against R1 was "Same" in both orders |
 | V14 | yes | the direction check's measured inventory (above), plus the closing changes measured on the render: 8 thousand marks for the 8700 rpm limiter, the tile at x 280, the speed's right edge at -62, the trip "0.0 mi" (`review/spacing_03.png`, `closing_measure.txt`) |
 | V15 | yes | blurred to the same level, reference and render show the same masses (`review/dc_real_vs_render.png`); the cold reviewer called the layout the same as R1 in both orders |
-| V16 | yes, with one refresh to come | the v3 board PNGs (`mockups/Gt7HoodPro/board/v3_<state>.png`) against the renders: every zone in place and at size, except the tile and the speed, which the v3 boards carry at their new places but whose PNG export predates the move; the re-export is queued for the next Penpot slot. The render is plainly richer than the board and the before render (`review/final_before_after.png`) |
+| V16 | yes | the v3 boards re-exported from Penpot at 07:39Z (heavier trip digits added) against the `b3f3039` renders (`review/v16_centre.png`, ink boxes local to the anchor, render then board): speed x -271..-68 against -270..-69, the unit within 1 px, the divider the same pixels, the gear 45..128 on both, the tile 236..323 on both, the trip "0.0" -619..-560 on both with stems about 3.4 px on both. `diff --fit` of `03`: 3.82% of pixels over dE 3, all in the render's materials, bloom and glow, which the flat board does not draw. One finding: the board's speed digits are lighter than the render's (the render adds `SPEED_WEIGHT` 0.3 and the soft keyline); place and size match. The render is plainly richer than the board and the before render (`review/final_before_after.png`) |
 | V17 | yes | at full frame the capsule bar reads as black glass, the plinth as black chrome, the domes and slots as glass, the chip as textured carbon, the tile as enamel, each lit from the one key (upper left) |
 | V18 | yes | the materials checks for black glass, chrome, enamel and carbon: lit long edges (glass top 0.22, plinth top 0.11), the trip window dark glass (0.017), dome glints, no texture on vector shapes (`review/p3_left.png`, `review/p3_right.png`) |
 | V19 | NOT ASSESSED | the dash has no clear glass; its glass is opaque black hardware |
@@ -376,7 +376,7 @@ cargo clippy -q -p fh6-clusters -p asset-forge --all-targets        no finding i
 rustfmt --edition 2021 --check (module and recipe)                 exit 0
 FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images gt7_hood_pro, then twice without it (lavapipe)   ok, ok
 ```
-After merging `origin/main` (`c03f6ae`, CATALOG.md kept as main has it): `cargo check -p fh6-clusters -p asset-forge` exit 0; `cargo test -p fh6-clusters --lib` 273 passed; asset-forge gt7_hood_pro 6 passed; `dash_gates` 10 passed (53.40 s); `cargo test -p fh6-osd` 64 passed; the Gt7HoodPro golden on lavapipe passed.
+After merging `origin/main` (`c03f6ae`, then `f1f02a3` and `7a57273`; CATALOG.md kept as main has it): `cargo check -p fh6-clusters -p asset-forge` exit 0; `cargo test -p fh6-clusters --lib` 279 passed at the last merge (273 at the first); `cargo test -p fh6-kit --lib` 177 passed; asset-forge gt7_hood_pro 6 passed; `dash_gates` 10 passed (53.40 s); `cargo test -p fh6-osd` 64 passed; the Gt7HoodPro golden on lavapipe passed.
 
 On the PC at `b3f3039` (rustc 1.100): lib tests, asset-forge tests, dash gates, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and fmt pass.
 
