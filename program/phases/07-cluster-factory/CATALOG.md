@@ -200,7 +200,7 @@ TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, star
 5. **Count.** Slots in use = bound dashes that are not done + open requests.
 6. **Start.** While fewer than 6 slots are in use and a startable dash exists: take the next one, write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
 7. **Mark.** Work out the Status cell each dash should show: ✅ done; ◐ bound and not done; ⧖ module missing; ☐ otherwise. If the table on `origin/main` differs, change only those cells in one commit (as `TJX <TJX@Ngage.com>`, no trailer) and get it onto `main`: a plain push, or a pull request merged at once where the push is refused. If neither works, drop the commit; the next run does it. No rule reads the Status cell. It is there for people.
-8. **Watch.** A bound thread that is failed or stopped, or has posted nothing for 2 hours, gets one message: `CHAIN CHECK <Name>`. If nothing has changed 2 hours later, the run asks the coordinator to restart the thread or to set the dash aside. A dash that posted `READY FOR MERGE` and is still not done 2 hours later: remind the coordinator, then every 4 hours, three times at most, then one line to TJX.
+8. **Watch.** A bound thread that is failed or stopped, or has posted nothing for 2 hours, gets one message: `CHAIN CHECK <Name>`. If nothing has changed 2 hours later, the run asks the coordinator to restart the thread or to set the dash aside. A dash that posted `READY FOR MERGE` and is still not done 2 hours later: send its thread `CHAIN CHECK <Name>` (it merges itself, AGENTS.md rule 16), then remind the coordinator every 4 hours, three times at most, then one line to TJX.
 9. **Save.** Write the ledger and bring the chain thread's checklist up to date. If nothing needs TJX, end without a message.
 
 ### Rules that keep it safe
@@ -214,8 +214,8 @@ TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, star
 | Line | When | Where |
 |---|---|---|
 | `DASH <Name>` | as the first line of its introduction | its own thread |
-| `READY FOR MERGE <Name> · PR #<n> · head <sha>` | the closing review is all yes, `origin/main` is merged into the branch and the tests have passed again | its own thread, for the coordinator |
-| `MERGED <Name> · <sha>` | the work is on `origin/main` | its own thread and the chain thread; whoever does the merge sends it |
+| `READY FOR MERGE <Name> · PR #<n> · head <sha>` | the closing review is all yes, `origin/main` is merged into the branch and the tests, goldens and workspace gate have passed again, just before the thread merges itself | its own thread, on record |
+| `MERGED <Name> · <sha>` | the thread's own merge is on `origin/main` (AGENTS.md rule 16) | its own thread and the chain thread; the thread that merged sends it |
 
 Neither line frees a slot by itself. Each makes the chain look, and the chain decides by the Done rule.
 
