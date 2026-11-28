@@ -110,6 +110,87 @@ Verified fields per `CATALOG.md` ("Flash and telemetry"): rpm (current, idle, ma
 | Engine data page | power, derived torque, boost | verified (boost) |
 | Temperatures, set-up, trip, consumption, audio, navigation | none | left out (change 7) |
 
+## Real behaviour study (second pass, 2026-11-28 10:45)
+
+Read from four more stills in the Drive reference folder (GT 63 G-force page, SL 55 G-force centre, GT 63 S E drive-program menu, SL 63 idle). Pixel positions are measured on the photos, so they are approximate.
+
+1. **The walls never sit at the vanishing point while the engine runs.** At idle (parked, about 700 rpm) both walls stand just inside the `1` tick, about 0.7 to 0.9 on the ×1000 scale. The thin bright front rim is a crisp arc; behind it a dotted orange fan reaches back to the mesh, and a flat orange glow runs along the scale line from the mesh to the wall.
+2. **The rev scale is not linear.** Measured on the SL 55 still: 0 to 1 and 1 to 2 each take about 55 px, while every 2,000 rpm step above that takes about 80 px. So the 0 to 2,000 band is stretched to about 1.4 times a 2,000 step, which gives idle and pull-away room to move. Labels are 0 (small), 1 (small), 2, 4, 6, 8 (large, 8 in red). Minor ticks every 500 rpm.
+3. **The red part starts at about 6,800 of 8,000 (85%)** and is a thicker red bar with an end cap, not a colour change of the thin line.
+4. **Torque and power arcs** (SL 55): thin vertical arcs outside the tunnel. Each arc's top value is the car's rated peak (516 lb ft and 469 hp: the SL 55's real ratings), the live value is an orange numeral that sits about half way up, the unit sits at the bottom. The arc's own fill rises from 0. The units follow the car's region settings (lb ft and HP in the US, Nm and kW in Europe). The plug-in hybrid adds an inner `CHARGE` scale (0 to 300 Nm, 0 to 150 kW) for recuperation; dropped (no telemetry).
+5. **The wings can hold panels instead of arcs.** The GT 63 G-force page puts a "G-Force" panel in the left wing (polar target, red dot, peak values in red on each axis, the total in g at the bottom) and a three-row panel in the right wing (Speed, Gas Pedal, Brake Pedal, each a label and a value). The panels are flat translucent slabs with a soft blue top edge, angled to follow the tunnel wall.
+6. **Centre content sits on the vanishing point.** The G-force centre (SL 55) is a small polar target with rings at 0.5, 1.0 and 1.5 g, four axis values round it and the total below, labelled "G-Force". The drive-program pop-up (GT 63 S E) is a 2×3 grid of mode tiles labelled `Setup`. Trip data (SL 63) is two numbers either side of a short line with the unit. A column of nine small dots on the right edge marks the page in the vertical menu, with the current one in pink.
+7. **Speed is a thin italic numeral** with a small unit below and two long hairlines either side that fade at their ends. TJS asked for it much bolder (09:12); the line pair stays and becomes the shelf the bold numeral stands on.
+8. **The floor** is a bright halftone plane with lane lines converging on the vanishing point, brightest at the front edge, which is a curved cyan line. Low dark blue hills sit behind the scales in both wings.
+9. **The fire colour shifts with the drive program**: redder in the SL 63 idle still (Race flag shown), oranger in the GT 63 S E still (Sport+). We keep one blue colourway, so the flame's heat follows load instead (see the motion notes).
+
+## Motion notes (what moves, what drives it)
+
+Real timing is still a gap until the video frames come back; these are the behaviours the dash will have, each tied to a signal. Durations are proposals for the board.
+
+| Element | Moves with | Behaviour |
+|---|---|---|
+| Fire walls (both) | `signals.rpm` through the scale map below | Stand at the current rpm, mirrored. Critically damped spring, about 60 ms, fed forward by `signals.rpm_rate` so they do not lag a fast pull. |
+| Plasma ribbon on the scale line | rpm and throttle | Smooth swelling blobs travel outward from the mesh to the wall; travel speed from rpm, blob height from throttle, thickest at the wall, a hairline at 0. White-yellow core, orange edge. |
+| Second ribbon on the floor edge | same, at 40% | Fainter echo, half a blob out of phase. |
+| Jets from the mesh | rpm fraction | The dotted fan behind each wall brightens and lengthens as rpm rises; above the red start the jets burn hotter (core towards yellow-white). No flashing anywhere (change 1). |
+| Sparks | throttle, `signals.g_lat` | Rate follows throttle, drift follows lateral g. On an upshift they are drawn back into the mesh with the jet. |
+| Upshift | `signals.gear` rises | The walls fall back to the new rpm on the spring (no snap); the rings rush past once (about 180 ms) and the new gear arrives from the horizon. |
+| Downshift | gear falls | Walls jump forward on the spring with a short flare at the rim (about 120 ms), no rush. |
+| Torque and power arcs | `telemetry.power_watts`, rpm | Fill rises with the live value; a hold tick marks the session peak and decays only on a car change. |
+| Horizon | g_lat, g_long | Rolls with lateral g, lifts and drops with longitudinal g, capped at a few degrees and pixels. |
+| Hills and clouds | throttle × rpm fraction | Lit from behind by load; calm at a cruise, bright through a pull. |
+| Speed and gear | g (parallax) | Float in front with a shadow and a blue rim light; 0 to 4 px parallax from g. |
+
+## Telemetry mapping (exact fields)
+
+The dash gets `FrameInput` (`crates/fh6-kit/src/cluster.rs:355`): the raw packet `telemetry: &FH6TelemetryData` and the smoothed `signals: &Signals` (`cluster.rs:197`). The packet decoder already makes every float finite and bounded, but values can still be 0 (see the edge cases).
+
+| Element | Source | Formula |
+|---|---|---|
+| Wall position | `signals.rpm`, `signals.max_rpm` | `x = scale(rpm)`, the piecewise map below. `max_rpm` is already `max(1.0)` and rpm is clamped to `0..=1.1·max_rpm`. |
+| Scale end and labels | `signals.max_rpm` | `end = ceil(max_rpm / 1000)` thousand. Labels 0, 1, 2, then every 2 (every 4 above an end of 12). |
+| Red bar | `signals.max_rpm` | From `0.85·end` to `end`, as measured on the real scale. Not tied to `shift_rpm`, which feeds nothing here because there is no strip. |
+| Ribbon speed and height | `signals.rpm_fraction`, `signals.throttle` | speed ∝ rpm_fraction; height ∝ throttle (0..=1). |
+| Speed | `signals.speed`, `signals.unit` | Rounded to a whole number with 0.6 hysteresis; unit text from `unit`. |
+| Gear | `signals.gear` | `Gear::label()`: `R`, `N`, `1` to `10`. Raw 0 is reverse, 11 and up are neutral. `M` beside it always. |
+| Power | `telemetry.power_watts` | `/ 745.7` for HP or `/ 1000` for kW, from `signals.power_unit`. |
+| Torque | power and rpm | `τ = P · 60 / (2π · max(rpm, idle_rpm, 500))` in Nm; × 0.7376 for lb ft when power is in HP. Labelled derived. |
+| Arc tops | session peaks | Held maximum of power and torque since the last `car_ordinal` change, rounded up to a clean step; starts at a guess of 400 kW and 700 Nm. |
+| G (horizon and centre page) | `signals.g_lat`, `signals.g_long` | Already smoothed (60 ms). Total = `hypot(g_lat, g_long)`. |
+| Sparks drift | `signals.g_lat` | Sideways drift ∝ g_lat. |
+| Load light on the hills | throttle, rpm_fraction | `throttle · rpm_fraction`, eased over 400 ms. |
+| Shown at all | `signals.race_on` | Off-race: scene idles at rpm with no sparks. |
+
+**The scale map.** With `e = end` in thousands and `k = 1.4` (the measured stretch), the 0 to 2,000 band takes `k` units, every later 2,000 takes 1 unit:
+
+- `rpm ≤ 2000`: `u = k · rpm / 2000`
+- above: `u = k + (rpm − 2000) / 2000`
+- normalised `s = u / (k + (e·1000 − 2000) / 2000)`, then `x = mesh_x + s · (front_x − mesh_x)` along the scale line.
+
+For an end of 2 or less (rare) the map is linear.
+
+## Edge cases (behaviour decided now)
+
+| Case | What the dash does |
+|---|---|
+| `engine_max_rpm` is 0 or tiny | `signals.max_rpm` is 1, so the scale would collapse. If `max_rpm < 1500`, draw the scale with an end of 8 and park the walls at 0; no NaN. |
+| `idle_rpm > max_rpm` (corrupt) | Use idle only as the torque floor; clamp it to `max_rpm`. |
+| rpm above the limiter (to 1.1×) | Walls stop at the scale end; the extra 10% only heats the jets. |
+| rpm below idle, or 0 (engine off, stall) | Walls ease back to the mesh; the ribbon becomes a hairline; jets dark. |
+| Reverse | Gear shows `R`; the floor's lane lines run toward the viewer instead of away (slowly). Speed still positive. |
+| Neutral | Gear `N`; walls follow rpm as normal (a free rev is shown). |
+| Gear change mid-spring | The upshift rush only plays once per change; a second change within 250 ms restarts it, no stacking. |
+| `power_watts ≤ 0` (engine braking, coasting) | Power and torque show 0; arcs empty; peaks untouched. |
+| Power spike on a load jump | Peaks take a value only after it holds for 150 ms. |
+| Car change (`car_ordinal` changes) | Peaks reset, scale rebuilt from the new `max_rpm`, walls glide to the new position. |
+| Unit change (mph/km/h, HP/kW) live | Text swaps on the next frame; no animation. |
+| Speed over 999 | Clamp the display to 999. |
+| `race_on` false (menus, pause) | Hold the last frame dimmed to the static cap; no sparks or ribbon motion. |
+| Very high max rpm (EV, 18,000+) | The label step rises to 4 (or 5 at an end above 20) so labels never collide. |
+| Frame drop (large `dt`) | Springs step with `dt` clamped to 50 ms. |
+| Reduced flash on | Already nothing flashes; the spark rate halves. |
+
 ## Ideas for the board
 
 - **The burning, rippling fuse, made better** (TJS, 2026-11-28 09:22-09:23: "Can you see that almost fire spark it has on the line", "Rippling", "Intergaetr it and make it better"). The real line crackles; ours ripples as a travelling wave from the mesh out to the wall (wave speed and height from rpm), spits sparks whose rate follows throttle and whose drift follows lateral g, glows hotter (orange to yellow-white) as load rises, and leaves a short cooling afterglow when revs fall. On an upshift the sparks are sucked back into the mesh with the jet.
@@ -124,7 +205,7 @@ Leads for step 2, each driven by verified telemetry. None is a design yet; the b
 
 ## Gaps (not guessed)
 
-1. **Motion while driving (blue colourway).** How fast the fire walls travel, whether they flicker, and what happens at the red segment and the limiter. No driving still was found; owner-video frames are the next step.
+1. **Motion while driving (blue colourway).** Behaviour now decided in the motion notes; real timing still open. How fast the fire walls travel, whether they flicker, and what happens at the red segment and the limiter. No driving still was found; owner-video frames are the next step.
 2. **A gear change.** Where the gear is shown in Supersport (none of the photos shows a gear figure in the centre; the manual's example puts it in the centre content) and how it changes.
 3. **The scale's ends.** The GT 63 and CLE 53 both end at 8 with red from about 7; the scale for other engines is not seen. The dash scales from the driven car's max rpm anyway.
 4. **The red colourway at the limiter**: whether the crescents pulse. The dash does not flash them (change 1).
