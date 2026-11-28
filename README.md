@@ -10,7 +10,7 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 ```
 
-Rust 1.90 or newer (developed on 1.100, MSVC). The manifest declares 1.87, but the locked dependencies need about 1.90. Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
+Rust 1.90 or newer (developed on 1.100, MSVC; the declared MSRV, checked with rustc 1.90.0). Windows is needed for `fh6-win`, `fh6-input` and `fh6-app`. The other crates build on any OS.
 
 ## Tools
 

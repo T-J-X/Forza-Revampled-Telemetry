@@ -1,6 +1,12 @@
 //! Telemetry data structures and the 324-byte little-endian Forza UDP packet decoder.
 //! Field offsets are fixed by the game's packet format; check any change against
 //! `tests/golden/packets` (97% rule).
+//!
+//! [`decode`] is the one place hostile floats are handled: every float it returns is finite and
+//! within `±`[`MAX_ABS`], so nothing downstream (the smoother, the dashes, the OSD) needs its own
+//! NaN guard for packet data. Zero and tiny values pass through as sent (a corrupt packet becomes
+//! zeros, not a rejected packet), so a division by a packet value still needs its own guard:
+//! `max_rpm` can be 0 and `idle_rpm` can exceed it.
 
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct FH6TelemetryData {
@@ -93,14 +99,6 @@ impl FH6TelemetryData {
     pub fn rear_tire_slip_angle_rad(&self) -> f32 {
         (self.tire_slip_angle_rl + self.tire_slip_angle_rr) * 0.5
     }
-    pub fn normalized_rpm(&self) -> f32 {
-        if self.engine_max_rpm <= 500.0 {
-            (self.power_watts / 1_400_000.0).clamp(0.0, 1.0)
-        } else {
-            let max = self.engine_max_rpm.max(1.0);
-            (self.current_engine_rpm / max).clamp(0.0, 1.2)
-        }
-    }
     pub fn gear_string(&self) -> String {
         if self.gear == 0 {
             "R".to_string()
@@ -123,8 +121,20 @@ pub enum TelemetryError {
     InvalidLength(usize),
 }
 
+/// The largest magnitude a decoded float keeps. Real readings sit far below it (rpm about 1e4,
+/// power about 2e6 W, world position about 1e4 m), so anything larger is a corrupt packet. The
+/// bound keeps a dash's products finite: `MAX_ABS` cubed is about 1e21, far inside `f32`.
+pub const MAX_ABS: f32 = 1.0e7;
+
+/// A packet float: NaN and the infinities become 0.0, and the rest are clamped to
+/// `±`[`MAX_ABS`]. Values inside the bound come through bit for bit.
 fn le_f32(b: &[u8; PACKET_LEN], off: usize) -> f32 {
-    f32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+    let v = f32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]);
+    if v.is_finite() {
+        v.clamp(-MAX_ABS, MAX_ABS)
+    } else {
+        0.0
+    }
 }
 
 fn le_i32(b: &[u8; PACKET_LEN], off: usize) -> i32 {
@@ -135,7 +145,9 @@ fn le_u32(b: &[u8; PACKET_LEN], off: usize) -> u32 {
     u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
 }
 
-/// Decodes one 324-byte little-endian packet.
+/// Decodes one 324-byte little-endian packet. Every float in the result is finite with
+/// `|v| <= `[`MAX_ABS`] (see [`le_f32`]); `CurrentEngineRpm` is also clamped to at least 0.
+/// Zeros, subnormals and inconsistent readings (idle above max) come through unchanged.
 ///
 /// # Errors
 /// [`TelemetryError::InvalidLength`] if `buf` is not exactly 324 bytes.
@@ -187,6 +199,61 @@ pub fn decode(buf: &[u8]) -> Result<FH6TelemetryData, TelemetryError> {
     })
 }
 
+/// Encodes `t` as the game would send it: the inverse of [`decode`] for every packet whose
+/// floats are within `±`[`MAX_ABS`] and whose rpm is not negative. Bytes `decode` does not read
+/// are zero. For tools and tests (`mock-udp`-style packets, the robustness gate's byte sweeps).
+#[must_use]
+pub fn encode(t: &FH6TelemetryData) -> [u8; PACKET_LEN] {
+    let mut b = [0u8; PACKET_LEN];
+    let mut put = |off: usize, bytes: [u8; 4]| b[off..off + 4].copy_from_slice(&bytes);
+    put(0, t.is_race_on.to_le_bytes());
+    put(4, t.timestamp_ms.to_le_bytes());
+    for (off, v) in [
+        (8, t.engine_max_rpm),
+        (12, t.engine_idle_rpm),
+        (16, t.current_engine_rpm),
+        (20, t.acceleration_x),
+        (24, t.acceleration_y),
+        (28, t.acceleration_z),
+        (32, t.velocity_x),
+        (36, t.velocity_y),
+        (40, t.velocity_z),
+        (48, t.angular_velocity_y),
+        (56, t.yaw),
+        (60, t.pitch),
+        (64, t.roll),
+        (68, t.normalized_suspension_travel_fl),
+        (72, t.normalized_suspension_travel_fr),
+        (76, t.normalized_suspension_travel_rl),
+        (80, t.normalized_suspension_travel_rr),
+        (164, t.tire_slip_angle_fl),
+        (168, t.tire_slip_angle_fr),
+        (172, t.tire_slip_angle_rl),
+        (176, t.tire_slip_angle_rr),
+        (196, t.suspension_travel_meters_fl),
+        (200, t.suspension_travel_meters_fr),
+        (204, t.suspension_travel_meters_rl),
+        (208, t.suspension_travel_meters_rr),
+        (244, t.position_x),
+        (248, t.position_y),
+        (252, t.position_z),
+        (256, t.speed_ms),
+        (260, t.power_watts),
+        (284, t.boost_psi),
+    ] {
+        put(off, v.to_le_bytes());
+    }
+    put(212, t.car_ordinal.to_le_bytes());
+    put(224, t.drivetrain_type.to_le_bytes());
+    b[315] = t.accel;
+    b[316] = t.brake;
+    b[317] = t.clutch;
+    b[318] = t.hand_brake;
+    b[319] = t.gear;
+    b[320] = t.steer.to_le_bytes()[0];
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +283,196 @@ mod tests {
         let data = decode(&buf).expect("decode");
         assert_eq!(data.current_engine_rpm, 0.0);
         assert_eq!(data.steer, -128);
+    }
+
+    /// Every float field, named so a new field fails to compile here until it is listed.
+    fn floats(t: &FH6TelemetryData) -> Vec<(&'static str, f32)> {
+        let FH6TelemetryData {
+            is_race_on: _,
+            timestamp_ms: _,
+            engine_max_rpm,
+            engine_idle_rpm,
+            current_engine_rpm,
+            acceleration_x,
+            acceleration_y,
+            acceleration_z,
+            velocity_x,
+            velocity_y,
+            velocity_z,
+            angular_velocity_y,
+            yaw,
+            pitch,
+            roll,
+            tire_slip_angle_fl,
+            tire_slip_angle_fr,
+            tire_slip_angle_rl,
+            tire_slip_angle_rr,
+            normalized_suspension_travel_fl,
+            normalized_suspension_travel_fr,
+            normalized_suspension_travel_rl,
+            normalized_suspension_travel_rr,
+            suspension_travel_meters_fl,
+            suspension_travel_meters_fr,
+            suspension_travel_meters_rl,
+            suspension_travel_meters_rr,
+            car_ordinal: _,
+            drivetrain_type: _,
+            position_x,
+            position_y,
+            position_z,
+            speed_ms,
+            power_watts,
+            boost_psi,
+            accel: _,
+            brake: _,
+            clutch: _,
+            hand_brake: _,
+            gear: _,
+            steer: _,
+        } = *t;
+        vec![
+            ("engine_max_rpm", engine_max_rpm),
+            ("engine_idle_rpm", engine_idle_rpm),
+            ("current_engine_rpm", current_engine_rpm),
+            ("acceleration_x", acceleration_x),
+            ("acceleration_y", acceleration_y),
+            ("acceleration_z", acceleration_z),
+            ("velocity_x", velocity_x),
+            ("velocity_y", velocity_y),
+            ("velocity_z", velocity_z),
+            ("angular_velocity_y", angular_velocity_y),
+            ("yaw", yaw),
+            ("pitch", pitch),
+            ("roll", roll),
+            ("tire_slip_angle_fl", tire_slip_angle_fl),
+            ("tire_slip_angle_fr", tire_slip_angle_fr),
+            ("tire_slip_angle_rl", tire_slip_angle_rl),
+            ("tire_slip_angle_rr", tire_slip_angle_rr),
+            ("normalized_suspension_travel_fl", normalized_suspension_travel_fl),
+            ("normalized_suspension_travel_fr", normalized_suspension_travel_fr),
+            ("normalized_suspension_travel_rl", normalized_suspension_travel_rl),
+            ("normalized_suspension_travel_rr", normalized_suspension_travel_rr),
+            ("suspension_travel_meters_fl", suspension_travel_meters_fl),
+            ("suspension_travel_meters_fr", suspension_travel_meters_fr),
+            ("suspension_travel_meters_rl", suspension_travel_meters_rl),
+            ("suspension_travel_meters_rr", suspension_travel_meters_rr),
+            ("position_x", position_x),
+            ("position_y", position_y),
+            ("position_z", position_z),
+            ("speed_ms", speed_ms),
+            ("power_watts", power_watts),
+            ("boost_psi", boost_psi),
+        ]
+    }
+
+    /// Gate G5 at the decoder: whatever the bytes, every float comes out finite and bounded.
+    #[test]
+    fn hostile_bytes_decode_to_finite_bounded_floats() {
+        let words = [
+            f32::NAN,
+            -f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::MAX,
+            f32::MIN,
+            f32::MIN_POSITIVE,
+            f32::from_bits(1),
+            MAX_ABS * 2.0,
+        ];
+        let mut packets: Vec<Vec<u8>> = words
+            .iter()
+            .map(|w| w.to_le_bytes().iter().copied().cycle().take(PACKET_LEN).collect())
+            .collect();
+        packets.extend([0x00u8, 0xFF, 0x7F, 0x80].map(|b| vec![b; PACKET_LEN]));
+        let mut x: u64 = 0x2545_F491_4F6C_DD1D;
+        for _ in 0..64 {
+            packets.push(
+                (0..PACKET_LEN)
+                    .map(|_| {
+                        x ^= x << 13;
+                        x ^= x >> 7;
+                        x ^= x << 17;
+                        x.to_le_bytes()[7]
+                    })
+                    .collect(),
+            );
+        }
+        for (i, bytes) in packets.iter().enumerate() {
+            let data = decode(bytes).expect("324 bytes decode");
+            for (name, v) in floats(&data) {
+                assert!(v.is_finite() && v.abs() <= MAX_ABS, "packet {i}: {name} = {v}");
+            }
+            assert!(data.current_engine_rpm >= 0.0, "packet {i}: negative rpm");
+        }
+    }
+
+    #[test]
+    fn non_finite_floats_decode_as_zero_and_huge_ones_clamp() {
+        let mut buf = [0u8; PACKET_LEN];
+        buf[256..260].copy_from_slice(&f32::NAN.to_le_bytes()); // speed
+        buf[260..264].copy_from_slice(&f32::INFINITY.to_le_bytes()); // power
+        buf[284..288].copy_from_slice(&f32::NEG_INFINITY.to_le_bytes()); // boost
+        buf[244..248].copy_from_slice(&1.0e30f32.to_le_bytes()); // position x
+        buf[248..252].copy_from_slice(&(-1.0e30f32).to_le_bytes()); // position y
+        let data = decode(&buf).expect("decode");
+        assert_eq!(data.speed_ms, 0.0);
+        assert_eq!(data.power_watts, 0.0);
+        assert_eq!(data.boost_psi, 0.0);
+        assert_eq!(data.position_x, MAX_ABS);
+        assert_eq!(data.position_y, -MAX_ABS);
+    }
+
+    /// Byte offsets of the 31 floats `decode` reads.
+    const FLOAT_OFFSETS: [usize; 31] = [
+        8, 12, 16, 20, 24, 28, 32, 36, 40, 48, 56, 60, 64, 68, 72, 76, 80, 164, 168, 172, 176, 196, 200, 204, 208, 244,
+        248, 252, 256, 260, 284,
+    ];
+
+    /// A packet with every field `decode` reads set to its own value and every other byte zero.
+    fn distinct_bytes() -> [u8; PACKET_LEN] {
+        let mut b = [0u8; PACKET_LEN];
+        for (i, off) in FLOAT_OFFSETS.into_iter().enumerate() {
+            b[off..off + 4].copy_from_slice(&(100.0 + i as f32 * 1.25).to_le_bytes());
+        }
+        b[0..4].copy_from_slice(&1i32.to_le_bytes());
+        b[4..8].copy_from_slice(&123_456_789u32.to_le_bytes());
+        b[212..216].copy_from_slice(&(-2_200i32).to_le_bytes());
+        b[224..228].copy_from_slice(&2i32.to_le_bytes());
+        b[315..321].copy_from_slice(&[201, 202, 203, 204, 7, (-77i8).to_le_bytes()[0]]);
+        b
+    }
+
+    #[test]
+    fn encode_is_the_inverse_of_decode() {
+        let bytes = distinct_bytes();
+        let t = decode(&bytes).expect("decode");
+        assert_eq!(floats(&t).len(), FLOAT_OFFSETS.len());
+        assert_eq!(encode(&t), bytes, "a field encoded at another field's offset");
+        assert_eq!(decode(&encode(&t)), Ok(t));
+        assert_eq!(encode(&FH6TelemetryData::default()), [0u8; PACKET_LEN]);
+    }
+
+    #[test]
+    fn in_range_floats_decode_bit_for_bit_at_every_offset() {
+        for v in [
+            -MAX_ABS,
+            -1.0e-30,
+            -0.0,
+            f32::from_bits(1),
+            0.1,
+            8_700.0,
+            1.5e6,
+            MAX_ABS,
+        ] {
+            let mut bytes = distinct_bytes();
+            for off in FLOAT_OFFSETS {
+                if off == 16 && v.is_sign_negative() {
+                    continue; // rpm is clamped to at least 0
+                }
+                bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+            }
+            let back = decode(&bytes).expect("decode");
+            assert_eq!(encode(&back), bytes, "{v:e}");
+        }
     }
 }

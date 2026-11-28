@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "Offscreen benchmark of the fh6-kit render kit at 3840x2160 (CPU and GPU per scenario)"
 
+[lints]
+workspace = true
+
 [dependencies]
 fh6-gpu = { path = "../../crates/fh6-gpu" }
 fh6-kit = { path = "../../crates/fh6-kit" }

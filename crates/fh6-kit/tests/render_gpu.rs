@@ -1,6 +1,11 @@
 //! GPU tests of the kit: every primitive, text, glass, bloom and blur render without validation
 //! errors and put pixels where they should.
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "test helpers: a GPU setup or readback that fails should stop the test with its message"
+)]
 
 use fh6_gpu::GpuContext;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};

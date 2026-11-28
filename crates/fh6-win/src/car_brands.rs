@@ -5,6 +5,7 @@
 //! with key order preserved, so every key this code does not know survives untouched. The
 //! file is only replaced (temp file, then rename) after the new text re-parses and still holds
 //! every car it held before: a bind can add or replace one car, never shrink the file.
+#![forbid(unsafe_code)]
 use serde_json::{Map, Value};
 use std::fs;
 use std::io;
