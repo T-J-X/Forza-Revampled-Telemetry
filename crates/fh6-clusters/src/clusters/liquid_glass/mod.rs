@@ -589,6 +589,8 @@ fn backlash(held: f32, raw: f32, band: f32) -> f32 {
 fn load_asset(setup: &mut Setup<'_>, name: &str) -> Option<ImageId> {
     let path = setup.assets?.join("clusters").join("liquid_glass").join(name);
     if !path.is_file() {
+        // Packaged builds ship it; without it the dash falls back, so say which file was missing.
+        tracing::debug!(path = %path.display(), "no Liquid Glass asset: drawing the fallback");
         return None;
     }
     match setup.images.load_file(setup.device, setup.queue, &path, None) {
@@ -601,13 +603,49 @@ fn load_asset(setup: &mut Setup<'_>, name: &str) -> Option<ImageId> {
     }
 }
 
+/// Loads the studio environment this cluster's glass mirrors (`studio_env.png`). The image
+/// cache keys files by path, so everything that loads it shares one texture.
+pub fn load_studio(setup: &mut Setup<'_>) -> Option<ImageId> {
+    load_asset(setup, "studio_env.png")
+}
+
+/// The studio glass this cluster and the OSD share, so the two read as one material: `glass`
+/// under the studio map at its white (the kit's analytic studio without `environment`), its
+/// light leaning to `primary` as a cabin's ambient lighting does, bending the game behind it.
+#[must_use]
+pub fn studio_glass(mut glass: OpticalGlass, environment: Option<ImageId>, primary: Color) -> OpticalGlass {
+    if let Some(env) = environment {
+        glass.environment = Environment::Map(env);
+        glass.env_gain = glass.env_gain.map(|g| g * ENV_WHITE);
+    }
+    let peak = primary.r.max(primary.g).max(primary.b).max(1e-4);
+    let lean_to = [primary.r, primary.g, primary.b].map(|c| 1.0 - AMBIENT_TINT * (1.0 - c / peak));
+    for (c, lean) in lean_to.into_iter().enumerate() {
+        glass.env_gain[c] *= lean;
+        glass.light[c] *= lean * KEY_SHARE;
+    }
+    glass.refraction = Refraction::World;
+    glass
+}
+
+/// Points the studio's rig: the key light comes from `azimuth` at `elevation` and leans by
+/// `lean` (`OpticalGlass::aim`). The environment turns with the rig but does not lean: its dark
+/// cone round the viewer then stays on the view axis, so no studio light reaches a numeral
+/// however far the key light leans, and the key's highlight still sweeps the faces.
+pub fn aim_studio(glass: &mut OpticalGlass, azimuth: f32, elevation: f32, lean: Vec2) {
+    let mut level = *glass;
+    level.aim(azimuth, elevation, Vec2::ZERO);
+    glass.aim(azimuth, elevation, lean);
+    glass.env_rotation = level.env_rotation;
+}
+
 impl LiquidGlass {
     /// Builds the cluster: faces, springs and its two assets (the liquid-light tile and the
     /// studio environment). Without them it draws a plain ribbon and the kit's analytic studio.
     #[must_use]
     pub fn new(setup: &mut Setup<'_>) -> Self {
         let light_tile = load_asset(setup, "liquid_light.png");
-        let environment = load_asset(setup, "studio_env.png");
+        let environment = load_studio(setup);
         let t: &Tokens = setup.tokens;
         let palette = Palette::family(t, "liquidGlass");
         let display = setup.fonts.role(FontRole::Display);
@@ -778,31 +816,16 @@ impl Cluster for LiquidGlass {
             0.0
         };
         self.bridge.update(self.bridge_target, dt);
-        let mut glass = input.tokens.optical_glass(&self.palette);
-        if let Some(env) = self.environment {
-            glass.environment = Environment::Map(env);
-            glass.env_gain = glass.env_gain.map(|g| g * ENV_WHITE);
-        }
-        // The studio's light leans to the car's colour, as a cabin's ambient lighting does.
-        let hue = self.palette.primary;
-        let peak = hue.r.max(hue.g).max(hue.b).max(1e-4);
-        let lean_to = [hue.r, hue.g, hue.b].map(|c| 1.0 - AMBIENT_TINT * (1.0 - c / peak));
-        for c in 0..3 {
-            glass.env_gain[c] *= lean_to[c];
-            glass.light[c] *= lean_to[c] * KEY_SHARE;
-        }
-        glass.refraction = Refraction::World;
-        glass.aim(
+        // The studio's light leans to the car's colour, and the key light leans with
+        // acceleration while the environment stays level.
+        let token_glass = input.tokens.optical_glass(&self.palette);
+        let mut glass = studio_glass(token_glass, self.environment, self.palette.primary);
+        aim_studio(
+            &mut glass,
             self.light.angle(),
             op.key_elevation,
             vec2(self.lean[0].value(), self.lean[1].value()),
         );
-        // The environment turns with the rig but does not lean: its dark cone round the viewer
-        // then stays on the view axis, so no studio light reaches a numeral at any G. The key
-        // light still leans with acceleration, and its highlight still sweeps the faces.
-        let mut level = glass;
-        level.aim(self.light.angle(), op.key_elevation, Vec2::ZERO);
-        glass.env_rotation = level.env_rotation;
         glass.materialize = self.shown();
         self.glass = glass;
         // The pieces that hold numerals keep the token clarity but not its lean to the hue.

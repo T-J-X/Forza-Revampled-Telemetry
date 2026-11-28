@@ -37,7 +37,7 @@ use crate::hero::part::Part;
 use crate::hero::rig::SWING;
 use crate::hero::texture::{self, Recipe};
 use crate::hero::{Passes, Rendered, Scene};
-use crate::img::{self, Img};
+use crate::img;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -270,7 +270,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     }
 
     // 3. Previews beside the masters (the masters themselves are copied by `--masters`).
-    let previews = write_previews(&masters, &scratch.join("previews"))?;
+    let previews = crate::lane::write_previews(&masters, &scratch.join("previews"), MASTERS_SUB)?;
 
     // 4. The cluster's own ledger.
     let mut md = String::from(
@@ -496,41 +496,19 @@ fn key_azimuth(scene: &Scene, i: usize) -> f32 {
 }
 
 /// Box-filters a master beauty (straight alpha, sRGB-encoded) to 1 px per 4K px and writes it
-/// as an optimised 8-bit sRGB PNG. Colour is averaged in linear light weighted by coverage, so
-/// edges keep their colour. Returns the file's size.
+/// as an optimised 8-bit sRGB PNG ([`img::box_down`]: colour averaged in linear light weighted
+/// by coverage, so edges keep their colour). Returns the file's size.
 fn runtime_png(master: &Path, out: &Path) -> Result<u64> {
     let src = img::load(master)?;
-    let k = MASTER_SCALE.round().max(1.0) as usize;
-    let (w, h) = (src.w / k, src.h / k);
-    let small = Img::from_fn(w, h, 4, |x, y| {
-        let mut acc = [0.0_f32; 4];
-        for dy in 0..k {
-            for dx in 0..k {
-                let (sx, sy) = (x * k + dx, y * k + dy);
-                let a = src.get(sx, sy, 3);
-                for (ch, v) in acc.iter_mut().enumerate().take(3) {
-                    *v += img::srgb_decode(src.get(sx, sy, ch)) * a;
-                }
-                acc[3] += a;
-            }
-        }
-        let a = acc[3] / (k * k) as f32;
-        let inv = if acc[3] > 1e-6 { 1.0 / acc[3] } else { 0.0 };
-        [
-            img::srgb_encode(acc[0] * inv),
-            img::srgb_encode(acc[1] * inv),
-            img::srgb_encode(acc[2] * inv),
-            a,
-        ]
-    });
+    let small = img::box_down(&src, MASTER_SCALE.round().max(1.0) as usize);
     img::save_png(&small, out, false, true)
 }
 
-/// A neutral copy of the SDXL grain in `dir`: luminance only, its mean at mid grey and one
-/// standard deviation at [`GRAIN_SPREAD`] (clamped at 2.5 deviations), so the dial's brightness
-/// comes from the material's tint and not from how dark SDXL drew the paint. It is named by a
-/// fingerprint of the source and of these settings, so the Blender scenes re-render when either
-/// changes.
+/// A neutral copy of the SDXL grain in `dir` ([`img::neutral_luma`]): luminance only, its mean
+/// at mid grey and one standard deviation at [`GRAIN_SPREAD`] (clamped at 2.5 deviations), so
+/// the dial's brightness comes from the material's tint and not from how dark SDXL drew the
+/// paint. It is named by a fingerprint of the source and of these settings, so the Blender
+/// scenes re-render when either changes.
 fn neutral_grain(src: &Path, dir: &Path) -> Result<PathBuf> {
     let bytes = std::fs::read(src).map_err(|e| io_err(src, e))?;
     let fp = crate::ledger::fingerprint(&[
@@ -543,57 +521,9 @@ fn neutral_grain(src: &Path, dir: &Path) -> Result<PathBuf> {
     if out.is_file() {
         return Ok(out);
     }
-    let img = img::load(src)?;
-    let (w, h) = (img.w, img.h);
-    let lum: Vec<f32> = (0..w * h)
-        .map(|i| {
-            img::luma(
-                img.get(i % w, i / w, 0),
-                img.get(i % w, i / w, 1),
-                img.get(i % w, i / w, 2),
-            )
-        })
-        .collect();
-    // The mean and the spread over a window round each texel (wrapping, as the texture tiles), so
-    // every part of the paint gets the same relief.
-    let mean = box_blur_wrap(&lum, w, h, GRAIN_WINDOW);
-    let dev: Vec<f32> = lum.iter().zip(&mean).map(|(l, m)| (l - m) * (l - m)).collect();
-    let var = box_blur_wrap(&dev, w, h, GRAIN_WINDOW);
-    let flat = Img::from_fn(w, h, 3, |x, y| {
-        let i = y * w + x;
-        let sd = var[i].max(0.0).sqrt().max(1e-4);
-        let z = ((lum[i] - mean[i]) / sd).clamp(-2.5, 2.5);
-        let v = 0.5 + z * GRAIN_SPREAD;
-        [v, v, v, 1.0]
-    });
+    let flat = img::neutral_luma(&img::load(src)?, GRAIN_WINDOW, GRAIN_SPREAD);
     img::save_png(&flat, &out, false, true)?;
     Ok(out)
-}
-
-/// A box blur of radius `r` texels over a `w`×`h` field that wraps at its edges (running sums,
-/// one pass across and one down).
-fn box_blur_wrap(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
-    let n = (2 * r + 1) as f64;
-    let pass = |src: &[f32], lines: usize, len: usize, at: &dyn Fn(usize, usize) -> usize| -> Vec<f32> {
-        let mut out = vec![0.0_f32; src.len()];
-        if len == 0 {
-            return out;
-        }
-        let wrap = |k: isize| k.rem_euclid(len as isize) as usize;
-        for line in 0..lines {
-            let mut acc: f64 = (-(r as isize)..=r as isize)
-                .map(|k| f64::from(src[at(line, wrap(k))]))
-                .sum();
-            for i in 0..len {
-                out[at(line, i)] = (acc / n) as f32;
-                acc += f64::from(src[at(line, wrap(i as isize + r as isize + 1))]);
-                acc -= f64::from(src[at(line, wrap(i as isize - r as isize))]);
-            }
-        }
-        out
-    };
-    let across = pass(src, h, w, &|line, i| line * w + i);
-    pass(&across, w, h, &|line, i| i * w + line)
 }
 
 /// Notes the data passes of a scene (normal, height, AO) as masters.
@@ -607,50 +537,6 @@ fn note_data_masters(stem: &str, r: &Rendered, masters: &mut Vec<(PathBuf, Strin
             masters.push((p.clone(), format!("{stem}, {what}")));
         }
     }
-}
-
-/// Writes a `<job>_<stem>_preview.png` (at most 1024 px wide, flattened on black) for every
-/// master into `dir`, and into the Drive masters folder when it is mounted. Returns how many were
-/// written.
-fn write_previews(masters: &[(PathBuf, String)], dir: &Path) -> Result<usize> {
-    let drive = crate::lane::masters_dir(MASTERS_SUB).ok();
-    let mut n = 0;
-    for (path, _) in masters {
-        let Ok(src) = img::load(path) else {
-            continue;
-        };
-        let scale = (1024.0 / src.w.max(1) as f32).min(1.0);
-        let (w, h) = (
-            ((src.w as f32 * scale).round() as usize).max(1),
-            ((src.h as f32 * scale).round() as usize).max(1),
-        );
-        let small = src.resize(w, h, false);
-        let flat = Img::from_fn(w, h, 3, |x, y| {
-            let a = if small.c > 3 { small.get(x, y, 3) } else { 1.0 };
-            [
-                small.get(x, y, 0) * a,
-                small.get(x, y, 1) * a,
-                small.get(x, y, 2) * a,
-                1.0,
-            ]
-        });
-        let stem = path
-            .file_stem()
-            .map_or_else(|| "master".into(), |s| s.to_string_lossy().to_string());
-        let job = path
-            .parent()
-            .and_then(Path::file_name)
-            .map_or_else(String::new, |s| format!("{}_", s.to_string_lossy()));
-        let name = format!("{job}{stem}_preview.png");
-        img::save_png(&flat, &dir.join(&name), false, true)?;
-        if let Some(d) = &drive {
-            if let Err(e) = std::fs::copy(dir.join(&name), d.join(&name)) {
-                eprintln!("  preview {name} not copied to Drive: {e}");
-            }
-        }
-        n += 1;
-    }
-    Ok(n)
 }
 
 /// A path's file name.
@@ -668,21 +554,6 @@ fn squash(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::hero::part::Shape;
-
-    #[test]
-    fn the_wrapping_box_blur_keeps_the_total_and_wraps_round_the_edges() {
-        // A constant field stays constant.
-        let flat = box_blur_wrap(&[0.25; 12], 4, 3, 1);
-        assert!(flat.iter().all(|v| (v - 0.25).abs() < 1e-6));
-        // A spike in the corner spreads over its 3x3 neighbours, wrapping to the far edges.
-        let mut spike = vec![0.0_f32; 25];
-        spike[0] = 9.0;
-        let out = box_blur_wrap(&spike, 5, 5, 1);
-        for (x, y) in [(0, 0), (1, 0), (4, 0), (0, 1), (0, 4), (4, 4), (1, 1), (4, 1), (1, 4)] {
-            assert!((out[y * 5 + x] - 1.0).abs() < 1e-5, "({x}, {y}): {}", out[y * 5 + x]);
-        }
-        assert!((out.iter().sum::<f32>() - 9.0).abs() < 1e-4);
-    }
 
     #[test]
     fn every_tube_fills_its_sprite_with_a_margin() {

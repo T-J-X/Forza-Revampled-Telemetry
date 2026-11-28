@@ -242,6 +242,55 @@ pub fn sink_images(masters: &Path, names: &[String], images: &[Vec<u8>]) -> Resu
     Ok(written)
 }
 
+/// Writes a `<job>_<stem>_preview.png` (at most 1024 px wide, flattened on black) for every
+/// master into `dir`, and into the Drive masters folder `sub` when it is mounted (the tracker
+/// shows them). `<job>` is the master's folder name. Returns how many were written.
+pub fn write_previews(masters: &[(PathBuf, String)], dir: &Path, sub: &str) -> Result<usize> {
+    use crate::img::{self, Img};
+    let drive = masters_dir(sub).ok();
+    let mut n = 0;
+    for (path, _) in masters {
+        let src = match img::load(path) {
+            Ok(src) => src,
+            Err(e) => {
+                eprintln!("  preview of {} skipped: {e}", path.display());
+                continue;
+            }
+        };
+        let scale = (1024.0 / src.w.max(1) as f32).min(1.0);
+        let (w, h) = (
+            ((src.w as f32 * scale).round() as usize).max(1),
+            ((src.h as f32 * scale).round() as usize).max(1),
+        );
+        let small = src.resize(w, h, false);
+        let flat = Img::from_fn(w, h, 3, |x, y| {
+            let a = if small.c > 3 { small.get(x, y, 3) } else { 1.0 };
+            [
+                small.get(x, y, 0) * a,
+                small.get(x, y, 1) * a,
+                small.get(x, y, 2) * a,
+                1.0,
+            ]
+        });
+        let stem = path
+            .file_stem()
+            .map_or_else(|| "master".into(), |s| s.to_string_lossy().to_string());
+        let job = path
+            .parent()
+            .and_then(Path::file_name)
+            .map_or_else(String::new, |s| format!("{}_", s.to_string_lossy()));
+        let name = format!("{job}{stem}_preview.png");
+        img::save_png(&flat, &dir.join(&name), false, true)?;
+        if let Some(d) = &drive {
+            if let Err(e) = std::fs::copy(dir.join(&name), d.join(&name)) {
+                eprintln!("  preview {name} not copied to Drive: {e}");
+            }
+        }
+        n += 1;
+    }
+    Ok(n)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

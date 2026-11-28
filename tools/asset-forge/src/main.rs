@@ -59,6 +59,7 @@ const SETS: &[&str] = &[
     "bosch_ddu",
     "liquid_glass",
     "porsche_analog",
+    "osd",
     "vision_spatial_glass",
     "amg_mbux_superscreen",
     "drift_glass",
