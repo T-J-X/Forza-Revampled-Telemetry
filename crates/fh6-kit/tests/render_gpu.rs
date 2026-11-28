@@ -181,6 +181,46 @@ fn gradients_and_text() {
 }
 
 #[test]
+fn text_under_the_least_size_is_left_out_but_keeps_its_bounds() {
+    let (ctx, mut kit) = setup();
+    let font = kit.fonts().role(fh6_kit::FontRole::Display);
+    let style = TextStyle::new(font, 160.0).tabular();
+    // Cap 160 local units at layout scale 0.5 is 80 target pixels.
+    let mut bounds = [Rect::from_xywh(0.0, 0.0, 0.0, 0.0); 3];
+    let mut inked = [0usize; 3];
+    for (i, least) in [0.0, 60.0, 100.0].into_iter().enumerate() {
+        // Twice: the first frame queues the glyphs.
+        let mut img = None;
+        for _ in 0..2 {
+            img = Some(render(&mut kit, &ctx, |p| {
+                p.save();
+                p.set_min_text_px(least);
+                bounds[i] = p.text(vec2(0.0, 100.0), "188", &style);
+                p.restore();
+                // Restore lifts the limit again.
+                p.text(vec2(0.0, -150.0), "1", &style);
+            }));
+        }
+        let img = img.expect("rendered");
+        inked[i] = (0..60)
+            .flat_map(|x| (0..30).map(move |y| vec2(-180.0 + x as f32 * 6.0, 30.0 + y as f32 * 5.0)))
+            .filter(|v| at(&img, *v)[3] > 128)
+            .count();
+        let after = (0..20)
+            .flat_map(|x| (0..20).map(move |y| vec2(-60.0 + x as f32 * 6.0, -220.0 + y as f32 * 6.0)))
+            .filter(|v| at(&img, *v)[3] > 128)
+            .count();
+        assert!(after > 20, "text after the restore draws (least {least}): {after}");
+    }
+    assert!(
+        inked[0] > 250 && inked[1] > 250,
+        "over the least size it draws: {inked:?}"
+    );
+    assert_eq!(inked[2], 0, "under it nothing draws");
+    assert_eq!(bounds[0], bounds[2], "the bounds stay the same either way");
+}
+
+#[test]
 fn glass_bloom_blur_and_effects() {
     let (ctx, mut kit) = setup();
     let img = render_named(&mut kit, &ctx, "glass", |p| {

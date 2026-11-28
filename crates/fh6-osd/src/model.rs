@@ -582,7 +582,10 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
         RowId::CameraPatch => "Camera patch",
         RowId::ClusterHeight => "Cluster height",
         RowId::ClusterScale => "Cluster scale",
-        RowId::Scrim(i) => fit.scrim_rows().get(usize::from(i)).map_or("Dash blocker", |f| f.label),
+        RowId::Scrim(i) => fit
+            .scrim_rows()
+            .get(usize::from(i))
+            .map_or("Blocker strength", |f| f.label),
         RowId::Resync => "Resync camera",
         RowId::OsdButton => "OSD button",
         RowId::HoldTime => "Hold time",
@@ -595,7 +598,6 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
 #[must_use]
 pub fn section(row: RowId) -> Option<&'static str> {
     Some(match row {
-        RowId::EditView => "Cluster",
         RowId::SpeedUnit => "Readouts",
         RowId::ColourMode => "Palette",
         RowId::GlassRefraction => "Material",
@@ -645,6 +647,7 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
         RowId::ClusterHeight => "Applies now, to the view you edit",
         RowId::ClusterScale => "Applies now",
         RowId::OsdButton => "Right, then hold the new button for 1 second",
+        RowId::HoldTime => "How long to hold the OSD button to open the menu",
         RowId::AutoPause => "Sends Esc when the OSD opens mid-race",
         _ => return None,
     })

@@ -807,7 +807,7 @@ impl Loop {
         // The OSD's soft black pools go to the kit as well: it writes them without blending,
         // where painting them cost about 0.4 ms of GPU time in a 4K frame.
         let pools = match osd {
-            Some(o) if draw => o.host.pools(layout, o.frame, blocker.is_none()),
+            Some(o) if draw => o.host.pools(layout, o.frame, o.cfg, blocker.is_none()),
             _ => fh6_osd::draw::Pools::NONE,
         };
         kit.set_pools(pools.as_slice());
@@ -836,7 +836,7 @@ impl Loop {
                 dim_dash(&mut p, lit, fade.care.dim);
                 if let Some(o) = osd {
                     let name = self.active.as_ref().map_or("", |a| model::theme_label(a.theme));
-                    o.host.draw(&mut p, o.cfg, o.frame, o.now, name, o.status);
+                    o.host.draw(&mut p, layout, o.cfg, o.frame, o.now, name, o.status);
                 }
                 if stats_on {
                     draw_stats(&mut p, &self.stat_lines, self.size, fade.care);

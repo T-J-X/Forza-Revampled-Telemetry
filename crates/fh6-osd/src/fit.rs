@@ -138,7 +138,7 @@ fn set_void(c: &mut AppConfig, v: f32) {
 /// ranges.
 pub static SCRIM_ROWS: &[FitRow] = &[
     FitRow {
-        label: "Dash blocker",
+        label: "Blocker strength",
         unit: "%",
         min: 0.0,
         max: 100.0,

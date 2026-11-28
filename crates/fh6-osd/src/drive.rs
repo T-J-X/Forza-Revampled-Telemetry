@@ -72,8 +72,16 @@ const RIM_LIGHT: f32 = 0.7;
 const RIM_ENERGY: f32 = 0.3;
 /// The eye's dot and the default eye's ring (radius, 4K px). The ring is wider than the dot's
 /// dark collar, so at the default height the dot sits inside it.
-const EYE_R: f32 = 11.0;
-const DEFAULT_R: f32 = 17.0;
+const EYE_R: f32 = 16.0;
+/// The rim light on a part the focused row does not move (a share of secondary ink).
+const QUIET_RIM: f32 = 0.3;
+/// The fan's edge stroke, doubled while the FOV row has focus, and how much of the edge's
+/// strength is left at the arc.
+const FAN_EDGE: f32 = 2.5;
+const FAN_EDGE_END: f32 = 0.6;
+const DEFAULT_R: f32 = 24.0;
+/// The default ring's stroke (4K px).
+const RING_W: f32 = 4.0;
 /// The legend: its type size and its right edge and middle in the view (under the dash, clear
 /// of the seat at every height and the wheel at every offset).
 const LEGEND_CAP: f32 = 26.0;
@@ -198,6 +206,13 @@ pub fn eye_at(seat_mm: f32) -> Vec2 {
     view_px(EYE) - vec2(0.0, rise_px(seat_mm))
 }
 
+/// How far below the view's top (4K px) the view reaches with the seat at `seat_mm`: the view's
+/// height, plus however far a lowered seat hangs below it.
+#[must_use]
+pub fn bottom_at(seat_mm: f32) -> f32 {
+    VIEW.y + (-rise_px(seat_mm)).max(0.0)
+}
+
 /// Draws the view with its top-left at `origin` (4K units) at opacity `alpha`.
 pub fn draw(p: &mut Painter<'_>, origin: Vec2, images: Option<DriveImages>, s: &DriveState, look: &Look, alpha: f32) {
     let alpha = alpha.clamp(0.0, 1.0);
@@ -215,24 +230,33 @@ pub fn draw(p: &mut Painter<'_>, origin: Vec2, images: Option<DriveImages>, s: &
             let lit = look
                 .accent
                 .fade((RIM_LIGHT + RIM_ENERGY * s.energy.clamp(0.0, 1.0)) * alpha);
+            // Both parts keep a quiet rim at all times, so their outlines hold over black.
+            let quiet = look.muted.fade(QUIET_RIM * alpha);
+            let (seat_rim, wheel_rim) = match s.focus {
+                Focus::Seat => (lit, quiet),
+                Focus::Wheel => (quiet, lit),
+                Focus::Fov | Focus::None => (quiet, quiet),
+            };
             p.save();
             p.set_blend(BlendMode::Add);
-            match s.focus {
-                Focus::Seat => layer(p, origin, SEAT_RECT, seat_up, img.seat_rim, lit),
-                Focus::Wheel => layer(p, origin, WHEEL_RECT, wheel_up, img.wheel_rim, lit),
-                Focus::Fov | Focus::None => {}
-            }
+            layer(p, origin, SEAT_RECT, seat_up, img.seat_rim, seat_rim);
+            layer(p, origin, WHEEL_RECT, wheel_up, img.wheel_rim, wheel_rim);
             p.restore();
         }
         None => sketch(p, origin, seat_up, wheel_up, s.focus, look, alpha),
     }
-    let fan_paint = if s.focus == Focus::Fov { look.accent } else { look.muted };
+    // The fan fills only while the FOV row has focus; otherwise its two edges say enough.
+    let (fan_paint, fill) = if s.focus == Focus::Fov {
+        (look.accent, true)
+    } else {
+        (look.muted, false)
+    };
     let eye = origin + eye_at(s.seat_mm);
-    fan(p, eye, s.fov_deg, fan_paint, alpha);
+    fan(p, eye, s.fov_deg, fan_paint, fill, alpha);
     p.stroke(
         &Shape::circle(origin + eye_at(s.default_seat_mm), DEFAULT_R),
         look.muted.fade(alpha),
-        Stroke::new(2.5),
+        Stroke::new(RING_W),
     );
     // A dark collar keeps the dot apart from the render behind it.
     p.fill(&Shape::circle(eye, EYE_R + 3.0), Color::BLACK.fade(0.7 * alpha));
@@ -252,7 +276,7 @@ fn layer(p: &mut Painter<'_>, origin: Vec2, rect: [f32; 4], up: f32, image: Imag
 }
 
 /// The FOV fan from `eye`: the field of view in the car's centre plane, fading out from the eye.
-fn fan(p: &mut Painter<'_>, eye: Vec2, fov_deg: f32, paint: Color, alpha: f32) {
+fn fan(p: &mut Painter<'_>, eye: Vec2, fov_deg: f32, paint: Color, fill: bool, alpha: f32) {
     let half = (fov_deg.clamp(20.0, 140.0) * 0.5).to_radians();
     let reach = FAN_R / PX_PER_M;
     let mut pts = [eye; FAN_POINTS + 1];
@@ -260,21 +284,33 @@ fn fan(p: &mut Painter<'_>, eye: Vec2, fov_deg: f32, paint: Color, alpha: f32) {
         let th = -half + 2.0 * half * i as f32 / (FAN_POINTS - 1) as f32;
         *pt = eye + view_vec([th.cos() * reach, 0.0, th.sin() * reach]);
     }
-    p.fill(
-        &Shape::Polygon { points: &pts },
-        Gradient::radial(eye, FAN_R)
-            .stop(0.0, paint.fade(FAN_FILL * alpha))
-            .stop(0.45, paint.fade(FAN_FILL * 0.3 * alpha))
-            .stop(1.0, Color::TRANSPARENT),
-    );
-    for end in [pts[1], pts[FAN_POINTS]] {
+    if fill {
         p.fill(
-            &Shape::line(eye, end, 2.5),
-            Gradient::linear(eye, end)
-                .stop(0.0, paint.fade(0.85 * alpha))
+            &Shape::Polygon { points: &pts },
+            Gradient::radial(eye, FAN_R)
+                .stop(0.0, paint.fade(FAN_FILL * alpha))
+                .stop(0.45, paint.fade(FAN_FILL * 0.3 * alpha))
                 .stop(1.0, Color::TRANSPARENT),
         );
     }
+    let width = if fill { 2.0 * FAN_EDGE } else { FAN_EDGE };
+    let edge = paint.fade(0.85 * alpha);
+    for end in [pts[1], pts[FAN_POINTS]] {
+        p.fill(
+            &Shape::line(eye, end, width),
+            Gradient::linear(eye, end)
+                .stop(0.0, edge)
+                .stop(1.0, edge.fade(FAN_EDGE_END)),
+        );
+    }
+    // The arc closes the fan at the edges' end strength: one band, so no joint doubles up.
+    let mut band = [eye; 2 * FAN_POINTS];
+    for (i, pt) in pts[1..].iter().enumerate() {
+        let out = (*pt - eye).normalize_or_zero() * (width * 0.5);
+        band[i] = *pt + out;
+        band[2 * FAN_POINTS - 1 - i] = *pt - out;
+    }
+    p.fill(&Shape::Polygon { points: &band }, edge.fade(FAN_EDGE_END));
 }
 
 /// "● Your eye  ○ Default", right-aligned at `right_mid` (its right edge and cap middle). The

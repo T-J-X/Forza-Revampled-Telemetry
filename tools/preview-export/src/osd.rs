@@ -78,6 +78,15 @@ fn press(host: &mut OsdHost, cfg: &mut AppConfig, t_ms: u64, held: u16, pressed:
     host.step(&input, cfg);
 }
 
+/// A custom palette whose primary and accent are both `hex`, with the colour-mode row focused.
+fn custom_accent(host: &mut OsdHost, cfg: &mut AppConfig, hex: &str) -> Duration {
+    cfg.color_mode = ColorMode::Custom;
+    cfg.primary_hex = hex.into();
+    cfg.accent_hex = hex.into();
+    focus(host, cfg, Tab::Colour, RowId::ColourMode);
+    Duration::ZERO
+}
+
 const STATES: &[OsdState] = &[
     OsdState {
         name: "01_cluster_carousel",
@@ -208,6 +217,24 @@ const STATES: &[OsdState] = &[
             focus(h, c, Tab::Fit, RowId::WheelOffset);
             Duration::ZERO
         },
+    },
+    OsdState {
+        name: "14_accent_navy",
+        caption: "Colour tab · a navy custom palette: the OSD falls back to sapphire, never a slate box",
+        drive: false,
+        setup: |h, c| custom_accent(h, c, "#1E3A8A"),
+    },
+    OsdState {
+        name: "15_accent_violet",
+        caption: "Colour tab · a violet custom palette: it falls back like navy",
+        drive: false,
+        setup: |h, c| custom_accent(h, c, "#8B5CF6"),
+    },
+    OsdState {
+        name: "16_accent_pale",
+        caption: "Colour tab · a pale mint custom palette: the light inside the glass keeps its colour",
+        drive: false,
+        setup: |h, c| custom_accent(h, c, "#A7F3D0"),
     },
 ];
 
@@ -432,10 +459,10 @@ pub fn render_all(
                 let backing = blocker.as_ref().map(|(fit, wash)| (fit, *wash));
                 draw::live_backing(&mut p, backing);
                 live.cluster.draw(&mut p, &layout);
-                host.draw(&mut p, &cfg, frame, now, name, LiveStatus::Dyno);
+                host.draw(&mut p, &layout, &cfg, frame, now, name, LiveStatus::Dyno);
             }
             kit.set_underlay(draw::underlay(host.anim.open.progress()));
-            kit.set_pools(host.pools(&layout, frame, blocker.is_none()).as_slice());
+            kit.set_pools(host.pools(&layout, frame, &cfg, blocker.is_none()).as_slice());
             let mut encoder = ctx.device.create_command_encoder(&Default::default());
             let stats = kit.render(
                 &ctx.device,
@@ -577,10 +604,10 @@ pub fn render_sequence(
         {
             let mut p = kit.begin_frame(&layout);
             live.cluster.draw(&mut p, &layout);
-            host.draw(&mut p, &cfg, frame, now, live.name, LiveStatus::Dyno);
+            host.draw(&mut p, &layout, &cfg, frame, now, live.name, LiveStatus::Dyno);
         }
         kit.set_underlay(draw::underlay(host.anim.open.progress()));
-        kit.set_pools(host.pools(&layout, frame, true).as_slice());
+        kit.set_pools(host.pools(&layout, frame, &cfg, true).as_slice());
         let mut encoder = ctx.device.create_command_encoder(&Default::default());
         kit.render(
             &ctx.device,

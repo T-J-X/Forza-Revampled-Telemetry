@@ -256,15 +256,18 @@ impl OsdHost {
     /// is the live cluster's ([`OsdHost::live_layout`]); `live_pool` is false while the host
     /// draws the real dash blocker under the cluster instead ([`draw::live_backing`]).
     #[must_use]
-    pub fn pools(&self, layout: &Layout, frame: Frame, live_pool: bool) -> draw::Pools {
-        draw::pools(&self.anim, frame, layout, live_pool)
+    pub fn pools(&self, layout: &Layout, frame: Frame, cfg: &AppConfig, live_pool: bool) -> draw::Pools {
+        draw::pools(&self.anim, frame, layout, cfg, live_pool)
     }
 
-    /// Draws the OSD (after the backdrop and the live cluster). Its black pools are not part
-    /// of this: see [`OsdHost::pools`].
+    /// Draws the OSD (after the backdrop and the live cluster). `layout` is the live cluster's
+    /// ([`OsdHost::live_layout`]). Its black pools are not part of this: see
+    /// [`OsdHost::pools`].
+    #[allow(clippy::too_many_arguments, reason = "the host's per-frame inputs, each one plain")]
     pub fn draw(
         &self,
         p: &mut Painter<'_>,
+        layout: &Layout,
         cfg: &AppConfig,
         frame: Frame,
         now: Duration,
@@ -295,6 +298,7 @@ impl OsdHost {
                 thumbs: &thumbs,
                 env: self.env,
                 drive: self.drive,
+                live: *layout,
             },
         );
     }
@@ -325,7 +329,7 @@ mod tests {
         };
         let opacity = SCRIM_ROWS
             .iter()
-            .position(|r| r.label == "Dash blocker")
+            .position(|r| r.label == "Blocker strength")
             .map(|i| RowId::Scrim(i as u8));
         let opacity = opacity.expect("opacity row");
         assert!(host.focus_row(Tab::Fit, opacity, &base));
@@ -583,10 +587,10 @@ mod gates {
                 host.prepare(&mut nk.kit, &nk.device, &nk.queue, assets, &cfg);
                 host.update(&input, &nk.kit, frame, &cfg);
                 let layout = host.live_layout(&base, frame);
-                std::hint::black_box(host.pools(&layout, frame, true).as_slice());
+                std::hint::black_box(host.pools(&layout, frame, &cfg, true).as_slice());
                 let mut p = nk.kit.begin_frame(&layout);
                 draw::live_backing(&mut p, None);
-                host.draw(&mut p, &cfg, frame, now, "Live", LiveStatus::Dyno);
+                host.draw(&mut p, &layout, &cfg, frame, now, "Live", LiveStatus::Dyno);
             });
             if i >= WARM_FRAMES {
                 worst = worst.max(info.count_total);

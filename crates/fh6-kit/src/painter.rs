@@ -51,6 +51,8 @@ struct State {
     segment: SegmentKey,
     /// When false, `layer` ignores backdrop requests (glass draws tint, rim and sheen only).
     backdrops: bool,
+    /// Text whose cap height comes out smaller than this many target pixels is not drawn.
+    min_text_px: f32,
 }
 
 /// Records one frame of drawing. Created by [`crate::Kit::begin_frame`].
@@ -98,6 +100,7 @@ impl<'f> Painter<'f> {
                     backdrop_px: None,
                 },
                 backdrops: true,
+                min_text_px: 0.0,
             },
             stack: [None; MAX_DEPTH],
             depth: 0,
@@ -230,6 +233,14 @@ impl<'f> Painter<'f> {
     /// and thumbnails drawn inside another surface turn it off).
     pub fn set_backdrops(&mut self, on: bool) {
         self.state.backdrops = on;
+    }
+
+    /// Leaves out text whose cap height would come out under `px` target pixels, until the
+    /// matching restore. A cluster drawn as a small thumbnail sets its labels and footers at a
+    /// few pixels, where they read as grey bars; its gear, speed and shapes still draw. `text`
+    /// still returns the bounds the text would have had, so layouts built on them hold.
+    pub fn set_min_text_px(&mut self, px: f32) {
+        self.state.min_text_px = finite_or(px, 0.0).max(0.0);
     }
 
     /// Sets the blend mode until the matching restore.
@@ -393,6 +404,9 @@ impl<'f> Painter<'f> {
             return Rect::from_points(pos, pos);
         };
         let origin = run.origin(pos);
+        if style.cap * self.state.xf.scale_factor() < self.state.min_text_px {
+            return run.bounds(origin);
+        }
         let paint = style.paint;
         let mut xf_saved = None;
         if style.slant.abs() > 1e-4 {

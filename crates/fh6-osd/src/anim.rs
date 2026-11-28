@@ -7,6 +7,8 @@ use fh6_kit::{Spring, SpringSpec, Tokens, Tween};
 /// How long a value change keeps the inner light up before it decays (s). Hold-to-repeat
 /// re-arms it every step, so a held adjust stays lit instead of pulsing.
 const ENERGISE_HOLD: f32 = 0.18;
+/// How long the scroll bar stays up after the rows last scrolled, and after the OSD opens (s).
+const SCROLLBAR_HOLD: f32 = 1.0;
 
 /// Animated values, advanced once per frame.
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +40,10 @@ pub struct OsdAnim {
     pub energy: Spring,
     /// Seconds the inner light stays up after the last value change.
     energised: f32,
+    /// The scroll bar's opacity: up while the rows scroll and briefly on open, else hidden.
+    pub scrollbar: Spring,
+    /// Seconds the scroll bar stays up.
+    scrolled: f32,
     /// Seconds since the OSD opened (the text cursor's blink).
     pub t: f32,
     primed: bool,
@@ -110,6 +116,8 @@ impl OsdAnim {
             echo_lift: Spring::new(s.default, 0.0),
             energy: Spring::new(s.default, 0.0),
             energised: 0.0,
+            scrollbar: Spring::new(s.default, 0.0),
+            scrolled: 0.0,
             t: 0.0,
             primed: false,
             lead: s.fast,
@@ -124,6 +132,8 @@ impl OsdAnim {
         self.tab_fade.restart();
         self.energy.reset(0.0);
         self.energised = 0.0;
+        self.scrollbar.reset(0.0);
+        self.scrolled = SCROLLBAR_HOLD;
         self.t = 0.0;
         self.primed = false;
     }
@@ -178,7 +188,13 @@ impl OsdAnim {
         let [left, top, right, bottom] = &mut self.key;
         edges(left, right, (to.key[0], to.key[2]), pace, dt);
         edges(top, bottom, (to.key[1], to.key[3]), pace, dt);
+        if (to.scroll - self.scroll.value()).abs() > 1.0 {
+            self.scrolled = SCROLLBAR_HOLD;
+        }
         self.scroll.update(to.scroll, dt);
+        let shown = self.scrolled > 0.0;
+        self.scrolled = (self.scrolled - dt).max(0.0);
+        self.scrollbar.update(if shown { 1.0 } else { 0.0 }, dt);
         self.echo_lift.update(to.echo_lift, dt);
         let lit = self.energised > 0.0 && !to.calm;
         self.energised = (self.energised - dt).max(0.0);
@@ -278,5 +294,25 @@ mod tests {
             a.update(&to, 1.0 / 60.0);
         }
         assert!(a.energy.value() < 0.05, "decays after release");
+    }
+
+    #[test]
+    fn the_scroll_bar_shows_on_open_and_while_scrolling_then_hides() {
+        let mut a = OsdAnim::new(&Tokens::default());
+        a.reset(1920.0);
+        let mut to = targets(0.0);
+        for _ in 0..20 {
+            a.update(&to, 1.0 / 60.0);
+        }
+        assert!(a.scrollbar.value() > 0.5, "flashes on open: {}", a.scrollbar.value());
+        for _ in 0..120 {
+            a.update(&to, 1.0 / 60.0);
+        }
+        assert!(a.scrollbar.value() < 0.01, "hidden at rest: {}", a.scrollbar.value());
+        to.scroll = 400.0;
+        for _ in 0..20 {
+            a.update(&to, 1.0 / 60.0);
+        }
+        assert!(a.scrollbar.value() > 0.5, "up while scrolling: {}", a.scrollbar.value());
     }
 }

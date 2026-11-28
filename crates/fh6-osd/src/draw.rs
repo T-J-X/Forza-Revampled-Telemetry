@@ -45,6 +45,11 @@ const VALUE_CAP: f32 = 30.0;
 const HELP_CAP: f32 = 26.0;
 const SECTION_CAP: f32 = 24.0;
 const SECTION_GAP: f32 = 76.0;
+/// Clear space above and below the focused row, outside its platter. A rounded edge mirrors
+/// what lies within about 35 px of it (`docs/specs/optics.md` §7), so with every row's own
+/// padding nothing comes within 64 px of the platter: no row and no section heading shows as a
+/// ghost in its rim.
+const FOCUS_GAP: f32 = 52.0;
 const TAB_CAP: f32 = 30.0;
 /// Smallest tab cap when the labels have to shrink to fit.
 const TAB_MIN_CAP: f32 = 26.0;
@@ -60,6 +65,10 @@ const DRIVE_TOP: f32 = 850.0;
 /// The black pool under the driving position (radii, 4K units): the renders are black
 /// upholstery and carbon, and read as a product shot on black.
 const DRIVE_POOL: Vec2 = vec2(620.0, 390.0);
+/// Clear space between the driving position and the live cluster's envelope (4K units), and the
+/// smallest scale the view is drawn at before it fades out instead.
+const DRIVE_CLEAR: f32 = 64.0;
+const DRIVE_MIN_SCALE: f32 = 0.6;
 /// The seat height the game's camera files ship with (mm, `AppConfig::default`), where the
 /// default eye's ring sits.
 const DEFAULT_SEAT_MM: f32 = -45.0;
@@ -141,6 +150,9 @@ pub struct DrawInput<'a> {
     /// The driving position's rendered layers (see [`drive::load`]); `None` draws its line
     /// drawing.
     pub drive: Option<DriveImages>,
+    /// The live cluster's layout this frame ([`live_layout`]): the driving position keeps clear
+    /// of it ([`drive_fit`]).
+    pub live: Layout,
 }
 
 /// A row's place in the scrolling content (relative to its top).
@@ -152,6 +164,8 @@ pub struct RowGeom {
     pub h: f32,
     /// A section heading sits above the row.
     pub section: bool,
+    /// Clear space kept above (and below) the row: [`FOCUS_GAP`] when it has focus.
+    pub gap: f32,
 }
 
 /// A row's height; a focused row with a help line grows so the 26 px help clears the focus rim.
@@ -159,27 +173,59 @@ fn row_height(kind: RowKind, help_shown: bool) -> f32 {
     match (kind, help_shown) {
         (RowKind::Slider(_), false) => 164.0,
         (RowKind::Slider(_), true) => 208.0,
-        (RowKind::Carousel, _) => 340.0,
+        (RowKind::Carousel, _) => 320.0,
         (RowKind::Info, false) => 124.0,
         (_, false) => 116.0,
         (_, true) => 148.0,
     }
 }
 
-/// The layout of `rows` (row `focus` focused) and the content height.
+/// Where a row's content sits below its top: the label's cap middle, the slider track or the
+/// carousel's centre, and the help line. Each kind's content is centred in its row, so on the
+/// focused platter it sits as far from the top rim as from the bottom one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct RowPlace {
+    label: f32,
+    track: f32,
+    help: f32,
+}
+
+fn row_place(kind: RowKind, help_shown: bool) -> RowPlace {
+    let (label, track, help) = match (kind, help_shown) {
+        (RowKind::Slider(_), false) => (51.0, 109.0, 0.0),
+        (RowKind::Slider(_), true) => (52.0, 110.0, 156.0),
+        (RowKind::Carousel, _) => (50.0, 200.0, 0.0),
+        (RowKind::Info, false) => (62.0, 0.0, 0.0),
+        (_, false) => (58.0, 0.0, 0.0),
+        (_, true) => (49.0, 0.0, 99.0),
+    };
+    RowPlace { label, track, help }
+}
+
+/// The layout of `rows` (row `focus` focused) and the content height. The focused row keeps
+/// [`FOCUS_GAP`] clear above and below its platter; a section heading sits above that space.
 #[must_use]
 pub fn geometry(rows: &RowList, fit: &dyn CockpitFit, edit: &EditState, focus: usize) -> ([RowGeom; MAX_ROWS], f32) {
     let mut out = [RowGeom::default(); MAX_ROWS];
-    let mut y = 0.0;
+    // The content starts below the viewport's fade, so nothing is faded before it scrolls.
+    let mut y = EDGE_FADE;
     for (i, row) in rows.as_slice().iter().enumerate() {
         let section = model::section(*row).is_some();
         if section {
             y += SECTION_GAP;
         }
-        let help_shown = i == focus && model::help(*row, edit).is_some();
+        let focused = i == focus;
+        let gap = if focused { FOCUS_GAP } else { 0.0 };
+        y += gap;
+        let help_shown = focused && model::help(*row, edit).is_some();
         let h = row_height(model::kind(*row, fit), help_shown);
-        out[i] = RowGeom { top: y, h, section };
-        y += h;
+        out[i] = RowGeom {
+            top: y,
+            h,
+            section,
+            gap,
+        };
+        y += h + gap;
     }
     (out, y)
 }
@@ -248,6 +294,9 @@ struct Ink {
     acc: Color,
     /// The same accent lifted for text.
     acc_text: Color,
+    /// The accent as the light inside the glass (the inner light and the selected tab's fill):
+    /// never so grey that the field reads as a slate or navy box.
+    field: Color,
     text: FontId,
     display: FontId,
 }
@@ -265,8 +314,17 @@ impl Ink {
     fn hair(&self) -> Color {
         self.pal.roles.hairline
     }
+    /// What is not in focus but still carries a value: unfocused slider fills and chevrons
+    /// (about sRGB 110 on black, 4:1).
+    fn quiet(&self) -> Color {
+        self.pal.roles.ink.with_alpha(QUIET_INK)
+    }
     fn accent(&self) -> Color {
         self.acc_text
+    }
+    /// Labels and instructions: 86% ink (over 4.5:1 even over the dimmed game's brightest).
+    fn label(&self) -> Color {
+        self.pal.roles.ink.with_alpha(LABEL_INK)
     }
     fn style(&self, font: FontId, cap: f32, paint: Color, align: Align) -> TextStyle {
         TextStyle::new(font, cap).paint(paint).align(align, VAlign::CapMiddle)
@@ -276,6 +334,25 @@ impl Ink {
             .paint(self.muted())
             .align(Align::Left, VAlign::CapMiddle)
     }
+}
+
+/// The quiet ink's share of full ink, and the label ink's.
+const QUIET_INK: f32 = 0.17;
+const LABEL_INK: f32 = 0.86;
+/// A dark mark on a lit accent (a switch's knob, the focused key's letter, a thumb's ring).
+fn on_accent() -> Color {
+    Color::rgb_u32(0x0A0E12)
+}
+
+/// The share of a light under the glass that reaches the screen: a fill measures about two
+/// thirds of its alpha through the platter and the bar.
+const UNDER_GLASS: f32 = 0.67;
+
+/// The alpha at which `field` under the glass shows at relative luminance `target` over black,
+/// within `lo..=hi`: a dark accent gets more and a light one less, so the selected tab and the
+/// focus light keep their contrast whatever the palette.
+fn lit_alpha(field: Color, target: f32, lo: f32, hi: f32) -> f32 {
+    (target / (UNDER_GLASS * field.luminance().max(1e-3))).clamp(lo, hi)
 }
 
 /// How dark the game is dimmed behind the OSD. The Phase 3 direction pairs about 45% black with
@@ -333,9 +410,10 @@ impl Pools {
 }
 
 /// This frame's pools, in target pixels. `live_pool` is false while the real dash blocker
-/// stands under the live cluster ([`live_backing`]): the blocker is the backing then.
+/// stands under the live cluster ([`live_backing`]): the blocker is the backing then. The
+/// driving position's pool shrinks with it above a raised cluster ([`drive_fit`]).
 #[must_use]
-pub fn pools(anim: &OsdAnim, frame: Frame, layout: &Layout, live_pool: bool) -> Pools {
+pub fn pools(anim: &OsdAnim, frame: Frame, layout: &Layout, cfg: &AppConfig, live_pool: bool) -> Pools {
     let open = anim.open.progress().clamp(0.0, 1.0);
     // The live-zone overlays and the panel fade in on this ease ([`ui`]), and their pools with
     // them.
@@ -360,11 +438,12 @@ pub fn pools(anim: &OsdAnim, frame: Frame, layout: &Layout, live_pool: bool) -> 
         radii: vec2(700.0, 330.0) * k,
         alpha: ECHO_SCRIM * eased,
     });
-    let shown = lift.clamp(0.0, 1.0);
+    let (scale, fade) = drive_fit(layout, frame, seat_mm(cfg));
+    let shown = lift.clamp(0.0, 1.0) * fade;
     if shown > 0.001 {
         pools.push(Pool::Ellipse {
-            center: vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5) * k,
-            radii: DRIVE_POOL * k,
+            center: vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5 * scale) * k,
+            radii: DRIVE_POOL * scale * k,
             alpha: ECHO_SCRIM * shown * eased,
         });
     }
@@ -411,6 +490,7 @@ pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
         pal,
         acc,
         acc_text,
+        field: field_colour(acc),
         text: p.fonts().role(FontRole::Text),
         display: p.fonts().role(FontRole::Display),
     };
@@ -429,7 +509,7 @@ pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
 
 fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let x = 160.0;
-    p.text(vec2(x, 196.0), "Live view", &ink.section());
+    p.text(vec2(x, 196.0), "Live view", &ink.section().paint(ink.label()));
     p.text(
         vec2(x, 270.0),
         inp.live_name,
@@ -445,7 +525,7 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     p.text(
         vec2(x + 32.0, 342.0),
         line.as_str(),
-        &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left),
+        &ink.style(ink.text, HINT_CAP, ink.label(), Align::Left),
     );
 
     let cx = inp.frame.live_centre_x();
@@ -454,11 +534,7 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         Mode::Keyboard => {
             p.text(vec2(cx, 740.0), "Custom name", &centered(ink.section()));
             let name = inp.ctl.keyboard().text.as_str();
-            p.text(
-                vec2(cx, 860.0),
-                if name.is_empty() { " " } else { name },
-                &ink.style(ink.display, 96.0, ink.ink(), Align::Center),
-            );
+            echo_value(p, ink, vec2(cx, 860.0), name, "", ink.ink());
         }
         Mode::Remap => {
             p.text(vec2(cx, 740.0), "New OSD button", &centered(ink.section()));
@@ -469,16 +545,8 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             } else {
                 remap::mask_label(cand, &mut l);
             }
-            p.text(
-                vec2(cx, 860.0),
-                l.as_str(),
-                &ink.style(
-                    ink.display,
-                    96.0,
-                    if cand == 0 { ink.muted() } else { ink.ink() },
-                    Align::Center,
-                ),
-            );
+            let paint = if cand == 0 { ink.muted() } else { ink.ink() };
+            echo_value(p, ink, vec2(cx, 860.0), l.as_str(), "", paint);
         }
     }
 }
@@ -506,36 +574,80 @@ fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
     );
     let mut value = Line::new();
     model::format_value(row, ctx, &mut value);
-    p.text(
-        vec2(cx, 860.0 - up),
-        value.as_str(),
-        &ink.style(ink.display, 110.0, ink.ink(), Align::Center),
-    );
-    if let RowKind::Slider(spec) = model::kind(row, inp.fit) {
+    let kind = model::kind(row, inp.fit);
+    let unit = if let RowKind::Slider(spec) = kind {
+        spec.unit
+    } else {
+        ""
+    };
+    echo_value(p, ink, vec2(cx, 860.0 - up), value.as_str(), unit, ink.ink());
+    if let RowKind::Slider(spec) = kind {
         let f = spec.fraction(model::slider_value(row, ctx));
         let track = Rect::from_xywh(cx - 360.0, 966.0 - up, 720.0, 8.0);
-        p.fill(&Shape::round_rect(track, 4.0), ink.ghost());
-        p.fill(
-            &Shape::round_rect(Rect::from_xywh(track.min.x, track.min.y, 720.0 * f, 8.0), 4.0),
-            ink.acc,
-        );
+        if row == RowId::Hue {
+            // The Hue row's track is the spectrum, and so is its mirror.
+            p.fill(&Shape::round_rect(track, 4.0), hue_track(track));
+            p.fill(
+                &Shape::circle(vec2(track.min.x + track.width() * f, track.center().y), 10.0),
+                ink.ink(),
+            );
+        } else {
+            p.fill(&Shape::round_rect(track, 4.0), ink.quiet());
+            p.fill(
+                &Shape::round_rect(Rect::from_xywh(track.min.x, track.min.y, 720.0 * f, 8.0), 4.0),
+                ink.acc,
+            );
+        }
     }
-    if let Some(help) = model::help(row, &inp.ctl.edit) {
-        p.text(
-            vec2(cx, 1030.0 - up),
-            help,
-            &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Center),
-        );
-    }
+    // The help line is on the focused platter, beside the control it explains; the echo shows
+    // the value and what it changes.
     if row == RowId::ClusterHeight {
         default_height_line(p, inp, ink);
     }
 }
 
+/// The echo's value, its cap middle at `centre`: digits at 110 px, a unit made of letters
+/// ("mm", "px") at half size in secondary ink beside them (as a cluster sets "MPH"), and a name
+/// wider than [`ECHO_NAME_W`] at 84 px, so a long word never outweighs the live cluster.
+fn echo_value(p: &mut Painter<'_>, ink: &Ink, centre: Vec2, text: &str, unit: &str, paint: Color) {
+    let unit = unit.trim_start();
+    let (number, unit) = match text.strip_suffix(unit) {
+        Some(n) if !unit.is_empty() && unit.chars().all(char::is_alphabetic) => (n.trim_end(), unit),
+        _ => (if text.is_empty() { " " } else { text }, ""),
+    };
+    let baseline = centre.y + ECHO_CAP * 0.5;
+    let mut style = ink.style(ink.display, ECHO_CAP, paint, Align::Left);
+    style.valign = VAlign::Baseline;
+    let mut w = p.measure(number, &style).width;
+    if !number.chars().any(|c| c.is_ascii_digit()) && w > ECHO_NAME_W {
+        style.cap = ECHO_NAME_CAP;
+        w = p.measure(number, &style).width;
+    }
+    let mut unit_style = ink.style(ink.text, ECHO_CAP * 0.5, ink.muted(), Align::Left);
+    unit_style.valign = VAlign::Baseline;
+    let gap = 18.0;
+    let unit_w = if unit.is_empty() {
+        0.0
+    } else {
+        gap + p.measure(unit, &unit_style).width
+    };
+    let x0 = centre.x - (w + unit_w) * 0.5;
+    p.text(vec2(x0, baseline), number, &style);
+    if !unit.is_empty() {
+        p.text(vec2(x0 + w + gap, baseline), unit, &unit_style);
+    }
+}
+
+/// The echo value's cap, a name's cap, and how wide a name may be at the full cap.
+const ECHO_CAP: f32 = 110.0;
+const ECHO_NAME_CAP: f32 = 84.0;
+const ECHO_NAME_W: f32 = 420.0;
+
 /// The driving position under the lifted echo (see [`crate::drive`]) at opacity `shown`: the
 /// seat and the eye at the seat height, the wheel at its offset, and the cockpit FOV's fan. The
 /// part the focused row moves is the one in the accent; on the hood and chase FOV rows nothing
-/// in the view is theirs, so it stays in secondary ink as context.
+/// in the view is theirs, so it stays in secondary ink as context. Above a raised or enlarged
+/// cluster it shrinks to keep clear of it ([`drive_fit`]).
 fn driving_position(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Option<RowId>, cx: f32, shown: f32) {
     if shown <= 0.001 {
         return;
@@ -550,24 +662,55 @@ fn driving_position(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Op
     // The rows' own ranges: a hand-edited config can hold any finite value, and the view's
     // clearances (the fan under the echo, the legend under the wheel) are proven for these.
     let state = drive::DriveState {
-        seat_mm: (cfg.driver_seat_height_m * 1000.0).clamp(model::SEAT.min, model::SEAT.max),
+        seat_mm: seat_mm(cfg),
         wheel_mm: (cfg.steering_wheel_offset_y_m * 1000.0).clamp(model::WHEEL.min, model::WHEEL.max),
         default_seat_mm: DEFAULT_SEAT_MM,
         fov_deg: cfg.wheel_less_cockpit_fov,
         focus,
         energy: inp.anim.energy.value(),
     };
+    let (scale, fade) = drive_fit(&inp.live, inp.frame, state.seat_mm);
+    let shown = shown * fade;
+    if shown <= 0.001 {
+        return;
+    }
     let look = drive::Look {
         accent: ink.acc,
         muted: ink.muted(),
         ghost: ink.ghost(),
         text: ink.text,
     };
+    // Scaled about the middle of its top edge, which stays under the lifted echo.
+    let top = vec2(cx, DRIVE_TOP);
+    p.save();
+    p.translate(top);
+    p.scale(scale);
+    p.translate(-top);
     let origin = vec2(cx - drive::VIEW.x * 0.5, DRIVE_TOP);
     drive::draw(p, origin, inp.drive, &state, &look, shown);
+    p.restore();
 }
 
-/// A dashed line where the cluster sits at height offset 0, across the live zone.
+/// The seat height the view shows (mm), within the Seat height row's range.
+fn seat_mm(cfg: &AppConfig) -> f32 {
+    (cfg.driver_seat_height_m * 1000.0).clamp(model::SEAT.min, model::SEAT.max)
+}
+
+/// How the driving position fits above the live cluster laid out by `live`, with the seat at
+/// `seat_mm`: the scale it is drawn at (1 at full size), so that its lowest point keeps
+/// [`DRIVE_CLEAR`] above the cluster's envelope, and its opacity (it fades out rather than
+/// shrink below [`DRIVE_MIN_SCALE`]). At the default anchor, height and scale it is (1, 1).
+#[must_use]
+pub fn drive_fit(live: &Layout, frame: Frame, seat_mm: f32) -> (f32, f32) {
+    let cluster_top = live.to_target(vec2(0.0, live.envelope.min.y)).y / frame.k.max(1e-6);
+    let room = cluster_top - DRIVE_CLEAR - DRIVE_TOP;
+    let scale = (room / drive::bottom_at(seat_mm)).clamp(0.0, 1.0);
+    let fade = fh6_kit::math::smoothstep(DRIVE_MIN_SCALE - 0.1, DRIVE_MIN_SCALE, scale);
+    (scale, fade)
+}
+
+/// A dashed line where the cluster sits at height offset 0, across the live zone, named at its
+/// right end (its left end lies on the game's minimap).
 fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     // The edited view's anchor (Phase 8 per-view placement); a car profile may move it, and the
     // line follows what the live view really uses.
@@ -582,7 +725,9 @@ fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         p.fill(&Shape::line(vec2(x, y), vec2((x + 28.0).min(x1), y), 3.0), ink.muted());
         x += 48.0;
     }
-    p.text(vec2(200.0, y - 36.0), "Default height", &ink.section());
+    let mut style = ink.section().paint(ink.label());
+    style.align = Align::Right;
+    p.text(vec2(x1, y - 36.0), "Default height", &style);
 }
 
 // ----- panel --------------------------------------------------------------------------------
@@ -609,6 +754,9 @@ const NOTICE_H: f32 = 60.0;
 /// The selected tab's fill, under the tab bar's glass: padding round the label and height.
 const TAB_FILL_PAD: f32 = 30.0;
 const TAB_FILL_H: f32 = 68.0;
+/// The selected tab's fill shows at this relative luminance (3:1 on the bar's face needs 0.115;
+/// over 0.15 its label drops under 4.5:1).
+const TAB_LUM: f32 = 0.13;
 /// Black pool behind the control column: core opacity and softness.
 const POOL_ALPHA: f32 = 0.78;
 const POOL_SIGMA: f32 = 90.0;
@@ -638,26 +786,43 @@ fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32, lean_y: f3
     glass
 }
 
-/// The inner light's strength at mid height and at the floor, and how much the energise light
-/// adds on top (a share of it) while a value changes.
+/// The inner light's strength at mid height of its band and at the floor (the platter's and a
+/// key cap's), how much the energise light adds on top (a share of it) while a value changes,
+/// and the height of the band it rises in from the floor: a tall platter stays clear glass
+/// above it, whatever the accent.
 const INNER_MID: f32 = 0.05;
 const INNER_FLOOR: f32 = 0.20;
 const ENERGY_GAIN: f32 = 0.5;
+const INNER_BAND: f32 = 120.0;
+/// The relative luminance the floor of the inner light shows at (over 3:1 against the dark
+/// column whatever the accent), the most it reaches while energised (full ink stays over 4:1 on
+/// it), and the height of the flat lit band at the floor.
+const FLOOR_LUM: f32 = 0.15;
+const FLOOR_LUM_MAX: f32 = 0.19;
+const FLOOR_BAND: f32 = 24.0;
 
-/// Corner radius of a keyboard key (its glass cap when focused).
+/// Corner radius of a keyboard key (its glass cap when focused), and the focused key's accent
+/// face (its dark letter is over 10:1 on it).
 const KEY_R: f32 = 18.0;
+const KEY_FACE: f32 = 0.9;
 
-/// The light a focused piece gives from within: a glow rising from its floor, under the glass,
-/// so the rounded edge bends a band of it into the rim (Liquid Glass "illuminates from within").
-/// `energy` (0..1) raises it while a value is being changed.
+/// The light a focused piece gives from within: a glow rising from its floor through the bottom
+/// [`INNER_BAND`], under the glass, so the rounded edge bends a band of it into the rim (Liquid
+/// Glass "illuminates from within"). `energy` (0..1) raises it while a value is being changed.
 fn inner_light(p: &mut Painter<'_>, rect: Rect, radius: f32, ink: &Ink, energy: f32) {
     let lift = 1.0 + ENERGY_GAIN * energy.clamp(0.0, 1.0);
+    let floor = lit_alpha(ink.field, FLOOR_LUM, INNER_FLOOR, 0.6);
+    let floor = (floor * lift).min(lit_alpha(ink.field, FLOOR_LUM_MAX, INNER_FLOOR, 0.8));
+    // A short platter keeps its upper part clear: the band rises at most halfway up it.
+    let band = rect.max.y - INNER_BAND.min(rect.height() * 0.5);
+    let flat = 1.0 - FLOOR_BAND / (rect.max.y - band).max(FLOOR_BAND);
     p.fill(
         &Shape::round_rect(rect, radius),
-        Gradient::linear(vec2(0.0, rect.min.y), vec2(0.0, rect.max.y))
-            .stop(0.0, ink.acc.with_alpha(0.0))
-            .stop(0.55, ink.acc.with_alpha(INNER_MID * lift))
-            .stop(1.0, ink.acc.with_alpha(INNER_FLOOR * lift)),
+        Gradient::linear(vec2(0.0, band), vec2(0.0, rect.max.y))
+            .stop(0.0, ink.field.with_alpha(0.0))
+            .stop(0.55 * flat, ink.field.with_alpha(INNER_MID * lift))
+            .stop(flat, ink.field.with_alpha(floor))
+            .stop(1.0, ink.field.with_alpha(floor)),
     );
 }
 
@@ -713,7 +878,7 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         let style = ink.style(ink.text, HINT_CAP, ink.ink(), Align::Center);
         let w = p.measure(n, &style).width + 72.0;
         let pill = Rect::from_center_size(vec2((CX0 + CX1) * 0.5, NOTICE_Y), vec2(w, NOTICE_H));
-        p.fill(&Shape::round_rect(pill, NOTICE_H * 0.5), ink.acc.with_alpha(0.18));
+        p.fill(&Shape::round_rect(pill, NOTICE_H * 0.5), ink.field.with_alpha(0.18));
         p.text(pill.center(), n, &style);
         pill
     });
@@ -726,9 +891,10 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         vec2(left, TABS_Y - TAB_FILL_H * 0.5),
         vec2(right, TABS_Y + TAB_FILL_H * 0.5),
     );
+    // At least 3:1 against the bar's face whatever the accent ([`lit_alpha`]).
     p.fill(
         &Shape::round_rect(fill, TAB_FILL_H * 0.5),
-        ink.acc.with_alpha(0.22 * tab_k),
+        ink.field.with_alpha(lit_alpha(ink.field, TAB_LUM, 0.22, 0.6) * tab_k),
     );
     let (centres, _, cap) = tab_slots(p.fonts());
     for (i, tab) in Tab::ALL.into_iter().enumerate() {
@@ -791,13 +957,20 @@ fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     });
 }
 
-/// How much of a row (or its section heading) shows inside the viewport, eased: rows fade at
-/// the viewport edges instead of being cut through a slider.
+/// How much of a row (or its section heading) shows at the viewport's edges: it fades as it
+/// nears the top or the bottom and is gone by the time the edge would cut it, so no knob or
+/// glyph is ever sliced by a straight line.
 fn edge_fade(top: f32, bottom: f32) -> f32 {
-    let h = (bottom - top).max(1.0);
-    let shown = (bottom.min(ROWS_Y1) - top.max(ROWS_Y0 - 12.0)).max(0.0) / h;
-    fh6_kit::math::smoothstep(0.55, 0.98, shown)
+    let from_top = fh6_kit::math::smoothstep(ROWS_Y0 - 12.0, ROWS_Y0 + EDGE_FADE, top);
+    let from_bottom = 1.0 - fh6_kit::math::smoothstep(ROWS_Y1 - EDGE_FADE, ROWS_Y1, bottom);
+    from_top * from_bottom
 }
+
+/// How far from the viewport's edges a row fades out (4K units).
+const EDGE_FADE: f32 = 40.0;
+/// The scroll bar: its x (64 px clear of the glass) and its share of secondary ink.
+const SCROLL_X: f32 = GLASS_X1 + 64.0;
+const SCROLL_INK: f32 = 0.5;
 
 fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let fit = inp.fit;
@@ -820,15 +993,17 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     for (i, row) in list.as_slice().iter().enumerate() {
         let g = geo[i];
         let top = ROWS_Y0 + g.top - scroll;
-        if top + g.h < ROWS_Y0 - SECTION_GAP || top > ROWS_Y1 {
+        if top + g.h < ROWS_Y0 - SECTION_GAP - g.gap || top > ROWS_Y1 {
             continue;
         }
         if let Some(sec) = model::section(*row) {
-            let k = edge_fade(top - SECTION_GAP + 20.0, top - 14.0);
+            // Above the clear space a focused row keeps, so it stays 64 px from the platter.
+            let y = top - g.gap - 30.0;
+            let k = edge_fade(y - 18.0, y + 18.0);
             if k > 0.01 {
                 p.save();
                 p.set_opacity(k);
-                p.text(vec2(TX, top - 30.0), sec, &ink.section());
+                p.text(vec2(TX, y), sec, &ink.section());
                 p.restore();
             }
         }
@@ -841,17 +1016,18 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         }
     }
 
-    if total > visible {
-        let bar_x = CX1 + 36.0;
+    // The scroll bar shows for a moment after the list moves, and only when it scrolls.
+    let shown = inp.anim.scrollbar.value().clamp(0.0, 1.0);
+    if total > visible && shown > 0.01 {
         p.fill(
-            &Shape::line(vec2(bar_x, ROWS_Y0), vec2(bar_x, ROWS_Y1), 3.0),
-            ink.hair(),
+            &Shape::line(vec2(SCROLL_X, ROWS_Y0), vec2(SCROLL_X, ROWS_Y1), 3.0),
+            ink.quiet().fade(shown),
         );
         let h = visible * visible / total;
         let y = ROWS_Y0 + (visible - h) * (scroll / (total - visible).max(1.0)).clamp(0.0, 1.0);
         p.fill(
-            &Shape::round_rect(Rect::from_xywh(bar_x - 3.0, y, 6.0, h), 3.0),
-            ink.muted(),
+            &Shape::round_rect(Rect::from_xywh(SCROLL_X - 3.0, y, 6.0, h), 3.0),
+            ink.muted().fade(SCROLL_INK * shown),
         );
     }
     p.restore();
@@ -873,16 +1049,25 @@ fn hue_track(rect: Rect) -> Gradient {
     g
 }
 
+/// A slider's knob: its radius on the focused row and on the others.
+const KNOB_R: f32 = 22.0;
+const KNOB_R_QUIET: f32 = 15.0;
+
+/// The values a slider row starts from in a fresh config, where its track marks the default
+/// (the menu has no reset button: A, B, X and Y stay with the gearbox).
+fn defaults() -> &'static AppConfig {
+    static DEFAULTS: std::sync::OnceLock<AppConfig> = std::sync::OnceLock::new();
+    DEFAULTS.get_or_init(AppConfig::default)
+}
+
 fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top: f32, focused: bool) {
     let ctx = inp.ctl.ctx(inp.cfg, inp.fit);
     let kind = model::kind(row, inp.fit);
-    let ly = top + 46.0;
-    let label_paint = if focused {
-        ink.ink()
-    } else {
-        ink.pal.roles.ink.with_alpha(0.86)
-    };
-    p.text(
+    let help = if focused { model::help(row, &inp.ctl.edit) } else { None };
+    let place = row_place(kind, help.is_some());
+    let ly = top + place.label;
+    let label_paint = if focused { ink.ink() } else { ink.label() };
+    let label = p.text(
         vec2(TX, ly),
         model::label(row, inp.fit),
         &ink.style(ink.text, LABEL_CAP, label_paint, Align::Left),
@@ -896,41 +1081,83 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
     match kind {
         RowKind::Slider(spec) => {
             p.text(vec2(VX, ly), value.as_str(), &vstyle);
-            let f = spec.fraction(model::slider_value(row, ctx));
-            let w = VX - TX;
-            let ty = top + 104.0;
-            let track = Rect::from_xywh(TX, ty - 5.0, w, 10.0);
+            let ty = top + place.track;
+            let track = Rect::from_xywh(TX, ty - 5.0, VX - TX, 10.0);
+            // The knob travels inside the track, so at either end it stays within the column.
+            let x_at = |v: f32| TX + KNOB_R + (VX - TX - 2.0 * KNOB_R) * spec.fraction(v);
+            let thumb = vec2(x_at(model::slider_value(row, ctx)), ty);
+            let colour_row = matches!(row, RowId::Hue | RowId::Saturation | RowId::Brightness);
             if row == RowId::Hue {
+                // On a dark bed, so its blue-to-magenta half keeps a body over the platter's light.
+                let bed = track.expand(4.0);
+                p.fill(&Shape::round_rect(bed, 9.0), Color::BLACK.with_alpha(0.7));
                 p.fill(&Shape::round_rect(track, 5.0), hue_track(track));
             } else {
-                p.fill(&Shape::round_rect(track, 5.0), ink.ghost());
-                p.fill(
-                    &Shape::round_rect(Rect::from_xywh(TX, ty - 5.0, w * f, 10.0), 5.0),
-                    ink.acc,
-                );
-            }
-            let thumb = vec2(TX + w * f, ty);
-            if focused {
-                p.glow(&Shape::circle(thumb, 22.0), ink.acc, Glow::new(14.0, 0.5));
-            }
-            p.fill(&Shape::circle(thumb, 22.0), ink.ink());
-            if focused {
-                if let Some(help) = model::help(row, &inp.ctl.edit) {
-                    p.text(
-                        vec2(TX, top + 150.0),
-                        help,
-                        &ink.style(ink.text, HELP_CAP, ink.muted(), Align::Left),
+                // The unfilled part is an outlined slot (over 3:1 on the platter too); only the
+                // focused row is in the accent, the others keep their value in quiet ink.
+                // Unfocused, the unfilled part is a 2 px line, so filled and unfilled differ by
+                // shape as well as by ink.
+                if focused {
+                    p.fill(&Shape::round_rect(track, 5.0), ink.ghost());
+                    p.stroke(&Shape::round_rect(track, 5.0), ink.muted(), Stroke::inner(2.0));
+                } else {
+                    p.fill(
+                        &Shape::line(vec2(thumb.x, ty), vec2(track.max.x - 1.0, ty), 2.0),
+                        ink.quiet(),
                     );
                 }
+                p.fill(
+                    &Shape::round_rect(Rect::from_points(track.min, vec2(thumb.x, track.max.y)), 5.0),
+                    if focused { ink.acc } else { ink.quiet() },
+                );
+            }
+            if !colour_row {
+                let at = x_at(model::slider_value(row, inp.ctl.ctx(defaults(), inp.fit)));
+                p.fill(
+                    &Shape::round_rect(Rect::from_xywh(at - 1.0, ty - 14.0, 2.0, 28.0), 1.0),
+                    ink.muted(),
+                );
+            }
+            if focused {
+                // The energise light: only while the value changes (no ring, no glow at rest).
+                let energy = inp.anim.energy.value().clamp(0.0, 1.0);
+                if energy > 0.01 {
+                    p.glow(&Shape::circle(thumb, KNOB_R), ink.acc, Glow::new(10.0, 0.5 * energy));
+                }
+                // A dark ring keeps the knob apart from its own glow with any accent.
+                p.fill(&Shape::circle(thumb, KNOB_R + 2.0), on_accent());
+                p.fill(&Shape::circle(thumb, KNOB_R), ink.ink());
+            } else {
+                // Opaque, so the default tick never shows through it.
+                p.fill(&Shape::circle(thumb, KNOB_R_QUIET), Color::BLACK);
+                p.fill(&Shape::circle(thumb, KNOB_R_QUIET), ink.muted());
+            }
+            if let Some(help) = help {
+                p.text(
+                    vec2(TX, top + place.help),
+                    help,
+                    &ink.style(ink.text, HELP_CAP, ink.ink(), Align::Left),
+                );
             }
             return;
         }
         RowKind::Toggle => {
             let on = model::toggle_value(row, inp.cfg);
             let pill = Rect::from_xywh(VX - 96.0, ly - 24.0, 96.0, 48.0);
-            p.fill(&Shape::round_rect(pill, 24.0), if on { ink.acc } else { ink.ghost() });
+            // On and focused: a dark knob on the lit pill. On and unfocused: an ink knob on a
+            // dimmed pill. Off: an outlined pill with the knob at the left. Each over 3:1.
+            let (pill_paint, knob_paint) = match (on, focused) {
+                (true, true) => (ink.acc, on_accent()),
+                (true, false) => (ink.acc.fade(0.4), ink.ink()),
+                (false, _) => (ink.ghost(), ink.muted()),
+            };
+            p.fill(&Shape::round_rect(pill, 24.0), pill_paint);
+            if !on {
+                let outline = if focused { ink.muted() } else { ink.quiet() };
+                p.stroke(&Shape::round_rect(pill, 24.0), outline, Stroke::inner(2.0));
+            }
             let knob = vec2(if on { pill.max.x - 24.0 } else { pill.min.x + 24.0 }, ly);
-            p.fill(&Shape::circle(knob, 18.0), if on { ink.ink() } else { ink.muted() });
+            p.fill(&Shape::circle(knob, 18.0), knob_paint);
             p.text(
                 vec2(pill.min.x - 24.0, ly),
                 value.as_str(),
@@ -940,7 +1167,7 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
         RowKind::Choice | RowKind::Carousel => {
             // Both chevrons always show (left and right adjust this row); accent when focused.
             let r = p.text(vec2(VX, ly), value.as_str(), &vstyle);
-            let chev = if focused { ink.accent() } else { ink.ghost() };
+            let chev = if focused { ink.accent() } else { ink.quiet() };
             chevron(p, vec2(chevron_tip, ly), 1.0, chev);
             chevron(p, vec2(r.min.x - 30.0, ly), -1.0, chev);
         }
@@ -961,15 +1188,14 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
         }
     }
     if kind == RowKind::Carousel {
-        carousel(p, inp, ink, top);
-    } else if focused {
-        if let Some(help) = model::help(row, &inp.ctl.edit) {
-            p.text(
-                vec2(TX, top + 96.0),
-                help,
-                &ink.style(ink.text, HELP_CAP, ink.muted(), Align::Left),
-            );
-        }
+        carousel(p, inp, ink, top + place.track, vec2(label.max.x + 28.0, ly), focused);
+    } else if let Some(help) = help {
+        // On the lit platter secondary ink drops under 4.5:1: help is in full ink.
+        p.text(
+            vec2(TX, top + place.help),
+            help,
+            &ink.style(ink.text, HELP_CAP, ink.ink(), Align::Left),
+        );
     }
 }
 
@@ -978,12 +1204,16 @@ fn chevron(p: &mut Painter<'_>, tip: Vec2, dir: f32, paint: Color) {
     p.fill(&Shape::Polygon { points: &pts }, paint);
 }
 
-/// Live thumbnails of the neighbouring clusters (−2..=+2), the selected one larger.
-fn carousel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, top: f32) {
+/// Live thumbnails of the neighbouring clusters (−2..=+2) round `cy`, the selected one larger,
+/// 52 px inside the platter's outline at both ends; the "n / 48" counter follows the row's
+/// label (`counter_at`: its left end and cap middle).
+fn carousel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cy: f32, counter_at: Vec2, focused: bool) {
     const BIG: Vec2 = vec2(330.0, 176.0);
-    const SMALL: Vec2 = vec2(192.0, 112.0);
+    const SMALL: Vec2 = vec2(178.0, 104.0);
     const GAP: f32 = 16.0;
-    let cy = top + 196.0;
+    // Text under this size in a thumbnail draws as a grey bar: thumbnails keep the gear, the
+    // speed and the shapes.
+    const THUMB_MIN_TEXT_PX: f32 = 12.0;
     let mid = (CX0 + CX1) * 0.5;
     let offsets = [
         -(BIG.x * 0.5 + GAP + SMALL.x * 1.5 + GAP),
@@ -1005,19 +1235,21 @@ fn carousel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, top: f32) {
             let c = world.apply(centre + vec2(0.0, size.y * 0.06));
             // Thumbnails skip their glass backdrops: each would copy and blur the whole frame.
             p.set_backdrops(false);
+            p.set_min_text_px(THUMB_MIN_TEXT_PX * world.scale_factor());
             p.set_transform(Affine::scale(s).then(&Affine::translate(c)));
             let layout = Layout::centered(c, s, inp.frame.size);
             t.cluster.draw(p, &layout);
             p.restore();
         }
-        if i == 2 {
-            // Selection, not focus: a plain white rim (the row ring is the only accent glow).
+        if i == 2 && focused {
+            // Selection inside the focused row: a plain white rim (the platter is the focus).
             p.stroke(
                 &Shape::round_rect(rect, 18.0),
                 ink.ink().with_alpha(0.78),
                 Stroke::inner(2.0),
             );
         } else {
+            // Unfocused, the selected thumbnail's size alone marks it: no second ring.
             p.stroke(&Shape::round_rect(rect, 18.0), ink.hair(), Stroke::rim_px(1.0));
         }
     }
@@ -1026,10 +1258,11 @@ fn carousel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, top: f32) {
     let idx = all.iter().position(|t| *t == theme).unwrap_or(0) + 1;
     let mut l = Line::new();
     let _ = write!(l, "{idx} / {}", all.len());
+    let paint = if focused { ink.ink() } else { ink.muted() };
     p.text(
-        vec2(mid, cy + BIG.y * 0.5 + 34.0),
+        counter_at,
         l.as_str(),
-        &ink.style(ink.text, 24.0, ink.muted(), Align::Center),
+        &ink.style(ink.text, HELP_CAP, paint, Align::Left),
     );
 }
 
@@ -1040,8 +1273,9 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         "Custom name",
         &ink.style(ink.text, 34.0, ink.ink(), Align::Left),
     );
+    // A hairline field: the focused key and its glass cap are the strong edges here.
     let field = Rect::from_xywh(CX0, ROWS_Y0 + 92.0, CX1 - CX0, 128.0);
-    p.stroke(&Shape::round_rect(field, 26.0), ink.accent(), Stroke::inner(2.0));
+    p.stroke(&Shape::round_rect(field, 26.0), ink.hair(), Stroke::rim_px(1.0));
     let text_style = ink.style(ink.display, 58.0, ink.ink(), Align::Left);
     let r = p.text(
         vec2(field.min.x + 36.0, field.center().y),
@@ -1067,8 +1301,9 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         &ink.style(ink.text, 24.0, ink.muted(), Align::Right),
     );
 
-    // The focused key lights from within under its glass cap, which glides between keys.
-    inner_light(p, key_cap(inp), KEY_R, ink, inp.anim.energy.value());
+    // The focused key is the accent under its glass cap, which glides between keys, with its
+    // letter dark and larger; the others are outlined, their letters in secondary ink.
+    p.fill(&Shape::round_rect(key_cap(inp), KEY_R), ink.acc.with_alpha(KEY_FACE));
     let mut buf = [0u8; 4];
     for row in 0..keyboard::ROWS {
         let mut col = 0u8;
@@ -1081,15 +1316,32 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             if !focused {
                 p.stroke(&shape, ink.hair(), Stroke::rim_px(1.0));
             }
-            let (label, style) = match key {
-                Key::Char(c) => (
-                    &*c.encode_utf8(&mut buf),
-                    ink.style(ink.display, if focused { 46.0 } else { 40.0 }, ink.ink(), Align::Center),
-                ),
-                Key::Case if kb.caps => ("CAPS", ink.style(ink.text, 24.0, ink.accent(), Align::Center)),
-                other => (other.label(), ink.style(ink.text, 26.0, ink.ink(), Align::Center)),
-            };
-            p.text(rect.center(), label, &style);
+            let paint = if focused { on_accent() } else { ink.muted() };
+            match key {
+                Key::Char(c) => {
+                    let cap = if focused { 46.0 } else { 40.0 };
+                    p.text(
+                        rect.center(),
+                        c.encode_utf8(&mut buf),
+                        &ink.style(ink.display, cap, paint, Align::Center),
+                    );
+                }
+                Key::Case if kb.caps => {
+                    // Caps on: a lit dot and the words, so the state never rests on colour.
+                    let style = ink.style(ink.text, 24.0, ink.ink(), Align::Left);
+                    let w = p.measure("Caps on", &style).width;
+                    let x0 = rect.center().x - (w + 26.0) * 0.5;
+                    p.fill(&Shape::circle(vec2(x0 + 8.0, rect.center().y), 8.0), ink.acc);
+                    p.text(vec2(x0 + 26.0, rect.center().y), "Caps on", &style);
+                }
+                other => {
+                    p.text(
+                        rect.center(),
+                        other.label(),
+                        &ink.style(ink.text, 26.0, paint, Align::Center),
+                    );
+                }
+            }
             col = first + span;
         }
     }
@@ -1103,45 +1355,32 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         "Hold the new OSD button",
         &ink.style(ink.text, 36.0, ink.ink(), Align::Left),
     );
+    let note = ink.style(ink.text, HINT_CAP, ink.label(), Align::Left);
     p.text(
         vec2(TX, ROWS_Y0 + 104.0),
-        "Hold it for 1 second. A, B, X, Y and the D-pad are ignored.",
-        &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left),
+        "View, Menu, L3, R3 or Guide, or LB or RB with another button.",
+        &note,
     );
-    let card = Rect::from_xywh(CX0, ROWS_Y0 + 170.0, CX1 - CX0, 420.0);
-    p.stroke(&Shape::round_rect(card, 32.0), ink.hair(), Stroke::rim_px(1.0));
-    let cand = cap.candidate();
-    let mut l = Line::new();
-    if cand == 0 {
-        let _ = l.write_str("Waiting for a button");
-    } else {
-        remap::mask_label(cand, &mut l);
-    }
     p.text(
-        vec2(mid, card.min.y + 140.0),
-        l.as_str(),
-        &ink.style(
-            ink.display,
-            76.0,
-            if cand == 0 { ink.muted() } else { ink.ink() },
-            Align::Center,
-        ),
+        vec2(TX, ROWS_Y0 + 152.0),
+        "A, B, X, Y and the D-pad are ignored.",
+        &note,
     );
+    // No card and no second copy of the combination: the echo on the left shows it large.
     let prog = cap.progress(inp.now);
-    let bar = Rect::from_xywh(mid - 400.0, card.min.y + 250.0, 800.0, 14.0);
-    p.fill(&Shape::round_rect(bar, 7.0), ink.ghost());
+    let bar = Rect::from_xywh(mid - 400.0, ROWS_Y0 + 260.0, 800.0, 14.0);
     p.text(vec2(bar.min.x, bar.min.y - 30.0), "Hold", &ink.section());
+    p.fill(&Shape::round_rect(bar, 7.0), ink.quiet());
     if prog > 0.0 {
-        p.layer(LayerOptions::bloom(), |p| {
-            p.fill(
-                &Shape::round_rect(Rect::from_xywh(bar.min.x, bar.min.y, 800.0 * prog, 14.0), 7.0),
-                ink.acc,
-            );
-        });
+        // A plain fill: the hold reads by its length, with no bloom past the bar.
+        p.fill(
+            &Shape::round_rect(Rect::from_xywh(bar.min.x, bar.min.y, 800.0 * prog, 14.0), 7.0),
+            ink.acc,
+        );
     }
     if let Some(msg) = cap.message {
         p.text(
-            vec2(mid, card.min.y + 330.0),
+            vec2(mid, bar.max.y + 70.0),
             msg,
             &ink.style(ink.text, 26.0, ink.pal.roles.caution, Align::Center),
         );
@@ -1151,52 +1390,68 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     remap::mask_label(inp.cfg.osd_toggle_mask, &mut cur);
     let _ = write!(cur, "   ·   {:.0} s left", cap.remaining(inp.now).ceil());
     p.text(
-        vec2(TX, card.max.y + 60.0),
+        vec2(TX, bar.max.y + 170.0),
         cur.as_str(),
-        &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left),
+        &ink.style(ink.text, HINT_CAP, ink.label(), Align::Left),
     );
 }
 
 fn hint_bar(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
-    let text_style = ink.style(ink.text, HINT_CAP, ink.muted(), Align::Left);
+    let text_style = ink.style(ink.text, HINT_CAP, ink.label(), Align::Left);
     // Keycap chips only name buttons the menu really uses; the remapper has none to name.
     let hints: &[(&str, &str)] = match inp.ctl.mode() {
-        Mode::Browse => &[("D-PAD", "Move · adjust"), ("LB RB", "Tabs"), ("VIEW", "Back")],
+        Mode::Browse => &[("D-PAD", "Move · adjust"), ("LB RB", "Tabs"), ("VIEW / MENU", "Back")],
         Mode::Keyboard => &[("RB", "Type"), ("LB", "Delete"), ("MENU", "Done"), ("VIEW", "Cancel")],
         Mode::Remap => {
             p.text(
-                vec2(TX, HINT_Y),
-                "Hold any allowed button for 1 s · cancels after 10 s",
-                &text_style,
+                vec2((CX0 + CX1) * 0.5, HINT_Y),
+                "Hold it for 1 s · D-pad left cancels",
+                &centered(text_style),
             );
             &[]
         }
     };
     let chip_style = ink.style(ink.text, 22.0, ink.ink(), Align::Center).tracking(0.12);
-    let mut x = TX;
+    let (chip_pad, after_chip, between) = (32.0, 14.0, 40.0);
+    // The chips are centred in the bar, so it holds no empty end.
+    let mut width = 0.0;
+    for (i, (chip, text)) in hints.iter().enumerate() {
+        let gap = if i == 0 { 0.0 } else { between };
+        width += gap + p.measure(chip, &chip_style).width + chip_pad + after_chip + p.measure(text, &text_style).width;
+    }
+    let mut x = ((CX0 + CX1) - width) * 0.5;
     for (chip, text) in hints {
-        let w = p.measure(chip, &chip_style).width + 32.0;
+        let w = p.measure(chip, &chip_style).width + chip_pad;
         let rect = Rect::from_xywh(x, HINT_Y - 26.0, w, 52.0);
         p.stroke(&Shape::round_rect(rect, 12.0), ink.muted(), Stroke::inner(2.0));
         p.text(rect.center(), chip, &chip_style);
-        let r = p.text(vec2(rect.max.x + 14.0, HINT_Y), text, &text_style);
-        x = r.max.x + 40.0;
+        let r = p.text(vec2(rect.max.x + after_chip, HINT_Y), text, &text_style);
+        x = r.max.x + between;
     }
     p.text(
         vec2(TX, NOTE_Y),
         "A, B, X and Y stay with your gearbox: the menu never uses them.",
-        &ink.style(ink.text, 22.0, ink.muted(), Align::Left),
+        &ink.style(ink.text, HINT_CAP, ink.label(), Align::Left),
     );
 }
 
-/// The OSD accent: the palette accent, else its primary, else sapphire, the first that sits
-/// at least 25° of hue from the warning red and has colour (a red focus ring reads as an
-/// error). Returns the fill colour and its text-safe variant.
+/// Hues (OKLCH degrees) whose light under the glass reads as a navy or violet box rather than
+/// as light: at 20% over black a blue or violet accent turns slate. They fall back like red.
+const NAVY_HUES: (f32, f32) = (250.0, 310.0);
+/// Least chroma (OKLCH) the light inside the glass keeps, so a pale accent never turns grey.
+const FIELD_CHROMA: f32 = 0.10;
+
+/// The OSD accent: the palette accent, else its primary, else sapphire, the first that has
+/// colour, sits at least 25° of hue from the warning red (a red focus ring reads as an error)
+/// and lies outside the blue-to-violet band ([`NAVY_HUES`]). Returns the fill colour and its
+/// text-safe variant.
 fn osd_accent(pal: &Palette) -> (Color, Color) {
     let warn = pal.roles.warning.to_oklch().h;
     let ok = |c: Color| {
         let o = c.to_oklch();
-        o.c > 0.04 && fh6_kit::color::Oklch::hue_distance(o.h, warn) >= 25.0
+        o.c > 0.04
+            && fh6_kit::color::Oklch::hue_distance(o.h, warn) >= 25.0
+            && !(NAVY_HUES.0..=NAVY_HUES.1).contains(&o.h.rem_euclid(360.0))
     };
     if ok(pal.accent) {
         (pal.accent, pal.accent_text)
@@ -1206,6 +1461,17 @@ fn osd_accent(pal: &Palette) -> (Color, Color) {
         let sapphire = Color::rgb_u32(0x38BDF8);
         (sapphire, sapphire)
     }
+}
+
+/// The accent as light inside the glass: the same hue and lightness with at least
+/// [`FIELD_CHROMA`] (as much as the sRGB gamut allows).
+fn field_colour(acc: Color) -> Color {
+    let o = acc.to_oklch();
+    if o.c >= FIELD_CHROMA {
+        return acc;
+    }
+    let (r, g, b) = fh6_kit::color::Oklch { c: FIELD_CHROMA, ..o }.to_linear_rgb_clipped();
+    Color::linear(r, g, b, acc.a)
 }
 
 #[cfg(test)]
@@ -1233,6 +1499,14 @@ mod tests {
             None,
         );
         assert_eq!(osd_accent(&blue).0, blue.accent);
+        // A navy or violet accent turns into a slate box under the glass: it falls back.
+        for hex in [0x1E3A8A, 0x8B5CF6] {
+            let deep = Palette::custom(&t, Color::rgb_u32(hex), Color::rgb_u32(hex), Color::WHITE, None);
+            let h = osd_accent(&deep).0.to_oklch().h.rem_euclid(360.0);
+            assert!(!(NAVY_HUES.0..=NAVY_HUES.1).contains(&h), "{hex:06X} gives hue {h}");
+        }
+        // A pale accent keeps some colour as light inside the glass.
+        assert!(field_colour(Color::rgb_u32(0x9AA89A)).to_oklch().c >= FIELD_CHROMA - 0.01);
     }
 
     #[test]
@@ -1278,16 +1552,47 @@ mod tests {
             let lift = targets(&ctl, &cfg, &fit, &fonts, frame).echo_lift;
             assert_eq!(lift, if lifted { 1.0 } else { 0.0 }, "{row:?}");
         }
-        // The lifted echo's help line (cap middle, plus half a cap and a descender) stays clear
-        // of the view, and the view clears the live cluster's envelope at the default anchor.
-        let help_bottom = 1030.0 - ECHO_LIFT + HINT_CAP;
+        // The lifted echo's lowest mark (the slider mirror's knob, centred on the 8 px track at
+        // 966) stays clear of the view.
+        let echo_bottom = 966.0 + 4.0 + 10.0 - ECHO_LIFT;
         assert!(
-            help_bottom < DRIVE_TOP - 80.0,
+            echo_bottom < DRIVE_TOP - 80.0,
             "drive.rs keeps the fan's tip within 80 px of the top"
         );
-        // The seat at its lowest (-100 mm) drops about 0.55 px per mm below the view.
-        let view_bottom = DRIVE_TOP + drive::VIEW.y + 100.0 * 0.55;
-        assert!(view_bottom < cfg.cockpit_anchor_y as f32 - 320.0);
+    }
+
+    #[test]
+    fn the_driving_position_keeps_clear_of_a_raised_cluster_or_fades_out() {
+        let cfg = AppConfig::default();
+        let tokens = fh6_kit::Tokens::default();
+        let frame = Frame::new((3840, 2160));
+        // At the default anchor, height and scale it is drawn whole; with the seat lowest it
+        // hangs 55 px lower and shrinks a little to keep its clearance.
+        let base = Layout::from_config(&cfg, &tokens, View::Cockpit, (3840, 2160));
+        assert_eq!(drive_fit(&base, frame, seat_mm(&cfg)), (1.0, 1.0));
+        let (low, fade) = drive_fit(&base, frame, model::SEAT.min);
+        assert!(low > 0.95 && fade == 1.0, "{low} {fade}");
+        // The worst case the rows allow: the seat lowest, the cluster raised to the top of its
+        // range and enlarged. It either keeps DRIVE_CLEAR above the envelope or is hidden.
+        for (lift, scale) in [(120, 1.2), (240, 1.4), (240, 1.0), (60, 1.4)] {
+            let raised = AppConfig {
+                cockpit_anchor_y: cfg.cockpit_anchor_y - lift,
+                ..cfg.clone()
+            };
+            let mut live = Layout::from_config(&raised, &tokens, View::Cockpit, (3840, 2160));
+            live.scale *= scale;
+            let (s, fade) = drive_fit(&live, frame, model::SEAT.min);
+            let cluster_top = live.to_target(vec2(0.0, live.envelope.min.y)).y;
+            let bottom = DRIVE_TOP + drive::bottom_at(model::SEAT.min) * s;
+            assert!(
+                fade < 1e-3 || bottom <= cluster_top - DRIVE_CLEAR + 0.5,
+                "lift {lift}, scale {scale}: view bottom {bottom}, cluster top {cluster_top}"
+            );
+            assert!(
+                s >= DRIVE_MIN_SCALE || fade < 1.0,
+                "it never shows below the smallest scale"
+            );
+        }
     }
 
     /// The motion of an OSD that is fully open, with the echo lifted by `echo_lift` (0 or 1).
@@ -1309,7 +1614,7 @@ mod tests {
         let alpha = |pools: &Pools, at: Vec2| Pool::combined_alpha(pools.as_slice(), at);
 
         // A plain row: the cluster's pool, the echo's and the column's.
-        let rest = pools(&open_anim(0.0), frame, &layout, true);
+        let rest = pools(&open_anim(0.0), frame, &layout, &AppConfig::default(), true);
         assert_eq!(rest.as_slice().len(), 3);
         assert!(
             (alpha(&rest, vec2(1150.0, 1825.0)) - LIVE_SCRIM).abs() < 0.01,
@@ -1341,7 +1646,7 @@ mod tests {
         assert_eq!(alpha(&rest, vec2(160.0, 196.0)), 0.0, "the header has no pool");
 
         // A camera row: the echo's pool rises with it and one comes up under the driving position.
-        let lifted = pools(&open_anim(1.0), frame, &layout, true);
+        let lifted = pools(&open_anim(1.0), frame, &layout, &AppConfig::default(), true);
         assert_eq!(lifted.as_slice().len(), Pools::MAX);
         assert!((alpha(&lifted, vec2(cx, 880.0 - ECHO_LIFT)) - ECHO_SCRIM).abs() < 0.01);
         let view_centre = vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5);
@@ -1351,14 +1656,14 @@ mod tests {
         );
 
         // While the real dash blocker stands under the cluster, the cluster has no pool.
-        let blocked = pools(&open_anim(0.0), frame, &layout, false);
+        let blocked = pools(&open_anim(0.0), frame, &layout, &AppConfig::default(), false);
         assert_eq!(blocked.as_slice().len(), 2);
         assert!(alpha(&blocked, vec2(1150.0, 1825.0)) < 0.01);
 
         // On the first frame of the open the pools show nothing yet, and `NONE` has none at all.
         let mut opening = OsdAnim::new(&fh6_kit::Tokens::default());
         opening.reset(1920.0);
-        let first = pools(&opening, frame, &layout, true);
+        let first = pools(&opening, frame, &layout, &AppConfig::default(), true);
         assert!(first.as_slice().iter().all(|pool| !pool.is_visible()));
         assert!(Pools::NONE.as_slice().is_empty());
     }
@@ -1368,7 +1673,11 @@ mod tests {
         let anim = open_anim(0.0);
         let column = |frame: Frame| {
             let layout = Layout::centered(vec2(0.0, 0.0), frame.k, frame.size);
-            match pools(&anim, frame, &layout, false).as_slice().last().copied() {
+            match pools(&anim, frame, &layout, &AppConfig::default(), false)
+                .as_slice()
+                .last()
+                .copied()
+            {
                 Some(Pool::RoundRect { rect, sigma, .. }) => (rect, sigma),
                 other => panic!("the column's pool is the last one: {other:?}"),
             }
