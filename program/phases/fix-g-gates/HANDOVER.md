@@ -178,7 +178,7 @@ How it was checked: a `rust-review` pass (with `rust-skills`) and an adversarial
 18. Commits are by TJX with no co-author trailer; no tracked file holds a real name, a `C:\Users\<name>` path or a personal email. **Yes.** `git log --format='%an <%ae> | %(trailers:only)'` over the branch; a search of the diff found none.
 19. Nothing was copied into the game folder or the mirror. **Yes.** [AGENTS 8]
 20. A new dependency has a decision-log line. **Yes.** `allocation-counter` 0.8.1, wgpu `noop` and `serde_json` as dev-dependencies of `fh6-clusters`. [AGENTS 6]
-21. fmt, clippy `-D warnings`, the workspace tests with the goldens and parity pass on the tree that lands. **Yes.** "Verification output": the PC run covered everything but the GPU tests; the GPU tests and image goldens ran on a software GPU, byte-identical to main's frames.
+21. fmt, clippy `-D warnings`, the workspace tests with the goldens and parity pass on the tree that lands. **Yes.** "Verification output": the PC ran everything on `fd13cf5` (966 passed, goldens included), and on a software GPU every golden frame was byte-identical to main's.
 
 **C. Rendering laws**
 22. Colour stays premultiplied linear end to end. **Yes.** No shader or blend state changed.
