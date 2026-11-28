@@ -553,6 +553,297 @@ pub fn chladni_square(x: f32, y: f32, m: u32, n: u32, l: f32) -> f32 {
     (n * k * x).cos() * (m * k * y).cos() - (m * k * x).cos() * (n * k * y).cos()
 }
 
+// ------------------------------------------------------------------------------- conductors
+
+/// The complex refractive index `ñ = n + ik` of a metal for the red, green and blue channels
+/// (`docs/specs/optics.md` §3, conductors). A metal reflects by the Fresnel equations with `η`
+/// replaced by `ñ` and transmits nothing: what it does not reflect it absorbs within a few
+/// nanometres.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Conductor {
+    /// Real part of the index per channel (may be below 1: silver is about 0.05).
+    pub n: [f32; 3],
+    /// Extinction coefficient per channel (the imaginary part).
+    pub k: [f32; 3],
+}
+
+impl Conductor {
+    /// Liquid mercury at the channel wavelengths ([`PRIMARY_NM`]), from [`Metal::Mercury`].
+    #[must_use]
+    pub fn mercury() -> Self {
+        Metal::Mercury.channels()
+    }
+
+    /// Polished chromium at the channel wavelengths, from [`Metal::Chromium`].
+    #[must_use]
+    pub fn chromium() -> Self {
+        Metal::Chromium.channels()
+    }
+
+    /// The same index in every channel (a grey metal, or a value quoted at one wavelength).
+    #[must_use]
+    pub fn grey(n: f32, k: f32) -> Self {
+        Self { n: [n; 3], k: [k; 3] }
+    }
+
+    /// The metal whose permittivity is `ε₁ + iε₂` in every channel ([`index_from_permittivity`]).
+    #[must_use]
+    pub fn from_permittivity(eps1: f32, eps2: f32) -> Self {
+        let (n, k) = index_from_permittivity(eps1, eps2);
+        Self::grey(n, k)
+    }
+
+    /// Reflectance per channel at `cos_i` ([`fresnel_conductor`]).
+    #[must_use]
+    pub fn reflectance(&self, cos_i: f32) -> [f32; 3] {
+        [0, 1, 2].map(|c| fresnel_conductor(cos_i, self.n[c], self.k[c]))
+    }
+}
+
+/// Metals with measured optical constants (`docs/specs/optics.md` §3, [S31], [S32]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Metal {
+    /// Liquid mercury at room temperature, Inagaki, Arakawa and Williams 1981 [S31].
+    Mercury,
+    /// Chromium, Johnson and Christy 1974 [S32].
+    Chromium,
+}
+
+/// (λ µm, n, k) of liquid mercury [S31], 365 to 775 nm.
+const HG_NK: [(f32, f32, f32); 10] = [
+    (0.3647, 0.713, 3.074),
+    (0.3875, 0.798, 3.294),
+    (0.4133, 0.898, 3.538),
+    (0.4428, 1.027, 3.802),
+    (0.4769, 1.186, 4.090),
+    (0.5166, 1.383, 4.406),
+    (0.5636, 1.621, 4.750),
+    (0.6199, 1.910, 5.150),
+    (0.6888, 2.284, 5.582),
+    (0.7749, 2.746, 6.054),
+];
+
+/// (λ µm, n, k) of chromium [S32], 368 to 756 nm.
+#[allow(
+    clippy::approx_constant,
+    reason = "3.140 is a measured extinction coefficient, not π"
+)]
+const CR_NK: [(f32, f32, f32); 15] = [
+    (0.3680, 1.870, 2.690),
+    (0.3810, 1.920, 2.740),
+    (0.3970, 2.000, 2.830),
+    (0.4130, 2.080, 2.930),
+    (0.4310, 2.190, 3.040),
+    (0.4510, 2.330, 3.140),
+    (0.4710, 2.510, 3.240),
+    (0.4960, 2.750, 3.300),
+    (0.5210, 2.940, 3.330),
+    (0.5490, 3.180, 3.330),
+    (0.5820, 3.220, 3.300),
+    (0.6170, 3.170, 3.300),
+    (0.6590, 3.090, 3.340),
+    (0.7040, 3.050, 3.390),
+    (0.7560, 3.080, 3.420),
+];
+
+impl Metal {
+    /// The measured table: (λ µm, n, k) rows in rising wavelength.
+    #[must_use]
+    pub fn table(self) -> &'static [(f32, f32, f32)] {
+        match self {
+            Self::Mercury => &HG_NK,
+            Self::Chromium => &CR_NK,
+        }
+    }
+
+    /// `(n, k)` at `wavelength_nm`, linear between the table's rows and clamped at its ends.
+    #[must_use]
+    pub fn index(self, wavelength_nm: f32) -> (f32, f32) {
+        let t = self.table();
+        let um = wavelength_nm / 1000.0;
+        let first = t[0];
+        if um.is_nan() || um <= first.0 {
+            return (first.1, first.2);
+        }
+        for w in t.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if um <= b.0 {
+                let f = (um - a.0) / (b.0 - a.0);
+                return (a.1 + (b.1 - a.1) * f, a.2 + (b.2 - a.2) * f);
+            }
+        }
+        let last = t[t.len() - 1];
+        (last.1, last.2)
+    }
+
+    /// The index at the three channel wavelengths ([`PRIMARY_NM`]), as the shader uses it.
+    #[must_use]
+    pub fn channels(self) -> Conductor {
+        let mut c = Conductor {
+            n: [0.0; 3],
+            k: [0.0; 3],
+        };
+        for (i, nm) in PRIMARY_NM.iter().enumerate() {
+            let (n, k) = self.index(*nm as f32);
+            c.n[i] = n;
+            c.k[i] = k;
+        }
+        c
+    }
+}
+
+/// `(n, k)` of the complex index `ñ = √ε` of a medium of permittivity `ε₁ + iε₂`:
+/// `n = √(½(|ε| + ε₁))`, `k = √(½(|ε| − ε₁))` (optics.md §3, conductors).
+#[must_use]
+pub fn index_from_permittivity(eps1: f32, eps2: f32) -> (f32, f32) {
+    let m = eps1.hypot(eps2);
+    ((0.5 * (m + eps1)).max(0.0).sqrt(), (0.5 * (m - eps1)).max(0.0).sqrt())
+}
+
+/// Reflectance of a conductor face-on, `((n − 1)² + k²) / ((n + 1)² + k²)`.
+#[must_use]
+pub fn conductor_normal_reflectance(n: f32, k: f32) -> f32 {
+    let k2 = k * k;
+    ((n - 1.0) * (n - 1.0) + k2) / ((n + 1.0) * (n + 1.0) + k2)
+}
+
+/// A complex number, for the reference Fresnel of a conductor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Complex {
+    re: f32,
+    im: f32,
+}
+
+impl Complex {
+    const fn new(re: f32, im: f32) -> Self {
+        Self { re, im }
+    }
+    fn add(self, o: Self) -> Self {
+        Self::new(self.re + o.re, self.im + o.im)
+    }
+    fn sub(self, o: Self) -> Self {
+        Self::new(self.re - o.re, self.im - o.im)
+    }
+    fn mul(self, o: Self) -> Self {
+        Self::new(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re)
+    }
+    fn norm2(self) -> f32 {
+        self.re * self.re + self.im * self.im
+    }
+    fn div(self, o: Self) -> Self {
+        let d = o.norm2().max(1e-30);
+        Self::new(
+            (self.re * o.re + self.im * o.im) / d,
+            (self.im * o.re - self.re * o.im) / d,
+        )
+    }
+    /// The principal square root (non-negative real part).
+    fn sqrt(self) -> Self {
+        let m = self.norm2().sqrt();
+        let re = (0.5 * (m + self.re)).max(0.0).sqrt();
+        let im = (0.5 * (m - self.re)).max(0.0).sqrt();
+        Self::new(re, if self.im < 0.0 { -im } else { im })
+    }
+}
+
+/// The exact Fresnel reflectance, for unpolarised light arriving from air at `cos_i`, of a
+/// conductor of complex index `n + ik` (optics.md §3, conductors): the dielectric equations with
+/// `η` replaced by `ñ`, `cos θt = √(1 − sin²θi / ñ²)`, `r∥ = (ñ cos θi − cos θt) / (ñ cos θi + cos θt)`,
+/// `r⊥ = (cos θi − ñ cos θt) / (cos θi + ñ cos θt)` and `F = ½(|r∥|² + |r⊥|²)`. With `k = 0` it is
+/// [`fresnel_dielectric`]; at grazing incidence it is 1.
+#[must_use]
+pub fn fresnel_conductor(cos_i: f32, n: f32, k: f32) -> f32 {
+    if !(cos_i.is_finite() && n.is_finite() && k.is_finite()) {
+        return 1.0;
+    }
+    let ci = cos_i.clamp(0.0, 1.0);
+    let eta = Complex::new(n.max(1e-4), k.max(0.0));
+    let sin2 = Complex::new(1.0 - ci * ci, 0.0);
+    let cos_t = Complex::new(1.0, 0.0).sub(sin2.div(eta.mul(eta))).sqrt();
+    let c = Complex::new(ci, 0.0);
+    let r_par = eta.mul(c).sub(cos_t).div(eta.mul(c).add(cos_t));
+    let r_perp = c.sub(eta.mul(cos_t)).div(c.add(eta.mul(cos_t)));
+    (0.5 * (r_par.norm2() + r_perp.norm2())).clamp(0.0, 1.0)
+}
+
+/// The same reflectance in the real form the shader evaluates (no complex arithmetic). With
+/// `t = n² − k² − sin²θ`, `a²+b² = √(t² + 4n²k²)` and `a = √(½(a²+b² + t))`:
+/// `Rs = (a²+b² − 2a cos θ + cos²θ) / (a²+b² + 2a cos θ + cos²θ)` and
+/// `Rp = Rs ((a²+b²) cos²θ − 2a cos θ sin²θ + sin⁴θ) / ((a²+b²) cos²θ + 2a cos θ sin²θ + sin⁴θ)`.
+#[must_use]
+pub fn fresnel_conductor_real(cos_i: f32, n: f32, k: f32) -> f32 {
+    let c = cos_i.clamp(0.0, 1.0);
+    let s2 = 1.0 - c * c;
+    let t = n * n - k * k - s2;
+    let ab = (t * t + 4.0 * n * n * k * k).sqrt();
+    let a = (0.5 * (ab + t)).max(0.0).sqrt();
+    let rs = (ab - 2.0 * a * c + c * c) / (ab + 2.0 * a * c + c * c).max(1e-30);
+    let num = ab * c * c - 2.0 * a * c * s2 + s2 * s2;
+    let den = ab * c * c + 2.0 * a * c * s2 + s2 * s2;
+    let rp = rs * num / den.max(1e-30);
+    (0.5 * (rs + rp)).clamp(0.0, 1.0)
+}
+
+// --------------------------------------------------------------------------- standing waves
+
+/// The height of a standing-wave surface, its gradient and the second derivatives of the waves.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WaveSample {
+    /// Height `η` above the still surface (local units).
+    pub height: f32,
+    /// `∇η`: what tilts the normal.
+    pub gradient: Vec2,
+    /// Second derivatives `[∂²/∂x², ∂²/∂x∂y, ∂²/∂y²]` of the waves before the still zone's
+    /// easing (the shader's pixel footprint uses them, §7).
+    pub hessian: [f32; 3],
+}
+
+/// The ease of a standing-wave surface towards a pinned centre: 0 inside `still_radius`, 1 from
+/// `still_radius + still_width` out, `3s² − 2s³` between (`s` the fraction of the band), so the
+/// height and its slope are continuous. Returns the ease and its radial derivative.
+#[must_use]
+pub fn still_ease(r: f32, still_radius: f32, still_width: f32) -> (f32, f32) {
+    let (still_radius, still_width) = (still_radius.max(0.0), still_width.max(0.0));
+    if r >= still_radius + still_width {
+        return (1.0, 0.0);
+    }
+    let w = still_width.max(1e-3);
+    let s = ((r - still_radius) / w).clamp(0.0, 1.0);
+    (s * s * (3.0 - 2.0 * s), 6.0 * s * (1.0 - s) / w)
+}
+
+/// The CPU mirror of the standing-wave height term (`docs/specs/optics.md` §2, standing waves):
+/// `η(p) = w(r) Σᵢ Aᵢ cos(k eᵢ·(p − c) + φᵢ)` with its exact gradient
+/// `∇η = w Σᵢ −k Aᵢ eᵢ sin(…) + ζ w′(r) r̂`, where `ζ` is the sum and `w` the still zone's ease
+/// ([`still_ease`]). It is the surface at full materialise (the shader scales the height by
+/// [`crate::OpticalGlass::materialize`]).
+#[must_use]
+pub fn standing_waves(waves: &crate::paint::StandingWaves, p: Vec2) -> WaveSample {
+    let k = waves.wavenumber;
+    let rel = p - waves.center;
+    let mut zeta = 0.0_f32;
+    let mut grad = Vec2::ZERO;
+    let mut hess = [0.0_f32; 3];
+    for w in waves.waves() {
+        let e = w.direction.normalize_or_zero();
+        let (s, c) = (k * e.dot(rel) + w.phase).sin_cos();
+        zeta += w.amplitude * c;
+        grad -= e * (k * w.amplitude * s);
+        let h = -k * k * w.amplitude * c;
+        hess[0] += h * e.x * e.x;
+        hess[1] += h * e.x * e.y;
+        hess[2] += h * e.y * e.y;
+    }
+    let r = rel.length();
+    let (ease, d_ease) = still_ease(r, waves.still_radius, waves.still_width);
+    let radial = if r > 1e-6 { rel * (1.0 / r) } else { Vec2::ZERO };
+    WaveSample {
+        height: ease * zeta,
+        gradient: grad * ease + radial * (zeta * d_ease),
+        hessian: hess,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1130,5 +1421,200 @@ mod tests {
             1e-6,
             "the diagonal is a nodal line",
         );
+    }
+
+    // ---------------------------------------------------------------- §2 standing waves
+
+    use crate::paint::{PlaneWave, StandingWaves, MAX_STANDING_WAVES};
+
+    /// `p` turned by `angle` about `c`.
+    fn turned(p: Vec2, c: Vec2, angle: f32) -> Vec2 {
+        let (s, co) = angle.sin_cos();
+        let d = p - c;
+        c + vec2(co * d.x - s * d.y, s * d.x + co * d.y)
+    }
+
+    fn probe_points() -> impl Iterator<Item = Vec2> {
+        (0..9).flat_map(|i| (0..9).map(move |j| vec2(-47.0 + 11.3 * i as f32, -41.0 + 10.1 * j as f32)))
+    }
+
+    #[test]
+    fn symmetric_waves_keep_their_rotational_symmetry() {
+        // Two waves at 90° make squares, three at 120° hexagons, six at 30° a twelve-fold
+        // pattern: turning the surface by 90°, 60° or 30° about the centre leaves it unchanged.
+        let c = vec2(3.0, -2.0);
+        for (count, turn_deg) in [(2_usize, 90.0_f32), (3, 60.0), (6, 30.0)] {
+            let w = StandingWaves::symmetric(c, 0.21, count, 1.3, 0.4);
+            assert_eq!(w.waves().len(), count);
+            for p in probe_points() {
+                let a = w.sample(p).height;
+                let b = w.sample(turned(p, c, turn_deg.to_radians())).height;
+                close(a, b, 2e-4, "rotated height");
+            }
+            // A turn that is not a symmetry of the pattern does change it (the check is not vacuous).
+            let off = (turn_deg * 0.5).to_radians();
+            let moved = probe_points()
+                .map(|p| (w.sample(p).height - w.sample(turned(p, c, off)).height).abs())
+                .fold(0.0, f32::max);
+            assert!(moved > 0.1, "{count} waves: a {}° turn moved nothing", turn_deg * 0.5);
+        }
+    }
+
+    #[test]
+    fn standing_wave_gradient_is_the_derivative_of_the_height() {
+        let mut w = StandingWaves::new(vec2(1.5, -0.5), 0.25).still(12.0, 9.0);
+        for (i, a) in [0.5_f32, 0.3, -0.4, 0.2, 0.35, -0.25].into_iter().enumerate() {
+            let t = 0.37 + 0.91 * i as f32;
+            assert!(w.push(PlaneWave {
+                direction: vec2(t.cos(), t.sin()) * 2.0,
+                amplitude: a,
+                phase: 0.3 * i as f32,
+            }));
+        }
+        assert!(!w.push(PlaneWave::default()), "a seventh wave is refused");
+        assert_eq!(w.waves().len(), MAX_STANDING_WAVES);
+        let h = 0.05;
+        for p in probe_points().chain([vec2(14.0, 3.0), vec2(-9.0, 13.5), vec2(0.0, 19.0)]) {
+            let s = w.sample(p);
+            let dx = (w.sample(p + vec2(h, 0.0)).height - w.sample(p - vec2(h, 0.0)).height) / (2.0 * h);
+            let dy = (w.sample(p + vec2(0.0, h)).height - w.sample(p - vec2(0.0, h)).height) / (2.0 * h);
+            close(s.gradient.x, dx, 1e-4, "d/dx");
+            close(s.gradient.y, dy, 1e-4, "d/dy");
+        }
+        // Far from the still zone the second derivatives are those of the waves.
+        for p in [vec2(40.0, 30.0), vec2(-35.0, 28.0), vec2(30.0, -44.0)] {
+            let s = w.sample(p);
+            let gx = (w.sample(p + vec2(h, 0.0)).gradient - w.sample(p - vec2(h, 0.0)).gradient) * (0.5 / h);
+            let gy = (w.sample(p + vec2(0.0, h)).gradient - w.sample(p - vec2(0.0, h)).gradient) * (0.5 / h);
+            close(s.hessian[0], gx.x, 1e-4, "xx");
+            close(s.hessian[1], gx.y, 1e-4, "xy");
+            close(s.hessian[1], gy.x, 1e-4, "yx");
+            close(s.hessian[2], gy.y, 1e-4, "yy");
+        }
+    }
+
+    #[test]
+    fn the_still_zone_pins_the_centre() {
+        let w = StandingWaves::symmetric(Vec2::ZERO, 0.3, 3, 2.0, 0.0).still(10.0, 6.0);
+        for r in [0.0_f32, 4.0, 9.99] {
+            let s = w.sample(vec2(r * 0.6, r * 0.8));
+            assert_eq!(s.height, 0.0, "r = {r}");
+            assert_eq!(s.gradient, Vec2::ZERO, "r = {r}");
+        }
+        // From the band's outer edge on, the surface is the bare sum.
+        let bare = StandingWaves::symmetric(Vec2::ZERO, 0.3, 3, 2.0, 0.0);
+        for p in [vec2(16.0, 0.0), vec2(-20.0, 7.0), vec2(5.0, 30.0)] {
+            assert_eq!(w.sample(p).height, bare.sample(p).height);
+        }
+        // The ease is C1: its value and slope are continuous at both ends of the band.
+        assert_eq!(still_ease(10.0, 10.0, 6.0), (0.0, 0.0));
+        let (e, d) = still_ease(16.0 - 1e-4, 10.0, 6.0);
+        close(e, 1.0, 1e-4, "outer value");
+        close(d, 0.0, 1e-4, "outer slope");
+        assert_eq!(still_ease(16.0, 10.0, 6.0), (1.0, 0.0));
+    }
+
+    #[test]
+    fn zero_amplitude_is_a_still_surface() {
+        let mut w = StandingWaves::symmetric(Vec2::ZERO, 0.3, 6, 0.0, 0.2);
+        assert!(!w.is_active());
+        for p in probe_points() {
+            let s = w.sample(p);
+            assert_eq!(s.height, 0.0);
+            assert_eq!(s.gradient, Vec2::ZERO);
+        }
+        w.waves_mut()[2].amplitude = 0.5;
+        assert!(w.is_active());
+        w.clear();
+        assert!(w.waves().is_empty() && !w.is_active());
+        assert!(!StandingWaves::default().is_active());
+    }
+
+    // ---------------------------------------------------------------- §3 conductors
+
+    #[test]
+    fn mercury_from_its_permittivity() {
+        // optics.md §3: ε = −18.46 + 13.50i at 546 nm [S30] gives n 1.485, k 4.546, R0 0.779.
+        let (n, k) = index_from_permittivity(-18.46, 13.50);
+        close(n, 1.485, 1e-3, "n");
+        close(k, 4.546, 1e-3, "k");
+        close(conductor_normal_reflectance(n, k), 0.779, 1e-3, "R0");
+        close(fresnel_conductor(1.0, n, k), 0.779, 1e-3, "exact face-on");
+        // The measured table [S31] at the green channel gives the same mercury.
+        let hg = Metal::Mercury.channels();
+        close(hg.reflectance(1.0)[1], 0.779, 2e-3, "table R0, green");
+        // A conductor dips only a little towards its principal angle and never to zero.
+        for i in 0..=90 {
+            let c = (i as f32).to_radians().cos();
+            for ch in 0..3 {
+                let r = fresnel_conductor(c, hg.n[ch], hg.k[ch]);
+                assert!(r > 0.7 && r <= 1.0, "{i}°, channel {ch}: {r}");
+            }
+        }
+        // n and k rise together with wavelength, so mercury is a neutral white mirror: 0.781,
+        // 0.779 and 0.779 face-on.
+        let r0 = hg.reflectance(1.0);
+        close(r0[0], 0.781, 1e-3, "R0, red");
+        close(r0[2], 0.779, 1e-3, "R0, blue");
+    }
+
+    #[test]
+    fn conductor_fresnel_limits_and_its_real_form() {
+        // k = 0 is a dielectric; grazing incidence reflects everything.
+        for eta in [1.33_f32, 1.5, 1.77] {
+            for i in 0..=89 {
+                let c = (i as f32).to_radians().cos();
+                close(
+                    fresnel_conductor(c, eta, 0.0),
+                    fresnel_dielectric(c, eta),
+                    2e-5,
+                    "k = 0",
+                );
+            }
+        }
+        for (n, k) in [(1.485_f32, 4.546_f32), (3.18, 3.33), (0.05, 4.0), (0.27, 2.95)] {
+            close(fresnel_conductor(0.0, n, k), 1.0, 1e-6, "grazing");
+            close(
+                fresnel_conductor(1.0, n, k),
+                conductor_normal_reflectance(n, k),
+                1e-5,
+                "face-on",
+            );
+            // The shader's real form is the same function.
+            for i in 0..=90 {
+                let c = (i as f32).to_radians().cos();
+                close(
+                    fresnel_conductor_real(c, n, k),
+                    fresnel_conductor(c, n, k),
+                    1e-4,
+                    "real form",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn metal_tables_interpolate_and_clamp() {
+        let (n, k) = Metal::Mercury.index(364.7);
+        close(n, 0.713, 1e-5, "first row n");
+        close(k, 3.074, 1e-5, "first row k");
+        assert_eq!(Metal::Mercury.index(200.0), (0.713, 3.074));
+        assert_eq!(Metal::Mercury.index(900.0), (2.746, 6.054));
+        let (n, k) = Metal::Chromium.index(549.0);
+        close(n, 3.18, 1e-5, "chromium n at a row");
+        close(k, 3.33, 1e-5, "chromium k at a row");
+        let (n, k) = Metal::Mercury.index(0.5 * (516.6 + 563.6));
+        close(n, 0.5 * (1.383 + 1.621), 1e-5, "midpoint n");
+        close(k, 0.5 * (4.406 + 4.750), 1e-5, "midpoint k");
+        for m in [Metal::Mercury, Metal::Chromium] {
+            assert!(m.table().windows(2).all(|w| w[0].0 < w[1].0), "rising wavelength");
+        }
+        // Chromium reflects 55-56% face-on at the three channels.
+        for r in Conductor::chromium().reflectance(1.0) {
+            assert!((0.55..0.56).contains(&r), "{r}");
+        }
+        assert_eq!(Conductor::grey(1.5, 4.0).n, [1.5; 3]);
+        let (n, k) = index_from_permittivity(-18.46, 13.50);
+        assert_eq!(Conductor::from_permittivity(-18.46, 13.50), Conductor::grey(n, k));
     }
 }

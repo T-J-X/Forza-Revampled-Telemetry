@@ -3,7 +3,7 @@
 //! a gradient moves, scales and rotates with the shape that uses it.
 use crate::color::Color;
 use crate::math::{finite_or, vec3, Rect, Vec2, Vec3};
-use crate::optics::{Dispersion, Profile};
+use crate::optics::{Conductor, Dispersion, Profile};
 
 /// Most stops a gradient carries. Extra stops are ignored.
 pub const MAX_STOPS: usize = 8;
@@ -301,6 +301,128 @@ pub struct Ripple {
     pub wavelength: f32,
 }
 
+/// Most plane waves a [`StandingWaves`] surface sums.
+pub const MAX_STANDING_WAVES: usize = 6;
+
+/// One plane wave of a [`StandingWaves`] surface: `A cos(k e·(p − c) + φ)`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PlaneWave {
+    /// Direction of the wave vector `e` (normalised when the paint is encoded).
+    pub direction: Vec2,
+    /// Its amplitude `A` (local units of height).
+    pub amplitude: f32,
+    /// Its phase `φ` (radians).
+    pub phase: f32,
+}
+
+/// A surface of standing plane waves on optical glass or liquid metal (`docs/specs/optics.md`
+/// §2, standing waves): `η(p) = w(r) Σᵢ Aᵢ cos(k eᵢ·(p − c) + φᵢ)`, up to
+/// [`MAX_STANDING_WAVES`] waves sharing one wavenumber `k`. `w` eases the height to 0 inside
+/// `still_radius` of the centre `c` (a pinned post) over a band `still_width` wide. Two waves at
+/// 90° make squares, three at 120° hexagons, six at 30° a twelve-fold quasi-pattern: the patterns
+/// of a Faraday wave. Set `wavenumber`, the amplitudes and the phases every frame; the normal is
+/// the exact gradient, one sine and cosine per wave per pixel. No waves (the default) is a still
+/// surface.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct StandingWaves {
+    /// The centre `c` the phases and the still zone are measured from (local units).
+    pub center: Vec2,
+    /// The shared wavenumber `k = 2π / λ` (radians per local unit).
+    pub wavenumber: f32,
+    /// Radius of the still zone around the centre.
+    pub still_radius: f32,
+    /// Width of the band over which the height eases in from the still zone.
+    pub still_width: f32,
+    waves: [PlaneWave; MAX_STANDING_WAVES],
+    count: u8,
+}
+
+impl StandingWaves {
+    /// No waves yet, centred on `center` with wavenumber `wavenumber`.
+    #[must_use]
+    pub fn new(center: Vec2, wavenumber: f32) -> Self {
+        Self {
+            center,
+            wavenumber,
+            ..Self::default()
+        }
+    }
+
+    /// `count` waves of equal `amplitude` and phase 0 whose directions are spread evenly over a
+    /// half turn from `turn` (radians): 2 give squares, 3 hexagons, 6 a twelve-fold pattern.
+    /// `count` is capped at [`MAX_STANDING_WAVES`].
+    #[must_use]
+    pub fn symmetric(center: Vec2, wavenumber: f32, count: usize, amplitude: f32, turn: f32) -> Self {
+        let mut s = Self::new(center, wavenumber);
+        let count = count.min(MAX_STANDING_WAVES);
+        for i in 0..count {
+            let (sin, cos) = (turn + core::f32::consts::PI * i as f32 / count as f32).sin_cos();
+            s.push(PlaneWave {
+                direction: Vec2::new(cos, sin),
+                amplitude,
+                phase: 0.0,
+            });
+        }
+        s
+    }
+
+    /// With a still zone of `radius` that eases in over `width`.
+    #[must_use]
+    pub fn still(mut self, radius: f32, width: f32) -> Self {
+        self.still_radius = radius;
+        self.still_width = width;
+        self
+    }
+
+    /// Adds a wave. Returns `false` (and adds nothing) when the surface already has
+    /// [`MAX_STANDING_WAVES`].
+    pub fn push(&mut self, wave: PlaneWave) -> bool {
+        let i = usize::from(self.count);
+        if i >= MAX_STANDING_WAVES {
+            return false;
+        }
+        self.waves[i] = wave;
+        self.count += 1;
+        true
+    }
+
+    /// Removes every wave.
+    pub fn clear(&mut self) {
+        self.count = 0;
+        self.waves = [PlaneWave::default(); MAX_STANDING_WAVES];
+    }
+
+    /// The waves.
+    #[must_use]
+    pub fn waves(&self) -> &[PlaneWave] {
+        &self.waves[..usize::from(self.count)]
+    }
+
+    /// The waves, to change their amplitudes and phases in place.
+    pub fn waves_mut(&mut self) -> &mut [PlaneWave] {
+        &mut self.waves[..usize::from(self.count)]
+    }
+
+    /// Whether the surface moves at all: at least one wave with a non-zero amplitude and a
+    /// finite wavenumber. (A wavenumber of 0 still makes a surface: a constant height that the
+    /// still zone eases in.)
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.wavenumber.is_finite()
+            && self
+                .waves()
+                .iter()
+                .any(|w| w.amplitude != 0.0 && w.amplitude.is_finite())
+    }
+
+    /// The height at `p` and its gradient at full materialise (the CPU mirror of the shader,
+    /// [`crate::optics::standing_waves`]).
+    #[must_use]
+    pub fn sample(&self, p: Vec2) -> crate::optics::WaveSample {
+        crate::optics::standing_waves(self, p)
+    }
+}
+
 /// Screen azimuth of the key light at rest: up and to the left (tokens `light.azimuthDeg`).
 pub const LIGHT_REST_AZIMUTH: f32 = -2.356_194_5;
 
@@ -346,6 +468,12 @@ pub struct OpticalGlass {
     pub refraction: Refraction,
     /// A liquid ripple on the surface (still by default).
     pub ripple: Ripple,
+    /// Standing waves on the surface (none by default). They add to the ripple.
+    pub standing: StandingWaves,
+    /// `Some` makes the piece a metal (`docs/specs/optics.md` §3, conductors): it reflects by the
+    /// exact Fresnel of the complex index, transmits nothing and is opaque. `ior`,
+    /// `absorption`, `frost` and `refraction` are then unused. `None` (the default) is glass.
+    pub conductor: Option<Conductor>,
 }
 
 impl OpticalGlass {
@@ -373,9 +501,22 @@ impl OpticalGlass {
             materialize: 1.0,
             refraction: Refraction::OwnLayers,
             ripple: Ripple::default(),
+            standing: StandingWaves::default(),
+            conductor: None,
         };
         glass.aim(LIGHT_REST_AZIMUTH, crate::math::deg(40.0), Vec2::ZERO);
         glass
+    }
+
+    /// A polished liquid metal of the given index (for example [`Conductor::mercury`]) under
+    /// the studio environment, lit like [`OpticalGlass::new`], with a flat cross-section. Give
+    /// it [`OpticalGlass::standing`] waves or a [`OpticalGlass::ripple`] to move its surface.
+    #[must_use]
+    pub fn metal(conductor: Conductor) -> Self {
+        let mut metal = Self::new(&Dispersion::CROWN_BK7);
+        metal.conductor = Some(conductor);
+        metal.roughness = 0.03;
+        metal
     }
 
     /// Sets the cross-section used by shapes other than a blob.

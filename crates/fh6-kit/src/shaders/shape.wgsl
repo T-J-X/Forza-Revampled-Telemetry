@@ -46,6 +46,9 @@ const P_CONIC: u32 = 3u;
 const P_IMAGE: u32 = 4u;
 const P_GLASS: u32 = 5u;
 const P_OPTIC: u32 = 6u;
+// Flags in head.y of an optical-glass record (painter.rs `optic_flag`).
+const OPTIC_CONDUCTOR: u32 = 1u;
+const OPTIC_STANDING: u32 = 2u;
 
 struct Globals {
     target_size: vec2<f32>,
@@ -726,6 +729,23 @@ fn height_pow(f: vec4<f32>, k: f32, grown: f32) -> f32 {
     return pow(max(f.y * grown, 0.0), k) * (1.0 - pow(1.0 - u, k));
 }
 
+// Exact Fresnel reflectance of a conductor of complex index n + ik for unpolarised light from
+// air, per channel (section 3, conductors), in its real form: with t = n^2 - k^2 - sin^2,
+// a^2 + b^2 = sqrt(t^2 + 4 n^2 k^2) and a = sqrt((a^2 + b^2 + t) / 2),
+// Rs = (a^2+b^2 - 2a cos + cos^2) / (a^2+b^2 + 2a cos + cos^2) and
+// Rp = Rs ((a^2+b^2) cos^2 - 2a cos sin^2 + sin^4) / ((a^2+b^2) cos^2 + 2a cos sin^2 + sin^4).
+fn fresnel_metal3(cos_i: f32, n: vec3<f32>, k: vec3<f32>) -> vec3<f32> {
+    let c = clamp(cos_i, 0.0, 1.0);
+    let s2 = 1.0 - c * c;
+    let t = n * n - k * k - vec3<f32>(s2);
+    let ab = sqrt(t * t + 4.0 * n * n * k * k);
+    let a = sqrt(max(0.5 * (ab + t), vec3<f32>(0.0)));
+    let rs = (ab - 2.0 * a * c + vec3<f32>(c * c)) / max(ab + 2.0 * a * c + vec3<f32>(c * c), vec3<f32>(1e-30));
+    let num = ab * (c * c) - 2.0 * a * (c * s2) + vec3<f32>(s2 * s2);
+    let den = ab * (c * c) + 2.0 * a * (c * s2) + vec3<f32>(s2 * s2);
+    return clamp(0.5 * (rs + rs * num / max(den, vec3<f32>(1e-30))), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 // Exact Fresnel reflectance of a dielectric for unpolarised light, per channel (section 3).
 fn fresnel3(cos_i: f32, eta: vec3<f32>) -> vec3<f32> {
     let ci = clamp(cos_i, 0.0, 1.0);
@@ -897,6 +917,47 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
             waved = true;
         }
     }
+    // Section 2, standing waves (the record after this one): eta = w(r) zeta with
+    // zeta = sum A_i cos(k e_i.(p - c) + phi_i) and its exact gradient
+    // w sum -k A_i e_i sin(..) + zeta w'(r) r_hat; w eases the height in from the still zone.
+    // `hw` keeps the waves' second derivatives (xx, xy, yy) for the pixel footprint.
+    let metal = (pa.head.y & OPTIC_CONDUCTOR) != 0u;
+    var standing = false;
+    var hw = vec3<f32>(0.0);
+    if ((pa.head.y & OPTIC_STANDING) != 0u) {
+        let wi = in.ids.y + 1u;
+        let centre = paints[wi].g0.xy;
+        let kw = paints[wi].g0.z;
+        let rel = p - centre;
+        var zeta = 0.0;
+        var gz = vec2<f32>(0.0);
+        let count = min(paints[wi].head.y, 6u);
+        for (var i = 0u; i < count; i = i + 1u) {
+            let wave = paints[wi].colors[i];
+            let phase = kw * dot(wave.xy, rel) + wave.w;
+            let sn = sin(phase);
+            let cs = cos(phase);
+            zeta = zeta + wave.z * cs;
+            gz = gz - wave.xy * (kw * wave.z * sn);
+            hw = hw - (kw * kw * wave.z * cs) * vec3<f32>(wave.x * wave.x, wave.x * wave.y, wave.y * wave.y);
+        }
+        let rr = length(rel);
+        let still_r = paints[wi].g0.w;
+        let still_w = paints[wi].g1.x;
+        var ease = 1.0;
+        var d_ease = 0.0;
+        if (rr < still_r + still_w) {
+            let band = max(still_w, 1e-3);
+            let sv = clamp((rr - still_r) / band, 0.0, 1.0);
+            ease = sv * sv * (3.0 - 2.0 * sv);
+            d_ease = 6.0 * sv * (1.0 - sv) / band;
+        }
+        let ge = (gz * ease + rel / max(rr, 1e-6) * (zeta * d_ease)) * grown;
+        hw = hw * (ease * grown);
+        slope = slope + up * vec2<f32>(rot.x * ge.x + rot.z * ge.y, rot.y * ge.x + rot.w * ge.y);
+        standing = true;
+        waved = true;
+    }
     var n = vec3<f32>(0.0, 0.0, 1.0);
     let n_len = length(vec3<f32>(slope, up));
     if (n_len > 1e-12) {
@@ -922,11 +983,39 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         dn_s = theta_s * vec3<f32>(downhill * n.z, -sin_t);
         dn_c = kappa * sin_t * vec3<f32>(-downhill.y, downhill.x, 0.0);
     }
+    // The standing waves turn the normal too: one device pixel along screen direction b moves
+    // the slope by U rot H rot^T b / px, H the waves' second derivatives (their ease is taken as
+    // constant across the pixel). It is added along the same two steps as above, so the two
+    // changes stay one Jacobian: dn_s is the step inwards (uphill, against `downhill`) and dn_c
+    // the step along (-downhill.y, downhill.x). On a level face any two axes do.
+    if (standing && n_len > 1e-12) {
+        var b_s = vec2<f32>(1.0, 0.0);
+        var b_c = vec2<f32>(0.0, 1.0);
+        if (big_g > 1e-9) {
+            let downhill = -vec2<f32>(rot.x * gq.x + rot.z * gq.y, rot.y * gq.x + rot.w * gq.y) / big_g;
+            b_s = -downhill;
+            b_c = vec2<f32>(-downhill.y, downhill.x);
+        }
+        let ls = vec2<f32>(rot.x * b_s.x + rot.y * b_s.y, rot.z * b_s.x + rot.w * b_s.y);
+        let lc = vec2<f32>(rot.x * b_c.x + rot.y * b_c.y, rot.z * b_c.x + rot.w * b_c.y);
+        let hs = vec2<f32>(hw.x * ls.x + hw.y * ls.y, hw.y * ls.x + hw.z * ls.y);
+        let hc = vec2<f32>(hw.x * lc.x + hw.y * lc.y, hw.y * lc.x + hw.z * lc.y);
+        let ds = up * one_px * vec2<f32>(rot.x * hs.x + rot.z * hs.y, rot.y * hs.x + rot.w * hs.y);
+        let dc = up * one_px * vec2<f32>(rot.x * hc.x + rot.z * hc.y, rot.y * hc.x + rot.w * hc.y);
+        let ms = vec3<f32>(-ds, 0.0) / n_len;
+        let mc = vec3<f32>(-dc, 0.0) / n_len;
+        dn_s = dn_s + ms - n * dot(n, ms);
+        dn_c = dn_c + mc - n * dot(n, mc);
+    }
 
-    // Sections 3 to 6: Fresnel, Snell and Beer-Lambert, one index per channel.
+    // Sections 3 to 6: Fresnel, Snell and Beer-Lambert, one index per channel. A metal (section
+    // 3, conductors) has n in these lanes and k in the absorption lanes, and transmits nothing.
     let eta = pa.g0.xyz;
     let ci = clamp(n.z, 0.0, 1.0);
-    let fres = fresnel3(ci, eta);
+    var fres = fresnel3(ci, eta);
+    if (metal) {
+        fres = fresnel_metal3(ci, eta, pa.g2.xyz);
+    }
     let ct = sqrt(max(vec3<f32>(1.0) - vec3<f32>(1.0 - ci * ci) / (eta * eta), vec3<f32>(0.0)));
     let bend = vec3<f32>(ci) / eta - ct;
     let wz = -vec3<f32>(1.0) / eta + bend * n.z;
@@ -942,6 +1031,9 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     var veil = 0.0;
     var here = vec4<f32>(0.0);
     if (g.backdrop_valid > 0.5) {
+        here = textureSampleLevel(backdrop, samp, backdrop_uv(wp), 0.0);
+    }
+    if (!metal && g.backdrop_valid > 0.5) {
         let ur = backdrop_uv(wp + n.xy * reach.x);
         let ug = backdrop_uv(wp + n.xy * reach.y);
         let ub = backdrop_uv(wp + n.xy * reach.z);
@@ -960,9 +1052,8 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         }
         under = vec3<f32>(shown1(sr.r, sr.a), shown1(sg.g, sg.a), shown1(sb.b, sb.a));
         veil = clamp(sg.a, 0.0, 1.0);
-        here = textureSampleLevel(backdrop, samp, backdrop_uv(wp), 0.0);
     }
-    if (pa.colors[0].w > 0.5 && g.world_valid > 0.5) {
+    if (!metal && pa.colors[0].w > 0.5 && g.world_valid > 0.5) {
         // The captured game frame, bent like everything else. The compositor blends in encoded
         // space, so the layers above it pass the decoded value of their encoded transmission.
         let lod = frost * 3.0;
@@ -1018,7 +1109,16 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         let lam_l = 0.5 * (sqrt(1.0 + a2 * (1.0 - nl * nl) / (nl * nl)) - 1.0);
         let lam_v = 0.5 * (sqrt(1.0 + a2 * (1.0 - ci * ci) / (ci * ci)) - 1.0);
         let dg = a2 / (PI * dd * dd) / (1.0 + lam_l + lam_v);
-        spec = fresnel3(hv.z, eta) * pa.colors[0].xyz * (dg / (4.0 * ci));
+        var f_h = fresnel3(hv.z, eta);
+        if (metal) {
+            f_h = fresnel_metal3(hv.z, eta, pa.g2.xyz);
+        }
+        spec = f_h * pa.colors[0].xyz * (dg / (4.0 * ci));
+    }
+
+    // Section 3, conductors: a metal is opaque and shows only what it reflects.
+    if (metal) {
+        return vec4<f32>(unshown(fres * env + spec, 1.0), 1.0) - here;
     }
 
     // Section 8: reflected plus transmitted, in linear light. The piece hides what it reflects
