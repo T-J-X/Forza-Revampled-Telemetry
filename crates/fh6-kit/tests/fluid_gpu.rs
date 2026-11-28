@@ -1,5 +1,10 @@
 //! GPU tests for the fluid solver and the WGSL noise functions on a headless DX12 device.
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "test helpers: a GPU setup or readback that fails should stop the test with its message"
+)]
 
 use fh6_gpu::GpuContext;
 use fh6_kit::fluid::{Fluid, FluidConfig};

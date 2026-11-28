@@ -1,42 +1,151 @@
-# TELEMETRY USAGE MATRIX - BEFORE SNAPSHOT
+# Telemetry usage matrix
 
-Generated: 2026-11-19
+Which telemetry inputs change each dash's frame. This file is the declaration that gates G2 and G3
+check (`docs/PROGRESS.md`): `crates/fh6-clusters/tests/dash_gates.rs` builds every dash in the
+registry on wgpu's no-op backend (no GPU and no GPU lock), probes each input below in each
+scenario, and fails when:
 
-## Notes
-- Cell values: `consumed`, `literal-substituted`, `not-consumed`, `discarded` (let _)
-- Evidence = file:line
+- a listed input does not change the dash's frame (G2: a claim the dash does not keep),
+- an input that is not listed does change it (G3: the matrix is out of date),
+- a registry dash has no row, a row names a dash or an input that does not exist, or the
+  Inputs table here differs from the test's `INPUTS` table.
 
-## ClusterTheme variants audited
+"Changes the frame" means the scene fingerprint differs (`Scene::fingerprint` in `fh6-kit`: every
+visible instance with its paint and clip, every point, draw run, layer segment and mesh draw, bit for
+bit). A probe builds the dash fresh, feeds the scenario for 8 updates, switches the input's probe
+value in for 20 and back out for 10, and fingerprints four frames: the first and last with the
+value, the first after it and the last. It compares them with a fresh build fed the scenario
+without the value, so an input that only shows while it changes (a start banner on `race_on`, a
+peak reset on a new car) counts as read. The test also checks that two fresh builds fed the same
+packets draw the same frames.
 
-| ClusterTheme | RPM normalized | speed | boost pressure | lateral G | yaw rate | slip angle | throttle | gear string | roll | pitch | longitudinal G | tire slip | torque | engine/speed/tire status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SolarisWarpCore | consumed:clusters/solaris_warp_core.rs:14 | consumed:clusters/solaris_warp_core.rs:31 | not-consumed | not-consumed | not-consumed | consumed:clusters/solaris_warp_core.rs:42 (car_slip_angle_deg) | not-consumed | consumed:clusters/solaris_warp_core.rs:31 | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed |
-| ChronoEventHorizon | consumed:clusters/chrono_event_horizon.rs:13 | consumed:clusters/chrono_event_horizon.rs:57 | not-consumed | consumed:clusters/chrono_event_horizon.rs:14 | not-consumed | consumed:clusters/chrono_event_horizon.rs:15 | not-consumed | consumed:clusters/chrono_event_horizon.rs:66 | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed |
-| NeuralCyberSynapse | consumed:clusters/neural_cyber_synapse.rs:16 (rpm_ratio) | consumed:clusters/neural_cyber_synapse.rs:?? | not-consumed | not-consumed | not-consumed | not-consumed | consumed:clusters/neural_cyber_synapse.rs:?? | literal-substituted:clusters/neural_cyber_synapse.rs:?? ("7".to_string()) | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed |
-| F35HelmetHmd | consumed:clusters/f35_helmet_hmd.rs:13 | consumed:clusters/f35_helmet_hmd.rs:46 | not-consumed | not-consumed | not-consumed | consumed:clusters/f35_helmet_hmd.rs:41 | not-consumed | consumed:clusters/f35_helmet_hmd.rs:59 | discarded:clusters/f35_helmet_hmd.rs:35 let _roll | consumed:clusters/f35_helmet_hmd.rs:34 | not-consumed | not-consumed | not-consumed | not-consumed |
-| EvaBioSync | consumed:clusters/eva_bio_sync.rs:13 | consumed:clusters/eva_bio_sync.rs:71 | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | consumed:clusters/eva_bio_sync.rs:70 | not-consumed | not-consumed | consumed:clusters/eva_bio_sync.rs:51 (brake_pct) | not-consumed | not-consumed | not-consumed |
-| CymaticResonanceField | consumed:clusters/cymatic_resonance_field.rs:15 | consumed:clusters/cymatic_resonance_field.rs:85 | not-consumed | consumed:clusters/cymatic_resonance_field.rs:94 (acceleration_x) | not-consumed | not-consumed | consumed:clusters/cymatic_resonance_field.rs:17 | consumed:clusters/cymatic_resonance_field.rs:88 | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed |
-| KineticLiquidMetal | consumed:clusters/kinetic_liquid_metal.rs:16 | consumed:clusters/kinetic_liquid_metal.rs:125 | not-consumed | consumed:clusters/kinetic_liquid_metal.rs:131 | consumed:clusters/kinetic_liquid_metal.rs:18 | not-consumed | consumed:clusters/kinetic_liquid_metal.rs:17 | consumed:clusters/kinetic_liquid_metal.rs:127 | not-consumed | not-consumed | not-consumed | literal-substituted:clusters/kinetic_liquid_metal.rs:76 slip=0.1 | not-consumed | not-consumed |
-| GlyphDotMatrix | consumed:clusters/glyph_dot_matrix.rs:55 | consumed:clusters/glyph_dot_matrix.rs:147 | consumed:clusters/glyph_dot_matrix.rs:158 | not-consumed | not-consumed | not-consumed | not-consumed | consumed:clusters/glyph_dot_matrix.rs:139 | not-consumed | not-consumed | not-consumed | not-consumed | literal-substituted:clusters/glyph_dot_matrix.rs:157 torque = hp * 0.5 | not-consumed |
-| Gt7HoodPro | consumed:clusters/gt7_hood_pro.rs:43 | consumed:clusters/gt7_hood_pro.rs:124 | not-consumed | not-consumed | not-consumed | not-consumed | not-consumed | consumed:clusters/gt7_hood_pro.rs:111 | not-consumed | not-consumed | not-consumed | literal-substituted:clusters/gt7_hood_pro.rs:135 tire slip placeholders comment | not-consumed | not-consumed |
-| ArNavWayfinder | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending | audit pending |
+Rebuilt on 2026-11-27 in Phase G from what the gate observes. It replaces the hand-audited v1
+snapshot of 2026-11-19, which covered the v1 tiny-skia clusters.
 
-## Known defects pre-fix
-- neural_cyber_synapse.rs: hardcoded gear "7" at line ~? draw_text with "7".to_string()
-- f35_helmet_hmd.rs: let _roll = sanitize(...); roll discarded line 35
-- kinetic_liquid_metal.rs: slip = 0.1 placeholder line 76; data unused in render_4_wheel_independent_torque_vectoring
-- glyph_dot_matrix.rs: torque = hp * 0.5 placeholder line 157
-- cymatic_resonance_field.rs: Placeholder for computation comment line 29; compute_chladni_harmonic_modes uses let _n/_m/_amp
-- gt7_hood_pro.rs: "Left wing tire slip placeholders" comment line 135
+## How a dash plugs in
 
-## Full variant list
-Remaining ClusterTheme variants not yet audited: BoschDdu, DriftGlass, PorscheAnalog, LiquidGlass, WindshieldHud, TeslaAdas, RetroCyber, AmgMbuxSuperscreen, LfaV10Nurburgring, PaganiHorologerie, BugattiTourbillon, KoenigseggGyro, ValkyrieLmp1, SynthwaveOutrun, ChronoMultiverse, Gt7ModularTripod, VisionSpatialGlass, AeroPlasmaBlade, ShibuyaChromaticPrisma.
+- A dash phase that rebuilds a dash updates its row in the same commit. On a mismatch the test
+  prints the observed row; copy it only after checking that each change is one the dash means
+  to make (the module docs list the telemetry a dash claims).
+- An input the dash reads only together with another (a lamp with two conditions, a rate) needs
+  a scenario where the other conditions hold: add it to `DASH_SCENARIOS` in the test. Bosch DDU's
+  four are the example.
+- `car_ordinal` reaches every dash through the palette and the logo's brand name, which the host
+  picks (`fh6-app` `render_loop.rs`, `ensure_palette` and `Logo.brand_name`); the gate gives each
+  dash a fixed palette and the default logo, so a row lists `car_ordinal` only when the dash reads
+  it itself. `race_on` and a stale stream hide the dash
+  in the host (AGENTS.md directive 9); a row lists `race_on` only when the dash draws differently
+  for it.
 
-Matrix to be completed after full audit.
+## Inputs
 
-## Post-G2 Update 2026-11-20
-- All clusters audited: no literal-substituted or discarded telemetry fields remain.
-- Gate G2 telemetry sensitivity harness passes for all 29 ClusterTheme variants.
-- Known defects fixed: neural_cyber_synapse gear string now from telemetry, f35_helmet_hmd roll consumed, kinetic_liquid_metal slip from telemetry, glyph_dot_matrix torque computed correctly, cymatic_resonance_field placeholder removed.
-- Matrix updated to reflect consumed fields per spec.
+The probe values are in the test's `INPUTS` table; a discrete input gets several (gear 2, reverse
+and neutral; rear and all-wheel drive; throttle full and a quarter; steer both ways). Each field of
+`FH6TelemetryData` belongs to exactly one input and each probe value changes exactly its input's
+fields (`every_telemetry_field_has_exactly_one_input`), so a new field fails the test until it has
+a column. In a field list, `_fr` repeats the previous field's stem.
 
+| Key | Packet fields |
+|---|---|
+| `race_on` | is_race_on |
+| `timestamp` | timestamp_ms |
+| `rpm` | current_engine_rpm |
+| `max_rpm` | engine_max_rpm |
+| `idle_rpm` | engine_idle_rpm |
+| `gear` | gear |
+| `speed` | speed_ms |
+| `throttle` | accel |
+| `brake` | brake |
+| `clutch` | clutch |
+| `handbrake` | hand_brake |
+| `steer` | steer |
+| `g_lat` | acceleration_x |
+| `g_long` | acceleration_z |
+| `g_vert` | acceleration_y |
+| `velocity` | velocity_x, velocity_y, velocity_z |
+| `yaw_rate` | angular_velocity_y |
+| `orientation` | yaw, pitch, roll |
+| `tyre_slip` | tire_slip_angle_fl, _fr, _rl, _rr |
+| `suspension` | normalized_suspension_travel_fl, _fr, _rl, _rr |
+| `suspension_m` | suspension_travel_meters_fl, _fr, _rl, _rr |
+| `car_ordinal` | car_ordinal |
+| `drivetrain` | drivetrain_type |
+| `position` | position_x, position_y, position_z |
+| `power` | power_watts |
+| `boost` | boost_psi |
+
+## Scenarios
+
+Every dash is probed in five common scenarios: cruise (the mid-cruise review state), idle, redline
+and drift braking (the review states in `fh6_clusters::review::STATES`), and a lift off (four
+frames at the limiter, then cruise, so a peak or a falling reading differs from the live one). Each
+has the fields a review state leaves at zero (timestamp, suspension, car ordinal) set to a
+plausible reading, the timestamp counting up and the position moving along the velocity. A dash is
+probed in each view the catalog designs it for (cockpit, hood or both; a raised HUD draws in the
+cockpit layout).
+
+Dash scenarios (`DASH_SCENARIOS`):
+
+| Dash | Scenario | Makes reachable |
+|---|---|---|
+| Bosch DDU | launch, nothing held | `brake`, `clutch` (LNCH: standing, throttle over 50% and something held) |
+| Bosch DDU | launch, brake held, throttle off | `throttle` (LNCH) |
+| Bosch DDU | threshold braking, brake off | `brake` (ABS: brake over 30% at 0.85 g deceleration) |
+| Bosch DDU | power oversteer, front drive | `drivetrain` (TC: throttle and growing body slip, not front drive) |
+
+## Dashes
+
+Six dashes have their own code today (Liquid Glass, GT7 Hood Pro, Porsche Analog, Bosch DDU,
+Tesla ADAS, Retro Cyber). The other 42 draw the shared scaffold (`common::scaffold`), which reads
+rpm, the limiter, gear and speed.
+
+| Theme | Dash | Reads |
+|---|---|---|
+| `LiquidGlass` | Liquid Glass | `race_on`, `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
+| `VisionSpatialGlass` | Vision Spatial Glass | `rpm`, `max_rpm`, `gear`, `speed` |
+| `Gt7HoodPro` | GT7 Hood Pro | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `AmgMbuxSuperscreen` | AMG MBUX Superscreen | `rpm`, `max_rpm`, `gear`, `speed` |
+| `DriftGlass` | Drift Glass | `rpm`, `max_rpm`, `gear`, `speed` |
+| `GlyphDotMatrix` | Glyph Dot Matrix | `rpm`, `max_rpm`, `gear`, `speed` |
+| `PorscheAnalog` | Porsche Analog | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `car_ordinal`, `power`, `boost` |
+| `PaganiHorologerie` | Pagani Horologerie | `rpm`, `max_rpm`, `gear`, `speed` |
+| `BugattiTourbillon` | Bugatti Tourbillon | `rpm`, `max_rpm`, `gear`, `speed` |
+| `LfaV10Nurburgring` | LFA V10 Nürburgring | `rpm`, `max_rpm`, `gear`, `speed` |
+| `KoenigseggGyro` | Koenigsegg Gyro | `rpm`, `max_rpm`, `gear`, `speed` |
+| `BoschDdu` | Bosch DDU | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `clutch`, `handbrake`, `g_lat`, `g_long`, `velocity`, `drivetrain`, `power`, `boost` |
+| `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed` |
+| `Gt7ModularTripod` | GT7 Modular Tripod | `rpm`, `max_rpm`, `gear`, `speed` |
+| `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `WindshieldHud` | Windshield HUD | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ArNavWayfinder` | AR Nav Wayfinder | `rpm`, `max_rpm`, `gear`, `speed` |
+| `F35HelmetHmd` | F-35 Helmet HMD | `rpm`, `max_rpm`, `gear`, `speed` |
+| `RetroCyber` | Retro Cyber | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `boost` |
+| `SynthwaveOutrun` | Synthwave Outrun | `rpm`, `max_rpm`, `gear`, `speed` |
+| `EvaBioSync` | EVA Bio-Sync | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ChronoEventHorizon` | Chrono Event Horizon | `rpm`, `max_rpm`, `gear`, `speed` |
+| `NeuralCyberSynapse` | Neural Cyber Synapse | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SolarisWarpCore` | Solaris Warp Core | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AeroPlasmaBlade` | Aero Plasma Blade | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ShibuyaChromaticPrisma` | Shibuya Chromatic Prisma | `rpm`, `max_rpm`, `gear`, `speed` |
+| `KineticLiquidMetal` | Kinetic Liquid Metal | `rpm`, `max_rpm`, `gear`, `speed` |
+| `CymaticResonanceField` | Cymatic Resonance Field | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ChronoMultiverse` | Chrono Multiverse | `rpm`, `max_rpm`, `gear`, `speed` |
+| `LumenEtch` | Lumen Etch | `rpm`, `max_rpm`, `gear`, `speed` |
+| `VernierLoupe` | Vernier Loupe | `rpm`, `max_rpm`, `gear`, `speed` |
+| `DichroicLouvre` | Dichroic Louvre | `rpm`, `max_rpm`, `gear`, `speed` |
+| `FibreOpticCorona` | Fibre-Optic Corona | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ApertureNine` | Aperture Nine | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AeroSmokeTunnel` | Aero Smoke Tunnel | `rpm`, `max_rpm`, `gear`, `speed` |
+| `RattrapanteSector` | Rattrapante Sector | `rpm`, `max_rpm`, `gear`, `speed` |
+| `SapphireMystery` | Sapphire Mystery | `rpm`, `max_rpm`, `gear`, `speed` |
+| `RackFocus` | Rack Focus | `rpm`, `max_rpm`, `gear`, `speed` |
+| `BionicSpaceframe` | Bionic Spaceframe | `rpm`, `max_rpm`, `gear`, `speed` |
+| `GeodesicWell` | Geodesic Well | `rpm`, `max_rpm`, `gear`, `speed` |
+| `Lightpainter` | Lightpainter | `rpm`, `max_rpm`, `gear`, `speed` |
+| `TreadSeismograph` | Tread Seismograph | `rpm`, `max_rpm`, `gear`, `speed` |
+| `StarSailOrigami` | Star Sail Origami | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ArcLadderCascade` | Arc Ladder Cascade | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AuroraVeil` | Aurora Veil | `rpm`, `max_rpm`, `gear`, `speed` |
+| `IsochromaticLoadPath` | Isochromatic Load Path | `rpm`, `max_rpm`, `gear`, `speed` |
+| `AbyssalShearBloom` | Abyssal Shear Bloom | `rpm`, `max_rpm`, `gear`, `speed` |
+| `HarmonographDrive` | Harmonograph Drive | `rpm`, `max_rpm`, `gear`, `speed` |

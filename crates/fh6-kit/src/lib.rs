@@ -18,6 +18,7 @@
 //!
 //! The kit takes a `wgpu` device and queue, so the same code runs natively (DX12 through
 //! `fh6-gpu`) and in a browser (WebGPU). See `docs/kit/README.md` for the author's guide.
+#![forbid(unsafe_code)]
 
 pub mod anim;
 mod clock;

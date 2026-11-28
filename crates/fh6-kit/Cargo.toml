@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "GPU 2D/2.5D render kit for FH6 WheelDash clusters: SDF shapes, paints, bloom, glass, MSDF text, springs, effects"
 
+[lints]
+workspace = true
+
 [dependencies]
 fh6-core = { path = "../fh6-core" }
 wgpu = { workspace = true }

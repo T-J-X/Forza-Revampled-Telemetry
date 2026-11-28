@@ -7,6 +7,7 @@ The coordinator starts you with: *"You are the cluster thread for `<Name>` (cata
 - its design board: the Penpot page `07 · <Name>` (see "Design boards" in `CATALOG.md`), plus its product page `mockups/<Name>/index.html`
 - its masters folder `<snake_name>\` inside the Google Drive folder `FH6 WheelDash v2 - 4K Masters`
 - its own row in `CATALOG.md` (the status and design-board cells only)
+- its own row in `docs/TELEMETRY_USAGE_MATRIX.md`, and its entries in `DASH_SCENARIOS` in `crates/fh6-clusters/tests/dash_gates.rs` when an input it reads needs one (a lamp with two conditions)
 
 **Edit nothing outside them.** The catalog table (`catalog.rs`), the registry, `ClusterTheme`, `common/`, the golden harness, the kit and the tools are shared. If a shared helper or the kit needs a change, write it in your handover so the coordinator can schedule it.
 
@@ -102,6 +103,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
    - `cargo check -p fh6-clusters -p asset-forge`.
    - `cargo run --release -p preview-export -- --cluster <Name>` writes `mockups/<Name>/`: 4 states per view at 4K, crops, the cockpit composite, the 60-frame sequence and `index.html`. It prints the GPU time of every frame and the sequence p50 / p99: that is your budget number (under 0.5 ms at 4K), in every view the catalog lists.
    - `FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters <snake_name>` writes your goldens; review the PNGs, then `cargo test -p fh6-clusters <snake_name>` must pass twice in a row without rewriting a golden.
+   - `cargo test -p fh6-clusters --test dash_gates` (no GPU, no lock, about a minute) checks your dash against its row in `docs/TELEMETRY_USAGE_MATRIX.md`, with hostile telemetry, for warm-frame allocation and without assets. On a matrix mismatch it prints the observed row: copy it only after checking that each input is one your dash means to read, and name the changes in your handover.
    - `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings`. Format only your files with `rustfmt --edition 2021 crates/fh6-clusters/src/clusters/<snake_name>/*.rs tools/asset-forge/src/recipes/<snake_name>.rs`, then run the same command with `--check`.
    - Live bench. Tell TJX first, because it draws on the main display. Build both tools (`cargo build --release -p fh6-app -p mock-udp`), start the stream (`cargo run --release -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 120 --rate-hz 60`), then run `cargo run --release -p fh6-app --bin FH6_WheelDash -- --demo --cluster <Name> --stats --bench-seconds 60 --bench-out mockups/<Name>/live_bench.md`. Always pass `--bench-out`: the default overwrites the tracked `docs/perf/engine.md`. The run quits by itself and writes the percentiles. Run the same bench once on a scaffold dash (a catalog row still marked ☐) for the baseline: your dash may add at most 0.3 ms to its "CPU per frame" p50.
    - Compare the renders with your board side by side, and fix the gaps.
@@ -162,7 +164,7 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 1. The module reads, binds or requires none of A, B, X, Y (`0xF000`). [AGENTS 4]
 2. No placeholder: no `todo!()`, no stub, no hardcoded value standing in for live telemetry. A telemetry field that the golden packets do not cover is derived from covered fields or verified first, and named in the handover. [AGENTS 1, AGENTS 2]
 3. No `unwrap()`, `expect()` or `panic!` in new non-test code, and no new `unsafe`. [AGENTS 6; Agent 2 keeps `unsafe` in `fh6-win` and `fh6-input`]
-4. `update()` and `draw()` do no heap allocation, file I/O, logging or locking after warm-up: a search of your module for `format!`, `vec!`, `collect`, `to_string`, `String::from`, `Box::new`, `tracing::`, `.lock()` and `std::fs` finds hits only in `new()` and in tests. [AGENTS 6, SKILLS 3.8]
+4. `update()` and `draw()` do no heap allocation, file I/O, logging or locking after warm-up: a search of your module for `format!`, `vec!`, `collect`, `to_string`, `String::from`, `Box::new`, `tracing::`, `.lock()` and `std::fs` finds hits only in `new()` and in tests, and `warm_frames_do_not_allocate` in `dash_gates` passes for your dash. [AGENTS 6, SKILLS 3.8]
 5. GPU time is under 0.5 ms at 3840×2160: the sequence p99 and every per-state GPU line that `preview-export` prints, in every view the catalog lists, with the numbers in the handover. [AGENTS 7, SKILLS 3.9]
 6. The dash's own share of the CPU is under 0.3 ms per frame: the live bench's "CPU per frame" p50 with your dash, minus the same number from the bench on a scaffold dash (a catalog row still marked ☐). Both reports, with their p99, are in the handover. An app total over 1 ms p99 that the scaffold shows too is a host regression (known defect 10 was fixed on 2026-11-27): it is reported to the coordinator, and no shared code is edited for it. [AGENTS 7]
 7. The dash adds no smoothing of its own to rpm, speed or gear beyond the kit springs from the tokens, so telemetry still reaches the screen within one display frame. [AGENTS 7, the bar]
@@ -171,11 +173,11 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 10. Commits are by TJX with no co-author trailer. No tracked file holds a real name, a `C:\Users\<name>` path or a personal email, mentions the legacy C# build, or names the design tool that Penpot replaced; the source links in `RESEARCH.md` are checked for this too. [AGENTS 10, ONBOARDING 3]
 11. Nothing was copied into the game folder or the mirror. [AGENTS 8]
 12. Any new dependency has its line in the `docs/PROGRESS.md` decision log. [AGENTS 6]
-13. `cargo check -p fh6-clusters -p asset-forge`, `cargo test -p fh6-clusters <snake_name>`, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and the `rustfmt --check` of step 7 pass, with their real output in the handover. [AGENTS 3]
+13. `cargo check -p fh6-clusters -p asset-forge`, `cargo test -p fh6-clusters <snake_name>`, `cargo test -p fh6-clusters --test dash_gates`, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and the `rustfmt --check` of step 7 pass, with their real output in the handover. [AGENTS 3]
 
 **B. Rendering laws**
 14. Colour is premultiplied linear end to end; alpha is never multiplied twice; transparent is `(0,0,0,0)`. [SKILLS 3.1]
-15. Sizes, radii and stroke widths are clamped to at least 1 px, and NaN or Inf telemetry is sanitised before a shader. [SKILLS 3.2]
+15. Sizes, radii and stroke widths are clamped to at least 1 px. Packet floats arrive finite and bounded, but the dash's own maths (a division by `max_rpm`, which can be 0) makes no NaN or Inf: the G5 gate in `dash_gates` passes with no repairs. [SKILLS 3.2]
 16. Every textured look has a procedural fallback: each asset lookup in your module has a branch that draws without the asset, and assets load once at startup, never in `update()` or `draw()`. [SKILLS 3.4]
 17. Text is MSDF from the kit, speed and RPM use tabular figures, and the numerals follow `input.fonts.display` when the user picks a font. [SKILLS 3.5]
 18. Off pixels are `#000000` (transparent). There is no opaque grey or navy box and no full-canvas fill. [SKILLS 3.6]

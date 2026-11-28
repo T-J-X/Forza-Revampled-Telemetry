@@ -9,6 +9,7 @@
 //! Offscreen targets and readback for tests, benches and `preview-export` are the kit's
 //! (`fh6_kit::testing`). `wgpu` is re-exported so dependants name the exact version this crate
 //! uses.
+#![forbid(unsafe_code)]
 
 mod block_on;
 mod context;

@@ -2,7 +2,7 @@
 
 **Project:** a Forza Horizon 6 overlay. It draws ultrawide cockpit/hood instrument clusters (a catalog of 48 dashes, each rebuilt in its own thread), a 0–100% OEM dash blackout scrim, and a gamepad-driven OSD from the game's UDP telemetry. It also patches the game's camera FOV and seat position.
 **Root:** the repository root (locally `%USERPROFILE%\Documents\FOV and Dash digtal clusters\`). This is a Cargo workspace; run every command from the root.
-**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, declared MSRV 1.87 (`Cargo.toml` and `clippy.toml`; the locked dependencies need about 1.90, so 1.87 is untested).
+**Toolchain:** rustc / cargo 1.100 on `x86_64-pc-windows-msvc`, edition 2021, declared MSRV 1.90 (`Cargo.toml` and `clippy.toml`, what the locked dependencies need; checked with rustc 1.90.0 on 2026-11-27).
 **Display target:** 55" LG C1 4K OLED at `3840x2160` and 200% DPI. Off pixels are true black, `#000000`.
 
 Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/README.md](program/README.md) (the v2 build program: phases, conductor protocol, pre-approvals), [SKILLS.md](SKILLS.md) (which skill or MCP to use when), [docs/PROGRESS.md](docs/PROGRESS.md) (where we are; read it first, update it last), and the `fh6-hmi-design-rules` skill for any visual work.
@@ -26,7 +26,7 @@ Read with: [ONBOARDING.md](ONBOARDING.md) (read first in every chat), [program/R
 | `tools/preview-export` | Headless 4K GPU renders of every kit cluster × 4 states, thumbnails, measured badges, the kit scrim and the OSD states (GPU timings, `--backdrop PNG`) → `mockups/` (`--cluster <Name>` writes one cluster's review set with the 60-frame sequence to `mockups/<Name>/`; `--fit` writes the cockpit fit review to `mockups/fit/`) | core, kit, gpu, clusters, osd |
 | `tools/visual-review` | CPU-only review images for a thread's self-review (no GPU lock), from `preview-export`'s renders, the goldens and design exports → `mockups/<Name>/review/`: 1:1 tiles and zooms, the tokens' blur gate with contrast per zone, golden-harness diffs with heat maps and crop pairs, comparison sheets, the WCAG 2.3.1 flash audit, the motion profile, colour-vision views, near-black stretch, static parts, a blind glance read, dial unwraps and annotated screenshots. Used through the `fh6-visual-review` skill | fh6-kit, image, resvg (fh6-clusters in its tests only) |
 | `tools/mock-udp` | Synthetic telemetry sender (`--scenario` incl. `menu_pause` and `parked` (idle at 800 rpm, for the OLED idle dim), `--port`, `--duration`, `--rate-hz`, `--race-on 0` or `1`) | std only |
-| `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares against the `.json` | fh6-core |
+| `tools/parity-dump` | Decodes `tests/golden/packets/*.bin` and compares each with its `.json`; a missing golden, or a golden with no packet, fails (`--write-missing` writes a new packet's golden, never an existing one) | fh6-core |
 | `tools/bench-render` | Offscreen kit benchmark at 3840x2160 (clusters, bloom on/off, glass ± refraction, fluid) | fh6-core, fh6-gpu, fh6-kit, fh6-clusters |
 | `tools/web-preview` | WebGPU page rendering a kit cluster from a synthetic drivetrain (Rust → WASM); `web-preview-build`, `web-preview-serve` | fh6-core; fh6-kit and fh6-clusters on wasm32 only |
 | `tools/wgc-bench` | Windows.Graphics.Capture cost benchmark for the glass refraction source | fh6-win |
@@ -45,8 +45,9 @@ Rules for the layers:
 ```
 cargo check --workspace
 cargo test --workspace
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+cargo test -p fh6-clusters --test dash_gates
 cargo run -p parity-dump -- tests/golden/packets
 cargo run -p mock-udp -- --scenario bmw_m4_cs --port 8000 --duration 10
 cargo run --release -p preview-export
@@ -80,9 +81,10 @@ Known red before any new work: none since Phase 4 (see `docs/PROGRESS.md`). Chec
    - Allowed: D-pad `0x0001/0x0002/0x0004/0x0008`, Menu/Start `0x0010`, View/Back `0x0020`, L3/R3 `0x0040/0x0080`, LB `0x0100`, RB `0x0200` and Guide `0x0400`.
 5. **UTF-8 without BOM** for every file in `data/` and for anything written to the game's camera files.
 6. **Rust hygiene.**
-   - No `unwrap()`, `expect()` or `panic!` in new non-test code; use `thiserror` errors or safe fallbacks.
-   - Every `unsafe` block gets a `// SAFETY:` comment naming the invariant.
-   - No per-frame heap allocation in render paths.
+   - No `unwrap()`, `expect()` or `panic!` in new non-test code; use `thiserror` errors or safe fallbacks. The workspace lint table (`[workspace.lints]` in `Cargo.toml`, inherited by every member with `[lints] workspace = true`) denies them outside tests.
+   - Every `unsafe` block gets a `// SAFETY:` comment naming the invariant. `unsafe` is denied everywhere except `fh6-win` and `fh6-input`'s `xinput` module, and the safe crates forbid it.
+   - No per-frame heap allocation in render paths. `cargo test -p fh6-clusters --test dash_gates` checks every registry dash for it, along with the telemetry matrix (G2, G3) and hostile telemetry (G5), on wgpu's no-op backend with no GPU.
+   - Packet floats are finite and within `fh6_core::telemetry::MAX_ABS` once `decode` returns, but zeros pass through: a division by a packet value still needs its own guard.
    - Add a dependency only with a line in the `docs/PROGRESS.md` decision log (name, version, why).
 7. **Frame budget ("0 ms" feel).**
    - No packet queue: telemetry reaches the screen on the next vsync, within 1 display frame.
@@ -211,7 +213,8 @@ All four follow the `fh6-hmi-design-rules` skill: the 7 rules, the rank order, O
 **Responsibilities:**
 - **Gate every change:**
   - `cargo check`, `cargo test`, `cargo clippy -D warnings` and `cargo fmt --check` across the workspace. Report the real output, and compare against the known reds above.
-  - **Golden telemetry:** the `golden_telemetry` test, plus `parity-dump` on `tests/golden/packets`, must cover all 20 packets. Never edit a golden `.json` to make a test pass.
+  - **Golden telemetry:** the `golden_telemetry` test (every field, floats bit for bit), plus `parity-dump` on `tests/golden/packets`, must cover all 20 packets. Never edit a golden `.json` to make a test pass.
+  - **Dash gates:** `cargo test -p fh6-clusters --test dash_gates` (no GPU, about a minute) checks every registry dash against its row in `docs/TELEMETRY_USAGE_MATRIX.md` (G2, G3), with hostile telemetry and odd targets (G5), for warm-frame allocation and without assets. A dash phase updates its matrix row in the same commit.
   - **Mockups:** `cargo run --release -p preview-export` renders all 48 catalog clusters × 4 states (`--cluster <Name>` renders one cluster's full review set), the 0/50/100% scrim and the OSD into `mockups/` (gitignored), plus `mockups/index.html`. Review them with the `fh6-visual-review` skill: its fixed checklist and the `visual-review` tool (CPU only), never judging detail by eye on a downscaled 4K frame.
 - **Deploy:** only on TJX's GO, and with a SHA256 parity check after copying. There are two targets:
   1. `E:\SteamLibrary\steamapps\common\ForzaHorizon6\`, in `mediapc\Camera\` (camera files) and `WheelDash\` (binaries, `config.json`, assets)
