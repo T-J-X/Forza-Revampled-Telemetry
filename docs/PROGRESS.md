@@ -244,6 +244,7 @@ What exists:
 19. The OSD's power unit row (HP or kW) changes nothing on the three dashes that exist: Bosch DDU and PorscheAnalog pick power from the speed unit, and Liquid Glass always shows hp. Each reads `signals.power_unit` when it is rebuilt (Rust fix phase D gave every dash the unit and edited none).
 20. `--cluster <Name>` forces the style in the live config, and the OSD copies that config for editing, so an OSD edit during such a run saves the forced style into all three style keys (found by the fix phase D review; not fixed there).
 21. `fh6_kit::Meshes::upload` never reuses a mesh: each call creates new buffers and a new `MeshId`, and nothing frees them, so every rebuild of a dash that uploads meshes leaks them (Tesla ADAS uploads 5 per build; the OSD carousel and a style switch rebuild). Found by the fix phase G review. A fix is a content key or a release on drop; the gate's fingerprint already numbers mesh handles by first use so it is not affected.
+22. After a device loss, the OSD carousel's thumbnail dashes keep image ids from the old device: `crates/fh6-osd/src/host.rs` keeps the thumbnails while the carousel's order is unchanged, and `fh6-app`'s `lose_gpu` and `adopt` cannot reach them. PorscheAnalog's own Porsche wordmark is one of those ids. Found by both fix phase F reviews, not reproduced; the live dash and its brand logo are not affected. A fix is an `OsdHost::new_kit()` that clears the thumbnails, called from `adopt`.
 
 ## Backlog (not yet scheduled)
 **Pre-05A: Liquid Glass OSD and cockpit optics**
@@ -256,6 +257,7 @@ What exists:
 **P5: mockups and contact sheet**
 - Keep `preview-export` working: the 48 catalog clusters × 4 states, the 0/50/100% scrim, the OSD and the `index.html` gallery.
 - Add the in-cockpit compositor (Phase 8 spec P8-4), using `assets/reference/cockpit_with_wheel.jpg`.
+- Pair the `--car` logo with that car's palette and telemetry (fix phase F sets only the logo; the states keep the family palettes and car 0, so a preview can pair a brand's dial with another family's colours).
 
 **P6: gates, benchmark, deploy**
 - P6-1: golden telemetry replay through the decoder; it must match `tests/golden/packets/*.json` field for field.
