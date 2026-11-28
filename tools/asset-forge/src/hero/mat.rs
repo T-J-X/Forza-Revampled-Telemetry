@@ -94,17 +94,35 @@ pub fn machined_alu() -> Mat {
         .set("grain", 1.2)
 }
 
-/// Anodised aluminium: metal under a tinted dielectric coat (the dye layer).
+/// Anodised aluminium; `tint` is the finished colour (linear). The dyed oxide scatters its
+/// colour (half the response is diffuse), the aluminium under it gives the metallic glint, and a
+/// satin clear coat sits on top. (A tinted coat over bright aluminium read mid-grey in batch 2,
+/// whatever the dye.)
 #[must_use]
 pub fn anodised(tint: [f32; 3]) -> Mat {
     Mat::new("metal", "anodised")
-        .color(metal::ALUMINIUM)
+        .color(tint)
         .rough(0.32)
+        .set("metallic", 0.5)
         .set("finish", "bead")
         .set("grain", 1.0)
         .set("coat", 1.0)
         .set("coat_rough", 0.18)
-        .set("coat_tint", json!(tint))
+}
+
+/// A synthetic jewel (ruby, sapphire, crystal) for sprites: an opaque body of `color` under a
+/// mirror polish, so its facets flash the lights and its colour reads on black (a clear,
+/// transmissive crystal renders transparent in a sprite). `glow` lights it (a jewel lamp), with
+/// a hot centre over `radius` px.
+#[must_use]
+pub fn jewel(color: [f32; 3], glow: f32, radius: f32) -> Mat {
+    Mat::new("jewel", "jewel")
+        .color(color)
+        .rough(0.02)
+        .set("ior", 1.76)
+        .set("emit", json!([1.0, 1.0, 1.0]))
+        .set("emit_strength", glow)
+        .set("radius", radius)
 }
 
 /// Linear brushed metal (grain along x).

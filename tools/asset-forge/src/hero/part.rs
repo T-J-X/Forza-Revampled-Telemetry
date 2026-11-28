@@ -119,6 +119,59 @@ impl Part {
         Self::lathe(name, at, z, geom::dome(r, h, collar), mats.to_vec())
     }
 
+    /// A faceted jewel lens of radius `r` and crown height `h` on a girdle `girdle` px tall: a
+    /// flat table (55% of the radius), `n` star facets round it, a ring of kite and girdle facets
+    /// down to a `2n`-sided girdle, flat shaded so each facet flashes on its own. Slots: crown,
+    /// girdle.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn jewel(name: &str, at: [f32; 2], z: f32, r: f32, h: f32, girdle: f32, n: usize, mats: [Mat; 2]) -> Self {
+        let n = n.max(6);
+        let tau = std::f32::consts::TAU;
+        let ring = |rad: f32, zz: f32, count: usize, off: f32| -> Vec<[f32; 3]> {
+            (0..count)
+                .map(|k| {
+                    let a = tau * (k as f32 + off) / count as f32;
+                    [rad * a.cos(), rad * a.sin(), zz]
+                })
+                .collect()
+        };
+        let mut verts: Vec<[f32; 3]> = Vec::with_capacity(6 * n);
+        verts.extend(ring(r * 0.55, girdle + h, n, 0.0));
+        verts.extend(ring(r * 0.8, girdle + h * 0.5, n, 0.5));
+        verts.extend(ring(r, girdle, 2 * n, 0.0));
+        verts.extend(ring(r, 0.0, 2 * n, 0.0));
+        let nn = n as u32;
+        let (s0, g0, b0) = (nn, 2 * nn, 4 * nn);
+        let g = |i: u32| g0 + i % (2 * nn);
+        let mut faces: Vec<Vec<u32>> = vec![(0..nn).collect()];
+        let mut fm = vec![0u8];
+        for k in 0..nn {
+            let k1 = (k + 1) % nn;
+            // Star facet between two table corners; the star point sits over girdle point 2k+1.
+            faces.push(vec![k, s0 + k, k1]);
+            // Upper kites: table corner, girdle, star point.
+            faces.push(vec![k, g(2 * k), s0 + k]);
+            faces.push(vec![k1, s0 + k, g(2 * k + 2)]);
+            // Girdle facets under the star point.
+            faces.push(vec![s0 + k, g(2 * k), g(2 * k + 1)]);
+            faces.push(vec![s0 + k, g(2 * k + 1), g(2 * k + 2)]);
+            fm.extend([0u8; 5]);
+        }
+        for k in 0..2 * nn {
+            let k1 = (k + 1) % (2 * nn);
+            faces.push(vec![b0 + k, b0 + k1, g0 + k1, g0 + k]);
+            fm.push(1);
+        }
+        let mesh = Mesh {
+            verts,
+            faces,
+            mats: fm,
+            smooth: false,
+        };
+        Self::new(name, at, z, Shape::Mesh(mesh), mats.to_vec())
+    }
+
     /// An extruded housing or surround.
     #[must_use]
     pub fn extrude(name: &str, outline: Outline, z: f32, thick: f32, bevel: f32, mat: Mat) -> Self {

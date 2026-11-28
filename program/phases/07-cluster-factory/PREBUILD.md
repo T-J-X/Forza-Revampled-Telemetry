@@ -22,7 +22,7 @@ Not pre-built: housings, yokes and binnacles (their shape is the layout), Psyche
 
 ## Dashes with nothing to pre-build
 
-VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35HelmetHmd, ArNavWayfinder, HarmonographDrive, DichroicLouvre, GeodesicWell, Lightpainter, AeroPlasmaBlade, RackFocus, LumenEtch, TreadSeismograph and FibreOpticCorona are procedural only by their briefs. ChronoMultiverse, AuroraVeil, IsochromaticLoadPath, AeroSmokeTunnel and AbyssalShearBloom draw their figure from the model. CarplayIsland, HopfFibration, VisionPetals, LiquidMorph, KaleidoscopeMirror and GoldenAngle reuse the existing `liquid_glass` studio plate (seed 77203). AmgMbuxSupersport, AmgMbuxTrackPace and AmgMbuxClassic wait for their frame grabs. Gt7CockpitPro shares Gt7HoodPro's parts, and Gt7ModularTripod (translucent panels, thin lines) has no hardware. SynthwaveOutrun's chrome bevel follows its font atlas. VisionPetals' petal lens, LiquidMorph's drops and SapphireMystery's cabochon are optical glass, which the kit computes from the outline. CymaticResonanceField's rim, SolarisWarpCore's coil hoops and ArcLadderCascade's insulators are optional profile strips, and the brief's analytic bevel is the default.
+VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35HelmetHmd, ArNavWayfinder, HarmonographDrive, DichroicLouvre, GeodesicWell, Lightpainter, AeroPlasmaBlade, RackFocus, LumenEtch, TreadSeismograph and FibreOpticCorona are procedural only by their briefs. ChronoMultiverse, AuroraVeil, IsochromaticLoadPath, AeroSmokeTunnel and AbyssalShearBloom draw their figure from the model. CarplayIsland, HopfFibration, VisionPetals, LiquidMorph, KaleidoscopeMirror and GoldenAngle reuse the existing `liquid_glass` studio plate (seed 77203). AmgMbuxTrackPace and AmgMbuxClassic wait for their frame grabs. Gt7CockpitPro shares Gt7HoodPro's parts, and Gt7ModularTripod (translucent panels, thin lines) has no hardware. SynthwaveOutrun's chrome bevel follows its font atlas. VisionPetals' petal lens, LiquidMorph's drops and SapphireMystery's cabochon are optical glass, which the kit computes from the outline. CymaticResonanceField's rim, SolarisWarpCore's coil hoops and ArcLadderCascade's insulators are optional profile strips, and the brief's analytic bevel is the default.
 
 ## The kits
 
@@ -41,20 +41,20 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #9 `ValkyrieLmp1` (`valkyrie_lmp1`)
 
-- Texture `forged_carbon_marble` (ComfyUI, seed 90002): the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance
+- Computed `forged_carbon_marble` (CPU, exact): the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance
 - Left to the thread: the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board
 - Left to the thread: the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)
 
 ### #12 `SkylineR34Mfd` (`skyline_r34_mfd`)
 
-- Texture `lcd_backlight_mura` (ComfyUI, seed 120001): modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural
 - Sprite `tach_ring_440` (Blender, 456 px): the 440 px tach ring: matte period black plastic with a polished inner chamfer (14 px width proposed; step 1 checks the R34 ring)
+- Computed `lcd_backlight_mura` (CPU, exact): modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural
 - Left to the thread: the MFD tile housings and the dial-face print: layout and text
 
 ### #16 `AmgOneF1` (`amg_one_f1`)
 
-- Texture `antiglare_matte_grain` (ComfyUI, seed 160001): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 - Swatch `carbon_twill_rim` (Blender tile): surface of the 780 px carbon rim arc (2x2 twill, 12 px tows)
+- Computed `antiglare_matte_grain` (CPU, exact): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 - Left to the thread: the housing, the rim arc and the F1 shift-light caps: need the Penpot layout and the cap pitch
 
 ### #19 `ChronoEventHorizon` (`chrono_event_horizon`)
@@ -64,11 +64,11 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 ### #20 `Gt3RsApogee` (`gt3_rs_apogee`)
 
 - Texture `mli_foil_crinkle_height` (ComfyUI, seed 200001): height only: the dash's gold-foil dial backing shades it with metal GOLD (SDXL never draws the metal)
-- Texture `heat_shield_tile_coating` (ComfyUI, seed 200004): surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)
 - Texture `star_field_tile` (ComfyUI, seed 200003): environment for reflections in the titanium and gold (a tile, not a figure)
 - Sprite `rev_counter_ring_500` (Blender, 516 px): the 500 px machined titanium rev-counter ring, no hub (22 px width proposed)
 - Sprite `docking_light_off` (Blender, 38 px): the 12 docking lights on the 760x30 strip: 30 px caps, unlit and lit
 - Sprite `docking_light_on` (Blender, 38 px): the 12 docking lights on the 760x30 strip: 30 px caps, unlit and lit
+- Computed `heat_shield_tile_coating` (CPU, exact): surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)
 - Left to the thread: the attitude ball and its gimbal cage: markings settle in step 1 against the reference ball
 
 ### #25 `BugattiTourbillon` (`bugatti_tourbillon`)
@@ -80,7 +80,7 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #26 `ShibuyaChromaticPrisma` (`shibuya_chromatic_prisma`)
 
-- Texture `wet_asphalt_ripple` (ComfyUI, seed 260001): greyscale height for the mirror-ripple normal map
+- Computed `wet_asphalt_ripple` (CPU, exact): greyscale height for the mirror-ripple normal map
 
 ### #30 `GtrNismoMfd` (`gtr_nismo_mfd`)
 
@@ -89,14 +89,14 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #31 `SimInputTrace` (`sim_input_trace`)
 
-- Texture `antiglare_matte_grain` (ComfyUI, seed 160001): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 - Swatch `dark_anodised_carrier` (Blender tile): the LED carrier and the trace window's frame edge
 - Sprite `shift_led_32_off` (Blender, 40 px): 16 LEDs on 780x32: 32 px caps, tinted go / warning / shift by the kit
 - Sprite `shift_led_32_on` (Blender, 40 px): 16 LEDs on 780x32: 32 px caps, tinted go / warning / shift by the kit
+- Computed `antiglare_matte_grain` (CPU, exact): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 
 ### #33 `LorenzButterfly` (`lorenz_butterfly`)
 
-- Texture `pad_rim_powder_coat` (ComfyUI, seed 330001): labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4
+- Computed `pad_rim_powder_coat` (CPU, exact): labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4
 
 ### #34 `PaganiHorologerie` (`pagani_horologerie`)
 
@@ -107,22 +107,22 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #37 `NeuralCyberSynapse` (`neural_cyber_synapse`)
 
-- Texture `soma_membrane_grain` (ComfyUI, seed 370001): optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model
+- Computed `soma_membrane_grain` (CPU, exact): optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model
 
 ### #42 `SuminagashiMarble` (`suminagashi_marble`)
 
-- Texture `urushi_lacquer` (ComfyUI, seed 420001): the tray rim's lacquer
-- Texture `still_water_sheen` (ComfyUI, seed 420002): greyscale height for the water's faint sheen normal; the marbling is the dash's area-preserving maps
-- Texture `washi_paper_fibre` (ComfyUI, seed 420003): labelled fibre texture under the labels
+- Computed `urushi_lacquer` (CPU, exact): the tray rim's lacquer
+- Computed `still_water_sheen` (CPU, exact): greyscale height for the water's faint sheen normal; the marbling is the dash's area-preserving maps
+- Computed `washi_paper_fibre` (CPU, exact): labelled fibre texture under the labels
 - Left to the thread: the gear stone (200 px) and the side stones (260x130): pebble geometry is modelled with the layout
 
 ### #43 `T50Floodlit` (`t50_floodlit`)
 
-- Texture `leather_binnacle_black` (ComfyUI, seed 430001): the binnacle surround (leather(...).set("texture")) for edges and reflections
 - Swatch `spun_aluminium_chapter` (Blender disc): the chapter ring's fine circular brushing
 - Swatch `carbon_twill_pane_frame` (Blender tile): frames of the two 300x220 panes
 - Sprite `dial_ring_480` (Blender, 496 px): the 480 px thin polished bezel over a satin spun chapter blank, no numerals (the scale follows the car's max rpm)
 - Sprite `centre_cap_200` (Blender, 212 px): the 200 px machined cap over the hub
+- Computed `leather_binnacle_black` (CPU, exact): the binnacle surround (leather(...).set("texture")) for edges and reflections
 
 ### #47 `LfaV10Nurburgring` (`lfa_v10_nurburgring`)
 
@@ -131,24 +131,24 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #48 `HakosukaS20` (`hakosuka_s20`)
 
-- Texture `crackle_black_paint` (ComfyUI, seed 480001): bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)
 - Texture `worn_steering_wood` (ComfyUI, seed 480002): wood in the environment the bright rings reflect
 - Sprite `tube_ring_420` (Blender, 436 px): the two big dials: a thin bright chrome ring on a deep matte tube (8 px width proposed)
 - Sprite `small_dial_ring_150` (Blender, 166 px): the three 150 px small dials (5 px width proposed); render straight, the 12° turn is in the kit
 - Sprite `jewel_lamp_28_off` (Blender, 36 px): the 10 lamps on 740x28: 28 px jewel lenses
 - Sprite `jewel_lamp_28_on` (Blender, 36 px): the 10 lamps on 740x28: 28 px jewel lenses
+- Computed `crackle_black_paint` (CPU, exact): bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)
 
 ### #49 `SimPitWall` (`sim_pit_wall`)
 
-- Texture `antiglare_matte_grain` (ComfyUI, seed 160001): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 - Swatch `carbon_twill_carrier` (Blender tile): the LED carrier surface
 - Sprite `shift_led_32_off` (Blender, 40 px): 14 LEDs on 760x32: 32 px caps (the same design as SimInputTrace's)
 - Sprite `shift_led_32_on` (Blender, 40 px): 14 LEDs on 760x32: 32 px caps (the same design as SimInputTrace's)
+- Computed `antiglare_matte_grain` (CPU, exact): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
 
 ### #51 `KaleidoscopeMirror` (`kaleidoscope_mirror`)
 
-- Texture `chip_glass_inclusions` (ComfyUI, seed 510001): labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group
 - Sprite `eyepiece_ring_380` (Blender, 396 px): the knurled black-chrome eyepiece ring round the 380 px figure (10 px width and 4 px knurl pitch proposed)
+- Computed `chip_glass_inclusions` (CPU, exact): labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group
 
 ### #52 `KoenigseggGyro` (`koenigsegg_gyro`)
 
@@ -162,21 +162,21 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #56 `RevueltoCorsa` (`revuelto_corsa`)
 
-- Texture `forged_composite_large_chips` (ComfyUI, seed 560001): the hexagon pod body
+- Computed `forged_composite_large_chips` (CPU, exact): the hexagon pod body
 - Left to the thread: the hex-mesh grille: the hero library has no hexagon perforation yet
 - Left to the thread: the 300 px hexagon pod: the library has no hexagon outline yet, and the anodise tint is not in the brief
 
 ### #57 `ZNismoSport` (`z_nismo_sport`)
 
-- Texture `crackle_black_paint` (ComfyUI, seed 480001): bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)
-- Texture `dash_top_leatherette` (ComfyUI, seed 570002): the dash top the pods stand on (stitching is geometry)
 - Sprite `hooded_pod_170` (Blender, 186 px): the 170 px hooded pods: matte crackle-black tube with a polished inner ring (12 px width proposed); render straight, the turn is in the kit
 - Sprite `pod_crystal_170` (Blender, 180 px): the 170 px pod crystal (reflections only, drawn over the needle)
+- Computed `crackle_black_paint` (CPU, exact): bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)
+- Computed `dash_top_leatherette` (CPU, exact): the dash top the pods stand on (stitching is geometry)
 
 ### #60 `GoldenAngle` (`golden_angle`)
 
-- Texture `bead_inner_sparkle` (ComfyUI, seed 600001): labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model
 - Sprite `seed_bead_26` (Blender, 38 px): the 26 px domed crystal bead; one sprite serves every seed
+- Computed `bead_inner_sparkle` (CPU, exact): labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model
 
 ### #61 `RattrapanteSector` (`rattrapante_sector`)
 
@@ -184,12 +184,12 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #64 `EvaBioSync` (`eva_bio_sync`)
 
-- Texture `cell_nucleus_grain` (ComfyUI, seed 640001): optional modulation of the lit-cell gradient
+- Computed `cell_nucleus_grain` (CPU, exact): optional modulation of the lit-cell gradient
 
 ### #65 `MclarenSlimDisplay` (`mclaren_slim_display`)
 
-- Texture `antiglare_matte_grain` (ComfyUI, seed 160001): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
-- Texture `alcantara_black` (ComfyUI, seed 650002): the dash top the slab folds into (alcantara(...).set("texture"))
+- Computed `antiglare_matte_grain` (CPU, exact): labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural
+- Computed `alcantara_black` (CPU, exact): the dash top the slab folds into (alcantara(...).set("texture"))
 
 ### #68 `BionicSpaceframe` (`bionic_spaceframe`)
 
@@ -201,8 +201,8 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #72 `HyperbolicTiles` (`hyperbolic_tiles`)
 
-- Texture `etched_glass_grain` (ComfyUI, seed 720001): labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths
 - Sprite `disc_rim_ring_400` (Blender, 416 px): the 400 px thin machined rim (8 px width proposed); one render, mirrored for both discs
+- Computed `etched_glass_grain` (CPU, exact): labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths
 
 ### #74 `FaradayMandala` (`faraday_mandala`)
 

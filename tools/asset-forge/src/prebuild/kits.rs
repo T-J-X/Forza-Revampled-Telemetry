@@ -143,17 +143,53 @@ fn metal_set(base: [f32; 3], top: Mat, tag: &str) -> [Mat; 4] {
 /// (white diffuser lit at full strength; the kit tints it).
 fn led_pair(name_off: &'static str, name_on: &'static str, d: f32, use_: &'static str) -> [Sprite; 2] {
     let r = d * 0.5 - 2.0;
-    let cap = |glow: f32, n: &str| {
+    lamp_pair(name_off, name_on, d, use_, &|glow: f32, n: &str| {
         Part::dome(
             "cap",
             [0.0, 0.0],
             0.0,
             r,
             r * 0.42,
-            1.0,
-            [mat::led_cap([1.0, 1.0, 1.0], glow).named(n), mat::piano_black()],
+            0.0,
+            [
+                mat::led_cap([1.0, 1.0, 1.0], glow).set("radius", r).named(n),
+                mat::piano_black(),
+            ],
         )
-    };
+    })
+}
+
+/// A faceted jewel lamp of diameter `d` (the period warning lamps): a pale crystal jewel the kit
+/// tints, `_off` and `_on`, in the same black-chrome collar as [`led_pair`].
+fn jewel_pair(name_off: &'static str, name_on: &'static str, d: f32, use_: &'static str) -> [Sprite; 2] {
+    let r = d * 0.5 - 2.0;
+    lamp_pair(name_off, name_on, d, use_, &|glow: f32, n: &str| {
+        Part::jewel(
+            "jewel",
+            [0.0, 0.0],
+            0.0,
+            r,
+            r * 0.38,
+            r * 0.12,
+            8,
+            [
+                mat::jewel([0.62, 0.6, 0.56], glow, r).named(n),
+                mat::polished(metal::BLACK_CHROME).named("jewel_girdle"),
+            ],
+        )
+    })
+}
+
+/// The off and lit sprites of one lamp in a black-chrome collar; `cap(glow, material_name)`
+/// builds the lens.
+fn lamp_pair(
+    name_off: &'static str,
+    name_on: &'static str,
+    d: f32,
+    use_: &'static str,
+    cap: &dyn Fn(f32, &str) -> Part,
+) -> [Sprite; 2] {
+    let r = d * 0.5 - 2.0;
     let bezel = || {
         Part::ring(
             "collar",
@@ -183,9 +219,46 @@ fn led_pair(name_off: &'static str, name_on: &'static str, d: f32, use_: &'stati
     ]
 }
 
-/// Emission strength of a lit LED or lamp cap: bright enough to read lit through the lens at the
-/// rest key (strength 1 barely lifted the white diffuser above the unlit cap in batch 1).
-const LED_ON_GLOW: f32 = 6.0;
+/// Emission strength of a lit LED or lamp cap at the rim; the centre runs 2.2 times hotter
+/// (`glow_strength` in the bpy builder). The cap is an opaque diffuser now, so the glow covers
+/// its face (batch 2: a transmissive lens rendered transparent and only its rim showed).
+const LED_ON_GLOW: f32 = 3.0;
+
+/// ValkyrieLmp1's shoulder encoder (the dash thread's spec, 2026-11-28): a diamond-knurled ring
+/// from r59 to r73 round a turned cap of r53, in a piano-black well of r92, all in dark red
+/// anodise (sRGB 58, 30, 33). One sprite; the dash mirrors it for the two rings at (±604, 4).
+fn valkyrie_encoder() -> Sprite {
+    // sRGB 58, 30, 33 in linear light.
+    let red = [0.0423, 0.0130, 0.0152];
+    let anod = |m: Mat, n: &str| m.set("metallic", 0.5).set("coat", 1.0).set("coat_rough", 0.18).named(n);
+    Sprite {
+        name: "encoder_ring_knurled_184",
+        size: 200.0,
+        parts: vec![
+            Part::face("well", [0.0, 0.0], 0.0, 92.0, mat::piano_black().named("encoder_well")),
+            Part::ring(
+                "knurl",
+                [0.0, 0.0],
+                0.0,
+                59.0,
+                73.0,
+                7.0,
+                anod(mat::knurled(red, 3.0, false), "encoder_knurl"),
+            ),
+            Part::dome(
+                "cap",
+                [0.0, 0.0],
+                0.0,
+                53.0,
+                6.0,
+                2.0,
+                [anod(mat::spun(red), "encoder_cap"), anod(mat::polished(red), "encoder_cap_edge")],
+            ),
+        ],
+        swing: true,
+        use_: "the two shoulder encoders at (±604, 4) in 4K px (0.7 scale in the hood view): one sprite, mirrored; a 3 px diamond knurl on the ring's face",
+    }
+}
 
 /// A domed cap of diameter `d` and height `h`.
 fn cap(name: &'static str, d: f32, h: f32, mats: [Mat; 2], use_: &'static str) -> Sprite {
@@ -286,11 +359,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
             computed: vec![
                 calc("forged_carbon_marble", Calc::Surface(Surf::ForgedMarble, 90_002), "the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance"),
             ],
-            deferred: vec![
-                "the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board",
-                "the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)",
-            ],
-            notes: "Forged carbon is SDXL (chopped-fibre marble is organic); the knurl is Blender, on the ring itself. Seed 90002 replaced 90001, which drew rough coal-like chunks with beige specks, not flat resin.",
+            sprites: vec![valkyrie_encoder()],
+            deferred: vec!["the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board"],
+            notes: "Forged carbon is computed (chopped tow flakes laid along a flow field, exact tile; the SDXL marble failed review); the knurl is Blender, on the ring itself.",
             ..Kit::default()
         },
         "skyline_r34_mfd" => Kit {
@@ -390,8 +461,8 @@ pub fn kit(snake: &str) -> Option<Kit> {
                 "jewel_lens_30",
                 30.0,
                 9.0,
-                [mat::sapphire().named("jewel_sapphire"), mat::polished(metal::STEEL).named("jewel_setting")],
-                "the 11 jewels on the 30x740 strip and the jewel bearings: clear sapphire in a polished steel setting, tinted at run time",
+                [mat::jewel([0.42, 0.012, 0.03], 0.0, 15.0).named("jewel_ruby"), mat::polished(metal::STEEL).named("jewel_setting")],
+                "the 11 jewels on the 30x740 strip and the jewel bearings: a faceted ruby jewel (opaque body, glassy coat) in a polished steel setting, tinted at run time",
             )],
             deferred: vec![
                 "Côtes de Genève stripes: the hero library has no stripe pattern yet (add a guilloché 'stripes' mode first)",
@@ -458,8 +529,8 @@ pub fn kit(snake: &str) -> Option<Kit> {
                 "polished_steel_matcap",
                 1000.0,
                 500.0,
-                [mat::polished(metal::STEEL).named("matcap_steel"), mat::polished(metal::STEEL).named("matcap_collar")],
-                "a 1000 px polished steel hemisphere under the hero rig: the matcap for the hands and screws",
+                [mat::polished(metal::STEEL).set("world", 1.0).named("matcap_steel"), mat::polished(metal::STEEL).named("matcap_collar")],
+                "a 1000 px polished steel hemisphere under a bright studio world: the matcap for the hands and screws",
             )],
             ..Kit::default()
         },
@@ -510,8 +581,8 @@ pub fn kit(snake: &str) -> Option<Kit> {
                     "centre_cap_200",
                     200.0,
                     26.0,
-                    [mat::machined_alu().named("t50_cap"), mat::polished(metal::ALUMINIUM).named("t50_cap_chamfer")],
-                    "the 200 px machined cap over the hub",
+                    [mat::spun(metal::ALUMINIUM).named("t50_cap"), mat::polished(metal::ALUMINIUM).named("t50_cap_chamfer")],
+                    "the 200 px spun-turned cap over the hub",
                 ),
             ],
             notes: "The needle's floodlit shadow is the dash's projection maths; these are the hardware it falls on.",
@@ -559,7 +630,7 @@ pub fn kit(snake: &str) -> Option<Kit> {
                     ring("tube_ring_420", 420.0, 8.0, chrome(), Some(mat::matte([0.006, 0.006, 0.006]).named("s20_tube")), "the two big dials: a thin bright chrome ring on a deep matte tube (8 px width proposed)"),
                     ring("small_dial_ring_150", 150.0, 5.0, chrome(), None, "the three 150 px small dials (5 px width proposed); render straight, the 12° turn is in the kit"),
                 ];
-                v.extend(led_pair("jewel_lamp_28_off", "jewel_lamp_28_on", 28.0, "the 10 lamps on 740x28: 28 px jewel lenses"));
+                v.extend(jewel_pair("jewel_lamp_28_off", "jewel_lamp_28_on", 28.0, "the 10 lamps on 740x28: 28 px jewel lenses"));
                 v
             },
             ..Kit::default()
@@ -622,7 +693,7 @@ pub fn kit(snake: &str) -> Option<Kit> {
             build: 53,
             swatches: vec![tile(
                 "brushed_black_titanium_blade",
-                mat::brushed(metal::TITANIUM).set("coat", 1.0).set("coat_rough", 0.2).set("coat_tint", serde_json::json!([0.007, 0.007, 0.008])),
+                mat::brushed([0.05, 0.05, 0.055]).set("coat", 1.0).set("coat_rough", 0.2),
                 "the iris blades' anisotropic lobe (18% luminance at most); the iris geometry is the dash's nine-disc maths",
             )],
             ..Kit::default()
@@ -680,7 +751,7 @@ pub fn kit(snake: &str) -> Option<Kit> {
                 "seed_bead_26",
                 26.0,
                 9.0,
-                [mat::sapphire().named("bead_sapphire"), mat::piano_black().named("bead_seat")],
+                [mat::jewel([0.6, 0.42, 0.16], 0.0, 13.0).named("bead_crystal"), mat::piano_black().named("bead_seat")],
                 "the 26 px domed crystal bead; one sprite serves every seed",
             )],
             ..Kit::default()
