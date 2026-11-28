@@ -17,3 +17,8 @@ tracing.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+# The gates in `host.rs` run the OSD on wgpu's no-op device and count a warm frame's allocations.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+wgpu = { workspace = true, features = ["noop"] }
+allocation-counter = "0.8.1"

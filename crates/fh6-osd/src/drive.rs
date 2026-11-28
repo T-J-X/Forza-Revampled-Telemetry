@@ -105,6 +105,7 @@ pub fn load(setup: &mut Setup<'_>) -> Option<DriveImages> {
     let mut one = |name: &str| -> Option<ImageId> {
         let path = dir.join(name);
         if !path.is_file() {
+            tracing::debug!(path = %path.display(), "no driving-position layer: the OSD draws the line drawing");
             return None;
         }
         match setup.images.load_file(setup.device, setup.queue, &path, None) {
@@ -375,6 +376,12 @@ mod tests {
         for r in [DASH_RECT, WHEEL_RECT, SEAT_RECT] {
             assert!(r[0] + r[2] <= VIEW.x && r[1] + r[3] <= VIEW.y);
         }
+        // The line drawing's geometry, each number weighted by its place: the recipe's test
+        // pins the same sum, so a reshaped seat or dash fails on the side that did not follow.
+        let tail = [COLUMN_DEG, RIM_R, DASH_CUT];
+        let numbers = SEAT_PATH.iter().chain(&DASH).flatten().chain(&HUB).chain(&tail);
+        let sum: f32 = numbers.zip(1u8..).map(|(v, place)| v * f32::from(place)).sum();
+        assert!((sum - 2145.40).abs() < 0.01, "the sketch geometry moved: {sum}");
     }
 
     #[test]
@@ -388,16 +395,17 @@ mod tests {
 
     #[test]
     fn the_fan_stays_under_the_echo_at_the_widest_fov_and_highest_seat() {
-        // The FOV rows reach the top of FOV_RANGE (110°) and the seat +50 mm (the top of the
-        // config's seat range). Even then the fan's tip ends less than 80 px above the view's
-        // top edge: the OSD puts the lifted echo's help line 120 px above that edge (draw.rs,
-        // ECHO_LIFT and DRIVE_TOP), so the two never touch.
-        let eye = eye_at(50.0);
+        // The FOV rows reach the top of FOV_RANGE (110°) and the seat the top of its row's
+        // range (the OSD clamps what it draws to it). Even then the fan's tip ends less than
+        // 80 px above the view's top edge: the OSD puts the lifted echo's help line 120 px above
+        // that edge (draw.rs, ECHO_LIFT and DRIVE_TOP), so the two never touch.
+        let eye = eye_at(crate::model::SEAT.max);
         let half = (fh6_core::config::FOV_RANGE.1 * 0.5).to_radians();
         let top = eye + view_vec([half.cos() * FAN_R / PX_PER_M, 0.0, half.sin() * FAN_R / PX_PER_M]);
         assert!(top.y > -80.0, "fan top {} px above the view", -top.y);
-        // The legend sits under the wheel at its lowest offset (-80 mm); the const block under
-        // the legend's constants checks it against the dash and the view's bottom edge.
-        assert!(LEGEND_AT.y - LEGEND_CAP > WHEEL_RECT[1] + WHEEL_RECT[3] - rise_px(-80.0));
+        // The legend sits under the wheel at the bottom of its row's range; the const block
+        // under the legend's constants checks it against the dash and the view's bottom edge.
+        let lowest = rise_px(crate::model::WHEEL.min);
+        assert!(LEGEND_AT.y - LEGEND_CAP > WHEEL_RECT[1] + WHEEL_RECT[3] - lowest);
     }
 }

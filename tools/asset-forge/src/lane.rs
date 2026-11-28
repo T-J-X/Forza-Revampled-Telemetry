@@ -250,8 +250,12 @@ pub fn write_previews(masters: &[(PathBuf, String)], dir: &Path, sub: &str) -> R
     let drive = masters_dir(sub).ok();
     let mut n = 0;
     for (path, _) in masters {
-        let Ok(src) = img::load(path) else {
-            continue;
+        let src = match img::load(path) {
+            Ok(src) => src,
+            Err(e) => {
+                eprintln!("  preview of {} skipped: {e}", path.display());
+                continue;
+            }
         };
         let scale = (1024.0 / src.w.max(1) as f32).min(1.0);
         let (w, h) = (

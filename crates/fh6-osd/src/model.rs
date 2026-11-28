@@ -251,8 +251,8 @@ const SHIFT: SliderSpec = SliderSpec::new(80.0, 100.0, 1.0, 0, "%");
 const HUE: SliderSpec = SliderSpec::new(0.0, 358.0, 2.0, 0, "°");
 const SAT: SliderSpec = SliderSpec::new(0.0, 100.0, 2.0, 0, "%");
 const VAL: SliderSpec = SliderSpec::new(10.0, 100.0, 2.0, 0, "%");
-const SEAT: SliderSpec = SliderSpec::new(-100.0, 50.0, 1.0, 0, " mm");
-const WHEEL: SliderSpec = SliderSpec::new(-80.0, 20.0, 1.0, 0, " mm");
+pub(crate) const SEAT: SliderSpec = SliderSpec::new(-100.0, 50.0, 1.0, 0, " mm");
+pub(crate) const WHEEL: SliderSpec = SliderSpec::new(-80.0, 20.0, 1.0, 0, " mm");
 const HEIGHT: SliderSpec = SliderSpec::new(-240.0, 240.0, 4.0, 0, " px");
 const SCALE: SliderSpec = SliderSpec::new(70.0, 140.0, 1.0, 0, "%");
 const HOLD: SliderSpec = SliderSpec::new(200.0, 1000.0, 50.0, 0, " ms");
@@ -591,21 +591,21 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
     }
 }
 
-/// The section heading a row starts, if any (caps, drawn above it).
+/// The section heading a row starts, if any (drawn above it, in sentence case as shown).
 #[must_use]
 pub fn section(row: RowId) -> Option<&'static str> {
     Some(match row {
-        RowId::EditView => "CLUSTER",
-        RowId::SpeedUnit => "READOUTS",
-        RowId::ColourMode => "PALETTE",
-        RowId::GlassRefraction => "MATERIAL",
-        RowId::Font => "TYPE",
-        RowId::FovCockpit => "FIELD OF VIEW",
-        RowId::SeatHeight => "DRIVING POSITION",
-        RowId::ClusterHeight => "CLUSTER",
-        RowId::Scrim(0) => "DASH BLOCKER",
+        RowId::EditView => "Cluster",
+        RowId::SpeedUnit => "Readouts",
+        RowId::ColourMode => "Palette",
+        RowId::GlassRefraction => "Material",
+        RowId::Font => "Type",
+        RowId::FovCockpit => "Field of view",
+        RowId::SeatHeight => "Driving position",
+        RowId::ClusterHeight => "Cluster",
+        RowId::Scrim(0) => "Dash blocker",
         RowId::OsdButton => "OSD",
-        RowId::Stats => "OVERLAY",
+        RowId::Stats => "Overlay",
         _ => return None,
     })
 }

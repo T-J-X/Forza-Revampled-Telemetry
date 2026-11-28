@@ -10,13 +10,13 @@ use crate::keyboard::{self, Key};
 use crate::model::{self, EditState, Line, RowId, RowKind, RowList, Tab, MAX_ROWS};
 use crate::nav::{Mode, OsdController};
 use crate::remap;
+use fh6_clusters::clusters::liquid_glass;
 use fh6_core::{AppConfig, ClusterTheme, ScrimFit};
 use fh6_kit::optics::absorption_coefficient;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    vec2, Affine, Align, Cluster, Color, Environment, FontId, FontRole, Fonts, Glow, Gradient, ImageId, LayerOptions,
-    Layout, OpticalGlass, Painter, Palette, Piece, Pool, Rect, Refraction, Setup, Shape, Stroke, TextStyle, VAlign,
-    Vec2, View,
+    vec2, Affine, Align, Cluster, Color, FontId, FontRole, Fonts, Glow, Gradient, ImageId, LayerOptions, Layout,
+    OpticalGlass, Painter, Palette, Piece, Pool, Rect, Shape, Stroke, TextStyle, VAlign, Vec2, View,
 };
 use std::fmt::Write as _;
 use std::time::Duration;
@@ -135,7 +135,8 @@ pub struct DrawInput<'a> {
     pub status: LiveStatus,
     /// Carousel cells, in order −2..=+2 around the selected cluster (may be empty).
     pub thumbs: &'a [Option<Thumb<'a>>; 5],
-    /// The studio environment the glass mirrors (see [`load_environment`]).
+    /// The studio environment the glass mirrors (the Liquid Glass cluster's,
+    /// [`liquid_glass::load_studio`]); `None` mirrors the kit's analytic studio.
     pub env: Option<ImageId>,
     /// The driving position's rendered layers (see [`drive::load`]); `None` draws its line
     /// drawing.
@@ -487,23 +488,6 @@ fn centered(mut s: TextStyle) -> TextStyle {
     s
 }
 
-/// A heading in sentence case ("FIELD OF VIEW" becomes "Field of view"): Liquid Glass lists no
-/// longer set section headers in capitals. A single short word ("OSD") is an acronym and stays.
-fn sentence_case(text: &str, out: &mut Line) {
-    out.clear();
-    if !text.contains(' ') && text.chars().count() <= 3 {
-        let _ = out.write_str(text);
-        return;
-    }
-    for (i, ch) in text.chars().enumerate() {
-        let _ = out.write_char(if i == 0 {
-            ch.to_ascii_uppercase()
-        } else {
-            ch.to_ascii_lowercase()
-        });
-    }
-}
-
 fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
     let row = inp.ctl.focused_row(inp.cfg, inp.fit);
     // The echo rises on the camera rows and the driving position fades in under it; both ride
@@ -563,9 +547,11 @@ fn driving_position(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Op
         Some(RowId::WheelOffset) => drive::Focus::Wheel,
         _ => drive::Focus::None,
     };
+    // The rows' own ranges: a hand-edited config can hold any finite value, and the view's
+    // clearances (the fan under the echo, the legend under the wheel) are proven for these.
     let state = drive::DriveState {
-        seat_mm: cfg.driver_seat_height_m * 1000.0,
-        wheel_mm: cfg.steering_wheel_offset_y_m * 1000.0,
+        seat_mm: (cfg.driver_seat_height_m * 1000.0).clamp(model::SEAT.min, model::SEAT.max),
+        wheel_mm: (cfg.steering_wheel_offset_y_m * 1000.0).clamp(model::WHEEL.min, model::WHEEL.max),
         default_seat_mm: DEFAULT_SEAT_MM,
         fov_deg: cfg.wheel_less_cockpit_fov,
         focus,
@@ -628,64 +614,26 @@ const POOL_ALPHA: f32 = 0.78;
 const POOL_SIGMA: f32 = 90.0;
 /// How far right of its place the panel starts while the OSD opens (4K units).
 const PANEL_SLIDE: f32 = 64.0;
-/// Radiance white in `studio_env.png` (`assets/clusters/liquid_glass/ASSETS.md`), how far the
-/// studio leans to the car's primary colour, and the key light's share, all as the Liquid
-/// Glass cluster sets them, so the two read as one material.
-const ENV_WHITE: f32 = 16.0;
-const AMBIENT_TINT: f32 = 0.4;
-const KEY_SHARE: f32 = 0.5;
 /// How far the key light leans (radians) when focus is at the top or bottom of the column.
 const PARALLAX_TILT: f32 = 0.07;
 
-/// Loads the studio environment the Liquid Glass cluster's glass mirrors. The image cache
-/// keys files by path, so when that cluster is live both share one texture.
-pub fn load_environment(setup: &mut Setup<'_>) -> Option<ImageId> {
-    let path = setup
-        .assets?
-        .join("clusters")
-        .join("liquid_glass")
-        .join("studio_env.png");
-    if !path.is_file() {
-        return None;
-    }
-    match setup.images.load_file(setup.device, setup.queue, &path, None) {
-        Ok(image) => Some(image),
-        Err(error) => {
-            // The OSD still draws: its glass mirrors the kit's analytic studio instead.
-            tracing::warn!(%error, "the OSD's studio environment did not load");
-            None
-        }
-    }
-}
-
-/// The OSD's optical glass: clear sapphire under the Liquid Glass cluster's studio, leaning to
-/// the palette's primary colour like the cluster's, with no tint of its own (it holds text).
+/// The OSD's optical glass: the Liquid Glass cluster's studio glass (its map, its lean to the
+/// palette's primary colour and its key light, through the cluster's own
+/// [`liquid_glass::studio_glass`], so the two stay one material), clear, with no tint of its
+/// own because it holds text.
 fn osd_glass(p: &Painter<'_>, env: Option<ImageId>, materialize: f32, lean_y: f32) -> OpticalGlass {
     let t = p.tokens();
     let op = &t.optics;
-    let mut glass = t.optical_glass(p.palette());
+    let mut glass = liquid_glass::studio_glass(t.optical_glass(p.palette()), env, p.palette().primary);
     glass.absorption = [absorption_coefficient(op.clarity, op.tint_depth); 3];
-    if let Some(env) = env {
-        glass.environment = Environment::Map(env);
-        glass.env_gain = glass.env_gain.map(|g| g * ENV_WHITE);
-    }
-    let hue = p.palette().primary;
-    let peak = hue.r.max(hue.g).max(hue.b).max(1e-4);
-    let lean = [hue.r, hue.g, hue.b].map(|c| 1.0 - AMBIENT_TINT * (1.0 - c / peak));
-    for ((env, light), lean) in glass.env_gain.iter_mut().zip(glass.light.iter_mut()).zip(lean) {
-        *env *= lean;
-        *light *= lean * KEY_SHARE;
-    }
-    glass.refraction = Refraction::World;
     // Parallax: the key light leans with the focus's height in the column, so its highlights
-    // travel round the pieces as focus moves. The environment turns but does not lean, so its
-    // dark cone stays on the view axis and no studio light reaches the text (as in the cluster).
-    let azimuth = fh6_kit::LIGHT_REST_AZIMUTH;
-    let elevation = op.key_elevation;
-    let mut level = glass;
-    level.aim(azimuth, elevation, Vec2::ZERO);
-    glass.aim(azimuth, elevation, vec2(PARALLAX_TILT * lean_y.clamp(-1.0, 1.0), 0.0));
-    glass.env_rotation = level.env_rotation;
+    // travel round the pieces as focus moves. The environment stays level, as in the cluster.
+    liquid_glass::aim_studio(
+        &mut glass,
+        fh6_kit::LIGHT_REST_AZIMUTH,
+        op.key_elevation,
+        vec2(PARALLAX_TILT * lean_y.clamp(-1.0, 1.0), 0.0),
+    );
     glass.materialize = materialize;
     glass
 }
@@ -717,11 +665,16 @@ fn inner_light(p: &mut Painter<'_>, rect: Rect, radius: f32, ink: &Ink, energy: 
 fn key_rect(ctl: &OsdController) -> Rect {
     let kb = ctl.keyboard();
     let (first, span) = keyboard::key_span(kb.row, kb.col);
+    key_cell(kb.row, first, span)
+}
+
+/// The key of keyboard row `row` that starts at column `first` and spans `span` columns, in
+/// panel units: the one grid both the drawn keys and the glass key cap use.
+fn key_cell(row: u8, first: u8, span: u8) -> Rect {
     let x0 = CX0 + ((CX1 - CX0) - (10.0 * KEY_W + 9.0 * KEY_GAP)) * 0.5;
-    let y0 = ROWS_Y0 + KEYS_TOP;
     Rect::from_xywh(
         x0 + f32::from(first) * (KEY_W + KEY_GAP),
-        y0 + f32::from(kb.row) * (KEY_H + KEY_GAP),
+        ROWS_Y0 + KEYS_TOP + f32::from(row) * (KEY_H + KEY_GAP),
         f32::from(span) * KEY_W + f32::from(span.saturating_sub(1)) * KEY_GAP,
         KEY_H,
     )
@@ -875,9 +828,7 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
             if k > 0.01 {
                 p.save();
                 p.set_opacity(k);
-                let mut title = Line::new();
-                sentence_case(sec, &mut title);
-                p.text(vec2(TX, top - 30.0), title.as_str(), &ink.section());
+                p.text(vec2(TX, top - 30.0), sec, &ink.section());
                 p.restore();
             }
         }
@@ -1118,21 +1069,13 @@ fn keyboard_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
 
     // The focused key lights from within under its glass cap, which glides between keys.
     inner_light(p, key_cap(inp), KEY_R, ink, inp.anim.energy.value());
-    let (key_w, key_h, gap) = (KEY_W, KEY_H, KEY_GAP);
-    let x0 = CX0 + ((CX1 - CX0) - (10.0 * key_w + 9.0 * gap)) * 0.5;
-    let y0 = ROWS_Y0 + KEYS_TOP;
     let mut buf = [0u8; 4];
     for row in 0..keyboard::ROWS {
         let mut col = 0u8;
         while col < keyboard::COLS {
             let (first, span) = keyboard::key_span(row, col);
             let key = keyboard::key_at(row, first, kb.caps);
-            let rect = Rect::from_xywh(
-                x0 + f32::from(first) * (key_w + gap),
-                y0 + f32::from(row) * (key_h + gap),
-                f32::from(span) * key_w + f32::from(span - 1) * gap,
-                key_h,
-            );
+            let rect = key_cell(row, first, span);
             let focused = kb.row == row && keyboard::key_span(row, kb.col).0 == first;
             let shape = Shape::round_rect(rect, KEY_R);
             if !focused {

@@ -1206,6 +1206,12 @@ mod tests {
         assert_eq!(LAYERS.map(|l| l.rim), [false, true, true]);
         assert!((PX_PER_M - 550.0).abs() < f32::EPSILON);
         assert!((YAW_DEG - 24.0).abs() < f32::EPSILON && (PITCH_DEG - 8.0).abs() < f32::EPSILON);
+        // The geometry the OSD's line drawing copies, each number weighted by its place: its
+        // test pins the same sum, so a reshaped seat or dash fails there until it follows.
+        let tail = [COLUMN_DEG, RIM_R, DASH_CUT];
+        let numbers = SEAT_PATH.iter().chain(&DASH).flatten().chain(&HUB).chain(&tail);
+        let sum: f32 = numbers.zip(1u8..).map(|(v, place)| v * f32::from(place)).sum();
+        assert!((sum - 2145.40).abs() < 0.01, "the sketch geometry moved: {sum}");
     }
 
     #[test]

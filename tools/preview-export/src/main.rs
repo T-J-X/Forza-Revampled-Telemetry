@@ -177,6 +177,9 @@ fn run() -> Result<()> {
     if args.osd {
         let only = args.osd_state.as_deref();
         let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), only)?;
+        if let (Some(name), true) = (only, osd_renders.is_empty()) {
+            return Err(format!("--osd-state {name:?} matches no OSD state").into());
+        }
         verify_osd(&out, &osd_renders)?;
         // The product page lists every state and plays the motion sequence, so a run of some
         // states leaves both alone.

@@ -741,7 +741,8 @@ pub fn write_page(out: &Path, renders: &[OsdRender], reel: &[String], adapter: &
          Rendered on {adapter} at 3840 × 2160; GPU times count only from a real GPU.</p></section></main></body></html>",
         adapter = inline_html(adapter),
     );
-    std::fs::write(out.join("osd").join("index.html"), h)
+    let page = out.join("osd").join("index.html");
+    std::fs::write(&page, h).map_err(|e| std::io::Error::new(e.kind(), format!("{}: {e}", page.display())))
 }
 
 #[cfg(test)]
