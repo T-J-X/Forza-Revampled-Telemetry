@@ -304,7 +304,7 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 
 **Brand logos**
 - A dial uploads a step a frame, and on the PC a step costs about 0.10 ms, mostly the fixed cost of one `Queue::write_texture`, so 11 to 19 frames each carry 0.10 to 0.14 ms once per brand. A lever not measured: copy the levels into one staging buffer mapped at creation, a slice a frame (a plain memory copy), then record every `copy_buffer_to_texture` in one frame.
-- PorscheAnalog's logo zone is a 160 x 20 wordmark slot, so emblem dials (18 brands, 196 cars) draw about 15 px tall at 4K and an emblem's own lettering does not read (`docs/handover-shots/fix-f-emblems.png`). Give emblems a taller zone, or the brand's name, on that dash.
+- ~~PorscheAnalog's logo zone is a 160 x 20 wordmark slot, so emblem dials (18 brands, 196 cars) draw about 15 px tall at 4K and an emblem's own lettering does not read (`docs/handover-shots/fix-f-emblems.png`). Give emblems a taller zone, or the brand's name, on that dash.~~ Done in the PorscheAnalog thread (2026-11-28): a logo narrower than the Porsche wordmark (8:1) keeps the wordmark's area and stands up to 40 px tall (the hub cap's width) on the wordmark's line, so Toyota's dial draws about 37 px tall instead of 15 and the BMW roundel 40; the zone, the legend and the window's clearance stay as they were (`porsche_analog/HANDOVER.md`, "After fix F").
 
 **Gates G1 to G5**
 - G1: a scan for forbidden patterns.
