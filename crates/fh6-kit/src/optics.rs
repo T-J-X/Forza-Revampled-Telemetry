@@ -516,6 +516,129 @@ pub fn view_through(profile: &Profile, inset: f32, outward: Vec2, eta: f32) -> S
     }
 }
 
+// ------------------------------------------------------------------- contact magnifier
+
+/// Paraxial magnification of a contact magnifier (optics.md §4, contact magnifier): a lens of
+/// index `eta` whose top is a sphere of radius `apex_radius` at its vertex, resting on the plane
+/// it shows, `depth` from vertex to plane. One refracting surface with the object in the glass:
+/// `n / t + 1 / s′ = (n − 1) / R`, so `m = n / (n − (n − 1) t / R)`. A hemisphere on the page
+/// (`t = R`) gives `n`; the aplanatic depth `t = R (1 + 1/n)` gives `n²`. Returns `None` from
+/// `t / R ≥ n / (n − 1)` on, where the image is no longer virtual.
+#[must_use]
+pub fn contact_magnification(eta: f32, depth: f32, apex_radius: f32) -> Option<f32> {
+    if !(eta > 1.0 && apex_radius > 0.0 && depth >= 0.0) {
+        return None;
+    }
+    let den = eta - (eta - 1.0) * depth / apex_radius;
+    (den > 1e-6).then(|| eta / den)
+}
+
+/// The depth `t` from vertex to plane that gives magnification `m`: `t = R n (1 − 1/m) / (n − 1)`
+/// (the inverse of [`contact_magnification`]).
+#[must_use]
+pub fn contact_depth(eta: f32, magnification: f32, apex_radius: f32) -> f32 {
+    apex_radius * eta * (1.0 - 1.0 / magnification.max(1.0)) / (eta - 1.0).max(1e-6)
+}
+
+/// The aplanatic depth `t = R (1 + 1/n)`: the object sits `R / n` beyond the centre of the
+/// sphere, is imaged free of spherical aberration at `n R`, and is magnified `n²`.
+#[must_use]
+pub fn aplanatic_depth(eta: f32, apex_radius: f32) -> f32 {
+    apex_radius * (1.0 + 1.0 / eta.max(1.0))
+}
+
+impl Profile {
+    /// The cross-section of a round contact magnifier of `radius` that magnifies the plane under
+    /// its centre `magnification` times (optics.md §4, contact magnifier), for glass of index
+    /// `eta`:
+    /// - from 1 up to `n`, an oblate dome with no base: `H = w √(n (1 − 1/m) / (n − 1))`, whose
+    ///   vertex radius is `w² / H`;
+    /// - from `n` on, a hemisphere (`H = w = radius`) standing on a base `b = t − R`, with `t`
+    ///   from [`contact_depth`].
+    ///
+    /// Draw it on a circle of that radius: only a round outline magnifies x and y alike. Returns
+    /// `None` when the magnification is below 1, not finite, or past the virtual-image limit.
+    #[must_use]
+    pub fn magnifier(radius: f32, magnification: f32, eta: f32) -> Option<Self> {
+        let m = magnification;
+        if !(m.is_finite() && m >= 1.0 && radius > 0.0 && eta > 1.0) {
+            return None;
+        }
+        if m <= eta {
+            let h = radius * (eta * (1.0 - 1.0 / m) / (eta - 1.0)).sqrt();
+            return Some(Self {
+                thickness: h,
+                bevel: radius,
+                base: 0.0,
+                exponent: 2.0,
+            });
+        }
+        contact_magnification(eta, contact_depth(eta, m, radius), radius)?;
+        Some(Self {
+            thickness: radius,
+            bevel: radius,
+            base: contact_depth(eta, m, radius) - radius,
+            exponent: 2.0,
+        })
+    }
+}
+
+/// Where on the plane a round lens of `radius` with this `profile` shows the point seen at
+/// distance `r` from its centre: the content radius `x(r)`, traced by [`view_through`] (exact
+/// Snell, the kit's orthographic contact model). `r / x` near the centre is the magnification;
+/// `dr / dx` is the radial magnification at `r`.
+#[must_use]
+pub fn contact_image_radius(profile: &Profile, radius: f32, r: f32, eta: f32) -> f32 {
+    let r = r.clamp(0.0, radius);
+    r + view_through(profile, radius - r, vec2(1.0, 0.0), eta).offset.x
+}
+
+/// The radius at which the view through a round contact magnifier folds: where `x(r)`
+/// ([`contact_image_radius`]) stops growing, so that beyond it, out to the rim, the lens shows a
+/// thin mirrored band of what it already showed. `None` if it never folds inside the lens.
+/// Found by a scan of 4096 steps refined by bisection, to about 1e-5 of the radius.
+#[must_use]
+pub fn contact_fold_radius(profile: &Profile, radius: f32, eta: f32) -> Option<f32> {
+    const STEPS: usize = 4096;
+    let h = radius / STEPS as f32;
+    let x = |r: f32| contact_image_radius(profile, radius, r, eta);
+    let slope = |r: f32| x((r + 0.25 * h).min(radius)) - x((r - 0.25 * h).max(0.0));
+    let mut prev = h;
+    for i in 1..STEPS {
+        let r = h * i as f32;
+        if slope(r) <= 0.0 {
+            let (mut lo, mut hi) = (prev, r);
+            for _ in 0..24 {
+                let mid = 0.5 * (lo + hi);
+                if slope(mid) <= 0.0 {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            return Some(0.5 * (lo + hi));
+        }
+        prev = r;
+    }
+    None
+}
+
+/// How fast the image of a fixed scale point moves while a lens of magnification `m` slides
+/// over it at `velocity` (optics.md §4, a moving lens): the point `x` is seen at
+/// `c + m (x − c)`, so its image moves at `(1 − m) v`, backwards through a magnifier.
+#[must_use]
+pub fn moving_lens_image_velocity(magnification: f32, velocity: f32) -> f32 {
+    (1.0 - magnification) * velocity
+}
+
+/// The length of the streak a scale point draws inside a sliding lens over an exposure of
+/// `dt` (one frame, or the eye's integration time): `|1 − m| v Δt`, along the direction of
+/// travel.
+#[must_use]
+pub fn moving_lens_smear(magnification: f32, velocity: f32, dt: f32) -> f32 {
+    moving_lens_image_velocity(magnification, velocity).abs() * dt.max(0.0)
+}
+
 // ------------------------------------------------------------- relativistic and plate waves
 
 /// The relativistic Doppler factor `D = 1 / (γ (1 − β cos θ))` of a source moving at speed
@@ -1616,5 +1739,121 @@ mod tests {
         assert_eq!(Conductor::grey(1.5, 4.0).n, [1.5; 3]);
         let (n, k) = index_from_permittivity(-18.46, 13.50);
         assert_eq!(Conductor::from_permittivity(-18.46, 13.50), Conductor::grey(n, k));
+    }
+
+    // ---------------------------------------------------------------- §4 contact magnifier
+
+    #[test]
+    fn contact_magnifier_law_known_values() {
+        let n = Dispersion::SAPPHIRE.n_d() as f32;
+        close(n, 1.7682, 1e-4, "sapphire n_d");
+        let r = 55.0;
+        let m = |t_over_r: f32| contact_magnification(n, t_over_r * r, r).unwrap_or(f32::NAN);
+        close(m(1.0), 1.7682, 1e-4, "a hemisphere on the page magnifies by n");
+        close(m(1.0 + 1.0 / n), 3.1265, 1e-3, "the aplanatic depth magnifies by n²");
+        close(aplanatic_depth(n, r) / r, 1.0 + 1.0 / n, 1e-6, "aplanatic depth");
+        close(m(1.3811), 2.500, 1e-3, "×2.5 at t/R = 1.3811");
+        close(contact_depth(n, 2.5, r) / r, 1.3811, 1e-4, "the inverse");
+        assert!(
+            contact_magnification(n, n / (n - 1.0) * r, r).is_none(),
+            "the virtual-image limit"
+        );
+        assert!(contact_magnification(n, 2.31 * r, r).is_none());
+        close(m(0.0), 1.0, 1e-6, "no glass, no magnification");
+        // The Liquid Glass pilot's gear dome (w 160, H 72, b 24): an oblate dome whose vertex
+        // radius is w²/H magnifies 1.133, its measured "about 1.15".
+        let apex = 160.0 * 160.0 / 72.0;
+        close(
+            contact_magnification(n, 72.0 + 24.0, apex).unwrap_or(0.0),
+            1.133,
+            1e-3,
+            "pilot gear dome",
+        );
+    }
+
+    #[test]
+    fn a_traced_magnifier_matches_the_law() {
+        let n = Dispersion::SAPPHIRE.n_d() as f32;
+        let radius = 55.0;
+        for m in [1.15_f32, 1.5, n, 2.4, 2.5, 3.0] {
+            let p = Profile::magnifier(radius, m, n).unwrap_or_else(|| panic!("×{m} is reachable"));
+            // Near the centre the trace gives the paraxial magnification.
+            let r = 0.002 * radius;
+            let got = r / contact_image_radius(&p, radius, r, n);
+            close(got, m, 2e-3 * m, "paraxial magnification of the traced profile");
+        }
+        assert!(Profile::magnifier(radius, 0.9, n).is_none());
+        assert!(Profile::magnifier(radius, f32::NAN, n).is_none());
+        let p = Profile::magnifier(radius, 1.5, n).unwrap_or_else(|| panic!("×1.5"));
+        assert!(p.thickness < radius && p.base == 0.0, "below n: an oblate dome, {p:?}");
+        let p = Profile::magnifier(radius, 2.5, n).unwrap_or_else(|| panic!("×2.5"));
+        assert!(
+            p.thickness == radius && p.base > 0.0,
+            "above n: a hemisphere on a base, {p:?}"
+        );
+    }
+
+    #[test]
+    fn the_flattest_field_and_the_fold() {
+        let n = Dispersion::SAPPHIRE.n_d() as f32;
+        let radius = 1000.0;
+        let radial = |p: &Profile, r: f32| {
+            let d = 1e-3 * radius;
+            2.0 * d / (contact_image_radius(p, radius, r + d, n) - contact_image_radius(p, radius, r - d, n))
+        };
+        // ×2.5 is the most even field: within 2.5% of the centre out to 0.8 R.
+        let p = Profile::magnifier(radius, 2.5, n).unwrap_or_else(|| panic!("×2.5"));
+        let centre = radial(&p, 0.01 * radius);
+        close(centre, 2.5, 0.01, "centre");
+        for i in 1..=8 {
+            let r = 0.1 * i as f32 * radius;
+            let m = radial(&p, r);
+            assert!((m / centre - 1.0).abs() <= 0.025, "×2.5 at {:.1} R: {m}", r / radius);
+        }
+        assert_eq!(contact_fold_radius(&p, radius, n), None, "×2.5 never folds");
+        // The fold appears between ×2.74 and ×2.76, at the rim.
+        let at = |m: f32| contact_fold_radius(&Profile::magnifier(radius, m, n).unwrap_or(p), radius, n);
+        assert_eq!(at(2.74), None);
+        assert!(at(2.76).is_some_and(|f| f > 0.99 * radius));
+        // ×2.8 folds at 0.98 R, inside the rim's own reflection.
+        let p = Profile::magnifier(radius, 2.8, n).unwrap_or_else(|| panic!("×2.8"));
+        let fold = contact_fold_radius(&p, radius, n).unwrap_or(0.0) / radius;
+        assert!((0.98..0.99).contains(&fold), "×2.8 fold at {fold} R");
+        // The aplanatic ×n² folds between 0.90 R and 0.91 R into a mirrored band under the rim.
+        let aplanatic = Profile {
+            thickness: radius,
+            bevel: radius,
+            base: aplanatic_depth(n, radius) - radius,
+            exponent: 2.0,
+        };
+        let fold = contact_fold_radius(&aplanatic, radius, n).unwrap_or(0.0) / radius;
+        assert!((0.90..0.91).contains(&fold), "aplanatic fold at {fold} R");
+        // The rim shows the plane b √(n² − 1) in from the edge (§4), here at ×2.4.
+        let p = Profile::magnifier(radius, 2.4, n).unwrap_or_else(|| panic!("×2.4"));
+        let rim = contact_image_radius(&p, radius, radius - 1e-3, n);
+        close(radius - rim, p.base * (n * n - 1.0).sqrt(), 0.02 * radius, "rim rule");
+    }
+
+    #[test]
+    fn a_sliding_lens_runs_its_image_backwards() {
+        // Inside a lens of magnification m centred at c, x is seen at c + m (x − c); moving c
+        // at v moves the image at (1 − m) v.
+        let (m, v) = (2.4_f32, 345.0 / 0.1);
+        let seen = |c: f32, x: f32| c + m * (x - c);
+        let numeric = (seen(10.0 + v * 1e-3, 3.0) - seen(10.0, 3.0)) / 1e-3;
+        close(moving_lens_image_velocity(m, v), numeric, 1e-2, "image velocity");
+        close(
+            moving_lens_image_velocity(m, v),
+            -1.4 * v,
+            1e-2,
+            "1.4 times the lens speed, backwards",
+        );
+        close(
+            moving_lens_smear(m, v, 1.0 / 60.0),
+            1.4 * v / 60.0,
+            1e-3,
+            "one frame's streak",
+        );
+        close(moving_lens_image_velocity(1.0, v), 0.0, 0.0, "no lens, no streak");
     }
 }

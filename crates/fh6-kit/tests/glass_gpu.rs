@@ -9,7 +9,9 @@
 
 use fh6_gpu::GpuContext;
 use fh6_kit::color::srgb_to_linear;
-use fh6_kit::optics::{fresnel_dielectric, ripple_slope, transmittance, view_through, Conductor, Dispersion, Profile};
+use fh6_kit::optics::{
+    contact_image_radius, fresnel_dielectric, ripple_slope, transmittance, view_through, Conductor, Dispersion, Profile,
+};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
     deg, vec2, Color, Environment, Gradient, Kit, LayerOptions, Layout, OpticalGlass, Painter, Piece, PlaneWave, Rect,
@@ -611,6 +613,38 @@ fn a_metal_reflects_by_its_complex_fresnel() {
         face_on[0] - face_on[2] > 0.2,
         "the tinted metal's channels differ: {face_on:?}"
     );
+}
+
+#[test]
+fn a_contact_magnifier_magnifies_by_its_law() {
+    // optics.md §4, contact magnifier. A ×2.5 sapphire loupe (a hemisphere on a base) over a
+    // ramp: each pixel at radius r shows the ramp at the traced content radius x(r), dimmed by
+    // the Fresnel loss. Checked out to 0.7 R, where the surface tilts 44°; further out it also
+    // mirrors the plane around it (§7), which this check leaves to the CPU tests.
+    let (ctx, mut kit) = setup();
+    let radius = 100.0_f32;
+    let eta = Dispersion::SAPPHIRE.primaries()[1];
+    let profile = Profile::magnifier(radius, 2.5, eta).expect("×2.5 is reachable");
+    let img = render(&mut kit, &ctx, "contact_magnifier", |p| {
+        ramp_band(p, vec2(-radius, 0.0), vec2(radius, 0.0));
+        let glass = dark_sapphire().with_profile(profile);
+        p.layer(LayerOptions::glass(0.0), |p| {
+            p.fill(&Shape::circle(Vec2::ZERO, radius), glass);
+        });
+    });
+    let ramp = |x: f32| ((x + radius) / (2.0 * radius)).clamp(0.0, 1.0);
+    for r in [0.5_f32, 10.5, 25.5, 40.5, 55.5, 65.5, 70.5] {
+        let x = contact_image_radius(&profile, radius, r, eta);
+        let loss = view_through(&profile, radius - r, vec2(1.0, 0.0), eta).reflectance;
+        let want = (1.0 - loss) * ramp(x);
+        let got = at(&img, vec2(r, 0.5))[1];
+        assert!(
+            (got - want).abs() <= 0.012,
+            "r = {r}: shader {got} vs traced {want} (x = {x})"
+        );
+    }
+    // The centre really magnifies: 40 px out shows the ramp only about 16 px out.
+    assert!(contact_image_radius(&profile, radius, 40.0, eta) < 17.0);
 }
 
 #[test]
