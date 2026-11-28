@@ -27,10 +27,9 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 ### #9 `ValkyrieLmp1` (`valkyrie_lmp1`)
 
-- Texture `forged_carbon_marble` (ComfyUI, seed 90001): the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance
-- Swatch `knurled_anodised_disc` (Blender disc): diamond knurl round an axis (pitch 5 px proposed) for the shoulder encoder rings; unwrap the outer band into the brief's 2048x64 strip
+- Texture `forged_carbon_marble` (ComfyUI, seed 90002): the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance
 - Left to the thread: the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board
-- Left to the thread: the encoder ring sprites: their diameter is not in the brief
+- Left to the thread: the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)
 
 ### #12 `SkylineR34Mfd` (`skyline_r34_mfd`)
 
@@ -51,7 +50,7 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 ### #20 `Gt3RsApogee` (`gt3_rs_apogee`)
 
 - Texture `mli_foil_crinkle_height` (ComfyUI, seed 200001): height only: the dash's gold-foil dial backing shades it with metal GOLD (SDXL never draws the metal)
-- Texture `heat_shield_tile_coating` (ComfyUI, seed 200002): surface of the side parts; the tile grid itself is geometry
+- Texture `heat_shield_tile_coating` (ComfyUI, seed 200004): surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)
 - Texture `star_field_tile` (ComfyUI, seed 200003): environment for reflections in the titanium and gold (a tile, not a figure)
 - Sprite `rev_counter_ring_500` (Blender, 516 px): the 500 px machined titanium rev-counter ring, no hub (22 px width proposed)
 - Sprite `docking_light_off` (Blender, 38 px): the 12 docking lights on the 760x30 strip: 30 px caps, unlit and lit
