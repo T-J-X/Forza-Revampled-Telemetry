@@ -113,6 +113,9 @@ const CORE_LIGHT: f32 = 0.9;
 const ZONE_LIGHT: f32 = 0.22;
 /// The thousand-rpm marks: their width, and the limiter range they are drawn for.
 const MARK_W: f32 = 2.0;
+/// The thousand marks' light as a share of [`static_ink`]: at full static ink they measured 0.21
+/// on the PC (the plate under them adds its own light), just over the 0.20 static cap.
+const MARK_LIGHT: f32 = 0.8;
 const MARK_RPM: [f32; 2] = [1000.0, 20_000.0];
 /// The pedal fills' share of the ink (under the speed, so a full bar never outlasts it).
 const PEDAL_LIGHT: f32 = 0.7;
@@ -661,7 +664,7 @@ impl Gt7HoodPro {
         if !(MARK_RPM[0]..=MARK_RPM[1]).contains(&max) {
             return;
         }
-        let ink = static_ink(pal.roles.ink);
+        let ink = static_ink(pal.roles.ink).intensity(MARK_LIGHT);
         let black = pal.roles.oled_black.with_alpha(KEYLINE_ALPHA);
         let [top, bottom] = g.mark_y;
         let mut rpm = MARK_RPM[0];

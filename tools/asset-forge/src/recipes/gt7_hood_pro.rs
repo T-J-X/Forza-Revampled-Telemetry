@@ -9,10 +9,11 @@
 //!   carbon. It is the colour and relief of the tyre diagram's car chip in the Blender scene, so
 //!   GT7's grey car icon becomes a sculpted carbon car seen from above.
 //! - **The hardware plate (Blender, Cycles):** every static part of the band in one plate
-//!   registered to the hood envelope: the rev bar's black-glass light bar on its polished plinth
-//!   with 95 smoked LED lenses, the car chip with its canopy and four tyre lenses, the boost
-//!   gauge's polished arc and the black-glass groove of its fill, the two pedal slots, the two
-//!   telltale rings (slide and limiter) and the trip tile.
+//!   registered to the hood envelope: the rev bar's pillowed black-glass light bar on its
+//!   polished plinth with 95 domed smoked LED lenses, the steering rail, the carbon car chip with
+//!   its canopy and four tyre lenses, the boost gauge's gunmetal arc with its marks and the
+//!   black-glass groove of its fill, the two pedal slots, the two domed telltale lamps in their
+//!   rings and the black-glass trip window. Lit by the band rig ([`band_rig`]).
 //!   Rendered orthographic at 2 px per 4K px at the virtual light's rest azimuth and its ±25°
 //!   swing, then box-filtered to 1 px per 4K px.
 //! - **The suggested-gear tile (Blender):** the red enamel tile the cluster shows at the shift
@@ -60,6 +61,12 @@ const SKY_SHARE: f32 = 0.4;
 const HDRI_SHARE: f32 = 0.5;
 /// The window: elevation (degrees), distance and size (shares of the span), and power.
 const WINDOW: (f32, f32, f32, f32) = (52.0, 2.0, 1.0, 0.5);
+/// The window on the key diagonal lit only the bar's rounded ends (the second build). A long
+/// strip straight up the screen (45° round from the key, so 12 o'clock at rest) lights the long
+/// top edge of every pillowed part, and a weaker one below lights the bottom edge: azimuth
+/// offset from the key, elevation, distance, length and width (shares of the span), power.
+const TOP_STRIP: (f32, f32, f32, f32, f32, f32) = (45.0, 55.0, 2.0, 1.4, 0.08, 0.25);
+const BOTTOM_STRIP: (f32, f32, f32, f32, f32, f32) = (225.0, 55.0, 2.0, 1.4, 0.08, 0.08);
 
 /// The plate's frame (local px round the hood anchor): the band's static parts plus a margin.
 const PLATE: [f32; 4] = [-880.0, -100.0, 1760.0, 240.0];
@@ -189,7 +196,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         (
             plate(&carbon),
             "plate",
-            "the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc and its black-glass groove, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140",
+            "the band's static hardware: a pillowed black-glass light bar on a polished black-chrome plinth with 95 domed smoked LED lenses, the steering rail with its notch and stops, a forged-carbon car chip with a black-glass canopy and four pillowed black-glass tyre lenses, a polished gunmetal boost arc with four engraved marks and its black-glass groove, two half-round black-glass pedal slots, two domed telltale lamps in black-chrome rings and the black-glass trip window; covers x -880..880, y -100..140",
         ),
         (
             suggest(),
@@ -205,7 +212,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             let name = format!("{stem}_{i}.png");
             let bytes = runtime_png(beauty, &out_dir.join(&name))?;
             rows.push(format!(
-                "| `{name}` | {what}; key at {az}° (sRGB, straight alpha) | {rw}x{rh} | {kb} KB | blender:hero (gt7_hood_pro::{stem}, Cycles {samples} samples, ortho at {MASTER_SCALE} px per 4K px, box-filtered to 1:1; hero rig at power {RIG_POWER}) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `{stem}/{master}` |",
+                "| `{name}` | {what}; key at {az}° (sRGB, straight alpha) | {rw}x{rh} | {kb} KB | blender:hero (gt7_hood_pro::{stem}, Cycles {samples} samples, ortho at {MASTER_SCALE} px per 4K px, box-filtered to 1:1; the band rig: hero rig with the sky at {SKY_SHARE} and the world at {HDRI_SHARE}, a window softbox and two strips, at power {RIG_POWER}) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `{stem}/{master}` |",
                 az = key_azimuth(scene, i),
                 rw = w / k,
                 rh = h / k,
@@ -272,6 +279,11 @@ fn band_rig(rest: &Rig) -> Rig {
     let (el, dist, size, power) = WINDOW;
     r.lights
         .push(Light::soft("window", key_az, el, span * dist, span * size, power).tint([0.96, 0.98, 1.0]));
+    for (name, (daz, el, dist, len, wid, power)) in [("top_strip", TOP_STRIP), ("bottom_strip", BOTTOM_STRIP)] {
+        r.lights.push(
+            Light::strip(name, key_az + daz, el, span * dist, span * len, span * wid, power).tint([0.96, 0.98, 1.0]),
+        );
+    }
     r.power(RIG_POWER)
 }
 
@@ -581,20 +593,7 @@ fn plate(carbon: &Path) -> Scene {
         PLINTH_BEVEL,
         black_chrome(),
     ));
-    s.add(slab(
-        "trip_face",
-        TRIP_C,
-        TRIP_FACE,
-        9.0,
-        0.0,
-        5.0,
-        4.0,
-        Mat::new("dielectric", "gt_graphite_glass")
-            .color([0.035, 0.036, 0.04])
-            .rough(0.08)
-            .set("coat", 1.0)
-            .set("coat_rough", 0.0),
-    ));
+    s.add(slab("trip_face", TRIP_C, TRIP_FACE, 9.0, 0.0, 5.0, 4.0, black_glass()));
     s
 }
 
