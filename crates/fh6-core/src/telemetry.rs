@@ -60,16 +60,16 @@ pub struct FH6TelemetryData {
     // 51744149102611). The 20 golden packets hold 0 in all of them, so their offsets follow the
     // documented field order only; real-game check C confirms them on a capture. Units the page
     // does not state are not assumed.
-    /// `AngularVelocityX` (44), rad/s about the car's x axis.
+    /// `AngularVelocityX` (44), about the car's x axis.
     pub angular_velocity_x: f32,
-    /// `AngularVelocityZ` (52), rad/s about the car's z axis.
+    /// `AngularVelocityZ` (52), about the car's z axis.
     pub angular_velocity_z: f32,
-    /// `TireSlipRatio*` (84-96): 0 is full grip, above 1 is loss of grip.
+    /// `TireSlipRatio*` (84-96).
     pub tire_slip_ratio_fl: f32,
     pub tire_slip_ratio_fr: f32,
     pub tire_slip_ratio_rl: f32,
     pub tire_slip_ratio_rr: f32,
-    /// `WheelRotationSpeed*` (100-112), rad/s.
+    /// `WheelRotationSpeed*` (100-112).
     pub wheel_rotation_speed_fl: f32,
     pub wheel_rotation_speed_fr: f32,
     pub wheel_rotation_speed_rl: f32,
@@ -89,12 +89,12 @@ pub struct FH6TelemetryData {
     pub surface_rumble_fr: f32,
     pub surface_rumble_rl: f32,
     pub surface_rumble_rr: f32,
-    /// `TireCombinedSlip*` (180-192): 0 is full grip, above 1 is loss of grip.
+    /// `TireCombinedSlip*` (180-192).
     pub tire_combined_slip_fl: f32,
     pub tire_combined_slip_fr: f32,
     pub tire_combined_slip_rl: f32,
     pub tire_combined_slip_rr: f32,
-    /// `CarClass` (216): the class index, lowest first. The index-to-letter mapping is unverified.
+    /// `CarClass` (216): a class index. Its mapping to the class letters is unverified.
     pub car_class: i32,
     /// `CarPerformanceIndex` (220): the PI number.
     pub car_performance_index: i32,
@@ -102,9 +102,9 @@ pub struct FH6TelemetryData {
     pub num_cylinders: i32,
     /// `CarGroup` (232), Horizon only. The page does not list the values.
     pub car_group: u32,
-    /// `SmashableVelDiff` (236), Horizon only: the speed change when the car hits a smashable.
+    /// `SmashableVelDiff` (236), Horizon only. Its meaning and unit are unverified.
     pub smashable_vel_diff: f32,
-    /// `SmashableMass` (240), Horizon only: the mass of the smashable hit.
+    /// `SmashableMass` (240), Horizon only. Its meaning and unit are unverified.
     pub smashable_mass: f32,
     /// `Torque` (264). The page states no unit (Forza Motorsport sends N·m).
     pub torque: f32,
@@ -117,13 +117,13 @@ pub struct FH6TelemetryData {
     pub fuel: f32,
     /// `DistanceTraveled` (292).
     pub distance_traveled: f32,
-    /// `BestLap` (296), seconds.
+    /// `BestLap` (296).
     pub best_lap: f32,
-    /// `LastLap` (300), seconds.
+    /// `LastLap` (300).
     pub last_lap: f32,
-    /// `CurrentLap` (304), seconds.
+    /// `CurrentLap` (304).
     pub current_lap: f32,
-    /// `CurrentRaceTime` (308), seconds.
+    /// `CurrentRaceTime` (308).
     pub current_race_time: f32,
     /// `LapNumber` (312).
     pub lap_number: u16,
