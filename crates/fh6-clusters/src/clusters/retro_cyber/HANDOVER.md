@@ -1,135 +1,163 @@
-# HANDOVER: Cluster · Retro Cyber (catalog row 19, build #6, ★ Sci-Fi pattern-setter)
+# HANDOVER: Dash · RetroCyber (catalog row 19)
 
-**Chat / branch:** RetroCyber cluster chat, `claude/cluster-retrocyber-c0db06`  **Date:** 2026-11-23  **Result:** ✅ complete (Penpot page, bespoke Blender + ComfyUI assets, clean critique pass)
+**Thread / branch:** "Rebuild RetroCyber as the Supra A70 dash" (slot D), `claude/project-thread-191tnq`, draft PR #9  **Date:** 2026-11-28  **Result:** DRAFT. Written while the build is finished; the closing review, the goldens, the live bench and the Penpot import are still to come, and each section marked *pending* is filled in at the close.
+
+Findings and yes/no answers only; there are no scores in this file. TJX is hands-off (AGENTS.md rule 12): the self-review stands in for TJX's direction check and sign-off. TJX's own words in the thread are quoted where they decided something.
 
 ## Exit criteria (`CLUSTER_PROMPT.md`)
 | Criterion | Met? | Evidence |
 |---|---|---|
-| Design board has 4 states per view | ✅ | Penpot page `07 · RetroCyber` (page ID `6fe75c5e-bb22-8084-8008-fd924684ddca`) in the master file. It holds 8 boards at 3840 × 2160: 4 states × cockpit and hood, each with the steering centreline, the view envelope and the anchor cross, drawn from the same geometry as `mod.rs`. The board IDs are listed under "What the next Sci-Fi chats must know". The exported cockpit redline board matches the render. Also: the zone table at the top of `mod.rs` and `mockups/RetroCyber/index.html`. |
-| Module complete, no TODOs, goldens pass | ✅ | `mod.rs`; `cargo test -p fh6-clusters retro_cyber`: 7 unit tests + the golden test (8 images) pass |
-| 4K renders + 60-frame sequence in `mockups/RetroCyber/` | ✅ | `cargo run --release -p preview-export -- --cluster RetroCyber` |
-| Live demo verified, GPU under 0.5 ms recorded | ✅ | GPU p50 0.32 / p99 0.33 ms (sequence); live run below |
-| Critique passed, with notes | ✅ | 4 rounds with the `ui-ux-designer` agent, ending in a clean pass that beats the hero reference; see "Critique" |
-| Handover written | ✅ | this file |
+| The introduction was posted, and the thread is not archived | yes | the thread's first message; the thread is open |
+| `RESEARCH.md` is written, with sources | yes | [RESEARCH.md](RESEARCH.md): the A70 Panoramic Digital Meter, its features with sources, the match table, deliberate changes A to G, the gaps |
+| The design board is the Penpot page `07 · RetroCyber`, 4 states per view, its IDs here and in the README | *pending* | the eight state boards and the motion notes are drawn from `Geom` (outlined text); the import waits for the Penpot queue |
+| A bespoke ComfyUI asset and a bespoke Blender asset are used, with ledger rows and 4K masters on Drive; the before and after pair is here | yes | [assets/clusters/retro_cyber/ASSETS.md](../../../../../assets/clusters/retro_cyber/ASSETS.md); "Assets and masters"; "Before and after pair" |
+| The module is complete, with no TODOs, and goldens pass | *pending* | 15 unit tests pass; goldens are a PC job |
+| 4K renders, the 60-frame sequence and the product page are in `mockups/RetroCyber/` | *pending* | the final `preview-export` run |
+| The live bench report and the GPU time under 0.5 ms are recorded | *pending* | "GPU budget"; the re-time after the mesh zones runs on the PC |
+| The direction check was posted and self-reviewed, with its findings here | yes | "Direction check" (posted 28 Nov 04:20 UTC) |
+| Every line of the closing review is yes, or a line that could not be fixed afterwards is reported | *pending* | "Closing review" |
+| The visual review (V1 to V26) is here, each line with its evidence | *pending* | "Visual review" |
+| The handover is written, the job is reported for the merge | *pending* | this file |
 
-## What it is
-A VFD tube in a 10 px chamfer45 gunmetal housing (1380 × 500 cavity, cut 58; hood 1680 × 336, cut 48). Inside, four layers with felt-G parallax (0 / 1 / 3 / 4 px):
-1. **Phosphor:** procedural seven-segment digits (shared `common::seg7`), pods, chevrons, columns and dots. Every unlit element is an opaque 7% ghost of its own phosphor.
-2. **Control-grid mesh:** the Phase 6 `assets/scifi/vfd_hex_mesh.png` tiled at 144 px (about a 6 px cell), multiplied at 42%; a procedural triangular lattice when the asset is missing.
-3. **Filaments:** five 1 px wires, multiplied at 55%, crossing the strip, chevrons, speed, gear and scope.
-4. **Front glass:** a light-driven 1 px rim and a 12 px crescent at 3.5% peak, both facet by facet; never a tint.
+## What was built
+- `crates/fh6-clusters/src/clusters/retro_cyber/`
+  - `mod.rs`: the zone tables for both views (`Geom`, with the stepped lens outline: a low strip across the width and a raised part over the centre window, joined by smooth shoulders), the tach scale (`Scale`: one bar per 250 rpm, numerals on the rising curve, red from the thousand nearest the shift point), the six-pod shift bracket, the pedal, slip, power and boost gauges, the lateral G readout, the sector boot, the limiter hold (`LimiterHold`), the surround's ring cover (`Geom::ring_cover`) and the mesh zones (`Geom::mesh_zones`), the cluster (`update`, `draw`) and 15 unit tests.
+  - `RESEARCH.md`, `README.md`, `spec.md` (the catalog brief, superseded by `RESEARCH.md` where they differ), this file.
+- `crates/fh6-clusters/src/common/seg7.rs`: two emission modes, `Emission::Halo` and `Emission::SoftHalo` (the bloom modes' lobes as a local glow, with no bloom pass), with a test. Shared code: see "Shared places touched".
+- `tools/asset-forge/src/recipes/retro_cyber.rs`: the ComfyUI phosphor plate and surround grain (SDXL), the Blender surround per view and key light, and the cluster's `ASSETS.md`.
+- `assets/clusters/retro_cyber/`: `phosphor_grain.png`, `surround_{cockpit,hood}_{l160,l110}.png` and `ASSETS.md`. The octagon `housing_*` renders of the old design are deleted.
 
-Ranks:
-1. The octagon-bay gear (Seg7 cap 220, white phosphor, primary ghosts with the `N` diagonal; N at 72%, R in warning; the soft lobe glow) under the 38 px, 15-pod slanted strip (outer 8 primary, 4 secondary, centre 3 accent; all pods `shift` at the limiter).
-2. The Seg7 speed (cap 112, ghost 8s, 0.6 hysteresis, phosphor bloom).
-3. 24 chevrons (14 / 6 / 4) with the rpm scale; steady at the limiter.
-4. THR / BRK / BST columns (go / warning / secondary, 16 steps, 60% level, no glow); a 13 × 5 dot G-scope (felt G, 0.25 g per column, 0.5 g per row, 500 ms trail); 6-step drift columns flanking the bay on the side the tail steps out (5 / 10 / 15 / 20 / 30 / 45°); a two-cell DRIFT readout (from 8°).
-5. SLIP / LOCK / SPIN annunciators (lit only when active, 150 ms hold), labels in Chakra Petch 600, the housing with four slotted screws.
+## Telemetry
+- **Through `fh6_kit::Signals`:** rpm and its limiter and shift point (bars, bracket, red zone), gear, speed (in the user's unit), throttle, brake, the race flag (boot), the body slip angle from the velocity (`Signals::slip_deg`), lateral G (the kit's smoothing; readout and light swing), the power unit.
+- **From the packet:** `power_watts` (power gauge, in hp or kW) and `boost_psi` (boost gauge).
+- Forza sends no fuel, coolant or oil temperature, oil pressure or trip distance, so the A70's windows for those carry the verified fields above in the same shapes (change B).
 
-Signature moments: the filament-ignition boot, the gear re-strike with the facet lap, and the strip-only limiter (see `README.md`).
+## GPU budget
+Measured on the PC's RTX 3070 Ti Laptop GPU (median of three interleaved rounds with PorscheAnalog as the control; 0.5 ms per cluster at 4K is the budget):
 
-## Renders
-- `docs/handover-shots/cluster-retro_cyber-02_mid_cruise.png`
-- `docs/handover-shots/cluster-retro_cyber-03_redline_strobe.png`
-- `docs/handover-shots/cluster-retro_cyber-04_drift_braking.png`
-- `docs/handover-shots/cluster-retro_cyber-hood_03_redline_strobe.png`
-- `docs/handover-shots/cluster-retro_cyber-hood_04_drift_braking.png`
-- `docs/handover-shots/cluster-retro_cyber-assets-before.png` and `docs/handover-shots/cluster-retro_cyber-assets-after.png` (procedural versus Blender housing and ComfyUI grain, 2× zoom)
-- `docs/handover-shots/cluster-retro_cyber-upshift_frame42.png` (sequence frame 42: the first facet of the lap and the re-strike)
-- Everything else is in `mockups/RetroCyber/` (gitignored; regenerate with the command above).
+| Build | Cockpit states | Hood states | Sequence p50 / p99 | Control (PorscheAnalog p50) |
+|---|---|---|---|---|
+| 7930b12 (first build after the direction check) | 0.66 to 0.74 ms | | 0.729 / 0.737 ms | |
+| 1b3ce71 (ring cover, no bloom, limiter hold, new surround art) | 0.518 to 0.536 ms | 0.471 to 0.484 ms | 0.529 / 0.845 ms | 0.392 ms |
+| 9447c0f (mesh zones) | *pending* | *pending* | *pending* | *pending* |
 
-## Performance (RTX 3070 Ti Laptop, 3840 × 2160, `preview-export`)
-| View | GPU |
-|---|---|
-| Cockpit, 60-frame sequence | p50 0.316 ms, p99 0.331 ms |
-| Cockpit states | 0.31–0.33 ms |
-| Hood states | 0.27–0.28 ms (the first hood frame after the view switch reads 0.43 ms) |
+What the cuts were, from the per-layer timing at e003c20 (surround 0.221, glass 0.205, mesh and scanlines 0.128, speed bloom 0.094 ms): the surround's art, face, rims and lens black are drawn on twelve rectangles over its ring only (about 17% of the panel); the speed and gear glow with local halos and no frame blooms; the grid mesh and the scanlines go only where phosphor can light. Drawing the lens glass on its rim band alone was tried and dropped: the kit never trims a glass draw under a clip, so twelve clipped glass draws were twice as slow on lavapipe. The p99 spikes (single frames about 0.3 ms slower, seen only in variants with a glass layer) are the kit thread "Speed up the kit's glass layer"'s to explain.
 
-History: the first build ran 0.85 ms. 0.33 ms of it was the shared `Bezel` Chamfer45 (see "Shared work"); the rest was full-tube glass strokes and a full-cavity mesh. The housing and glass are now drawn facet by facet and the mesh and scanlines cover only the five phosphor zones.
+## Direction check
+Run 28 Nov 2026, 03:55 to 04:20 UTC, on lavapipe renders in the container and one cold-reviewer run on the PC. Decision: **go with changes**.
 
-With the bespoke assets: sequence p50 0.321 ms, p99 0.331 ms; 19–25 draw calls (the plate fills are grouped after the halos and ghosts, so the image switches once per group).
+### Frozen expectations (written 03:20 UTC, before the first new render)
+Rank order: 1 gear (white VFD seven-segment, centre window under the red zone) and the red-zone bracket shift light; 2 speed (three cyan seven-segment digits, ghost 888); 3 the horizontal rising tach bars; 4 pedal columns, slip bar, power and boost slants, G readout; 5 numerals, printed labels, lens, surround.
 
-Live demo (`FH6_WheelDash --demo --cluster RetroCyber --stats --bench-seconds 60`, release, desktop with no stand-in game, before the assets landed): 3743 frames in 60 s (62.4 fps), stable, no jitter. CPU per frame was p50 1.24 ms, p99 4.86 ms; of that, upload + record + submit was 0.88 ms p50. That is the shared host cost the pilot also recorded (1.44 / 3.66 ms), not the cluster. Demo mode synthesises telemetry in-process, so the packet-to-present series is empty.
+Feature inventory, reference → tolerance:
+- F1 one long low panel, separate VFD windows on black behind one lens → windows visibly separate (at least 12 px of black between), one lens outline over all
+- F2 order left to right: two-column bar window, centre (tach over speed), narrow vertical bar, two slanted bars → same order, no other windows
+- F4 tach bars: thin upright bars, tops on a curve rising left to right, taller to the right → the right end's bar at least 3 times the left one's height; 4 bars per 1000 rpm
+- F5 numerals 0 to N above the bars on the same curve, "TACH ×1000r/min" top left → each numeral within ±8 px of its bar's x; label present
+- F6 red numerals in the red zone and the bracket over it; bars stay primary → red only on numerals from the red-zone thousand and on the bracket (tolerance change below)
+- F7 speed the largest figure in the centre window below the tach, unit right, "SPEED" below → speed cap at least 2.5 times the numeral cap
+- F8 small readout left of the speed → present, cap at most 0.4 times the speed cap (tolerance change below)
+- F9 two columns of thick horizontal segments → 2 columns, at least 8 rows
+- F10 one vertical bar with a slanted top in a narrow window → width at most half its height
+- F11 two slanted parallelogram bars leaning right with scale figures → lean 10 to 25°, figures present
+- F12 colours: bars green or cyan, digits cyan, labels near-white but dim, red zone red → hue within 20° of the palette roles
+- F13 ghosts visible through the filter, lens reflections → unlit segments at 7% (±2%), lens rim crisp, no tint over black
+- F15 boot lights the windows left to right → sequence frames 0 to 9 show only the settled state
+- Key frames: the limiter at frame 29 or 30; strobe 30 to 41 (bracket only); gear change at 42.
 
-## Assets
-Recipe: `tools/asset-forge/src/recipes/retro_cyber.rs`. Build it with `cargo run --release -p asset-forge -- build --set retro_cyber` (≈ 95 s: Blender ≈ 20 s, SDXL ≈ 70 s). Outputs are in `assets/clusters/retro_cyber/`, with the ledger in `assets/clusters/retro_cyber/ASSETS.md` (generator, seed, prompt, licence).
+### Tolerance changes (logged before re-checking)
+- 04:05 UTC, F8: "cap at most 0.4 times the speed cap" became "at most 0.7 times and visibly smaller than the speed". Why: the glance gate needs every information zone at 4.5:1 after the blur, and the shared seg7 stroke is a fixed 10.5% of the cap, so the G readout measured 3.9 to 4.4:1 at cap 44 (cockpit) and 36 (hood). It is now cap 62 (0.48 of 128) and 66 (0.69 of 96).
+- 05:12 UTC, F6: red is also on the printed red-zone line under the baseline and its limiter tick. Why: the cold reviewer's finding 5 and the frontal bench photo, whose red zone is a marked section of the scale, not numerals alone.
 
-| Asset | Tool | What it adds | Fallback |
-|---|---|---|---|
-| `housing_cockpit_l160.png`, `housing_cockpit_l110.png`, `housing_hood_l160.png`, `housing_hood_l110.png` | **Blender 5.3**, Cycles on the GPU, 96 spp, OptiX denoise, seed 1907 | The chamfer45 housing modelled in 3D: 45° outer bevel, flat face with an engraved groove at 55%, rounded inner lip, four slotted pan-head screws, brushed gunmetal (roughness streaked by stretched noise). Rendered orthographic at 2 px per 4K px with key lights at −160° and −110°. `draw_housing_art` blends the two by the virtual light's azimuth (lateral G), facet by facet over the ring band, and adds the light-driven 1 px rim. | procedural facets (`draw_housing`) |
-| `phosphor_grain.png` (1024², tileable) | **ComfyUI**, SDXL base 1.0 + 4x-UltraSharp, seed 1906 | A macro of lit VFD phosphor powder: grey, made seamless, high-passed, 88–100% display level (±6%). It is tiled at 80 local px (2–3 px grains, under the 6 px hex mesh) and tinted by each lit pod, chevron, column and drift step (gain 1.1), so the phosphor has a fine organic grain instead of flat paint. | flat emission with an 85% lower-edge falloff |
+### Cold look (04:10 UTC, `02_mid_cruise_cockpit.png` at full frame, its mirror and its luminance view)
+Not blind to the references (they were studied for `RESEARCH.md`) or to earlier renders of this build.
+1. One wide, low rounded rectangle with a thin grey metal rim sits low in the centre of the frame, in the black scrim, below the windscreen; it spans about 37% of the frame width.
+2. Inside it, behind a dark glass face, are separate black windows with faint outlines: a narrow one at the left, a large centre one, a narrow one and a wider one at the right.
+3. The eye goes first to the white seven-segment "4" right of centre, then to the cyan "118" with ghost 8s, then to the cyan bar row that climbs from left to right across the top of the centre window.
+4. The bar row is lit to just past the 5; the numerals 0 to 9 sit above it on the same rising curve, 8 and 9 in red; a dim red bracket with dark pods sits above 7 to 9.
+5. Small readouts: "0.2 G" in yellow seven-segment left in the centre window, "MPH" right of the speed, "45°" over the narrow right window, "200 HP" and "20 psi" over the wide right window.
+6. Left window: two columns of ten segments, the left lit green four high, the right dark red ghosts. Narrow right window: one column of dark yellow ghosts with a slanted top. Wide right window: two slanted yellow bars lit about half way.
+7. Labels in grey caps under the windows: THR BRK, G-LOAD, SPEED, GEAR, SLIP, POWER, BOOST; "TACH ×1000r/min" and the logo letters at the top left of the centre window.
+8. Colours: cyan bars and speed, white gear, yellow G and right-hand bars, green throttle, red numerals and bracket rail, grey labels, on black.
+9. The lit segments carry a fine hexagonal mesh and read as lit phosphor; the rim reads as metal with a highlight on its top-left curve; the windows and labels read flat.
+10. In the luminance view the gear and speed are the brightest marks, then the lit tach bars, then the G digits and the yellow bars; labels and numerals are mid grey.
 
-Before / after (2× zoom of the top-left corner, redline state): `docs/handover-shots/cluster-retro_cyber-assets-before.png` and `docs/handover-shots/cluster-retro_cyber-assets-after.png`. In the "after", the strip and chevrons show the phosphor grain, and the housing shows the rendered bevel shading, the groove and the screw heads.
+Premortem (the likeliest reason TJX rejects it): "a neat 2D VFD mock-up in a thin frame, not the Supra's glass panel in a real binnacle: the surround is too thin to show its material at a glance, the windows are flat outlines, and the black right of the gear and over the tach's left end looks sparse."
 
-Also used: the shared Phase 6 `assets/scifi/vfd_hex_mesh.png` (control grid), with a procedural lattice as fallback, and Chakra Petch 600 from the font pack.
+Rejection patterns against named crops: (a) not like the real car: the layout follows the A70; the A70 has no gear and a longer panel (changes A and C), left to the cold reviewer. (b) materials only at 2×: the surround's grain reads only at 2×; at 1× it reads as a metal rim. (c) slab with blobs: one panel behind one lens is what the A70 has; no. (d) flat modern widgets: phosphor, ghosts and lens read as hardware; the window outlines were flat 1 px rims; partly. (e) murky glass: the lens interior measured black after the stretch fix; no.
 
-The recipe writes its own ledger and never calls `ctx.image`, so the shared `assets/ASSETS.md`, `assets.json`, `forge.lock.json` and `contact-sheet.html` are untouched. `build` still re-saves them and can reformat them; I reverted that churn. Registering the set took three one-line shared edits:
-- `pub mod retro_cyber;` in `recipes/mod.rs`
-- the `"retro_cyber"` arm in `sets/mod.rs`
-- `"retro_cyber"` in `SETS` in `main.rs`
+### Measurements (03:55 to 04:20 UTC)
+- glance, first run: gear 8.5 / 9.7 / 6.3 / 10.4:1 (redline no: magenta gear), G readout 3.9 to 4.2:1 (no). Fixed in be612fd and 7930b12 (the gear stays white; G cap 62 / 66); re-run all yes: cockpit gear 8.5 / 9.7 / 11.5 / 10.4:1, speed 8.3 / 9.3 / 9.3 / 8.7:1, G 5.1 / 5.0 / 5.1 / 4.7:1; hood gear 9.1 to 10.7:1, speed 7.5 to 8.1:1, G 4.6 to 5.1:1.
+- flash, frames 30 to 41: one area (the bracket), 10 Hz, 3 on / 3 off, worst field 3,872 of 21,526 px² (yes), tallest 32 px (yes).
+- motion, first run: stalls at frames 29, 47, 57 and 59 (the rpm moved less than one bar). Fixed in be612fd (the next bar dimmed by duty): no stalls.
+- static: p95 at or below 0.2, dimmer than the live data: yes.
+- stretch, first run: the whole lens face at 4/255 (a haze). Fixed in e003c20 (key light 30%, roughness 0.015, studio 1.2%): face 0/255, rims keep the highlight.
+- before and after: the before's main failure, an octagon tube with chevrons that copies no real car, is gone. What it did better: the dot G-scope and the DRIFT and SLIP lamps; the slip bar keeps slip but loses the lamps (the A70 has none).
 
-Other cluster chats will add the same kind of lines, so expect trivial merge conflicts there.
+### Cold reviewer (one run on the PC, 04:13 UTC, seed 1928, logo zone masked; R1 a frontal left-hand-drive bench photo, R2 an angled right-hand-drive photo)
+- Five-second test: first the white "4", second the teal "118", third the teal rev bar.
+- Recognition: "Don't know." (V13 no; stays no.)
+- Blind read against the key: gear 8 of 8, speed within 1 mph 8 of 8, rpm zone 8 of 8.
+- R1: "Same" in both orders. R2: "Different" in both orders (that car's left-end turbo module and longer lower strip).
 
-## Critique
-- **Round 1** (`ui-ux-designer` on the 4K crops, the composite and the hero frames): **not yet**. Better parts than the hero, weaker restraint. Must-fix: bloom leaking outside the cavity; a white "plastic key" band through every pod and chevron; rank 4 as loud as rank 3; the gear not dominant; a thin bay rim; labels and bezel too bright. All six were applied.
-- **Round 2:** "the cockpit states now beat the hero frame", with one remaining hard fail: the strip and chevron bloom still hazed the bezel (the kit's bloom cannot be masked to the cavity). It also asked to stretch the hood chevrons and to tint the gear cyan. Fixed: pods and chevrons left the bloom pass for tight local glows (σ 3.5 / 2.5), and the hood was re-laid with the full-width staircase.
-- **Round 3** (after the bespoke Blender and ComfyUI assets): "nothing lights outside the tube… clearly beats the hero frame on hierarchy and material." Two must-fixes:
-  1. The grain was too strong and hid the hex mesh. Fixed: the plate was remapped to 88–100% (±6%) and tiled at 80 px (2–3 px grains), and the mesh went to 42% so the regular grid dominates.
-  2. The hood annunciators were too small. Fixed: 180 × 36 px lamps with 19 px caps.
-- **Final:** "**Yes, it is a clean pass and beats the hero reference.**" Not taken, and accepted by the reviewer as deferred:
-  - the cyan gear tint (the brief says the gear is ink with a 45% white core, N at 72%)
-  - the ghost `N` diagonal (shared `seg7`)
-  - the dead band between the scrim dome and the housing (host layout / Phase 8 fit)
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | Flat tablet frame with an even grey rim, no hood, lens, depth or curve | fixed in e093d1b: the lens and surround follow the A70's stepped panel; the Blender surround follows the same outline (re-rendered 1b3ce71, checked at 1:1) |
+| 2 | Rounded boxes round the windows read as UI cards | fixed in 126a98d: no window boxes; one printed divider line under the windows with a riser in each gap |
+| 3 | Empty corners above the side columns | fixed in e093d1b: the side windows sit under the low strip, the centre window under the raised part |
+| 4 | Shift strip small and thin | fixed in 126a98d: six pods, 30 px (cockpit) and 20 px (hood) tall |
+| 5 | Red zone marked only by two numerals | fixed in 126a98d: a printed red line under the baseline and a limiter tick |
+| 6 | Gear looks raised; its ghost is teal while lit is white | fixed in 126a98d and 1aa00e5: white ghost; matte off the limiter, a soft local glow on it |
+| 7 | G digits look outlined | fixed in 126a98d: the readout is drawn in front of the mesh; glance 6.1 to 6.9:1 |
+| 8 | G reads 0.1 at idle; boost has 2 bars lit at idle with no zero mark | boost: a zero tick and "0" (vacuum below it is the A70's own scale); G 0.1 is the review telemetry's idle lateral G |
+| 9 | Power top figure differs between frames | by design: the power scale re-ranges to the car only with the throttle under 0.1 |
+| 10 | Speed, gear and rpm disagree between frames | the review telemetry (sequence against state data), not the dash |
+| 11 | BOOST touches the rim | fixed in 126a98d: POWER left-aligned, BOOST right-aligned |
+| 12 | Grey labels small and mid grey | the static cap (V11, 20% luminance); labels raised to cap 18 (cockpit) and 16 (hood) |
 
-## My calls
-- **The boot runs only on an observed 0 → 1.** A cluster made while racing never saw the 0, so it does not boot; this also keeps the goldens and the sequence free of the boot. The boot is covered by unit tests (`boot_runs_only_on_the_first_observed_race_start`, `sectors_ignite_left_to_right_and_settle`); the review harness never sends `IsRaceOn` 0 → 1, so there is no render of it (see "Shared work").
-- **Slip is body slip from velocity** (`Signals::slip_deg`), not rear `TireSlipAngle`: tyre slip is not verified against `tests/golden/packets`. It drives the drift columns, the DRIFT readout and SLIP.
-- **LOCK and SPIN are inferred from verified fields.** The packet decoder has no `TireSlipRatio` at all. LOCK = brake > 0.6 at over 5 m/s while decelerating less than 0.35 g per unit of brake. SPIN = throttle > 0.6 with more than 12° of body slip.
-- **Corner cut 58 px, not 28.** At 28 px the 1380 × 500 tube reads as a rectangle; 58 is the family table's 64 px outer chamfer less the 10 px ring.
-- **Pods and chevrons do not bloom.** The display bloom has a fixed pixel radius and cannot be masked, so at any useful level it lit the bezel. Local glows stay inside the cavity; only the speed (seg7 phosphor bloom at 3%) and the gear's soft lobe write to the bloom buffer.
-- **The strip's stage colours are the VFD zones**, not `Palette::rev_stage` (which gave green). `ShiftLights` still decides lit, attack, release, strobe and breath.
-- **No white core band in pods and chevrons:** flat emission with an 85% lower-edge falloff. The mesh and filaments give them texture.
-- **The gear uses the soft lobe all the time** (`Emission::Soft`), not matte off the limiter: round 1 found the matte white gear lost to the blooming cyan speed.
-- **The housing is drawn locally**, with the Chamfer45 look (levels, bevel facing, rims, screws), to stay in budget.
-- **The Blender housing is a lit render, not a normal/roughness map.** The kit has no normal-mapped 2D shading, so a normal map could not be lit at runtime. Two baked key lights blended by azimuth give real light-driven bevels and cost two texture fills over the 10 px band.
-- **The phosphor plate replaces the flat fill only on blocks the cluster draws itself** (pods, chevrons, columns, drift steps). The seven-segment digits are the shared `seg7` and take no paint, so the gear and speed stay smooth phosphor.
-- **No blue-noise dither on the crescent.** It peaks at 3.5% and shows no banding.
-- **A user display font replaces the labels and scale only.** The digits are the family's procedural segment face (tokens `type.fonts.segment`).
-- **The parallax runs phosphor 0, mesh 1, filaments 3, glass 4 px** (the brief lists 0/1/3/4 and the layer order).
+### DC answers
+V1 yes, V2 yes, V3 yes (findings above), V4 yes (the gear first), V6 yes after the fixes, V10 yes, V13 no (stays no), V14 yes for layout, geometry and colour, V15 yes against R1, no against R2 (another car's panel), V16 NOT ASSESSED at the direction check (the board came later, out of order: Penpot was held by other threads), V17 partly (the surround's material at 1× only after the stepped re-render), V19 yes after e003c20, V20 yes after e003c20.
 
-## Shared work for the conductor
-1. **`common::bezel` Chamfer45 costs 0.33 ms at 4K** on a 1400 × 520 frame. Its two closed 8-segment polylines (body and gunmetal face) and the two full-octagon rim strokes are evaluated over the whole frame's bounding box. Drawing it facet by facet, as `draw_housing` here does, gives the same look for a few µs. Every Sci-Fi and race-hardware sibling will hit this.
-2. **The kit cannot mask bloom to a shape.** The brief's "one emissive buffer clipped to 1440 × 560" is not expressible: `p.clip` limits what is written, not the blur. A `LayerOptions` bloom clip (rect or rounded rect) would let VFD strips bloom inside their cavity.
-3. **`common::tach::TachChevron::draw` blooms at the full token intensity and paints a white core band.** Inside a VFD cavity both read as neon UI. RetroCyber draws the run itself through the public `segment`, `segment_color` and `lit`. A `ChevronStyle` (bloom share, core on/off) would let siblings keep the component.
-4. **The review harness never sends `IsRaceOn` 0 → 1,** so no family's sector boot can be rendered or goldened. A boot sequence (or a sequence variant starting with `is_race_on: 0`) in `review` and `preview-export` would cover the Sci-Fi signature.
+## Visual review
+*Pending: the closing round.* Re-checked on the cloud render at 9447c0f with the new surround art: glance all yes (cockpit gear 8.7 / 9.9 / 11.6 / 10.7:1, speed 8.4 / 9.3 / 9.3 / 8.7:1, G 6.6 / 6.6 / 6.6 / 6.1:1); static yes; stretch 0 px not off outside the envelope; flash, frames 30 to 41: one area, 10 Hz, 3 on / 3 off, worst field 4,834 of 21,526 px², tallest 38 px (yes); motion: no stalls.
 
-### `common::seg7` second review (requested)
-It works for RetroCyber; the tests pass and the digits, ghosts, diagonal neutral and re-strike behave as specified. Findings:
-1. **`draw_scanlines` does not do what its docs say.** It fills normal-blend `oledBlack` at alpha 34. That only darkens lit phosphor when the cavity under it is opaque. Over the transparent overlay it would darken the game in stripes. Use `BlendMode::Multiply` (identity on black, and it truly multiplies emission), or say in the docs that it needs an opaque cavity.
-2. **Scanline phase depends on each call's rect.** The repeating gradient starts at the rect's snapped `min.y`, so two calls over neighbouring rects do not share one grid. Anchor the period to target y = 0 (start the gradient at `floor(min.y / period) * period`). RetroCyber calls it per phosphor zone; its zones never touch, so this is harmless here.
-3. **No blank state for `Seg7Number`.** `update` always lights at least the last digit (`0`). The DRIFT readout needed two `Seg7Digit`s to show all-ghost. An `update_blank()` (or `Option<i64>`) would help.
-4. **The diagonal glass ghosts at the full 7%,** so a faint `N` shows behind every gear (round 1 critique). An optional lower ghost level for the diagonal would answer that without touching the hero frames.
-5. **`Seg7Geometry::bounds` is conservative:** it adds the slant overhang on both sides at every corner, plus half the spacing. That is fine for layout, but a fit test against an octagon needs the segment polygons (as `the_gear_fits_its_octagon_bay` does).
+## Before and after pair
+- Before: `mockups/_before/RetroCyber/02_mid_cruise.png` (the octagon tube on `main`); copied to `docs/handover-shots/` at the close.
+- After: the final render at the close.
 
-## Known issues / debt
-- **The boot has no render** (see shared item 4); it is unit-tested.
-- **The hood over a bright bonnet is unproven.** The tube is opaque black, so legibility is safe, but there is no hood-over-photo composite in `preview-export` yet.
-- **The scrim dome leaves about 250 px of dark band above the housing** in the cockpit composite. That is the Phase 8 fit / host anchor, not the cluster.
+## Assets and masters
+Runtime files (in git) with recipe, seed and licence: [assets/clusters/retro_cyber/ASSETS.md](../../../../../assets/clusters/retro_cyber/ASSETS.md).
+- `phosphor_grain.png`: ComfyUI (SDXL base + 4x-UltraSharp), seed 1906, the tinted fill of every lit bar, pod and segment.
+- `surround_{cockpit,hood}_{l160,l110}.png`: Blender, seed 1907, over a ComfyUI graphite grain (seed 2708); two key lights per view, cross-faded by lateral G. Built on the cloud 4090 for the first outline (28 Nov 03:45, $0.097) and on the PC's own card for the stepped outline (28 Nov 05:27, TJX chose "local": no cost).
+- Masters: the Drive folder `FH6 WheelDash v2 - 4K Masters/retro_cyber/` (the asset build's `--masters` copy, 7 files per view).
 
-## Penpot
-- The page is `07 · RetroCyber`, ID `6fe75c5e-bb22-8084-8008-fd924684ddca`, in the master file. The file has since been renamed "FH6 WheelDash v2 — Design System."; the IDs are unchanged.
-- Boards, each 3840 × 2160 and named `<View> · <state>`:
-  - Cockpit `01_idle` `…fd9291c36128`, `02_mid_cruise` `…fd929257c331`, `03_redline_strobe` `…fd927d11c9b0`, `04_drift_braking` `…fd9292f018cd`
-  - Hood `01_idle` `…fd92935d6982`, `02_mid_cruise` `…fd9293d5f226`, `03_redline_strobe` `…fd92944d0ada`, `04_drift_braking` `…fd9294c26f8e`
-  - Every ID has the prefix `6fe75c5e-bb22-8084-8008-`.
-- Each board has a `cluster` group: an SVG built from the same zone table, plus the guides.
-- Exports of the cockpit redline and hood drift boards were compared with the renders: they match. The fonts fall back to Penpot's default, as Chakra Petch is not installed there.
+## Changes from the real display and from the brief
+From `RESEARCH.md`, "Deliberate changes and why":
+- A. The panel is taller than the A70's 6:1 in the cockpit view, to fill the steering-column gap at a readable size.
+- B. The fuel, temperature, oil and trip windows carry pedals, slip, power and lateral G (no such data in the telemetry).
+- C. A gear window under the red zone (the manual A70 has none; the gear is rank 1 here).
+- D. The bracket over the red zone is the shift light: six pods that fill from the shift point and strobe on the limiter.
+- E. Magenta for the limiter (the family's shift colour).
+- F. The 2027 step: phosphor grain, grid mesh and filaments over lit phosphor, a Blender graphite surround, the kit's optical lens; whole bars with the next one dimmed by duty; a limiter hold; halos without bloom.
+- G. The windows have no drawn edges; a printed divider line under them with a riser in each gap.
 
-## What the next Sci-Fi chats must know
-- **The VFD dialect pattern:**
-  - Opaque cavity; every unlit element is an opaque 7% ghost (`ghost()` in `mod.rs`, the same formula as `seg7`).
-  - Mesh, filaments and scanlines multiply, and only over the phosphor zones.
-  - Glass is a facet-wise rim and crescent.
-  - Housing drawn facet by facet.
-  - No bloom except digits.
-- **Module shape:** a `Geom` per view with the zone table in the module docs, unit tests for the envelope, octagon-cut clearance and the gear-in-bay fit, plus a GPU-free `Boot` state machine.
+## Shared places touched
+- `crates/fh6-clusters/src/common/seg7.rs`: `Emission::Halo` and `Emission::SoftHalo` (additive; no existing caller changes) with a test.
+- `docs/handover-shots/cluster-retro_cyber-*.png` (at the close).
+- Not touched: `CATALOG.md` (main's copy kept on every merge), `fh6-kit`, the shared asset ledgers.
+
+## Requests for shared code
+1. **Glass under a clip** (now the kit thread "Speed up the kit's glass layer"): the painter never trims a glass draw, so a dash cannot limit its lens to the rim band where all of its visible effect is; and the glass pass shows single-frame spikes of about 0.3 ms.
+2. **Emissive target only when something blooms:** every fill writes both the scene and the emissive target; a frame with no bloom could skip the second.
+3. **`common::seg7::draw_scanlines` phase:** the lines start at each rectangle's own top pixel. A dash that draws scanlines over several rectangles has to align them itself (`mod.rs` does, with a copy of the private period rule); an origin argument would remove that copy.
+4. **asset-forge:** the surround rows' arguments were positional and landed in the wrong columns (fixed in c24f52f); named arguments in every recipe's ledger rows would prevent it elsewhere.
+
+## What sibling dashes must know
+- **A full-panel fill costs about 0.05 ms at 4K** on the PC card (two Rgba16Float targets per fill). Draw big surrounds on a ring cover and multiply layers only where there is light.
+- **Glass is never trimmed by a clip**: clipping a glass shape into pieces multiplies its cost.
+- **The glass's flat interior is not free of effect**: it passes about 91% of what is under it (Fresnel and absorption), so removing glass from an area brightens it.
+- **A VFD tach on the limiter flickers at 30 Hz** if the next bar's duty follows the bouncing rpm: hold the peak (`LimiterHold`).
+- **Penpot swaps lettering for a stand-in serif**: outline the text from `assets/fonts/` before importing an SVG board; the board generator reads the dash's own `Geom` (dumped by a local test), so the board and the code cannot drift.
+
+## Review findings
+*Pending: the closing review's skills and agents.*
