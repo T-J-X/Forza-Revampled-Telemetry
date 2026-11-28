@@ -1,11 +1,31 @@
-# GT7 Hood Pro assets
+# Gt7HoodPro assets
 
-Built by `cargo run --release -p asset-forge -- build --set gt7_hood_pro` (recipe `tools/asset-forge/src/recipes/gt7_hood_pro.rs`). Both are optional at runtime: without them the cluster draws its procedural pod and ribbons.
+Built by `cargo run --release -p asset-forge -- --masters gt7_hood_pro build --set gt7_hood_pro` (recipe `tools/asset-forge/src/recipes/gt7_hood_pro.rs`, hero library `tools/asset-forge/src/hero/`). The cluster draws a procedural fallback for every file that is missing.
 
+## Runtime files (in git)
 
-| Path | Kind | Space / alpha | Dims | Size | Generator | Licence | Clusters | QA |
-|---|---|---|---|---|---|---|---|---|
-| `assets/clusters/gt7_hood_pro/pod_lens.png` | color | srgb / straight | 928x736 | 37 KB | blender:gt7_hood_pro::POD_LENS (squircle n 4 slab, 24-segment rolled bevel, satin clear-coated black dielectric IOR 1.52 (roughness 0.16, coat 0.7 at 0.09); key strip from the upper left at 950 W, cool rim strip 280 W; orthographic top-down, Cycles 256 spp + denoise, AgX, transparent film) seed=7201 | MIT (asset-forge) | Gt7HoodPro | face black floor 0.1 crushed to #000 (bevel speculars kept); 928x736 = 4x the hood pod (232 x 184 local px) plus a 2% margin each side; drawn 1:1 over the pod squircle |
-| `assets/clusters/gt7_hood_pro/ribbon_grain.png` | color, tileable | srgb / additive | 1024x1024 | 85 KB | comfyui:workflows/sdxl_plate.json (SDXL base 1.0 + 4x-UltraSharp, dpmpp_2m karras 32 steps cfg 6.5) seed=7301 prompt="seamless texture of fine horizontal luminous light filaments and streaks, anisotropic brushed light, thin parallel white and pale cyan lines of varying brightness, sparse sparkling grain, pure black background, macro photograph, crisp, high detail" | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | Gt7HoodPro | SDXL 1024² → 4x-UltraSharp 4096² → 1024 px; blacks below 4% crushed to #000; seamless, tile seam score 139.94; luminance only (tinted at runtime) |
+| File | Kind | Size | Bytes | Generator (recipe + seed) | Licence | Used for |
+|---|---|---|---|---|---|---|
+| (no runtime file: rendered into `plate_*.png`) | seamless forged-carbon texture | 4096x4096 | master | comfyui:gt7_hood_pro::CARBON (SDXL base 1.0 + refiner when installed, 1024², dpmpp_2m karras, half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=73101 prompt="macro photograph of forged carbon fibre composite, large marbled chopped carbon flakes in graphite grey and black under clear resin, glossy, flat top-down, filling the whole frame, even soft studio light, seamless tileable texture, physically based material scan" | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the colour and relief of the tyre diagram's car chip (one repeat per 320 px). Master `gt7_hood_pro_forged_carbon.png` |
+| `plate_0.png` | the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc and its black-glass groove, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140; key at -135° (sRGB, straight alpha) | 1760x240 | 72 KB | blender:hero (gt7_hood_pro::plate, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `plate/beauty_0.png` |
+| `plate_1.png` | the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc and its black-glass groove, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140; key at -160° (sRGB, straight alpha) | 1760x240 | 77 KB | blender:hero (gt7_hood_pro::plate, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `plate/beauty_1.png` |
+| `plate_2.png` | the band's static hardware: black-glass light bar on a polished plinth with 95 smoked LED lenses, carbon car chip with four tyre lenses, polished boost arc and its black-glass groove, two pedal slots, two telltale rings and the trip tile; covers x -880..880, y -100..140; key at -110° (sRGB, straight alpha) | 1760x240 | 76 KB | blender:hero (gt7_hood_pro::plate, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `plate/beauty_2.png` |
+| `suggest_0.png` | the suggested-gear tile: red enamel on a black-chrome base; covers x 156..266, y -2..100; key at -135° (sRGB, straight alpha) | 110x102 | 5 KB | blender:hero (gt7_hood_pro::suggest, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `suggest/beauty_0.png` |
+| `suggest_1.png` | the suggested-gear tile: red enamel on a black-chrome base; covers x 156..266, y -2..100; key at -160° (sRGB, straight alpha) | 110x102 | 5 KB | blender:hero (gt7_hood_pro::suggest, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `suggest/beauty_1.png` |
+| `suggest_2.png` | the suggested-gear tile: red enamel on a black-chrome base; covers x 156..266, y -2..100; key at -110° (sRGB, straight alpha) | 110x102 | 5 KB | blender:hero (gt7_hood_pro::suggest, Cycles 192 samples, ortho at 2 px per 4K px, box-filtered to 1:1; hero rig at power 0.55) | MIT (asset-forge) | drawn at full strength; the cluster cross-fades the azimuths with the virtual light. Master `suggest/beauty_2.png` |
 
-**Used for:** `pod_lens.png` is laid 1:1 over the gear pod (the sculpted black-glass face and rolled bevel); `ribbon_grain.png` scrolls through both wing ribbons as light filaments (tinted by the palette, `shift` on the locked inner arch).
+## 4K masters (Google Drive, `FH6 WheelDash v2 - 4K Masters/gt7_hood_pro/`)
+
+Copied by `--masters gt7_hood_pro`: the Blender outputs into one sub-folder per job (`hero_gt7_hood_pro_<stem>`), the ComfyUI master into `comfyui/`, and a `*_preview.png` beside each.
+
+| Master | What it is |
+|---|---|
+| `gt7_hood_pro_forged_carbon.png` | forged carbon (ComfyUI, seamless 4096 px): the car chip's colour and relief |
+| `beauty_0.png` | plate, key -135° |
+| `beauty_1.png` | plate, key -160° |
+| `beauty_2.png` | plate, key -110° |
+| `beauty_0.png` | suggest, key -135° |
+| `beauty_1.png` | suggest, key -160° |
+| `beauty_2.png` | suggest, key -110° |
+
+7 preview(s) written.
