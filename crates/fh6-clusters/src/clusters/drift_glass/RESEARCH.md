@@ -73,7 +73,9 @@ The lateral velocity of a point a distance b behind the centre of mass, on a rig
 
 β_r = atan2(v_x − r·b, v_z)
 
-with b the centre-of-mass-to-rear-axle distance. The packet has no wheelbase; b = 1.35 m is our assumption (about half of a 2.7 m wheelbase) and is named in the handover. In a steady drift the rear axle slides more than the body, so β_r > β is the "rear is out" cue. The sign of r against v_x (FH6's axes are not stated as left- or right-handed [S23]) is checked against the golden packets before it is used: a car turning right with positive v_x must give β_r of the same sign. Until then, the amber edge is a no-claim cue and the handover says so.
+with b the centre-of-mass-to-rear-axle distance. The packet has no wheelbase; b = 1.35 m is our assumption (about half of a 2.7 m wheelbase) and is named in the handover. In a steady drift the rear axle slides more than the body, so β_r > β is the "rear is out" cue.
+
+**The sign of r is not checkable from the repo.** FH6's axes are not stated as left- or right-handed [S23], and the golden packets in `tests/golden/packets/*.json` carry velocity and acceleration but no angular velocity (checked 2026-11-28). So r's sign comes from a verified field instead: the lateral acceleration of a body moving at speed v on a path of curvature κ is a_x = v²κ, and the path's turn rate is v·κ = a_x / v = r + dβ/dt. In a held drift dβ/dt is near zero, so r_est = a_x / v (verified fields only) has the sign r must have. The dash uses the packet's r only while its sign agrees with r_est above a small threshold, and r_est otherwise; the real-game check at the PC (memory "C") confirms the sign, and the handover records the result.
 
 ### 6.3 Yaw rate and counter-steer
 
