@@ -83,6 +83,8 @@ fn custom_accent(host: &mut OsdHost, cfg: &mut AppConfig, hex: &str) -> Duration
     cfg.color_mode = ColorMode::Custom;
     cfg.primary_hex = hex.into();
     cfg.accent_hex = hex.into();
+    // Opened again, as the overlay would with this config, so the colour rows read it.
+    host.open(cfg, View::Cockpit, cfg.cockpit_anchor_x as f32);
     focus(host, cfg, Tab::Colour, RowId::ColourMode);
     Duration::ZERO
 }

@@ -29,8 +29,8 @@ impl CameraApply {
         match self {
             Self::NextLaunch => "Applies on next launch (camera file)",
             Self::Applied => "Saved to the camera file",
-            Self::Unavailable => "Camera file not found: saved in config only",
-            Self::PatchOff => "Camera patch is off: saved in config only",
+            Self::Unavailable => "Camera file not found: the game keeps its own camera",
+            Self::PatchOff => "Camera patch is off: the game keeps its own camera",
         }
     }
 }

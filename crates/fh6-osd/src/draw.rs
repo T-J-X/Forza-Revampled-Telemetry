@@ -720,9 +720,17 @@ fn default_height_line(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         View::Cockpit => inp.cfg.cockpit_anchor_y as f32,
     });
     let x1 = PANEL.min.x + inp.frame.ox - 120.0;
+    // The line breaks round the live cluster, so it never runs through its readouts.
+    let k = inp.frame.k.max(1e-6);
+    let env = inp.live.envelope;
+    let gap_lo = inp.live.to_target(vec2(env.min.x, 0.0)).x / k - 40.0;
+    let gap_hi = inp.live.to_target(vec2(env.max.x, 0.0)).x / k + 40.0;
     let mut x = 200.0;
     while x < x1 {
-        p.fill(&Shape::line(vec2(x, y), vec2((x + 28.0).min(x1), y), 3.0), ink.muted());
+        let end = (x + 28.0).min(x1);
+        if end < gap_lo || x > gap_hi {
+            p.fill(&Shape::line(vec2(x, y), vec2(end, y), 3.0), ink.muted());
+        }
         x += 48.0;
     }
     let mut style = ink.section().paint(ink.label());
@@ -971,6 +979,8 @@ const EDGE_FADE: f32 = 40.0;
 /// The scroll bar: its x (64 px clear of the glass) and its share of secondary ink.
 const SCROLL_X: f32 = GLASS_X1 + 64.0;
 const SCROLL_INK: f32 = 0.5;
+/// The scroll bar's strength at rest, as a share of its strength while the list moves.
+const SCROLL_REST: f32 = 0.45;
 
 fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let fit = inp.fit;
@@ -1016,8 +1026,9 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         }
     }
 
-    // The scroll bar shows for a moment after the list moves, and only when it scrolls.
-    let shown = inp.anim.scrollbar.value().clamp(0.0, 1.0);
+    // The scroll bar, only when the list scrolls: quiet at rest, so it still says there is more,
+    // and full for a moment after the list moves.
+    let shown = SCROLL_REST + (1.0 - SCROLL_REST) * inp.anim.scrollbar.value().clamp(0.0, 1.0);
     if total > visible && shown > 0.01 {
         p.fill(
             &Shape::line(vec2(SCROLL_X, ROWS_Y0), vec2(SCROLL_X, ROWS_Y1), 3.0),
@@ -1363,18 +1374,19 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     );
     p.text(
         vec2(TX, ROWS_Y0 + 152.0),
-        "A, B, X, Y and the D-pad are ignored.",
+        "A, B, X and Y are ignored, and the D-pad cannot be bound.",
         &note,
     );
     // No card and no second copy of the combination: the echo on the left shows it large.
     let prog = cap.progress(inp.now);
-    let bar = Rect::from_xywh(mid - 400.0, ROWS_Y0 + 260.0, 800.0, 14.0);
+    // Aligned with the instructions above it, across the column.
+    let bar = Rect::from_xywh(TX, ROWS_Y0 + 260.0, VX - TX, 14.0);
     p.text(vec2(bar.min.x, bar.min.y - 30.0), "Hold", &ink.section());
     p.fill(&Shape::round_rect(bar, 7.0), ink.quiet());
     if prog > 0.0 {
         // A plain fill: the hold reads by its length, with no bloom past the bar.
         p.fill(
-            &Shape::round_rect(Rect::from_xywh(bar.min.x, bar.min.y, 800.0 * prog, 14.0), 7.0),
+            &Shape::round_rect(Rect::from_xywh(bar.min.x, bar.min.y, bar.width() * prog, 14.0), 7.0),
             ink.acc,
         );
     }
