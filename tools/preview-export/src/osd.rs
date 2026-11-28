@@ -214,6 +214,7 @@ pub fn render_all(
     kit: &mut Kit,
     tokens: &Tokens,
     assets: &Path,
+    cars: &CarDatabase,
     out: &Path,
     timing: bool,
     backdrop: Option<&RgbaImage>,
@@ -221,14 +222,13 @@ pub fn render_all(
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
     for state in STATES {
         let mut cfg = AppConfig {
             current_camera_index: 3,
             cockpit_hud_style: ClusterTheme::LiquidGlass,
-            custom_driver_name: "TJX".into(),
+            custom_driver_name: crate::DRIVER_NAME.into(),
             ..AppConfig::default()
         };
         let mut host = OsdHost::new(tokens, Box::new(ConfigOnlyFit));
@@ -243,7 +243,7 @@ pub fn render_all(
             let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
             (entry.make)(&mut setup)
         };
-        let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family.key());
+        let palette = Palette::from_config(tokens, &cfg, cars, 0, entry.family.key());
         kit.set_palette(palette);
         let fonts = kit.font_choice(None);
         let mut smoother = SignalSmoother::new();

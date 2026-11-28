@@ -149,7 +149,7 @@ impl Ctx<'_> {
 fn config(pct: i32, height: f32, scale: f32) -> AppConfig {
     AppConfig {
         current_camera_index: 3,
-        custom_driver_name: "TJX".to_string(),
+        custom_driver_name: super::DRIVER_NAME.to_string(),
         oem_dash_opaque_pct: pct,
         cockpit_height_offset_px: height,
         cluster_scale: scale,

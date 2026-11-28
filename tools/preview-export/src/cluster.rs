@@ -181,7 +181,7 @@ pub fn run(
     let assets = root.join("assets");
     let cfg = AppConfig {
         current_camera_index: 3,
-        custom_driver_name: "TJX".to_string(),
+        custom_driver_name: crate::DRIVER_NAME.to_string(),
         ..Default::default()
     };
     let palette = Palette::family(tokens, entry.family.key());
