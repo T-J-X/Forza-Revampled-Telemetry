@@ -39,16 +39,33 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 - Left to the thread: the metaball skin and its thickness field: computed live from the brief's equations (Jeffreys h = sqrt(mu s / (rho g t)), skin at sum q^2 / |x - c|^2 = 1), never a texture
 - Left to the thread: a polished chrome swatch: a smooth mirror has no surface texture to bake, so chrome_matcap and chrome_fresnel replace it
 
+### #8 `AmgMbuxSuperscreen` (`amg_mbux_superscreen`)
+
+- Computed `rain_streaks` (CPU, exact): v5 rain: 12 motion-blurred streaks (1 to 3 px wide, 64 to 256 px long), alpha on black; tint and scroll them in the kit
+- Computed `water_beads` (CPU, exact): v5 rain: 16 water beads of 8 to 24 px with a refraction rim and highlight, straight alpha
+- Computed `wet_asphalt_2048` (CPU, exact): v5 rain: seamless 2048 wet asphalt, dark and low contrast; albedo, height, normal and roughness (water in the troughs is glossy)
+
+### #11 `AmgMbuxSupersport` (`amg_mbux_supersport`)
+
+- Computed `fire_jet_band` (CPU, exact): the orange fire jets out of the halftone mesh along the two rev scales: a seamless 4096x1024 luminance band (colour it with the palette) and its _flow map so it can scroll and flicker
+- Computed `flame_front_loop` (CPU, exact): the burning leading edge of each wall: 16-frame loop, 256x1024 per frame at runtime (2x master), luminance + alpha
+- Computed `fuse_line` (CPU, exact): the burning rev line: a seamless 2048x128 crackling ember strip with a jagged bright core, luminance + alpha (TJX 09:22: the fire spark on the line)
+- Computed `fuse_sparks` (CPU, exact): 16 small sparks spitting off the burning line, 64x64 at 1:1 (2x master), luminance + alpha
+- Computed `horizon_haze` (CPU, exact): fog at the tunnel's end and faint clouds over the horizon: a seamless 4096x1024 luminance band
+- Computed `blue_perforated_panel` (CPU, exact): tunnel ribs and floor if rendered in depth: glossy dark-blue anodised panel with a perfectly regular 32 px micro-perforation (albedo, normal, roughness)
+- Left to the thread: the halftone dots, ribs and scales: procedural in the dash's code
+
 ### #9 `ValkyrieLmp1` (`valkyrie_lmp1`)
 
+- Sprite `encoder_ring_knurled_184` (Blender, 200 px): the two shoulder encoders at (±604, 4) in 4K px (0.7 scale in the hood view): one sprite, mirrored; a 3 px diamond knurl on the ring's face
 - Computed `forged_carbon_marble` (CPU, exact): the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance
 - Left to the thread: the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board
-- Left to the thread: the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)
 
 ### #12 `SkylineR34Mfd` (`skyline_r34_mfd`)
 
 - Sprite `tach_ring_440` (Blender, 456 px): the 440 px tach ring: matte period black plastic with a polished inner chamfer (14 px width proposed; step 1 checks the R34 ring)
 - Computed `lcd_backlight_mura` (CPU, exact): modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural
+- Computed `diagonal_wear_streaks` (CPU, exact): optional: faint wear over the MFD glass, fine streaks top left to bottom right at very low contrast (thread request, 28 Nov)
 - Left to the thread: the MFD tile housings and the dial-face print: layout and text
 
 ### #16 `AmgOneF1` (`amg_one_f1`)
@@ -74,7 +91,7 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 ### #25 `BugattiTourbillon` (`bugatti_tourbillon`)
 
 - Swatch `brushed_steel_linear` (Blender tile): the bridges' base albedo and roughness (20% luminance at most in the kit)
-- Sprite `jewel_lens_30` (Blender, 42 px): the 11 jewels on the 30x740 strip and the jewel bearings: clear sapphire in a polished steel setting, tinted at run time
+- Sprite `jewel_lens_30` (Blender, 42 px): the 11 jewels on the 30x740 strip and the jewel bearings: a faceted ruby jewel (opaque body, glassy coat) in a polished steel setting, tinted at run time
 - Left to the thread: Côtes de Genève stripes: the hero library has no stripe pattern yet (add a guilloché 'stripes' mode first)
 - Left to the thread: the 210 px tourbillon cage glTF: part of the dash's 15k-triangle budget and its motion
 
@@ -103,7 +120,7 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 - Swatch `clous_de_paris_p12` (Blender tile): the dial faces, raked by the G light (14 alpha at most)
 - Swatch `rose_guilloche_p24` (Blender disc): the secondary guilloché zone (the brief's barleycorn, as the library's rose pattern)
 - Swatch `black_anodised_alu` (Blender tile): the tonneau case chamfer
-- Sprite `polished_steel_matcap` (Blender, 1012 px): a 1000 px polished steel hemisphere under the hero rig: the matcap for the hands and screws
+- Sprite `polished_steel_matcap` (Blender, 1012 px): a 1000 px polished steel hemisphere under a bright studio world: the matcap for the hands and screws
 
 ### #37 `NeuralCyberSynapse` (`neural_cyber_synapse`)
 
@@ -121,7 +138,7 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 - Swatch `spun_aluminium_chapter` (Blender disc): the chapter ring's fine circular brushing
 - Swatch `carbon_twill_pane_frame` (Blender tile): frames of the two 300x220 panes
 - Sprite `dial_ring_480` (Blender, 496 px): the 480 px thin polished bezel over a satin spun chapter blank, no numerals (the scale follows the car's max rpm)
-- Sprite `centre_cap_200` (Blender, 212 px): the 200 px machined cap over the hub
+- Sprite `centre_cap_200` (Blender, 212 px): the 200 px spun-turned cap over the hub
 - Computed `leather_binnacle_black` (CPU, exact): the binnacle surround (leather(...).set("texture")) for edges and reflections
 
 ### #47 `LfaV10Nurburgring` (`lfa_v10_nurburgring`)
