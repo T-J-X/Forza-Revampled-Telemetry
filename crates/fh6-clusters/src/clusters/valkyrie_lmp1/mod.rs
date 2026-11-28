@@ -14,6 +14,8 @@
 //! the anodised window bezel, the LED partition and pod housings, the unlit LED caps and the
 //! knurled encoders, one render per key-light azimuth (−135°, −160°, −110°) crossfaded by the
 //! virtual light (lateral G swings it 25°). Without the files it draws a flat procedural face.
+//! The config key `ValkyrieLmp1Face` (`false`) turns the face off: the screen, the lit lights and
+//! the encoder arcs then float on black.
 //!
 //! Glance ranks:
 //! 1. The gear (`race` Saira Condensed 800, cap 168) at the dial's centre, and the ten shift
@@ -79,6 +81,9 @@ use fh6_kit::{
 
 /// Shift lights: one on each shoulder and eight in the centre partition.
 const PODS: u32 = 10;
+/// The config's extra key that turns the wheel face (the carbon slab round the screen) on or
+/// off: `true` (the default) or `false`. Hot-reloaded; set in `config.json` until the OSD offers it.
+const FACE_KEY: &str = "ValkyrieLmp1Face";
 /// Scale of the layout in the hood view (the recipe renders the hood face at this scale).
 const HOOD_SCALE: f32 = 0.7;
 /// The wheel face's parallax at full lateral G (px). The data on the screen stays.
@@ -485,6 +490,8 @@ pub struct ValkyrieLmp1 {
     plates: [Option<[ImageId; 3]>; 2],
     envelopes: [Rect; 2],
     tracking: f32,
+    /// The wheel face is drawn ([`FACE_KEY`]); off, the screen and the lights float on black.
+    face: bool,
 }
 
 impl ValkyrieLmp1 {
@@ -538,6 +545,7 @@ impl ValkyrieLmp1 {
             plates,
             envelopes: [t.layout.cockpit_envelope, t.layout.hood_envelope],
             tracking: t.type_scale.label_tracking,
+            face: true,
         }
     }
 
@@ -571,6 +579,8 @@ impl Cluster for ValkyrieLmp1 {
         self.sig = sig;
         self.palette = *input.palette;
         self.view = input.view;
+        let face = input.config.extra.get(FACE_KEY);
+        self.face = face_on(face.and_then(|v| v.as_bool()), face.and_then(|v| v.as_str()));
         if input.fonts.display != self.faces.role_display {
             self.faces.gear = input.fonts.display;
             self.faces.digits = input.fonts.display;
@@ -622,8 +632,11 @@ impl Cluster for ValkyrieLmp1 {
         let vi = self.view_index();
         let scale = if vi == 1 { HOOD_SCALE } else { 1.0 };
         let par = (-self.parallax() * PARALLAX_FACE * scale).round();
-        // The wheel face, rendered at the view's scale into its envelope.
+        // The wheel face, rendered at the view's scale into its envelope, unless it is turned off.
         p.scoped(|p| {
+            if !self.face {
+                return;
+            }
             p.translate(vec2(par, 0.0));
             match self.plates[vi] {
                 Some(keys) => self.draw_plate(p, keys, self.envelopes[vi]),
@@ -1087,9 +1100,28 @@ pub fn make(setup: &mut Setup<'_>) -> Box<dyn Cluster> {
     Box::new(ValkyrieLmp1::new(setup))
 }
 
+/// The wheel face's option ([`FACE_KEY`]) from the key's value as a bool or as text: on unless
+/// it is `false` (or the text `off`).
+fn face_on(flag: Option<bool>, text: Option<&str>) -> bool {
+    match (flag, text) {
+        (Some(on), _) => on,
+        (None, Some(t)) => !t.eq_ignore_ascii_case("off"),
+        (None, None) => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wheel_face_turns_off_only_when_asked() {
+        assert!(face_on(None, None), "on by default");
+        assert!(!face_on(Some(false), None), "false turns it off");
+        assert!(face_on(Some(true), None), "true keeps it on");
+        assert!(!face_on(None, Some("Off")), "the text off turns it off");
+        assert!(face_on(None, Some("on")), "other text keeps it on");
+    }
 
     #[test]
     fn layout_stays_inside_the_envelopes_and_clear() {
@@ -1125,14 +1157,14 @@ mod tests {
         // The gear is centred on the dial (F8) and clear of the lowest numerals.
         assert!((g::GEAR.x - g::DIAL_C.x).abs() <= 10.0);
         // The gear (with its 2% round overshoot) clears the RPM label by at least 16 px.
-        assert!(g::RPM_LABEL.y - g::LABEL_CAP * 0.5 - (g::GEAR.y + g::GEAR_CAP * 0.51) >= 16.0);
+        const { assert!(g::RPM_LABEL.y - g::LABEL_CAP * 0.5 - (g::GEAR.y + g::GEAR_CAP * 0.51) >= 16.0) };
         let low = Vec2::polar(g::DIAL_C, g::NUMERAL_R, dial_angle(0.0));
         assert!(
             low.x.abs() - g::NUMERAL_CAP > g::GEAR_CAP * 0.33,
             "numeral 0 clear of the gear"
         );
         // The strobing strip is <= 42 px tall; pods sit in the partition or on the shoulders.
-        assert!(g::POD.y <= 42.0);
+        const { assert!(g::POD.y <= 42.0) };
         let pods = g::pods();
         for c in &pods[1..9] {
             let r = Rect::from_center_size(*c, g::POD);
@@ -1158,10 +1190,8 @@ mod tests {
         let speed_right = g::SPEED.x + g::SPEED_CAP * 2.13 * 0.5;
         assert!(speed_right < g::DIAL_C.x - outer, "speed clear of the dial");
         assert!(g::TRACE.min.x > g::DIAL_C.x + outer, "trace clear of the dial");
-        assert!(
-            g::SPEED.x - g::SPEED_CAP * 2.13 * 0.5 > g::WINDOW.min.x,
-            "speed inside the window"
-        );
+        let speed_left = g::SPEED.x - g::SPEED_CAP * 2.13 * 0.5;
+        assert!(speed_left > g::WINDOW.min.x, "speed inside the window");
         // The tunnel stays inside the numerals; the friction circle inside the window, below the
         // speed's unit.
         assert!(g::tunnel_r(g::TUNNEL_RINGS - 1) + 2.0 < g::NUMERAL_R - g::NUMERAL_CAP * 0.6);
