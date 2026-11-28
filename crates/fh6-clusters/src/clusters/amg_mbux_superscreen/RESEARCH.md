@@ -121,6 +121,79 @@ This needs the real-game check (session C): drive in FH6 rain and in clear weath
 
 **Road logo.** The car's logo (from `fh6-kit::logo::draw`, never an AMG or Mercedes mark) is painted flat on the road near y 150 under a vertical squash of about 0.34. It is a faint satin decal that turns glossy when wet. It is static, so `static` must show it under the 20% cap. It replaces the bottom-left logo box.
 
+### Rain from real physics (research, 28 Nov 10:40)
+
+Study chart: `/mnt/project-files/amg_mbux_superscreen/research/rain_physics_study.png` (a chart, not a design).
+
+**Fall speed.** The Foote and du Toit fit to Gunn and Kinzer (1949), as tabled in Bringi, Thurai and Baumgardner (AMT preprint amt-2017-401, Table 1), gives these speeds at sea level: 0.7 mm about 2.6 m/s, 1 mm about 3.9 to 4.0 m/s, 1.5 mm about 5.4 m/s, 2 mm about 6.5 m/s. Big drops top out near 9 m/s (the textbook Gunn and Kinzer ceiling, not read in this round). The dash uses 6.5 m/s for steady rain. A drizzle variant at 4 m/s is noted for later.
+
+**Where the streaks come from.** In the car's frame a drop moves at (−v_x, −v_t, −v_z). So the rain's focus of expansion (the point the streaks fan out from) sits at elevation atan(v_t / v) above the horizon, and sideways at atan(v_x / v_z), which is the car's slip angle. With the tunnel's virtual focal length f = 312 px (the 180 px sky window spans about 30°), the focus sits at these heights:
+
+| speed | source elevation (2 mm drops) | px above the horizon |
+|---|---|---|
+| parked | 90° | streaks fall straight down |
+| 10 mph | 55° | 454 (off the top: near-vertical streaks) |
+| 20 mph | 36° | 227 (at the top of the sky window) |
+| 40 mph | 20° | 113 |
+| 60 mph | 14° | 76 |
+| 90 mph | 9° | 50 |
+| 130 mph | 6° | 35 |
+| 180 mph | 5° | 25 |
+
+This is the dash's own data-driven idea for the rain. When you pull away the rain falls straight down, and as you speed up its source sinks towards the horizon and the streaks fan out into a warp. In a drift the source slides sideways by f·tan(slip) (83 px at 15°, 180 px at 30°), so the rain shows where the car is actually going, not where it points. Streak length follows the drop's speed across the screen over one frame of persistence, so streaks are short at the source and long at the tunnel's edge. Inputs: `speed_ms`, `velocity_x`, `velocity_z` (or `car_slip_angle_rad()`, already in fh6-core).
+
+**Wet road: darker, and a mirror near the horizon.**
+- Darker: Ångström's measurements, quoted by Lekner and Dorf ("Why some things are darker when wet", Applied Optics 27(7), 1988), put dry sand at 0.182 and wet sand at 0.091 albedo, and black mould at 0.141 dry and 0.084 wet. So the wet road plate is about 0.5 to 0.6 times as bright as the dry one.
+- Mirror: a water film reflects by Fresnel (n 1.333, unpolarised). With the same f = 312 px, the reflectance at a given depth below the horizon is:
+
+| below the horizon | incidence | reflectance |
+|---|---|---|
+| 5 px | 89.1° | 0.90 |
+| 20 px | 86.3° | 0.67 |
+| 40 px | 82.7° | 0.46 |
+| 80 px | 75.6° | 0.23 |
+| 120 px | 69.0° | 0.12 |
+| 208 px (the road's foot) | 56.3° | 0.05 |
+
+So the wet road shows the clouds mirrored in the horizon, strong just under it and fading to almost nothing at your feet. That is the same sky plate drawn flipped and scrolling with it, through a Fresnel ramp. The road logo picks up the same reflection, so it turns glossy. The clouds stay visible twice in rain (TJS: "Just don't lose the clouds").
+
+**FH6's real weather (what the sources say).** Pure Xbox and The Drive (both 17 Mar 2026, quoting Playground) confirm four seasons. Winter asphalt is "generally" clear of snow, off-road routes are snowy, and the Alpine Region has snow all year. None of the sources read documents rain, puddles, storms, wet grip or mid-session weather changes. One seller blog claims "Tokyo downpours" without a source. So rain in FH6 is likely but unconfirmed. The real-game check must confirm it, and also check whether snow sets the puddle flag.
+
+### Telemetry mapping (all zones, v5 plan)
+
+| zone | input | rule |
+|---|---|---|
+| portal rings (rev counter) | `rpm / max_rpm`, shift fraction | rings light far to near; red rings from the shift point; horizon strobe on the limiter |
+| sky drift | `speed_ms` | scroll by metres × 0.5, wrapping |
+| horizon lean | `g_lat` | 5° per g, capped at 8° |
+| sky warmth | shift fraction | warm veil from 72% |
+| brake wash | `brake` | red wash on the road, red-tinted horizon |
+| lane dashes | `speed_ms` | one dash per 10 m |
+| crescents | rpm heat | intensity from 55% to 95% |
+| torque and power bands | `power`, torque from power / ω | held values (no flicker) |
+| G-Force widget | `g_lat`, `g_long` | dot |
+| Engine data | `boost` | psi arc |
+| **rain source** | `speed_ms`, `velocity_x/z` | elevation atan(6.5 / v), side f·tan(slip) |
+| **rain density** | wetness (puddle accumulator) or the setting | 0 to 1 over 4 s |
+| **wet road** | wetness | plate × 0.55, Fresnel sky mirror |
+| **road logo** | car (logo crate), wetness | satin decal, glossy when wet |
+| **housing** | `housing::shown` | optional slab; off by default |
+
+### Edge cases (v5)
+
+1. **Parked in rain** (speed under 0.5 m/s): the streaks become vertical falls with no fan, and the beads still sit on the ribs. The source formula needs a guard for v = 0, using the vertical limit and no division.
+2. **Reverse:** `velocity_z` goes negative, so the source would flip behind the camera. Clamp to forward travel (use |v_z| and treat reverse as slow forward), and never draw streaks converging.
+3. **Airborne:** puddle flags read 0 in the air. The decay is slow (90 s), so a jump never clears the rain.
+4. **Fords and splashes on a dry day:** a long ford can push the wetness over the threshold. Two seconds of contact to saturate is short, so test it in the real game. If it trips, need 3 or more separate puddle hits within 60 s instead.
+5. **Packets stop** (menu, pause, rewind, replay; the FH6 page says data flows only while driving): hold the wetness frozen and never decay it while no packets arrive. This needs a timestamp check, `timestamp_ms` not advancing.
+6. **Car change or a new session:** keep the wetness (the weather didn't change).
+7. **Setting changed mid-drive:** Clear forces 0 and Rain forces 1, each fading over 4 s. Auto resumes from the current accumulator.
+8. **Reduced flash:** rain has no flashing. Streaks move but never blink, and drop beads fade in over 0.5 s or more, never popping.
+9. **OLED:** streaks are thin, grey-white and always moving, so there's no static burn-in. The wet road is darker, which helps. The road logo is static and must stay under the 20% luminance cap.
+10. **Budget:** streaks go in one batched draw (about 70 quads), the mirror reuses the sky image (no new texture), and nothing allocates per frame (a fixed array for streak state, refreshed by an index hash).
+11. **Snow (winter, Alpine):** out of scope unless TJS asks. If snow sets the puddle flag, Auto would show rain in snow. Note that for the real-game check.
+12. **Drizzle versus downpour:** with a flag-only input the intensity can't be measured. Density follows the wetness level only.
+
 **Rejected idea, 09:16.** TJS asked for the crescent mesh to change colour as the rev limiter, then withdrew it: "Actually no the portal is fine for that". The portal rings stay the rev counter and limiter.
 
 **Housing.** The OSD thread is adding `housing::shown(config, ClusterTheme::AmgMbuxSuperscreen)`, with MBUX dashes off by default. This dash draws an optional slab only when that returns true.
