@@ -57,8 +57,8 @@ At the final head. The cloud container runs lavapipe (Linux), the PC runs the Wi
 cloud container (lavapipe), code of a0cb477 plus the local-only Vulkan backend commit (never pushed):
 cargo test -p fh6-clusters --test dash_gates        test result: ok. 10 passed; 0 failed
 cargo test -p fh6-clusters --lib bosch_ddu          test result: ok. 22 passed; 0 failed
-cargo test -p fh6-clusters --test golden_images     bosch_ddu ok, twice in a row, no golden rewritten
-                                                    (the four BoschDdu_*.png byte-identical: 86b8edab… 9d94dc1d… e5a9e20b… 7554e670…)
+cargo test -p fh6-clusters --test golden_images     bosch_ddu ok, twice in a row, with the lavapipe-made goldens
+                                                    (86b8edab… 9d94dc1d… e5a9e20b… 7554e670…; replaced by the card's, below)
 rustfmt --check mod.rs hardware.rs recipe           clean (only Linux's CRLF newline-style note, which the PC does not print)
 
 PC (RTX 3070 Ti Laptop), a0cb477, preview-export under gpu-lock.exe:
@@ -71,7 +71,17 @@ PC (RTX 3070 Ti Laptop), a0cb477, preview-export under gpu-lock.exe:
 
 The golden run in the container also reports 69 other dashes' goldens as mismatched on lavapipe (their goldens were made on other adapters); none is this thread's, and `main` has the same goldens.
 
-The workspace gate (`cargo check --workspace --all-targets`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`) cannot build in the Linux container (`fh6-app` and `fh6-input` need the Windows crates), so it runs on the PC on the merge head, the commit that adds this file; its output is in the thread's `READY FOR MERGE BoschDdu` post.
+The workspace gate (`cargo check --workspace --all-targets`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`) cannot build in the Linux container (`fh6-app` and `fh6-input` need the Windows crates), so it runs on the PC on the merge head, the commit that adds this file; its output is in the thread's `READY FOR MERGE BoschDdu` post. At `130902a` (the head before the card's goldens):
+
+```
+cargo fmt --all -- --check                         exit 0
+cargo check --workspace --all-targets              exit 0
+cargo clippy --workspace --all-targets -- -D warnings   exit 0
+cargo test --workspace -j 2 (gpu-lock, --no-fail-fast)  1213 passed, 1 failed, 2 ignored
+    failed: golden_images bosch_ddu (the lavapipe goldens on the card, V26)
+FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images bosch_ddu   1 passed (rewritten)
+cargo test -p fh6-clusters --test golden_images bosch_ddu                        1 passed, then 1 passed
+```
 
 ## Live bench
 Run on the PC at `a0cb477` under one `gpu-lock.exe` take (announced in the thread first): `mock-udp --scenario bmw_m4_cs --port 8000 --rate-hz 60` streaming, then `FH6_WheelDash --demo --cluster <Name> --stats --bench-seconds 60 --bench-out mockups/BoschDdu/live_bench.md` (and `live_bench_scaffold.md`), both exit 0 with no error. The scaffold is VisionPetals (catalog row 51, still ☐).
@@ -223,7 +233,7 @@ Answered at the final head (the render of `d320f91`, the code `a0cb477` carries,
 | V23 | yes | `final_gear_39_50.png` at 1:1: 3 through frame 41, 4 from frame 42 (the data's frame), never blank or doubled; the 1.12 → 1.0 entry ends within 6 frames (committed as `docs/handover-shots/cluster-bosch_ddu-gear_change_39_50.png`) |
 | V24 | yes | each `motion` spike checked: frame 10 is the pull's start (band, needle, digits, throttle bar); frames 29 to 30 the limiter (strip lit), 42 the upshift (gear, band drop, digits); no shimmer, crawling edge, bloom pop or late glyph in the pairs' `diff` |
 | V25 | yes | `final_before_after.png` (committed `cluster-bosch_ddu-before_…` and `-after_02_mid_cruise_cockpit.png`): the before's named failure, the v2 dash's flat slab with stuck-on boxes, is gone (one rendered DDU 10 housing with a live screen); nothing the before did better is lost except the size of gear and speed, which shrank on purpose to the DDU 10's proportions (RESEARCH change B) |
-| V26 | yes | the four `tests/golden/images/BoschDdu_*.png` were opened in one sheet against the previous goldens (`goldens_sheet`): every difference is the rebuild (against the v2 dash's goldens, `bcfe234`), build 3's darker lenses and board v2's boost row. SHA-256 `86b8edab…`, `9d94dc1d…`, `e5a9e20b…`, `7554e670…` |
+| V26 | yes | the four goldens were first written on lavapipe and opened in one sheet against the previous goldens (`goldens_sheet`): every difference is the rebuild (against the v2 dash's goldens, `bcfe234`), build 3's darker lenses and board v2's boost row; they passed twice on lavapipe. The workspace gate on the PC then failed them on the card on 0.56 to 0.60 % of pixels in 01, 02 and 04 (max dE 7.7 to 11.1, mean 0.06 to 0.07; 03 matched): one-level differences at glow contours and glyph edges near black, which the golden metric's OKLab cube root magnifies (as Gt7HoodPro found). AGENTS.md rule 15 gives the goldens to the local card, so they were rewritten on the card at `130902a` (`FH6_UPDATE_GOLDEN=1`, then twice without it, both pass), brought here through Drive (`bosch_ddu/goldens_card/`, SHA-256 checked: `1cc80cc1…`, `3bba0430…`, `368a3342…`, `253dd685…`) and each opened before commit: the same pictures as the lavapipe ones, 5.5 to 8 % of pixels one or a few levels apart, 11 pixels in `02` more than 8 levels apart (all inside the gauge's glow). On lavapipe they now differ by that amount, so the cloud check of this dash's goldens fails by it, as Gt7HoodPro's does |
 
 ### Frozen expectations of the closing round (written 07:08 UTC, before housing build 3 or any final render existed)
 Carried unchanged from the direction check: the rank order, F1 to F10 and their tolerances, the key frames and TJX's rejection patterns. Added from the closing findings, before re-rendering:
