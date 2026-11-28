@@ -44,8 +44,11 @@ const TRAFFIC_ANCHOR: [f32; 2] = [0.5, 0.70];
 const TRAFFIC_ELEVATIONS: [f32; 4] = [3.0, 6.0, 10.0, 16.0];
 const TRAFFIC_HEADING_STEP: f32 = 10.0;
 const TRAFFIC_COLS: usize = 5;
-/// The parked image is 2048 x 1152.
+/// The parked image is 2048 x 1152, and its car's wheels stand this far down it.
 const PARKED_ASPECT: f32 = 2048.0 / 1152.0;
+const PARKED_FLOOR_Y: f32 = 0.70;
+/// The parked car's floor is this much lighter than the road: the car stands alone on it.
+const PARKED_FLOOR_LEVEL: f32 = 1.6;
 
 /// Japanese expressway lane line: 8 m of paint in every 20 m (NEXCO; `RESEARCH.md`).
 const DASH_ON: f32 = 8.0;
@@ -70,17 +73,31 @@ const Z_FAR: f32 = 90.0;
 const REACH_HEADING_TAN: f32 = 1.2;
 const REACH_MIN: f32 = 24.0;
 /// Solid lines are drawn in this many tapered pieces, a dash in this many.
-const EDGE_PIECES: usize = 16;
-const DASH_PIECES: usize = 2;
+const EDGE_PIECES: usize = 22;
+const DASH_PIECES: usize = 4;
 /// Lane paint and road surface levels (OLED: the road is a hint, not a plate).
 const LINE_ALPHA: f32 = 0.62;
 const EDGE_ALPHA: f32 = 0.46;
+/// The road is lit as a pool round the ego car: full inside this share of the pool's radius,
+/// then dissolving to nothing at its rim. Above the car the lane paint keeps its light this much
+/// longer than the surface does, because the depth fade already takes it.
+const POOL_CORE: f32 = 0.60;
+const POOL_PAINT_UP: f32 = 1.7;
+/// The under-car glow at its fullest: light on the road, not a lamp.
+const GLOW_LEVEL: f32 = 0.55;
+/// The cars' share of full white, so the gear and the speed stay the brightest things shown.
+const CAR_LEVEL: f32 = 0.72;
+/// How far a car's contact shadow reaches past its footprint, and how dark it is at its core.
+const SHADOW_REACH: f32 = 1.22;
+const SHADOW_DARK: f32 = 0.88;
 
 /// From the ego's ground centre to its nose (m), and half the path band's width.
 const NOSE: f32 = 2.45;
 const PATH_HALF: f32 = 1.05;
 const PATH_SAMPLES: usize = 14;
-const PATH_ALPHA: f32 = 0.42;
+const PATH_ALPHA: f32 = 0.24;
+/// The band's soft edge (the Gaussian's sigma, local px).
+const PATH_SOFT_PX: f32 = 5.0;
 
 /// The brake counts as on above this input.
 const BRAKE_ON: f32 = 0.05;
@@ -118,7 +135,7 @@ const SLOW_REACH: f32 = 60.0;
 const PARK_ON: f32 = 0.5;
 const PARK_OFF: f32 = 1.5;
 /// Time of the parked/driving cross-fade and of the brake light (s).
-const PARK_FADE_S: f32 = 0.45;
+const PARK_FADE_S: f32 = 0.12;
 const BRAKE_FADE_S: f32 = 0.08;
 const STOP_FADE_S: f32 = 0.20;
 
@@ -456,13 +473,21 @@ impl Frame {
         (metres * self.scale(z)).max(1.0)
     }
 
-    /// The scene dissolves toward the band's sides and bottom and toward the far end of the road.
+    /// The pool of light the road is drawn in: an ellipse from the horizon to the band's bottom
+    /// edge and across its width (centre, radii).
+    fn pool(&self) -> (Vec2, Vec2) {
+        let top = self.cam.horizon_y.min(self.vp.max.y - 2.0);
+        let ry = (self.vp.max.y - top) * 0.5;
+        (vec2(self.vp.center().x, top + ry), vec2(self.vp.width() * 0.5, ry))
+    }
+
+    /// The scene dissolves toward the pool's rim and toward the far end of the road.
     fn fade(&self, q: Vec2, z: f32) -> f32 {
-        let half = self.vp.width() * 0.5;
-        let side = 1.0 - smoothstep(half * 0.64, half, (q.x - self.vp.center().x).abs());
-        let bottom = smoothstep(self.vp.max.y, self.vp.max.y - 24.0, q.y);
+        let (c, r) = self.pool();
+        let dy = (q.y - c.y) / r.y;
+        let dy = if dy < 0.0 { dy / POOL_PAINT_UP } else { dy };
         let far = 1.0 - smoothstep(self.z_far * 0.55, self.z_far, z);
-        side * bottom * far
+        pool_level(((q.x - c.x) / r.x).hypot(dy)) * far
     }
 
     /// A strip of road paint `width_m` wide along the path at `offset`, from `z0` to `z1`, in
@@ -492,8 +517,11 @@ impl Frame {
             };
             // Each piece fades from its near end to its far end, so a long piece near the car
             // shows no step where the scene dissolves.
+            // The fade is not a straight ramp, so the middle of the piece gets its own stop.
+            let zm = (za + zb) * 0.5;
+            let fm = self.ground(offset, zm).map_or(0.0, |m| self.fade(m, zm));
             let (fa, fb) = (self.fade(a, za), self.fade(b, zb));
-            if fa.max(fb) < 0.01 {
+            if fa.max(fb).max(fm) < 0.01 {
                 continue;
             }
             let piece = Shape::Line {
@@ -503,18 +531,27 @@ impl Frame {
                 width_b: self.paint_px(width_m, zb),
                 cap: Cap::Butt,
             };
-            if (fa - fb).abs() < 0.01 {
+            if (fa - fb).abs() < 0.01 && (fa - fm).abs() < 0.01 {
                 p.fill(&piece, color.fade(fa));
             } else {
                 p.fill(
                     &piece,
                     Gradient::linear(a, b)
                         .stop(0.0, color.fade(fa))
+                        .stop(0.5, color.fade(fm))
                         .stop(1.0, color.fade(fb)),
                 );
             }
         }
     }
+}
+
+/// The pool's light at `d` of its radius: full to [`POOL_CORE`], then an eased fall to nothing.
+/// The fall is squared because the scrim view adds light linearly, where a plain ramp reads as an
+/// edge.
+fn pool_level(d: f32) -> f32 {
+    let v = 1.0 - smoothstep(POOL_CORE, 1.0, d);
+    v * v
 }
 
 /// The road scene's state.
@@ -656,7 +693,7 @@ impl Scene {
         (self.stop_level > 0.01).then(|| EGO_Z + NOSE + self.stop.value())
     }
 
-    /// The road surface: a faint lift of the three lanes, dissolved toward the band's sides.
+    /// The road surface: a faint lift of the three lanes inside the pool of light.
     fn draw_surface(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
         if f.surface <= 0.0 {
             return;
@@ -680,17 +717,23 @@ impl Scene {
         if n < PATH_SAMPLES {
             return;
         }
+        // One radial gradient, squashed into the pool's ellipse: the outline is stretched the
+        // other way first, so the squash puts it back where it belongs.
+        let (c, r) = f.pool();
+        let k = r.x / r.y.max(1.0);
+        for q in &mut pts {
+            q.y = c.y + (q.y - c.y) * k;
+        }
         let ink = pal.roles.ink;
-        let (x0, x1) = (f.vp.min.x, f.vp.max.x);
-        let y = f.vp.center().y;
-        p.fill(
-            &Shape::Polygon { points: &pts },
-            Gradient::linear(vec2(x0, y), vec2(x1, y))
-                .stop(0.0, ink.with_alpha(0.0))
-                .stop(0.22, ink.with_alpha(f.surface))
-                .stop(0.78, ink.with_alpha(f.surface))
-                .stop(1.0, ink.with_alpha(0.0)),
-        );
+        let mut ramp = Gradient::radial(c, r.x).stop(0.0, ink.with_alpha(f.surface));
+        for i in 0..=5 {
+            let d = POOL_CORE + (1.0 - POOL_CORE) * i as f32 / 5.0;
+            ramp = ramp.stop(d, ink.with_alpha(f.surface * pool_level(d)));
+        }
+        p.scoped(|p| {
+            p.transform(&squash(c, r));
+            p.fill(&Shape::Polygon { points: &pts }, ramp);
+        });
     }
 
     /// Lane paint: solid edge lines and the 8 m / 12 m lane lines, scrolling with the road.
@@ -769,6 +812,11 @@ impl Scene {
         if far <= near + 1.0 {
             return;
         }
+        let (Some(a), Some(b)) = (f.ground(0.0, near), f.ground(0.0, far)) else {
+            return;
+        };
+        let c = pal.primary;
+        let end = if self.stop_level > 0.5 { 0.4 } else { 0.0 };
         let mut pts = [Vec2::ZERO; 2 * PATH_SAMPLES];
         for i in 0..PATH_SAMPLES {
             let z = near + (far - near) * (i as f32 / (PATH_SAMPLES - 1) as f32).powf(1.6);
@@ -778,19 +826,17 @@ impl Scene {
             pts[i] = l;
             pts[2 * PATH_SAMPLES - 1 - i] = r;
         }
-        let (Some(a), Some(b)) = (f.ground(0.0, near), f.ground(0.0, far)) else {
-            return;
-        };
-        let c = pal.primary;
-        p.fill(
+        // Filled, with a soft edge: light on the road, not a painted shape.
+        p.glow(
             &Shape::Polygon { points: &pts },
             Gradient::linear(a, b)
                 .stop(0.0, c.with_alpha(PATH_ALPHA))
                 .stop(0.55, c.with_alpha(PATH_ALPHA * 0.55))
-                .stop(
-                    1.0,
-                    c.with_alpha(if self.stop_level > 0.5 { PATH_ALPHA * 0.4 } else { 0.0 }),
-                ),
+                .stop(1.0, c.with_alpha(PATH_ALPHA * end)),
+            Glow {
+                fill_inside: true,
+                ..Glow::new(PATH_SOFT_PX, 1.0)
+            },
         );
     }
 
@@ -896,7 +942,11 @@ impl Scene {
     /// stage, growing in the primary through the stages, the shift colour at the shift point.
     /// It is steady: only the shift line strobes.
     fn draw_glow(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
-        let level = if self.over_shift { 1.0 } else { self.glow * 0.8 };
+        let level = if self.over_shift {
+            GLOW_LEVEL
+        } else {
+            self.glow * GLOW_LEVEL * 0.8
+        };
         if level < 0.01 {
             return;
         }
@@ -941,6 +991,7 @@ impl Scene {
         }
         order[USERS] = (EGO_Z, USERS);
         order.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        self.draw_shadows(p, f, pal);
         for (_, i) in order {
             if i == USERS {
                 self.draw_ego(p, f, pal);
@@ -948,6 +999,46 @@ impl Scene {
                 self.draw_road_user(p, f, pal, self.traffic.users[i]);
             }
         }
+    }
+
+    /// The contact shadows: each car darkens the lit road under it, so it stands on the road.
+    /// Multiplied, so only the surface's light is taken and nothing is laid over black.
+    fn draw_shadows(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        if f.surface <= 0.0 {
+            return;
+        }
+        let black = pal.roles.oled_black;
+        p.scoped(|p| {
+            p.set_blend(BlendMode::Multiply);
+            let ego = (0.0, EGO_Z, [0.97, 2.35]);
+            let users = self.traffic.users.iter().map(|u| {
+                let half = match u.kind {
+                    Kind::Kei => [0.74, 1.70],
+                    _ => [0.95, 2.30],
+                };
+                (f32::from(u.lane) * LANE_WIDTH, u.z, half)
+            });
+            for (offset, z, [half_w, half_l]) in std::iter::once(ego).chain(users) {
+                if z < f.z_near - 2.0 || z > f.z_far {
+                    continue;
+                }
+                let (Some(q), Some(near), Some(far)) = (
+                    f.ground(offset, z),
+                    f.ground(offset, z - half_l),
+                    f.ground(offset, z + half_l),
+                ) else {
+                    continue;
+                };
+                let level = f.fade(q, z);
+                let c = vec2(q.x, (near.y + far.y) * 0.5);
+                let rx = half_w * f.scale(z) * SHADOW_REACH;
+                let ry = (near.y - far.y) * 0.5 * SHADOW_REACH;
+                if level < 0.05 || rx < 2.0 || ry < 1.0 {
+                    continue;
+                }
+                contact_shadow(p, c, vec2(rx, ry), SHADOW_DARK * level, black);
+            }
+        });
     }
 
     fn draw_road_user(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette, u: RoadUser) {
@@ -1000,9 +1091,9 @@ impl Scene {
             rect,
             // Tesla draws the car ahead in a darker grey than the rest of the traffic.
             if u.lane == 0 {
-                Color::linear(LEAD_SHADE, LEAD_SHADE, LEAD_SHADE, 1.0).fade(alpha)
+                grey(LEAD_SHADE).fade(alpha)
             } else {
-                Color::WHITE.fade(alpha)
+                grey(CAR_LEVEL).fade(alpha)
             },
         );
     }
@@ -1014,7 +1105,7 @@ impl Scene {
         let cell = ego_cell(self.yaw.value());
         let warning = pal.roles.warning;
         match self.sprites.ego {
-            Some(img) => sprite(p, img, EGO_GRID, cell, false, rect, Color::WHITE),
+            Some(img) => sprite(p, img, EGO_GRID, cell, false, rect, grey(CAR_LEVEL)),
             None => {
                 // No sprite: the car's plan as a white block with its dark glass, turned by the
                 // same yaw the atlas would show.
@@ -1046,6 +1137,35 @@ impl Scene {
         }
     }
 
+    /// The floor under the parked car: a small pool of the road's light with the car's shadow
+    /// in it, placed where the parked image's wheels stand.
+    fn draw_floor(&self, p: &mut Painter<'_>, rect: Rect, surface: f32, pal: &Palette) {
+        let c = vec2(rect.center().x, rect.min.y + rect.height() * PARKED_FLOOR_Y);
+        let r = vec2(rect.width() * 0.56, rect.height() * 0.32);
+        let ink = pal.roles.ink;
+        let level = surface * PARKED_FLOOR_LEVEL * self.parked;
+        let mut ramp = Gradient::radial(c, r.x).stop(0.0, ink.with_alpha(level));
+        for i in 0..=5 {
+            let d = 0.35 + 0.65 * i as f32 / 5.0;
+            let v = 1.0 - smoothstep(0.35, 1.0, d);
+            ramp = ramp.stop(d, ink.with_alpha(level * v * v));
+        }
+        p.scoped(|p| {
+            p.transform(&squash(c, r));
+            p.fill(&Shape::circle(c, r.x), ramp);
+        });
+        p.scoped(|p| {
+            p.set_blend(BlendMode::Multiply);
+            contact_shadow(
+                p,
+                c,
+                vec2(rect.width() * 0.34, rect.height() * 0.11),
+                SHADOW_DARK * self.parked,
+                pal.roles.oled_black,
+            );
+        });
+    }
+
     /// The parked view, as Tesla draws a car that stands still: the car alone, three-quarter front.
     fn draw_parked(&self, p: &mut Painter<'_>, g: &SceneGeom, pal: &Palette) {
         let fit = if g.parked.width() / g.parked.height().max(1.0) > PARKED_ASPECT {
@@ -1055,10 +1175,15 @@ impl Scene {
         };
         let rect = Rect::from_center_size(g.parked.center(), fit);
         match self.sprites.parked {
-            Some(img) => p.fill(
-                &Shape::rect(rect),
-                ImagePaint::new(img, rect).tint(Color::WHITE.fade(self.parked)),
-            ),
+            Some(img) => {
+                if g.surface > 0.0 {
+                    self.draw_floor(p, rect, g.surface, pal);
+                }
+                p.fill(
+                    &Shape::rect(rect),
+                    ImagePaint::new(img, rect).tint(grey(CAR_LEVEL).fade(self.parked)),
+                );
+            }
             None => {
                 let body = Rect::from_center_size(rect.center(), vec2(fit.x * 0.62, fit.y * 0.34));
                 p.fill(
@@ -1068,6 +1193,34 @@ impl Scene {
             }
         }
     }
+}
+
+/// A soft dark ellipse. Draw it with [`BlendMode::Multiply`]: it takes light from what is under
+/// it and lays nothing over black.
+fn contact_shadow(p: &mut Painter<'_>, center: Vec2, radii: Vec2, dark: f32, black: Color) {
+    p.scoped(|p| {
+        p.transform(&squash(center, radii));
+        p.fill(
+            &Shape::circle(center, radii.x),
+            Gradient::radial(center, radii.x)
+                .stop(0.0, black.with_alpha(dark))
+                .stop(0.66, black.with_alpha(dark))
+                .stop(0.84, black.with_alpha(dark * 0.45))
+                .stop(1.0, black.with_alpha(0.0)),
+        );
+    });
+}
+
+/// A squash about `center` that turns a circle of radius `radii.x` into the ellipse `radii`.
+fn squash(center: Vec2, radii: Vec2) -> Affine {
+    Affine::translate(-center)
+        .then(&Affine::scale_xy(1.0, radii.y / radii.x.max(1e-3)))
+        .then(&Affine::translate(center))
+}
+
+/// An opaque neutral grey of linear level `k`: a sprite's tint.
+fn grey(k: f32) -> Color {
+    Color::linear(k, k, k, 1.0)
 }
 
 /// Draws one cell of an atlas into `rect`, mirrored left-right when asked.

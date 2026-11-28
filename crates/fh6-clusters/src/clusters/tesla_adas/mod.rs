@@ -53,8 +53,10 @@ use std::f32::consts::TAU;
 const G: f32 = 9.80665;
 /// Pills in the shift line.
 const SEGMENTS: u32 = 16;
-/// How bright a pill is while it only shows the revs (below the first shift stage).
-const REV_ALPHA: f32 = 0.26;
+/// How bright a pill is while it only shows the revs (below the first shift stage): an opaque
+/// grey of this share of the ink's light, so it reads the same over the scrim and on the hood
+/// and stays 3:1 against black.
+const REV_LEVEL: f32 = 0.24;
 /// The power line reads full at the engine's highest power seen so far, and never at less than
 /// this (W), so a small engine's first metres do not fill the line.
 const POWER_FLOOR_W: f32 = 110_000.0;
@@ -123,7 +125,7 @@ const COCKPIT: Geom = Geom {
         },
         focal: 700.0,
         horizon_y: -226.0,
-        surface: 0.030,
+        surface: 0.022,
         parked: Rect {
             min: vec2(-290.0, -160.0),
             max: vec2(290.0, 170.0),
@@ -194,8 +196,8 @@ const HOOD: Geom = Geom {
     meter: vec2(-470.0, -26.0),
     meter_r: 70.0,
     status_x: [-530.0, -410.0],
-    status_y: [114.0, 135.0, 158.0],
-    status_cap: 20.0,
+    status_y: [114.0, 135.0, 161.0],
+    status_cap: 24.0,
     halos: [
         Some(Rect {
             min: vec2(-560.0, -212.0),
@@ -247,6 +249,17 @@ fn japanese_face(setup: &mut Setup<'_>) -> Option<FontId> {
     };
     setup.fonts.preload_text(font, JP_TEXT);
     Some(font)
+}
+
+/// The cells a figure needs, so a centred figure sits on its label's axis whatever its length.
+fn cells_of(value: i64) -> u8 {
+    match value.unsigned_abs() {
+        0..=9 => 1,
+        10..=99 => 2,
+        100..=999 => 3,
+        1000..=9999 => 4,
+        _ => 5,
+    }
 }
 
 /// The lighting order of pill `i`: 0 for the outermost pair, 7 for the centre pair.
@@ -502,7 +515,7 @@ impl TeslaAdas {
                 if fill > 0.01 {
                     p.fill(
                         &Shape::round_rect(rect, rect.height() * 0.5),
-                        pal.roles.ink.fade(REV_ALPHA * fill),
+                        pal.roles.ink.intensity(REV_LEVEL).fade(fill),
                     );
                 }
             }
@@ -564,24 +577,25 @@ impl TeslaAdas {
         self.ball.draw_meter(p, g.meter, g.meter_r, pal);
         let cap = p.tokens().type_scale.metric_secondary;
         let baseline = GBall::readout_baseline(g.meter, g.meter_r, cap);
+        // The shared readout sets its value in the muted ink. Here it is a figure the driver
+        // reads at a glance, so it gets the full ink.
+        let mut figures = *pal;
+        figures.roles.ink_muted = pal.roles.ink;
         self.ball
-            .draw_readout(p, baseline, pal, self.faces.figure, self.faces.label);
+            .draw_readout(p, baseline, &figures, self.faces.figure, self.faces.label);
     }
 
     /// The status row: rpm and power, each under its two-language label.
     fn draw_status(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let value = TextStyle::new(self.faces.figure, g.status_cap)
-            .paint(pal.roles.ink.fade(0.82))
+            .paint(pal.roles.ink)
             .align(Align::Center, VAlign::CapMiddle)
             .tabular();
         let [y_label, y_latin, y_value] = g.status_y;
-        let cells = [
-            ("回転数", "RPM", self.rpm, if self.rpm >= 10_000 { 5 } else { 4 }),
-            ("出力", self.power_unit, self.power_value, 4),
-        ];
-        for ((japanese, latin, number, digits), x) in cells.into_iter().zip(g.status_x) {
+        let cells = [("回転数", "RPM", self.rpm), ("出力", self.power_unit, self.power_value)];
+        for ((japanese, latin, number), x) in cells.into_iter().zip(g.status_x) {
             self.sign(p, vec2(x, y_label), japanese, latin, y_latin - y_label, pal);
-            p.number(vec2(x, y_value), number, digits, &value, None);
+            p.number(vec2(x, y_value), number, cells_of(number), &value, None);
         }
     }
 
@@ -589,19 +603,25 @@ impl TeslaAdas {
     /// letter lit.
     fn draw_drive(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
-        self.gear.draw(p, g.gear, self.faces.gear, g.gear_cap, pal);
-        // The speed is a fixed three-cell field with no ghost 8s (the real display has none), so
-        // a short number sits at the field's right edge. The unit hangs from that same edge.
+        // Neutral is as bright as a gear: at a standstill the gear still leads the speed.
+        let gear_ink = match self.gear.gear() {
+            Gear::Neutral => roles.ink,
+            _ => self.gear.color(pal),
+        };
+        self.gear.draw_with(p, g.gear, self.faces.gear, g.gear_cap, gear_ink);
+        // The speed is centred under the gear, as the real display centres it, with no ghost 8s
+        // (the real display has none). The unit is centred under it.
         let digits = TextStyle::new(self.faces.figure, g.speed_cap)
             .paint(roles.ink)
             .align(Align::Center, VAlign::CapMiddle)
             .tabular();
-        let field = p.number(g.speed, self.speed.value(), 3, &digits, None);
+        let shown = self.speed.value();
+        p.number(g.speed, shown, cells_of(shown), &digits, None);
         let unit = TextStyle::new(self.faces.label, g.unit_cap)
             .paint(roles.ink_label)
             .tracking(self.tracking)
-            .align(Align::Right, VAlign::CapTop);
-        p.text(vec2(field.max.x - g.speed_cap * 0.06, g.unit_y), self.unit, &unit);
+            .align(Align::Center, VAlign::CapTop);
+        p.text(vec2(g.speed.x, g.unit_y), self.unit, &unit);
         let current = match self.gear.gear() {
             Gear::Reverse => 0,
             Gear::Neutral => 1,
@@ -611,7 +631,7 @@ impl TeslaAdas {
             let ink = if i == current {
                 roles.ink
             } else {
-                roles.ink_label.fade(0.55)
+                roles.ink_label.fade(0.8)
             };
             let style = TextStyle::new(self.faces.label, g.prnd_cap)
                 .paint(ink)
