@@ -513,9 +513,138 @@ pub fn renormalize(img: &mut Img) {
     }
 }
 
+/// Box-filters a straight-alpha, sRGB-encoded image down by a whole factor `k` (a render master
+/// to its runtime size). Colour is averaged in linear light weighted by coverage, so edges keep
+/// their colour; alpha is the mean coverage (1 for an image without alpha). The size rounds down
+/// to whole output pixels.
+pub fn box_down(src: &Img, k: usize) -> Img {
+    let k = k.max(1);
+    let (w, h) = (src.w / k, src.h / k);
+    let last = src.c.max(1) - 1;
+    Img::from_fn(w, h, 4, |x, y| {
+        let mut acc = [0.0_f32; 4];
+        for dy in 0..k {
+            for dx in 0..k {
+                let (sx, sy) = (x * k + dx, y * k + dy);
+                let a = if src.c > 3 { src.get(sx, sy, 3) } else { 1.0 };
+                for (ch, v) in acc.iter_mut().enumerate().take(3) {
+                    *v += srgb_decode(src.get(sx, sy, ch.min(last))) * a;
+                }
+                acc[3] += a;
+            }
+        }
+        let a = acc[3] / (k * k) as f32;
+        let inv = if acc[3] > 1e-6 { 1.0 / acc[3] } else { 0.0 };
+        [
+            srgb_encode(acc[0] * inv),
+            srgb_encode(acc[1] * inv),
+            srgb_encode(acc[2] * inv),
+            a,
+        ]
+    })
+}
+
+/// A box blur of radius `r` texels over a `w`×`h` field that wraps at its edges (running sums,
+/// one pass across and one down).
+pub fn box_blur_wrap(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    let n = (2 * r + 1) as f64;
+    let pass = |src: &[f32], lines: usize, len: usize, at: &dyn Fn(usize, usize) -> usize| -> Vec<f32> {
+        let mut out = vec![0.0_f32; src.len()];
+        if len == 0 {
+            return out;
+        }
+        let wrap = |k: isize| k.rem_euclid(len as isize) as usize;
+        for line in 0..lines {
+            let mut acc: f64 = (-(r as isize)..=r as isize)
+                .map(|k| f64::from(src[at(line, wrap(k))]))
+                .sum();
+            for i in 0..len {
+                out[at(line, i)] = (acc / n) as f32;
+                acc += f64::from(src[at(line, wrap(i as isize + r as isize + 1))]);
+                acc -= f64::from(src[at(line, wrap(i as isize - r as isize))]);
+            }
+        }
+        out
+    };
+    let across = pass(src, h, w, &|line, i| line * w + i);
+    pass(&across, w, h, &|line, i| i * w + line)
+}
+
+/// A neutral copy of a tiling texture, for Blender to read as relief: luminance only, its mean
+/// evened out to mid grey and one standard deviation scaled to `spread` (clamped at 2.5
+/// deviations), both measured over a wrapping window of radius `window` texels, so every part
+/// of the texture gets the same relief and the material's brightness comes from the material,
+/// not from how dark the texture was drawn.
+pub fn neutral_luma(src: &Img, window: usize, spread: f32) -> Img {
+    let (w, h) = (src.w, src.h);
+    let last = src.c.max(1) - 1;
+    let at = |i: usize, ch: usize| src.get(i % w, i / w, ch.min(last));
+    let lum: Vec<f32> = (0..w * h).map(|i| luma(at(i, 0), at(i, 1), at(i, 2))).collect();
+    let mean = box_blur_wrap(&lum, w, h, window);
+    let dev: Vec<f32> = lum.iter().zip(&mean).map(|(l, m)| (l - m) * (l - m)).collect();
+    let var = box_blur_wrap(&dev, w, h, window);
+    Img::from_fn(w, h, 3, |x, y| {
+        let i = y * w + x;
+        let sd = var[i].max(0.0).sqrt().max(1e-4);
+        let z = ((lum[i] - mean[i]) / sd).clamp(-2.5, 2.5);
+        let v = 0.5 + z * spread;
+        [v, v, v, 1.0]
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wrapping_box_blur_keeps_the_total_and_wraps_round_the_edges() {
+        // A constant field stays constant.
+        let flat = box_blur_wrap(&[0.25; 12], 4, 3, 1);
+        assert!(flat.iter().all(|v| (v - 0.25).abs() < 1e-6));
+        // A spike in the corner spreads over its 3x3 neighbours, wrapping to the far edges.
+        let mut spike = vec![0.0_f32; 25];
+        spike[0] = 9.0;
+        let out = box_blur_wrap(&spike, 5, 5, 1);
+        for (x, y) in [(0, 0), (1, 0), (4, 0), (0, 1), (0, 4), (4, 4), (1, 1), (4, 1), (1, 4)] {
+            assert!((out[y * 5 + x] - 1.0).abs() < 1e-5, "({x}, {y}): {}", out[y * 5 + x]);
+        }
+        assert!((out.iter().sum::<f32>() - 9.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn box_down_keeps_the_colour_of_a_half_covered_edge() {
+        // A 2x2 block: two opaque red texels and two empty black ones.
+        let src = Img::from_fn(2, 2, 4, |x, _| if x == 0 { [1.0, 0.0, 0.0, 1.0] } else { [0.0; 4] });
+        let small = box_down(&src, 2);
+        assert_eq!((small.w, small.h, small.c), (1, 1, 4));
+        assert!(
+            (small.get(0, 0, 0) - 1.0).abs() < 1e-6,
+            "red stays full red, not darkened"
+        );
+        assert!((small.get(0, 0, 3) - 0.5).abs() < 1e-6, "alpha is the coverage");
+        // Grey averages in linear light: black and white make 0.5 linear, about 0.735 encoded.
+        let grey = Img::from_fn(2, 2, 3, |x, _| [x as f32, x as f32, x as f32, 1.0]);
+        let g = box_down(&grey, 2);
+        assert!((g.get(0, 0, 0) - srgb_encode(0.5)).abs() < 1e-6);
+        assert!((g.get(0, 0, 3) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_neutral_texture_sits_at_mid_grey_with_the_asked_spread() {
+        // A dark, low-contrast stripe pattern comes out round 0.5 with the same spread everywhere.
+        let src = Img::from_fn(32, 32, 3, |x, _| {
+            let v = if x % 2 == 0 { 0.05 } else { 0.08 };
+            [v, v, v, 1.0]
+        });
+        let n = neutral_luma(&src, 4, 0.1);
+        let mean = n.data.iter().step_by(3).sum::<f32>() / (32 * 32) as f32;
+        assert!((mean - 0.5).abs() < 0.01, "mean {mean}");
+        let (lo, hi) = (n.get(0, 5, 0), n.get(1, 5, 0));
+        assert!((hi - lo - 0.2).abs() < 0.02, "one deviation each side: {lo} {hi}");
+        // A flat texture has nothing to show: it stays at mid grey.
+        let flat = neutral_luma(&Img::from_fn(8, 8, 3, |_, _| [0.3, 0.3, 0.3, 1.0]), 2, 0.1);
+        assert!(flat.data.iter().all(|v| (v - 0.5).abs() < 1e-6));
+    }
 
     #[test]
     fn seamless_wraps_cleanly() {

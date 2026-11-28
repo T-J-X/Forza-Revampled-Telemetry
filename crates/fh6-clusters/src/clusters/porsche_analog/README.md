@@ -22,7 +22,7 @@ Catalog row 7 · `ClusterTheme::PorscheAnalog` (config value `"PorscheAnalog"`) 
 | `PorscheAnalogFarLeft`, `PorscheAnalogLeft`, `PorscheAnalogRight`, `PorscheAnalogFarRight` | `Speed`, `G`, `Power`, `Boost`, `Off` | `Power`, `Speed`, `G`, `Boost` |
 | `PorscheAnalogNumerals` | `White`, `Heritage` (the 356 green) | `White` |
 
-Colours come from the palette (factory, custom or random), the numerals follow the user's display font, and the logo zone shows the car's logo, else the Porsche wordmark from `assets/logos/` on a Porsche, else the brand or custom name; it stays empty when `ShowLogo` is off. The right tube greets the driver by the config's driver name while the car is parked in neutral.
+Colours come from the palette (factory, custom or random), the numerals follow the user's display font, and the logo zone shows the car's logo, else the Porsche wordmark from `assets/logos/` on a Porsche, else the brand or custom name; it stays empty when `ShowLogo` is off, and shows nothing of the car's own while the car's logo loads. A logo narrower than the Porsche wordmark (an emblem such as Toyota's or BMW's) keeps the wordmark's area and stands up to 40 px tall on the wordmark's line, instead of 15 px in the wordmark's slot. The right tube greets the driver by the config's driver name while the car is parked in neutral.
 
 ## Commands
 ```

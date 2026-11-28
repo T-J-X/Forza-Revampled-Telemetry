@@ -453,6 +453,9 @@ struct Loop {
     refraction_retry: Instant,
     /// `ClusterFont` resolved against the loaded faces.
     font_override: Option<FontId>,
+    /// How many kits this loop has had: one at start-up and one more after each lost device.
+    /// What is built for a kit remembers the number it was built at ([`Osd::kit_seen`]).
+    kits: u32,
 }
 
 /// The OSD as the render thread runs it: the host, the working config being edited, the
@@ -470,7 +473,9 @@ struct Osd {
     injector: Box<dyn KeyboardInjector>,
     saver: Option<ConfigSaver>,
     epoch: Instant,
-    fonts_listed: bool,
+    /// The kit ([`Loop::kits`]) the host's font list and assets were loaded from; 0 before the
+    /// first.
+    kit_seen: u32,
 }
 
 impl Osd {
@@ -578,9 +583,11 @@ impl Loop {
         self.present_mode = format!("{:?}", surface.present_mode());
         self.size = surface.size();
         let kit = new_kit(&ctx, &self.resources);
-        // Clusters and the refraction texture belong to the old device: rebuild them.
+        // Clusters and the refraction texture belong to the old device: rebuild them. The OSD's
+        // assets follow through `kits`.
         self.active = None;
         self.refraction = None;
+        self.kits = self.kits.wrapping_add(1).max(1);
         self.gpu = Some(Gpu { ctx, surface, kit });
         // The new kit has none of the dials: each loads again the next time its brand shows, and
         // `ensure_palette` shows the car again on the next frame (the new kit needs its palette
@@ -683,6 +690,19 @@ impl Loop {
             }
         }
         self.palette_cache = Some((Arc::clone(cfg), car_ordinal, family));
+    }
+
+    /// Hands the OSD this loop's kit: the font families it offers, and its studio and
+    /// driving-position layers, loaded now (at start-up, or after a lost device) so the first
+    /// open does not decode them. What the host made for an earlier kit is dropped first. False
+    /// while there is no kit.
+    fn load_osd(&mut self, host: &mut OsdHost) -> bool {
+        let Some(gpu) = self.gpu.as_mut() else { return false };
+        let Some(kit) = gpu.kit.as_mut() else { return false };
+        host.device_changed();
+        host.set_fonts(kit.fonts().families());
+        host.load_assets(kit, &gpu.ctx.device, &gpu.ctx.queue, self.resources.assets.as_deref());
+        true
     }
 
     /// This frame's share of uploading the brand dials the worker has decoded (only while one is
@@ -797,20 +817,27 @@ impl Loop {
             Some(o) if draw => fh6_osd::draw::underlay(o.host.anim.open.progress()),
             _ => 0.0,
         });
+        // Under the live cluster while the OSD is open: the real dash blocker while a blocker
+        // row has focus (it follows the cluster), else a soft pool.
+        let blocker = match osd {
+            Some(o) if o.blocker => scrim.as_ref().map(|(fit, wash)| (fit, *wash)),
+            _ => None,
+        };
+        // The OSD's soft black pools go to the kit as well: it writes them without blending,
+        // where painting them cost about 0.4 ms of GPU time in a 4K frame.
+        let pools = match osd {
+            Some(o) if draw => o.host.pools(layout, o.frame, o.cfg, blocker.is_none()),
+            _ => fh6_osd::draw::Pools::NONE,
+        };
+        kit.set_pools(pools.as_slice());
         // No draw can dim bloom (see `dim_dash`), so a dimmed frame has none.
         kit.set_bloom(!is_dimmed(fade.care.dim));
         {
             let mut p = kit.begin_frame(layout);
             if draw {
-                if let Some(o) = osd {
-                    // The cluster glides to the OSD's live zone. Under it: the real dash blocker
-                    // while a blocker row has focus (it follows the cluster), else a soft pool.
-                    let blocker = if o.blocker {
-                        scrim.as_ref().map(|(fit, wash)| (fit, *wash))
-                    } else {
-                        None
-                    };
-                    fh6_osd::draw::live_backing(&mut p, layout, o.host.anim.open.progress(), blocker);
+                if osd.is_some() {
+                    // The cluster glides to the OSD's live zone, over the blocker or the pool.
+                    fh6_osd::draw::live_backing(&mut p, blocker);
                 } else if let Some((fit, wash)) = scrim {
                     // Game frame, scrim, wash, cluster (SCRIM_FIT §3).
                     scrim::draw_scrim(&mut p, &fit);
@@ -828,7 +855,7 @@ impl Loop {
                 dim_dash(&mut p, lit, fade.care.dim);
                 if let Some(o) = osd {
                     let name = self.active.as_ref().map_or("", |a| model::theme_label(a.theme));
-                    o.host.draw(&mut p, o.cfg, o.frame, o.now, name, o.status);
+                    o.host.draw(&mut p, layout, o.cfg, o.frame, o.now, name, o.status);
                 }
                 if stats_on {
                     draw_stats(&mut p, &self.stat_lines, self.size, fade.care);
@@ -942,7 +969,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         injector: osd_setup.injector,
         saver: osd_setup.saver,
         epoch: Instant::now(),
-        fonts_listed: false,
+        kit_seen: 0,
     };
     let logo = CarLogo::start(&resources.logos);
     let mut lp = Loop {
@@ -988,6 +1015,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         refraction: None,
         refraction_retry: Instant::now(),
         font_override: None,
+        kits: 0,
     };
     lp.adopt(gpu, surface);
     if options.open_osd {
@@ -1092,11 +1120,8 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         if osd.pause.poll(&mut *osd.injector, wake - osd.epoch, pause_inputs) {
             tracing::info!("OSD closed: ESC sent to resume the game");
         }
-        if !osd.fonts_listed {
-            if let Some(kit) = lp.gpu.as_ref().and_then(|g| g.kit.as_ref()) {
-                osd.host.set_fonts(kit.fonts().families());
-                osd.fonts_listed = true;
-            }
+        if osd.kit_seen != lp.kits && lp.load_osd(&mut osd.host) {
+            osd.kit_seen = lp.kits;
         }
         // The OSD's working config (while open, and until the saved file reloads) is the base;
         // the car's profile overlays it.
