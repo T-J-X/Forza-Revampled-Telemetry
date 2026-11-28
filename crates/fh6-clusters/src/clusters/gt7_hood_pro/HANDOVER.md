@@ -109,7 +109,7 @@ The first build with the plate (commit `c7a27a2`), reviewed once with `fh6-visua
 | F3 | lit LEDs 9 or 10 / 56 ± 1 / 94 or 95 / 77 ± 1 | 10 / 57 / 95 / 78 | matched |
 | F4 | speed ends 26 px left of 1920 (± 4); divider on 1920; gear starts 30 px right (± 4); caps 58 and 88 | speed ink ends at 1888 (32 px left); divider 1919 to 1920; gear ink starts at 1951 ("4") to 1957 (31 to 37 px right); caps 60 and 88 | the caps and divider match; the two gaps are 2 to 3 px outside the frozen tolerance, because each digit sits centred in its tabular cell (logged, not re-frozen) |
 | F5 | red tile right of the gear, 94 x 86, only in 03, showing 6 | red face 88 x 81 at x 2087 to 2174 (the base rim makes 94 x 86); "6"; 0 red pixels in 01, 02 and 04 | matched |
-| F6 | steering dot above the bar, off-centre in 04 | on x 1920 in 01 to 03; off-centre in 04 | matched |
+| F6 | steering dot above the bar, off-centre in 04 | on x 1920 in all four states: the review telemetry carries steer 0 (the code audit, NS-5) | no: the travel is covered by the unit test `the_steering_dot_spans_its_travel`; a steer value in `04_drift_braking` would change the shared review telemetry and every dash's goldens, so it is a request for the coordinator |
 | F7 | brake left, throttle right, white fills; brake fill in 04 | as frozen (`review/dc_states.png`) | matched |
 | F8 | tyre diagram leftmost | leftmost | matched in place; its car shape is finding 1 |
 | F9 | arc about 120 px across, 200 px box under it | arc 124 px, box 207 px | matched |
@@ -157,4 +157,44 @@ Materials at glance scale (frozen): the bar as black glass with one highlight li
 5. **The board** is redrawn for the parts that change, and the plate is rebuilt after it (the order of work).
 
 V13 stays no for this review point: GT7's bonnet band has few cues of its own, and the dash gives up two of them on purpose (a white run and a primary-colour dot, where GT7's are pink-red and red; RESEARCH.md, "Deliberate changes").
+
+### TJX's words on the direction-check sheet (2026-11-28, 05:17Z to 05:18Z)
+
+TJX answered in the thread, on `dc_board_before_after.png`: "i like what you made". Pinned on the old gull-wing render (the before row's gear pod): "shit". Pinned on the new rev bar (the lit LED run in the black-glass bar) and on the run's head: "nrautiful" (beautiful) and "amazing". So the lit run and its bloom stay as they were; the cold reviewer's "bloom haze" finding does not outrank TJX's words, and only the alert run's bloom changed (below).
+
+## After the direction check
+
+### The changes (commit `9b0a5e4`, rendered on lavapipe 05:24Z)
+
+| Group | Change | Evidence |
+|---|---|---|
+| 2 meaning | BRK and THR under the slots (Titillium Web 600, cap 22, static ink); thousand-rpm marks under the plinth placed by the car's limiter; the alert zone's lenses smoked red in the plate (from LED 85, where the run takes the shift colour, test `the_alert_zone_starts_where_the_run_changes_colour`); a rail under the steering dot with a centre notch and end stops | `review/p2_03_redline_strobe.png` |
+| 3 moments | Alert LEDs carry a hot white core and their own bloom (threshold 0.2), so the alert run outshines the white run it replaces (test `the_alert_run_is_brighter_than_the_white_run`); the tile shows an up chevron over the next gear (cap 42); the hand-over slides the whole tile, digit kept, 90 px towards the gear while it shrinks and fades (no blank or squeezed frame, test `taking_the_suggested_gear_folds_the_tile_and_keeps_it_away`) | `review/p2_handover.png` (frames 41 to 47) |
+| 4 readouts | Speed at synthetic weight 0.3 with a soft outer keyline ring (12 copies at 1.7 widths, alpha 0.25) on the speed and gear; the unit right-aligned under the last digit; the trip as whole units, a point and tenths with its unit (`0.0 mi`), right-aligned; neutral at full ink; tyre lenses lit from inside (a radial light, screened over the lens); pedal and boost fills at 0.7 of the ink, under the lit run | `review/p2_03_centre.png`, `review/p2_02_left.png` |
+| 1 materials | Recipe: the zenith sky at 0.4 and the studio world at 0.5 of the hero rig's, and a window softbox on the key side (el 52°, half size 14°, so it never reaches the zenith); the light bar pillowed (10 px tall, 9 px round edge, a flat centre 28 px tall for the 26 px LED field); domed lenses (2 px, pill corners); half-round slots; domed telltale lamps; pillowed black-glass tyre lenses; a polished gunmetal boost arc with four engraved marks (−1, 0, 1, 2 bar); a car outline for the chip (narrower nose, mirrors, hips); deeper polished chamfers on every base. Rebuilt on the cloud lane through the PC | the PC's report (pending) |
+| 5 board | Zone table v3 boards drawn from the new numbers (`board_v3`), outlined for Penpot | Penpot page `07 · Gt7HoodPro` (pending) |
+
+### Code audit (workflow `gt7-hood-pro-code-audit`: four read-only auditors, each followed by one refuter; findings only)
+
+| Id | Finding | Refuter | Action |
+|---|---|---|---|
+| HP-1, NS-1 | No off-hysteresis at the shift point or the alert: an rpm on the threshold flashed the tile and restarted the strobe | real (with a guard for an unknown limiter) | fixed: both release 120 rpm under their thresholds, only for a known limiter (test `the_shift_point_holds_through_a_dip_and_an_unknown_limiter_stays_dark`) |
+| HP-2 | The run's release takes 100 to 150 ms to drain a large drop | not real (the tokens' release is met as the project reads it) | kept |
+| HP-3, RL-5, NS-9 | Clearing the user's display font never brought the dash's own faces back | real | fixed: the faces from `new()` are kept and restored |
+| RL-6 | A wide user face was set with no tracking, so its digits overlapped | | fixed: a user face's tracking is its widest digit less the kit's cell |
+| NS-2, RL-4 | The tile's 10 (in 9th) overflowed the face | real | fixed: a proportional run fitted to the face |
+| NS-3, RL-3 | The trip was set 5 px right of centre | real | gone with the right-aligned trip (a `number` field needs the bias, a `text` run does not) |
+| NS-4 | A dash built past the shift point played the tile's pop on its first frame | real | fixed |
+| NS-5 | Frozen F6 cannot hold: the review telemetry has no steering | real | F6 is recorded no above; unit test added; the coordinator is asked about a steer value in the review state |
+| NS-6 | The trip restarts on every camera or theme change (the app builds the cluster again) | real | the wording now says "since the view was entered"; a session distance would need the host |
+| NS-7 | The slide lamp lit while reversing in a straight line | real | fixed: off in reverse |
+| NS-8 | A limiter of 0 rpm made the whole dash a permanent shift alarm | real | fixed: an unknown limiter keeps the bar dark, with no alert, tile or limiter lamp |
+| RL-1, RL-2 | The tile's sprite cross-fade doubled its bloom and every anti-aliased edge thickened during a swing | | fixed: the rest render at 1 − swing and the swing render added, so coverage sums to one (`hardware::blend`); spec.md names the tile as the second bloom layer |
+| RL-7 | Long wordmarks shrank far under the label floor | | fixed: set in the label face at 22 px when the wide face would go under it |
+| RL-8 | The boost scale was a static part far over the cap | | the arc is now polished gunmetal; measured after the rebuild |
+| RL-9 | Pedal and boost fills burned brighter than the lit run | | fixed: 0.7 of the ink (test `the_side_groups_burn_below_the_lit_run`) |
+| RC-1 | A changed carbon texture would not reach the plate (the Blender cache keys on its path) | pending | the texture does not change in this rebuild; logged as a request for the hero library (hash the bytes of texture parameters) |
+| RC-2 | The ComfyUI master is not copied to Drive under its ledger name | pending | to fix with RC-1 |
+| RC-3 | The tile's baked red is not exactly the `warning` role after the render's light | pending | kept baked (enamel under light is not a flat role colour); the comments say so |
+| RC-4 | Two radii were bare literals the drift test could not see | | fixed: `TICK_R`, `SUG_R` named and checked (commit `59c8a0b`) |
 

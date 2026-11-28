@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(recipe("SUG_R"), vec![g.sug_r]);
         assert_eq!(recipe("SUG_FACE"), flat(&[g.sug_face]));
         assert!(g.bar_c.x.abs() < 1e-6, "the recipe centres the light bar on x 0");
-        // The tile's enamel is the warning role, so the sprite and the fallback agree.
+        // The tile's enamel base colour is the warning role, so the sprite and the fallback share a hue.
         let warning = Tokens::default().roles.warning;
         let red = recipe("WARNING_RED");
         for (got, want) in red.iter().zip([warning.r, warning.g, warning.b]) {

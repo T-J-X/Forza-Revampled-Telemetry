@@ -131,8 +131,9 @@ const SUG_FACE: [f32; 2] = [88.0, 80.0];
 const SUG_R: f32 = 11.0;
 /// Its sprite's frame (local px).
 const SUG_FRAME: [f32; 4] = [156.0, -2.0, 110.0, 102.0];
-/// The tile's enamel: the palette's fixed `warning` role (#FF2D3A) in linear light, so the
-/// rendered tile and the vector fallback are the same red.
+/// The tile's enamel base colour: the palette's fixed `warning` role (#FF2D3A) in linear light,
+/// so the rendered tile and the vector fallback share a hue. The render's light and clear coat
+/// shade it, so its pixels are near that red, not equal to it (the code audit, RC-3).
 const WARNING_RED: [f32; 3] = [1.0, 0.0262, 0.0423];
 
 // Every part fits its frame, the LED field fits inside the bar, and the tiles do not overlap
