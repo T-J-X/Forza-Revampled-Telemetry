@@ -7,7 +7,9 @@ use crate::color::Color;
 use crate::images::Images;
 use crate::math::{finite_or, note_repair, vec2, Affine, Rect, Vec2};
 use crate::mesh::{MeshCmd, MeshDraw};
-use crate::paint::{BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread};
+use crate::paint::{
+    BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread, StandingWaves,
+};
 use crate::palette::Palette;
 use crate::scene::{
     pack_bloom, Bloom, DrawCmd, GpuClip, GpuPaint, Instance, LayerOptions, Scene, Segment, MAX_CLIPS, MAX_INSTANCES,
@@ -29,7 +31,7 @@ const MAX_DEPTH: usize = 32;
 const GLASS_CLIP_SLACK_PX: f32 = 1.0;
 
 /// Paint kinds (must match `shape.wgsl`).
-mod paint_kind {
+pub(crate) mod paint_kind {
     pub const SOLID: u32 = 0;
     pub const LINEAR: u32 = 1;
     pub const RADIAL: u32 = 2;
@@ -37,6 +39,8 @@ mod paint_kind {
     pub const IMAGE: u32 = 4;
     pub const GLASS: u32 = 5;
     pub const OPTIC: u32 = 6;
+    /// The standing waves of the optical-glass record before it (never drawn by itself).
+    pub const WAVES: u32 = 7;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -703,15 +707,69 @@ impl<'f> Painter<'f> {
                 return Some((idx, Color::WHITE));
             }
         }
-        if self.scene.paints.len() >= MAX_PAINTS {
+        // Optical glass with standing waves takes a second record right after its own.
+        let waves = match paint {
+            Paint::OpticalGlass(gl) => standing_record(&gl.standing),
+            _ => None,
+        };
+        let slots = 1 + usize::from(waves.is_some());
+        if self.scene.paints.len() + slots > MAX_PAINTS {
             return None;
         }
-        let gpu = gpu_paint(paint, self.images);
+        let mut gpu = gpu_paint(paint, self.images);
+        if waves.is_some() {
+            gpu.head[1] |= optic_flag::STANDING;
+        }
         self.scene.paints.push(gpu);
         let idx = (self.scene.paints.len() - 1) as u32;
+        if let Some(w) = waves {
+            self.scene.paints.push(w);
+        }
         self.last_paint = Some((*paint, idx));
         Some((idx, Color::WHITE))
     }
+}
+
+/// Flags in `head[1]` of an optical-glass record (`shape.wgsl` `optic_glass`).
+pub(crate) mod optic_flag {
+    /// The piece is a metal: `g0.xyz` is `n` and `g2.xyz` is `k` per channel.
+    pub const CONDUCTOR: u32 = 1;
+    /// The next record holds standing waves ([`super::standing_record`]).
+    pub const STANDING: u32 = 2;
+}
+
+/// Largest wavenumber the shader takes (radians per local unit; a wavelength of 0.1 px), and
+/// largest amplitude, so the waves' second derivatives `k² A` stay finite in `f32`.
+const MAX_WAVENUMBER: f32 = 64.0;
+/// See [`MAX_WAVENUMBER`].
+const MAX_WAVE_AMPLITUDE: f32 = 1.0e4;
+
+/// The record that follows an optical-glass record whose surface has standing waves, or `None`
+/// when it has none that move: `head` = [`paint_kind::WAVES`], the wave count; `g0` = centre,
+/// wavenumber, still radius; `g1.x` = still width; `colors[i]` = unit direction, amplitude and
+/// phase of wave `i`. The wavenumber and amplitudes are clamped to [`MAX_WAVENUMBER`] and
+/// [`MAX_WAVE_AMPLITUDE`].
+fn standing_record(s: &StandingWaves) -> Option<GpuPaint> {
+    if !s.is_active() {
+        return None;
+    }
+    let k = finite_or(s.wavenumber, 0.0).clamp(-MAX_WAVENUMBER, MAX_WAVENUMBER);
+    let mut g: GpuPaint = bytemuck::Zeroable::zeroed();
+    let waves = s.waves();
+    g.head = [paint_kind::WAVES, waves.len() as u32, 0, 0];
+    g.g0 = [
+        finite_or(s.center.x, 0.0),
+        finite_or(s.center.y, 0.0),
+        k,
+        finite_or(s.still_radius, 0.0).max(0.0),
+    ];
+    g.g1 = [finite_or(s.still_width, 0.0).max(0.0), 0.0, 0.0, 0.0];
+    for (slot, w) in g.colors.iter_mut().zip(waves) {
+        let e = Vec2::new(finite_or(w.direction.x, 0.0), finite_or(w.direction.y, 0.0)).normalize_or_zero();
+        let a = finite_or(w.amplitude, 0.0).clamp(-MAX_WAVE_AMPLITUDE, MAX_WAVE_AMPLITUDE);
+        *slot = [e.x, e.y, a, finite_or(w.phase, 0.0)];
+    }
+    Some(g)
 }
 
 /// Converts a paint to its GPU record.
@@ -847,6 +905,23 @@ fn gpu_paint(paint: &Paint, images: &Images) -> GpuPaint {
                 unit(wave.center.y, 0.0),
                 unit(wave.radius, 0.0),
             ];
+            // A metal transmits nothing, so its complex index takes the index and absorption
+            // lanes: n in g0.xyz (it may be below 1), k in g2.xyz.
+            if let Some(m) = gl.conductor {
+                g.head[1] |= optic_flag::CONDUCTOR;
+                g.g0 = [
+                    unit(m.n[0], 1.0).clamp(1e-3, 16.0),
+                    unit(m.n[1], 1.0).clamp(1e-3, 16.0),
+                    unit(m.n[2], 1.0).clamp(1e-3, 16.0),
+                    0.0,
+                ];
+                g.g2 = [
+                    unit(m.k[0], 0.0).clamp(0.0, 32.0),
+                    unit(m.k[1], 0.0).clamp(0.0, 32.0),
+                    unit(m.k[2], 0.0).clamp(0.0, 32.0),
+                    g.g2[3],
+                ];
+            }
         }
     }
     g
