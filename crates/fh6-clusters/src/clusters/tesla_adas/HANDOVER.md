@@ -1,6 +1,6 @@
 # HANDOVER: Dash · TeslaAdas (catalog row 15, build #5, ADAS & HUD pattern-setter)
 
-**Thread / branch:** "Rebuild the Tesla ADAS dash", `claude/project-thread-r828zb`  **Date:** 2026-11-28  **Result:** ◐ in progress (this file is filled as the work goes; the old build's handover is in git history).
+**Thread / branch:** "Rebuild the Tesla ADAS dash", `claude/project-thread-r828zb`  **Date:** 2026-11-28  **Result:** ✓ closing review done, ready for merge (one open finding: the app's CPU p99 with this dash, see "GPU and CPU"; the old build's handover is in git history).
 
 Findings and yes/no answers only; there are no scores in this file.
 
@@ -97,6 +97,93 @@ Its findings, each fixed (round t8) or not:
 
 Decision: **go with changes.** Changes made (t8): the road pool and contact shadows, calmer cars, the softer path and glow, the short parked fade, centred figures, full-ink figures, the rev grey, the figure hysteresis. Still to do before the closing review: the car model pass (shut lines and the scale of the roof's lamp reflections) in the next cloud asset run.
 
+## Closing review
+
+Round t9 (`09ae6da`: the car images with shut lines from the second cloud run), reviewed 06:05–06:40 UTC, then one fix (the glass reflections, `c0cbd13`) from the cold reviewer's findings. The expectations frozen at the direction check were not edited.
+
+### Cold reviewer (the second and last run, 06:11–06:13 UTC, packet `mockups/blind/16/`)
+
+Five-second test: first "the big 4", second "118 MPH", third the road with the white car. Recognition: "Don't know. A.png shows no maker name or logo." Blind glance read against the key (`review/blind_key_16.txt`): gear right on 8 of 8, speed right to within 1 on 8 of 8, rpm zone right on 8 of 8; the shift lights as each frame shows them on 8 of 8 (glance_07 is frame 33, the strobe's dark phase, read "dark"; the reader added "from the lights alone I would have read it as low"). The glance frames were written without the logo mask, so the driven car's logo (the review telemetry's car, a Porsche) showed in them; A.png, on which the recognition question was asked, was masked.
+
+| Finding | Status |
+|---|---|
+| The ego car's rear glass has "an odd brown/orange striped texture that looks like wood grain" (also found at the direction check) | Fixed (`c0cbd13`): the tunnel light card is desaturated to 0.15 in the car shots, so the glass shows soft neutral streaks (`/mnt/project-files/shots/tesla_adas/12_rear_glass_neutral_test.png`, CPU Cycles test; the cloud run and the goldens follow) |
+| Unlit shift pills are mid-grey, the middle four darker; lit and unlit hard to tell apart | Not fixed: the grey is the rev fill (the only rpm graphic, as Tesla has no tach; it must reach 3:1, change C), filling from the outside in, so the dark middle four are the revs not yet reached. The stage colours replace it with hue and at 9.8:1 |
+| glance_07: all lights dark at 8650 rpm reads as low revs | Not fixed: the strobe's dark phase is the token strobe (`motion.limiterStrobe`, 3 on / 3 off); the rpm figure carries the value through it |
+| No tach scale and no limiter mark | Not fixed: deliberate (change C) |
+| The ego car looks matte and clay-like | Not fixed: Tesla's own visualisation draws a smooth, light grey model (R3); the shut lines and lamp reflections are what the model pass added |
+| The van is a toy-like box with a flat yellow plate | Not fixed: the kei box is the RESEARCH M motif; the plate may hold no readable number |
+| The blue path is a flat even fill; the road plain dark grey | Not fixed: the path is Tesla's flat Autopilot band (R1, R3); the road is the pool of light from the direction check |
+| The parked car looks flat next to R2 | Not fixed: R2 is lit daytime studio art; the parked car is the same night model |
+| The thin line at the bottom has no label | Not fixed: Tesla's power meter carries no label either (feature 7) |
+| Labels, the logo and the rpm and power figures are small and grey | Not fixed: rank 5; caps measured on the 1:1 crop at 17.7 px or more for every figure (V8) |
+| A gear digit beside R N D, no P | Not fixed: deliberate (change A); P shows when parked |
+| The cockpit photo behind the cluster, no frame of its own | Not fixed: change G, no screen rectangle |
+
+### Second opinions (once each)
+
+- `design:design-critique` (on `02_mid_cruise_crop.png`, `04_drift_braking_crop.png`, the cvd sheets and the before/after sheet): the eye goes to the 4, then 118, then the car, which is the rank order. The orange rear glass was the one element out of rank (the only warm hue in the frame at cruise, on the brightest object): fixed as above. The red tail bar reads at cruise and grows brighter under braking, which is the brake signal; position (the car) and brightness carry it without the hue. The hood static labels and the G-meter rings are brighter than the 0.2 static cap (see V11). Consistency: the shift pills, the meter, the figures and the chips share one type family and one grey ladder; the Japanese lines sit above the Latin ones everywhere.
+- `design:accessibility-review` (contrast, use of colour, flashing, motion without data): contrast as V6; colour as V12 (every state reads in the luminance-only panels: the shift stages by count, the limiter by all pills lit, braking by the tail bar's brightness, drift by the path's bend and the meter's ball); flashing as V22, and the reduced-flash mode is the shared `ShiftLights` (`input.reduced_flash` passed in `update`, which holds the strip lit instead of strobing); motion: nothing moves without data (`motion`: idle frames 6–9 still, the lane lines scroll with the speed).
+- `rust-review` (the dash's `mod.rs` and `scene.rs`, the kit's `preload_text`; clippy with `-W clippy::pedantic` run): no must-fix and no should-fix. Every float-to-index cast is clamped or guarded before it indexes (`ego_cell` clamps to the atlas, `PeakTrace::record` takes `rem_euclid` and `% PEAK_BINS`, the traffic column takes `min`); no `unwrap`, `expect` or `panic!` outside tests; the remaining pedantic lints are precision casts of small counts to `f32`, single-letter geometry names and one `unused_self` on `draw_surface` (kept so every `draw_*` has the same shape). `Fonts::preload_text` is documented, allocates only when the cluster is built and changes no existing behaviour.
+
+### Visual review V1–V26
+
+- V1 yes: frozen 04:58 UTC, unchanged.
+- V2 yes: cold look and premortem at the direction check; for t9 each rejection pattern was checked again on `02_mid_cruise_crop.png`: (a) the layout pairing with R1 holds; (b) the shut lines and glass show at 1:1, no texture needs 2x; (c) the road is a pool of light, not a slab; (d) the scene carries the 2027 bar; (e) no glass panels.
+- V3 yes: one run, every finding in the table above.
+- V4 yes: "the big 4" first, "118 MPH" second.
+- V5 yes: gear, speed and rpm zone right on all 8 frames; the shift lights as the frames show them.
+- V6 yes: gear 17.7–18.8:1 and speed 11.3–13.8:1 in all four states of both views; rpm, power, G and R·N·D 4.3:1 or more; the lit shift pills 3.2:1 or more. Two zones below 3:1 carry no information at the time: the shift line at idle (1.5 cockpit, 1.3 hood; no revs to show) and the power line at idle (1.2; zero power).
+- V7 yes: in the squint view each stage (2, 5, all pills) and the strobe's on and off frames differ from each other and from idle.
+- V8 yes: from the `Geom` tables, confirmed on 1:1 crops: the gear 233 px (cockpit) and 205 px (hood) cap, the speed 108 / 90 px, the G, rpm and power figures 24 px or more, labels 17.7 px or more; strokes 1 px or more at full contrast.
+- V9 yes: after the hysteresis, `flash --frames 30-41` marks no digit.
+- V10 yes: `review/02_mid_cruise_cockpit_squint.png`: labels and the logo go first, the gear and the speed last.
+- V11 yes with explanations: `static` over the four states (cockpit, round t9): every area over the 0.2 cap is live content that lands on the same pixels in all four states (the gear digits N, 4, 5, 3 overlapping, the rpm figure's trailing 00, the speed digits, and the idle parked car overlapping the cruising ego car), not structure. Hood: the logo (0.30, the shared `logo_zone`, the kit's label ink), the two-language labels (0.29–0.31) and the G-meter rings (0.31) are over the cap. Explained, not changed: they use the palette's `ink_label`, which they need for 4.5:1 over the cockpit scrim (0.2 would give 4.5:1 over black but not over the scrim's lift), and they are well under the live data (p95 0.93). Large near-white static areas: none.
+- V12 yes: `04_drift_braking_cockpit_cvd_sheet.png`, `03_redline_strobe_cockpit_cvd_sheet.png`, `hood_04_drift_braking_cvd_sheet.png`: every colour state reads in every panel by count, position or brightness; red only on the tail lamps (brighter when braking) and the rev line's limiter end.
+- V13 no: the reviewer could not name Tesla in either run ("Don't know", both times). It cannot be fixed afterwards and stays no.
+- V14 yes: the frozen inventory was measured at the direction check; t9 changed only the car images (shut lines, dimmer glass), so lines 3, 9 and 11 were checked again on the 1:1 crop and still match.
+- V15 yes, V16 yes (direction check, unchanged since).
+- V17 yes: paint, glass, rubber, the lit lamps nameable at full frame, one overhead key.
+- V18 yes for the checks that apply (car paint, glass, lamps); no bezel, crystal, carbon or Liquid Glass on this dash.
+- V19 NOT ASSESSED: no glass pieces on this dash.
+- V20 yes: `stretch` 0 px not off outside the envelope plus 40 px; corners off; no banding in the road's fall (squared).
+- V21 yes: shift stages, strobe, gear and digits change on the data's frame; nothing trails or overshoots; `motion` reports 0 stalls.
+- V22 yes: worst 10-degree field yes, strip height yes, the shift strip 3 on / 3 off at 10 Hz; the other flashing area is the G readout falling with the data and the scenery (area 3).
+- V23 yes: frames 39–50 at 1:1 (`/tmp` sheet, recorded here): 3 on 39–41, 4 from 42 (the data changes at 42), no blank or doubled frame, no morph.
+- V24 yes: the `motion` spikes are frame 27 (the first shift stage) and 50, 53, 56 (lane lines passing at 93 mph); no shimmer, crawl or bloom pop on the 1:1 frames.
+- V25 yes: `review/before_after/02_mid_cruise_cockpit_vs_TeslaAdas-02_mid_cruise_cockpit_side.png`: the before's main failure (a generic pod HUD with nothing of Tesla's layout) is gone; nothing it did better is lost (its gear is still the biggest figure; its blind-spot arcs and lock box are removed on purpose, change E).
+- V26 yes: the eight goldens were made on the PC's card from the third run's car images (`goldens_v4`, the golden test passes there with them) and each was opened here before it was committed: idle (the parked car three-quarter front, N, 0 MPH, the line dark), cruise (the car from behind on the blue path, the kei van left, three cars ahead, 4 and 118), redline (all 16 pills violet, the violet glow under the car, 5 and 152), drift braking (the road bending right, the car turned with its brake bar lit, the outer three pills green each side, 3, 74 and 1.12 G), and the four hood versions. Every difference from the previous goldens (the old build's) is the rebuild.
+
+### After the fix (round t10, the third run's car images)
+
+`docs/handover-shots/cluster-tesla_adas-after-02_mid_cruise.png`: the rear and roof glass shows soft grey streaks with no orange; nothing else changed (the code is the same, the goldens are new). Re-checked on the 1:1 crop: the car's place, size and lamps (inventory lines 3, 9, 11) unchanged.
+
+### GPU and CPU
+
+- `preview-export --cluster TeslaAdas` on the PC's card (06:53–06:55 UTC, gpu.lock held): cockpit 01 0.081 ms, 02 0.222, 03 0.321, 04 0.354; hood 01 0.268, 02 0.287, 03 0.401, 04 0.434; the 60-frame sequence p50 0.316 ms, p99 0.327 ms. Every figure is under the 0.5 ms per cluster.
+- Live bench on the PC (07:1x UTC, through `gpu-lock.exe run`, release build, 60 s each, the stand-in window in front, `mock-udp --scenario bmw_m4_cs` at 60 Hz, `--bench-out` to a scratch folder so the tracked `docs/perf/engine.md` stayed as it is; no panic, warning or error in either run):
+
+  | | Frames | CPU per frame p50 / p99 / max | Receive to present p50 / p99 | Draw calls per frame |
+  |---|---|---|---|---|
+  | TeslaAdas | 8059 (134 fps, 3267 packets) | 0.729 / 1.317 / 16.25 ms | 0.759 / 1.880 ms | 19.3 |
+  | Scaffold (AbyssalShearBloom) | 8189 (136 fps, 3496 packets) | 0.582 / 0.796 / 1.396 ms | 0.594 / 1.227 ms | 11.0 |
+
+  The dash's own share (criterion 6): 0.729 − 0.582 = **0.147 ms p50, under the 0.3 ms limit.** Receive to present meets one display frame (3.33 ms) at p99.
+  **Finding, not fixed here: the app total is 1.317 ms CPU p99, over the 1 ms target, and the scaffold does not show it** (0.796 ms p99). The extra p99 sits in the per-frame GPU submission, not in the dash's code: upload, record and submit p99 0.769 against 0.477 ms (swapchain, encoder and finish 0.510 against 0.317; `Queue::submit` 0.277 against 0.191), the present call p99 0.476 against 0.303 (the 16 ms max is one present call), while the dash's own draw is p99 0.104 against 0.063 and the kit render 0.062 against 0.051. The dash issues 19 draw calls a frame against the scaffold's 11, because each car atlas (ego, its glow and brake layers, the parked car, three traffic atlases) is its own texture and the shadows and glows switch blend modes. The cheap fix is fewer texture switches: one atlas for the three traffic bodies and one for the ego's glow and brake layers (the recipe already builds the atlases), and drawing every multiply shadow, then every additive glow, together. That is a recipe-and-draw-order change of its own, with a cloud run, new goldens and a new bench, and is reported to the coordinator as a follow-up rather than done after the closing review.
+
+### Assets, masters and cloud spend
+
+- Three cloud runs on the RTX 4090 lane: the first (all jobs, the tunnel plate) $0.129; the second (cars with shut lines) about $0.138; the third (cars with the neutral card) about $0.124. This thread's lane spend is $0.391; the lane total after the third run was $2.64 of the $50. The $40 warning never printed. Every pod was taken down after its batch.
+- Masters and runtime copies in the Drive folder `tesla_adas/` (`runtime_v4/`, `goldens_v4/`, `renders_v4/`), listed in `assets/clusters/tesla_adas/ASSETS.md` with each committed file's SHA-256; every file fetched to the cloud was checked against the SHA-256 the PC reported before it was committed.
+
+### Board and code (TJX, 28 Nov 07:09: Penpot first, then code)
+
+The board came first (page `07 · TeslaAdas`, before any of this build's code), and the code has not drifted from it: the direction check laid the board over the render and every zone sat where the board puts it (V16). After the direction check nothing in the layout changed; the closing review's one change is inside the Blender car images (the light card's saturation), which the board does not draw. So the board needed no update before the change.
+
+### Before and after
+
+`docs/handover-shots/cluster-tesla_adas-before-02_mid_cruise.png` (the dash on `main` before the rebuild) against `cluster-tesla_adas-after-02_mid_cruise.png`, with the other three states and the hood cruise view beside them (`after-01_idle`, `after-03_redline_strobe`, `after-04_drift_braking`, `after-hood_02_mid_cruise`).
+
 ## What was built
 - `crates/fh6-clusters/src/clusters/tesla_adas/`
   - `mod.rs`: the zone tables (`Geom`, one for the cockpit and one for the hood), the cluster (`update`, `draw`), the shift line (16 thin pills along the top that fill with revs from the outside in, take the palette's stage colours and strobe at the shift point), the left card (logo zone, the two-language Track Mode label, the G-meter with its peak history in 24 direction bins, the rpm and power figures), the right column (gear, speed with its unit, the R · N · D row), the centre-zero power line, and the hood view's legibility halos. 6 unit tests (the layout inside both envelopes with the zone minimums, the halos per view, the rev fill, the shift stages, the peak history, the Japanese glyphs preloaded).
@@ -107,7 +194,7 @@ Decision: **go with changes.** Changes made (t8): the road pool and contact shad
 - `crates/fh6-kit/src/text.rs`: `Fonts::preload_text` (8 lines; see "Shared places touched").
 - `docs/TELEMETRY_USAGE_MATRIX.md`: this dash's row.
 - `tests/golden/images/TeslaAdas_*.png`: the eight goldens (four states, cockpit and hood).
-- `docs/handover-shots/cluster-tesla_adas-*.png`: the before and after pair and the review crops.
+- `docs/handover-shots/cluster-tesla_adas-*.png`: the before and after pair and the other states (the old build's shots are removed; they are in git history).
 
 ## Telemetry
 Every field the dash reads is one the golden packets cover, or is derived from one:
@@ -132,7 +219,7 @@ From `RESEARCH.md`, "Deliberate changes and why" and "Japan-inspired":
 - J. The driven car's logo, small and grey, at the top of the left card.
 - K. Track Mode's G-meter fills the card that holds Tesla's map.
 - L. Noto Sans (OFL) for every figure and label.
-- M. (TJX, 28 Nov 2026: "make it japan inspired as we are in horizon 6") The road is a three-lane Japanese expressway at night that keeps left, with NEXCO lane lines, orange reflector posts, a kei box car in the slow lane, and a tunnel's ceiling lamps mirrored in the car's glass.
+- M. (TJX, 28 Nov 2026: "make it japan inspired as we are in horizon 6") The road is a three-lane Japanese expressway at night that keeps left, with NEXCO lane lines, orange reflector posts, a kei box car in the slow lane, and a tunnel's ceiling lamps mirrored, neutral, in the car's glass.
 - N. Two-language labels, Japanese above and Latin below.
 - O. Braking is written on the road: slow-down dashes and a stop bar with 止まれ.
 - P. Left out on purpose: speed-limit roundels, route numbers, destination names and tourist motifs.
