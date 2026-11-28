@@ -104,7 +104,7 @@ One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they sha
 | 2 | 7 | ★ [`PorscheAnalog`](../../../crates/fh6-clusters/src/clusters/porsche_analog/) | Retro | recreation | Classic Analog | cockpit | ✅ |
 | 3 | 3 | ★ [`Gt7HoodPro`](../../../crates/fh6-clusters/src/clusters/gt7_hood_pro/) | Motorsport | recreation | Modern Digital 2027 | hood | ◐ |
 | 4 | 12 | ★ [`BoschDdu`](../../../crates/fh6-clusters/src/clusters/bosch_ddu/) | Motorsport | recreation | Race Dash | cockpit | ◐ |
-| 5 | 15 | ★ [`TeslaAdas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | Sci-Fi | recreation | ADAS & HUD | cockpit+hood | ◐ |
+| 5 | 15 | ★ [`TeslaAdas`](../../../crates/fh6-clusters/src/clusters/tesla_adas/) | Sci-Fi | recreation | ADAS & HUD | cockpit+hood | ✅ |
 | 6 | 19 | ★ [`RetroCyber`](../../../crates/fh6-clusters/src/clusters/retro_cyber/) | Retro | recreation | Sci-Fi | cockpit+hood | ◐ |
 | 7 | 27 | ★ [`KineticLiquidMetal`](../../../crates/fh6-clusters/src/clusters/kinetic_liquid_metal/) | Psychedelic | concept | Fluid / Generative | cockpit | ◐ |
 | 8 | 4 | [`AmgMbuxSuperscreen`](../../../crates/fh6-clusters/src/clusters/amg_mbux_superscreen/) (wide glass panel) | Supercar | recreation | Modern Digital 2027 | cockpit | ◐ |
