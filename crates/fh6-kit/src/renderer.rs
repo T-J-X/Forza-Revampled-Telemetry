@@ -1,9 +1,11 @@
 //! The GPU side of the kit: pipelines, work targets and the frame graph.
 //!
 //! A frame is: one upload (every instance, paint, clip, point and uniform packed into a single
-//! buffer write), then per layer segment an optional backdrop snapshot and blur, the instanced
-//! shape pass (scene + emissive targets, depth for meshes), an optional layer blur and
-//! composite, then bloom (dual-filter Kawase, one compute pass) and the resolve into the caller's target.
+//! buffer write), the pool pass when the frame has pools (`Kit::set_pools`: soft black written
+//! into the scene before anything is drawn over it), then per layer segment an optional backdrop
+//! snapshot and blur, the instanced shape pass (scene + emissive targets, depth for meshes), an
+//! optional layer blur and composite, then bloom (dual-filter Kawase, one compute pass) and the
+//! resolve into the caller's target.
 //!
 //! All work targets are sized to the **work rectangle** (the union of what was drawn, plus the
 //! bloom margin), not the screen, so a cluster costs what it covers.
@@ -12,6 +14,7 @@ use crate::images::Images;
 use crate::math::Rect;
 use crate::mesh::Meshes;
 use crate::paint::BlendMode;
+use crate::pool::{Pool, PoolBlock, MAX_POOLS};
 use crate::scene::{
     DrawCmd, GpuClip, GpuPaint, Instance, Scene, MAX_CLIPS, MAX_INSTANCES, MAX_PAINTS, MAX_POINTS, MAX_SEGMENTS,
 };
@@ -93,6 +96,7 @@ struct Offsets {
     paints: u64,
     clips: u64,
     points: u64,
+    pools: u64,
 }
 
 fn align(v: u64) -> u64 {
@@ -105,8 +109,11 @@ const INSTANCES_CAP: u64 = (size_of::<Instance>() * MAX_INSTANCES) as u64;
 const PAINTS_CAP: u64 = (size_of::<GpuPaint>() * MAX_PAINTS) as u64;
 const CLIPS_CAP: u64 = (size_of::<GpuClip>() * MAX_CLIPS) as u64;
 const POINTS_CAP: u64 = (8 * MAX_POINTS) as u64;
+/// The pool pass's uniform block takes one slot.
+const POOLS_CAP: u64 = SLOT;
 /// Upload buffer size: every region at capacity, aligned (the worst-case offsets plus sizes).
-const UPLOAD_SIZE: u64 = GLOBALS_CAP + POST_CAP + INSTANCES_CAP + PAINTS_CAP + CLIPS_CAP + POINTS_CAP + 8 * SLOT;
+const UPLOAD_SIZE: u64 =
+    GLOBALS_CAP + POST_CAP + INSTANCES_CAP + PAINTS_CAP + CLIPS_CAP + POINTS_CAP + POOLS_CAP + 8 * SLOT;
 
 /// Host-visible staging buffers for the frame upload, reused frame after frame. `Queue::write_buffer`
 /// creates (and later frees) a staging buffer on every call and submits it in a command list of its
@@ -357,6 +364,9 @@ pub(crate) struct Renderer {
     bloom_up: wgpu::ComputePipeline,
     composite: wgpu::RenderPipeline,
     resolve: Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
+    /// The pool pass (`shaders/pool.wgsl`): its pipeline and its one bind group, on `upload`.
+    pool_pipeline: wgpu::RenderPipeline,
+    pool_group: wgpu::BindGroup,
     upload: wgpu::Buffer,
     staging: Vec<u8>,
     /// Reused staging buffers for `upload` (see [`STAGING_SLOTS`]).
@@ -379,6 +389,10 @@ pub(crate) struct Renderer {
     bloom_enabled: bool,
     /// Premultiplied black floor under the whole target (0 = none), see `Kit::set_underlay`.
     underlay: f32,
+    /// The frame's pools (`Kit::set_pools`): the first `pool_count` are set, and all of them
+    /// are visible.
+    pools: [Pool; MAX_POOLS],
+    pool_count: usize,
     globals: Vec<Globals>,
     post: Vec<PostParams>,
     started: Stamp,
@@ -610,6 +624,7 @@ impl Renderer {
                 | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let (pool_pipeline, pool_group) = make_pools(device, &upload);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("fh6-kit linear clamp"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -706,6 +721,8 @@ impl Renderer {
             bloom_up,
             composite,
             resolve: Vec::with_capacity(2),
+            pool_pipeline,
+            pool_group,
             upload,
             staging: Vec::with_capacity(UPLOAD_SIZE as usize),
             staging_ring: std::array::from_fn(|_| StagingSlot::new(device)),
@@ -725,6 +742,8 @@ impl Renderer {
             timing_enabled: false,
             bloom_enabled: true,
             underlay: 0.0,
+            pools: [NO_POOL; MAX_POOLS],
+            pool_count: 0,
             globals: Vec::with_capacity(MAX_SEGMENTS),
             post: Vec::with_capacity(MAX_POST),
             started: Stamp::now(),
@@ -736,6 +755,22 @@ impl Renderer {
     /// Sets the black underlay alpha (0..1) applied by the clear and the resolve.
     pub(crate) fn set_underlay(&mut self, alpha: f32) {
         self.underlay = if alpha.is_finite() { alpha.clamp(0.0, 1.0) } else { 0.0 };
+    }
+
+    /// Sets the frame's pools (see `Kit::set_pools`): the visible ones, up to `MAX_POOLS`.
+    pub(crate) fn set_pools(&mut self, pools: &[Pool]) {
+        self.pool_count = 0;
+        for pool in pools.iter().filter(|p| p.is_visible()).take(MAX_POOLS) {
+            if let Some(slot) = self.pools.get_mut(self.pool_count) {
+                *slot = *pool;
+                self.pool_count += 1;
+            }
+        }
+    }
+
+    /// The frame's pools.
+    fn frame_pools(&self) -> &[Pool] {
+        self.pools.get(..self.pool_count).unwrap_or(&[])
     }
 
     pub(crate) fn set_bloom(&mut self, on: bool) {
@@ -1230,13 +1265,20 @@ impl Renderer {
         let (tw, th) = (target_size.0.max(1), target_size.1.max(1));
         let timer_on = self.timing_enabled && self.timer.is_some();
 
-        // Work rectangle: what was drawn (+ bloom margin), snapped to 16 px, inside the target.
+        // Work rectangle: what was drawn (+ bloom margin) and the pools, snapped to 16 px, inside
+        // the target.
         let mut bounds = scene.bounds;
         if bloom_on {
             bounds = bounds.expand(bloom_margin_px);
         }
+        if scene.draws.is_empty() {
+            bounds = Rect::EMPTY;
+        }
+        for pool in self.frame_pools() {
+            bounds = bounds.union(&pool.bounds());
+        }
         let b = bounds.intersect(&Rect::from_xywh(0.0, 0.0, tw as f32, th as f32));
-        let work = if b.is_empty() || scene.draws.is_empty() || opacity <= 0.0 {
+        let work = if b.is_empty() || opacity <= 0.0 {
             None
         } else {
             let x0 = ((b.min.x / 16.0).floor() * 16.0).max(0.0) as u32;
@@ -1322,6 +1364,17 @@ impl Renderer {
             // The point list binding needs at least one element.
             self.staging.extend_from_slice(&[0u8; 8]);
         }
+        if self.pool_count > 0 {
+            let mut block = PoolBlock {
+                origin: [wx as f32, wy as f32],
+                count: self.pool_count as u32,
+                ..PoolBlock::zeroed()
+            };
+            for (slot, pool) in block.pools.iter_mut().zip(self.frame_pools()) {
+                *slot = pool.gpu();
+            }
+            offs.pools = push_region(&mut self.staging, bytemuck::bytes_of(&block));
+        }
         offs.post = align(self.staging.len() as u64);
         if !scene.meshes.is_empty() {
             self.meshes
@@ -1336,8 +1389,47 @@ impl Renderer {
         }
 
         // ----- record -----------------------------------------------------------------------
-        let mut scene_cleared = false;
         let mut first_pass = true;
+        // The pools are the scene's first layer. Their pass clears the scene and writes them
+        // without blending, so the first shape pass loads the scene instead of clearing it.
+        let mut scene_cleared = false;
+        if self.pool_count > 0 {
+            if let Some(t) = self.targets.as_ref() {
+                let ts = self
+                    .timer
+                    .as_ref()
+                    .filter(|_| timer_on)
+                    .map(|tm| wgpu::RenderPassTimestampWrites {
+                        query_set: &tm.set,
+                        beginning_of_pass_write_index: Some(0),
+                        end_of_pass_write_index: None,
+                    });
+                first_pass = false;
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("fh6-kit pools"),
+                    color_attachments: &[Some(color_attachment(&t.scene.full, true))],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: ts,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                stats.passes += 1;
+                pass.set_viewport(0.0, 0.0, ww as f32, wh as f32, 0.0, 1.0);
+                pass.set_pipeline(&self.pool_pipeline);
+                pass.set_bind_group(0, &self.pool_group, &[offs.pools as u32]);
+                for pool in self.frame_pools() {
+                    let Some([x, y, w, h]) = pool_scissor(pool.bounds(), (wx, wy), (ww, wh)) else {
+                        continue;
+                    };
+                    pass.set_scissor_rect(x, y, w, h);
+                    pass.draw(0..3, 0..1);
+                    stats.draw_calls += 1;
+                }
+                scene_cleared = true;
+            }
+        }
+        // The emissive target has no pools: the first shape pass clears it.
+        let mut emissive_cleared = false;
         for (si, seg) in scene.segments.iter().enumerate() {
             if let Some(sigma) = seg.backdrop_px {
                 let level = blur_level(sigma);
@@ -1417,7 +1509,7 @@ impl Renderer {
                     label: Some("fh6-kit shapes"),
                     color_attachments: &[
                         Some(color_attachment(color_view, into_layer || !scene_cleared)),
-                        Some(color_attachment(&t.emissive.full, !scene_cleared)),
+                        Some(color_attachment(&t.emissive.full, !emissive_cleared)),
                     ],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &t.depth.full,
@@ -1490,6 +1582,7 @@ impl Renderer {
                 }
             }
             scene_cleared = true;
+            emissive_cleared = true;
             // A blurred layer is blurred and composited only round what it drew (nothing when
             // it drew nothing), not over the whole work rectangle.
             let level = blur_level(seg.blur_px);
@@ -1723,6 +1816,65 @@ fn scissor_at(region: [u32; 4], scale: u32, size: (u32, u32)) -> [u32; 4] {
     let y1 = region[3].div_ceil(scale).min(size.1);
     [x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0)]
 }
+
+/// A pool's bounds (target pixels) as a scissor rectangle `[x, y, width, height]` in the work
+/// rectangle at `origin` of size `work`, rounded outward. `None` when it lies outside.
+fn pool_scissor(bounds: Rect, origin: (u32, u32), work: (u32, u32)) -> Option<[u32; 4]> {
+    let x0 = (bounds.min.x - origin.0 as f32).floor().max(0.0);
+    let y0 = (bounds.min.y - origin.1 as f32).floor().max(0.0);
+    let x1 = (bounds.max.x - origin.0 as f32).ceil().min(work.0 as f32);
+    let y1 = (bounds.max.y - origin.1 as f32).ceil().min(work.1 as f32);
+    (x1 > x0 && y1 > y0).then_some([x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32])
+}
+
+/// The pool pass: its pipeline (no blending, the scene format) and its bind group, the pool
+/// block in `upload` at a dynamic offset (`shaders/pool.wgsl`).
+fn make_pools(device: &wgpu::Device, upload: &wgpu::Buffer) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fh6-kit pools"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/pool.wgsl").into()),
+    });
+    let size = wgpu::BufferSize::new(size_of::<PoolBlock>() as u64);
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fh6-kit pool layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: true,
+                min_binding_size: size,
+            },
+            count: None,
+        }],
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fh6-kit pool pipeline layout"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+    let pipeline = make_post(device, &layout, &module, "fs_pools", SCENE_FORMAT, None);
+    let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("fh6-kit pool group"),
+        layout: &bgl,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                buffer: upload,
+                offset: 0,
+                size,
+            }),
+        }],
+    });
+    (pipeline, group)
+}
+
+/// A pool slot that holds nothing.
+const NO_POOL: Pool = Pool::Ellipse {
+    center: crate::math::Vec2::ZERO,
+    radii: crate::math::Vec2::ZERO,
+    alpha: 0.0,
+};
 
 /// The caller's target, cleared to the premultiplied black underlay (`alpha` 0 = transparent).
 fn output_attachment(view: &wgpu::TextureView, alpha: f32) -> wgpu::RenderPassColorAttachment<'_> {

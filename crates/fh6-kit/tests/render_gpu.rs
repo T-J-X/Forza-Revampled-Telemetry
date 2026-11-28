@@ -10,8 +10,8 @@
 use fh6_gpu::GpuContext;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    deg, vec2, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Painter, Rect, SegmentedBar, Shadow,
-    Shape, Stroke, TextStyle, TickRing, Tokens, Vec2,
+    deg, vec2, Affine, Cap, Color, Glass, Glow, Gradient, Kit, LayerOptions, Layout, Painter, Pool, Rect, SegmentedBar,
+    Shadow, Shape, Stroke, TextStyle, TickRing, Tokens, Vec2,
 };
 
 const W: u32 = 960;
@@ -253,6 +253,214 @@ fn a_blurred_layer_looks_the_same_when_far_draws_widen_the_work_rectangle() {
         "blur still spreads the layer"
     );
     assert!(at(&widened, vec2(-850.0, -450.0))[3] > 200, "the far dot is drawn");
+}
+
+/// Two pools that overlap a little, as `Kit::set_pools` takes them (target pixels).
+const POOLS: [Pool; 2] = [
+    Pool::Ellipse {
+        center: Vec2 { x: 330.0, y: 220.0 },
+        radii: Vec2 { x: 200.0, y: 125.0 },
+        alpha: 0.45,
+    },
+    Pool::RoundRect {
+        rect: Rect {
+            min: Vec2 { x: 580.0, y: 95.0 },
+            max: Vec2 { x: 830.0, y: 395.0 },
+        },
+        radius: 20.0,
+        sigma: 30.0,
+        alpha: 0.78,
+    },
+];
+
+/// The same two pools drawn with the painter, in the test layout's local units (half scale
+/// round the centre): a radial gradient on an ellipse and a shadow.
+fn paint_pools(p: &mut Painter<'_>) {
+    p.save();
+    let world = p.current_transform();
+    p.set_transform(
+        Affine::scale_xy(400.0, 250.0)
+            .then(&Affine::translate(vec2(-300.0, -100.0)))
+            .then(&world),
+    );
+    p.fill(
+        &Shape::circle(Vec2::ZERO, 1.0),
+        Gradient::radial(Vec2::ZERO, 1.0)
+            .stop(0.0, Color::BLACK.with_alpha(0.45))
+            .stop(0.55, Color::BLACK.with_alpha(0.45 * 0.75))
+            .stop(1.0, Color::BLACK.with_alpha(0.0)),
+    );
+    p.restore();
+    p.shadow(
+        &Shape::round_rect(Rect::from_xywh(200.0, -350.0, 500.0, 600.0), 40.0),
+        Shadow {
+            offset: Vec2::ZERO,
+            sigma: 60.0,
+            spread: 0.0,
+            color: Color::BLACK.with_alpha(0.78),
+        },
+    );
+}
+
+/// The largest difference between two renders in any channel of any pixel, and where it is.
+fn worst_difference(a: &RgbaImage, b: &RgbaImage) -> (u8, u32, u32) {
+    assert_eq!((a.width, a.height), (b.width, b.height));
+    let mut worst = (0, 0, 0);
+    for y in 0..a.height {
+        for x in 0..a.width {
+            let (pa, pb) = (a.pixel(x, y).unwrap_or([0; 4]), b.pixel(x, y).unwrap_or([0; 4]));
+            let d = pa.iter().zip(&pb).map(|(u, v)| u.abs_diff(*v)).max().unwrap_or(0);
+            if d > worst.0 {
+                worst = (d, x, y);
+            }
+        }
+    }
+    worst
+}
+
+#[test]
+fn pools_are_the_same_picture_as_painting_them_first() {
+    // Opaque, translucent, glowing, blurred and glass content, over the pools and beside them.
+    // Translucent light is encoded by the alpha under it and glass reads the alpha of what it
+    // bends, so each of these would show a pool that was not truly the scene's first layer.
+    let content = |p: &mut Painter<'_>| {
+        p.fill(
+            &Shape::rect(Rect::from_xywh(-700.0, -160.0, 1500.0, 70.0)),
+            Color::rgb_u32(0x38BDF8).with_alpha(0.35),
+        );
+        p.fill(&Shape::circle(vec2(420.0, 60.0), 70.0), Color::WHITE);
+        p.glow(
+            &Shape::circle(vec2(-420.0, 120.0), 30.0),
+            Color::rgb_u32(0xFF2D3A),
+            Glow::new(24.0, 1.0),
+        );
+        p.layer(LayerOptions::blurred(12.0), |p| {
+            p.fill(
+                &Shape::rect(Rect::from_xywh(120.0, 150.0, 160.0, 60.0)),
+                Color::WHITE.with_alpha(0.6),
+            );
+        });
+        p.layer(LayerOptions::glass(8.0), |p| {
+            p.fill(
+                &Shape::round_rect(Rect::from_xywh(-560.0, -260.0, 1200.0, 240.0), 48.0),
+                Glass::default(),
+            );
+        });
+        // Bloom whose faint halo crosses the ellipse's edge but stays clear of the rectangle's:
+        // a painted shadow stops three sigmas out, and faint light shows that edge (see
+        // `a_faint_halo_does_not_show_where_a_pool_ends`).
+        p.layer(LayerOptions::bloom(), |p| {
+            p.fill(&Shape::circle(vec2(-600.0, 300.0), 24.0), Color::WHITE);
+        });
+    };
+    let (ctx, mut kit) = setup();
+    let painted = render_named(&mut kit, &ctx, "pools_painted", |p| {
+        paint_pools(p);
+        content(p);
+    });
+    kit.set_pools(&POOLS);
+    let pooled = render_named(&mut kit, &ctx, "pools_set", content);
+    let (worst, x, y) = worst_difference(&painted, &pooled);
+    assert!(
+        worst <= 2,
+        "pools set on the kit differ from pools painted first by {worst} at ({x}, {y}): {:?} painted, {:?} set",
+        painted.pixel(x, y),
+        pooled.pixel(x, y)
+    );
+    // The pools are there: black at their core alpha, nothing where neither reaches.
+    let core = pooled.pixel(760, 300).unwrap_or([0; 4]);
+    assert_eq!(&core[..3], &[0, 0, 0], "a pool adds no colour: {core:?}");
+    let want = (POOLS[1].alpha_at(vec2(760.5, 300.5)) * 255.0).round() as u8;
+    assert!(want > 190, "deep inside the rectangle: {want}");
+    assert!(
+        core[3].abs_diff(want) <= 1,
+        "{want} deep inside the rectangle: {core:?}"
+    );
+    assert_eq!(pooled.pixel(40, 500), Some([0; 4]), "clear outside every pool");
+
+    // They stay until they are cleared, and an empty slice clears them.
+    let again = render_named(&mut kit, &ctx, "pools_again", content);
+    assert_eq!(
+        worst_difference(&pooled, &again).0,
+        0,
+        "pools stay set from frame to frame"
+    );
+    kit.set_pools(&[]);
+    let cleared = render_named(&mut kit, &ctx, "pools_cleared", content);
+    assert_eq!(
+        cleared.pixel(760, 300),
+        Some([0; 4]),
+        "a cleared pool leaves nothing behind"
+    );
+    // A kit that never had pools draws the same frame. Its work targets are smaller, so its
+    // blur and bloom pyramids fall on other texels: the same picture within the usual 2.
+    let bare = {
+        let (ctx, mut fresh) = setup();
+        render_named(&mut fresh, &ctx, "pools_never", content)
+    };
+    let (worst, x, y) = worst_difference(&cleared, &bare);
+    assert!(worst <= 2, "cleared pools left {worst} behind at ({x}, {y})");
+}
+
+#[test]
+fn a_faint_halo_does_not_show_where_a_pool_ends() {
+    // The resolve encodes light up to the alpha under it as coverage, so an alpha of 0.001
+    // holds back a bloom halo of 3/255 and the halo steps up where that alpha stops. A pool's
+    // bounds reach far enough out that nothing is left to hold the halo back.
+    let (ctx, mut kit) = setup();
+    kit.set_pools(&POOLS[1..]);
+    let edge = POOLS[1].bounds().min.x as u32;
+    let img = render_named(&mut kit, &ctx, "pools_halo", |p| {
+        p.layer(LayerOptions::bloom(), |p| {
+            p.fill(&Shape::circle(vec2(-240.0, -50.0), 24.0), Color::WHITE);
+        });
+    });
+    let mut lit = 0;
+    for y in 150..340 {
+        let (out, inside) = (
+            img.pixel(edge - 1, y).unwrap_or([0; 4]),
+            img.pixel(edge, y).unwrap_or([0; 4]),
+        );
+        lit += u32::from(out[0] >= 2);
+        let step = out.iter().zip(&inside).map(|(a, b)| a.abs_diff(*b)).max().unwrap_or(0);
+        assert!(
+            step <= 1,
+            "the pool's bounds show at y {y}: {out:?} outside, {inside:?} inside"
+        );
+    }
+    assert!(lit > 20, "the halo reaches the pool's edge ({lit} rows)");
+}
+
+#[test]
+fn pools_show_under_an_empty_frame_and_match_their_formula() {
+    let (ctx, mut kit) = setup();
+    kit.set_pools(&POOLS);
+    let img = render_named(&mut kit, &ctx, "pools_alone", |_| {});
+    let mut worst = 0u8;
+    for y in (0..H).step_by(3) {
+        for x in (0..W).step_by(3) {
+            let centre = vec2(x as f32 + 0.5, y as f32 + 0.5);
+            let inside = POOLS.iter().any(|pool| pool.bounds().contains(centre));
+            let want = if inside {
+                (Pool::combined_alpha(&POOLS, centre) * 255.0).round() as u8
+            } else {
+                0
+            };
+            let got = img.pixel(x, y).unwrap_or([0; 4]);
+            assert_eq!(&got[..3], &[0, 0, 0], "pools are black at ({x}, {y})");
+            worst = worst.max(got[3].abs_diff(want));
+        }
+    }
+    assert!(worst <= 1, "the pool pass is off its formula by {worst}");
+    // Both pools reach this pixel: together they are darker than either alone.
+    let both = vec2(520.5, 220.5);
+    let (a, b) = (POOLS[0].alpha_at(both), POOLS[1].alpha_at(both));
+    assert!(a > 0.02 && b > 0.01, "the test pools overlap here: {a} {b}");
+    let got = f32::from(img.pixel(520, 220).unwrap_or([0; 4])[3]) / 255.0;
+    assert!(
+        (got - (a + b * (1.0 - a))).abs() < 0.006,
+        "overlap: {got} against {a} and {b}"
+    );
 }
 
 #[test]
