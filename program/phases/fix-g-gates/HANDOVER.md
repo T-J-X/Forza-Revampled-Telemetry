@@ -57,8 +57,25 @@ Fix phase G of the Rust structural assessment of 2026-11-27, "Gates that mean so
 **Docs**: `AGENTS.md` (toolchain line, the `parity-dump` row, the commands, directive 6, Agent 4's gates), `SKILLS.md` (MSRV; the dash gates need no GPU lock), `README.md` (MSRV), `program/phases/07-cluster-factory/CLUSTER_PROMPT.md` (a dash owns its matrix row and `DASH_SCENARIOS` entries; the verify step and checklist lines 4, 13 and 15 run the gates), `docs/PROGRESS.md` (G2, G3 and G5 done, known defect 21, the lint backlog, seven decision-log rows, the state of the code after G).
 
 ## Verification output
-### On the PC (rustc 1.100), commit `1f50de9` (before the rebase onto fix D)
-In an isolated clone under the checkout's `target\fix-g\` with its own target folder. The session reported these green: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p fh6-clusters --test dash_gates`, `cargo run -p parity-dump -- tests/golden/packets` (20/20 OK) and `cargo build -p fh6-kit --target wasm32-unknown-unknown`. The GPU half (`cargo test --workspace` under `gpu.lock`) queued behind fix F's run, and the session then stopped on the plan's usage limit (it resumes on 1 December). The GPU tests and image goldens were therefore run in the cloud on a software GPU instead (next section).
+### On the PC (rustc 1.100.0), commit `fd13cf5` (the tree that landed), 2026-11-28
+In an isolated clone under the checkout's `target\fix-g\` with its own target folder. The GPU tests held `gpu.lock` from 05:50:57 to 05:56:30 UTC (an earlier wait, at `1f50de9`, ran from 23:48 to 00:34 UTC while fix F and the Retro Cyber thread held the lock, and then the session paused on the usage limit). Each command's last line as the PC session reported it:
+```
+$ cargo fmt --all -- --check
+exit 0
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.90s     (no lints)
+$ cargo test -p fh6-clusters --test dash_gates
+test result: ok. 10 passed; 0 failed; 0 ignored; finished in 42.59s
+$ cargo test --workspace --no-fail-fast
+exit 0; 966 passed, 0 failed, 1 ignored (the fluid.rs doctest), across 39 test binaries and 9 doc-test runs
+golden_images: 49 passed in 129.24 s; dash_gates 10 passed; golden_telemetry 2 passed; parity_dump 7 passed
+$ cargo run -p parity-dump -- tests/golden/packets
+20/20 OK, 0 orphaned goldens
+$ cargo build -p fh6-kit --target wasm32-unknown-unknown
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.46s
+```
+
+An earlier PC pass at `1f50de9` (before the rebase onto fix D) had the same fmt, clippy, dash gates, parity and wasm results.
 
 ### Cloud checks (Linux container, rustc 1.100.1 and 1.90.0), final tree `9e03335` on main `8212145`
 ```
@@ -94,7 +111,7 @@ branch 9e03335 with main's lavapipe images:
   -> 84 passed, 0 failed (golden_images 49/49, the kit's GPU tests 18/18, the component tests 17/17)
 branch 9e03335:  FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images     -> 260 images, 0 differ from main's byte for byte
 ```
-So every golden frame the branch renders is byte-identical to main's on the same renderer. The run on the PC's card (the GPU half above) follows when the PC session resumes; its result is added here by a later commit.
+So every golden frame the branch renders is byte-identical to main's on the same renderer. The PC's card then ran the same tests on `fd13cf5` (above): all pass against the committed goldens.
 
 ### The gates catch what they claim
 - **A dash's own NaN** (mutation check): a NaN rotation planted in the shared scaffold's `draw` failed G5 for all 42 scaffold dashes (2,016 failure lines); the file was restored and `git diff` was empty.

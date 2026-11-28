@@ -59,7 +59,7 @@ What fix phase F added (finding 6 of the 2026-11-27 Rust assessment; `program/ph
 ## State of the code (after Rust fix phase G, 2026-11-28)
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | ✅ in the cloud: 810 passed, 88 failed, 1 ignored, the 88 being the container's known reds (no DX12 adapter, Windows paths); the GPU tests and image goldens pass on a software GPU (lavapipe), every golden frame byte-identical to main's. The PC's GPU run is pending (its session paused on the usage limit) |
+| `cargo test --workspace` | ✅ on the PC at `fd13cf5`: 966 passed, 0 failed (1 ignored; `golden_images` 49/49). In the cloud the GPU tests and image goldens also pass on a software GPU, every golden frame byte-identical to main's |
 | `cargo test -p fh6-clusters --test dash_gates` | ✅ 10 passed, no GPU, about 50 s |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean, with the workspace lint table |
 | `cargo fmt --all -- --check` | ✅ clean |
