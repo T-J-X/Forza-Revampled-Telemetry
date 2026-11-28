@@ -9,6 +9,7 @@ A dash draws its Penpot board before any code (CLUSTER_PROMPT.md), so only what 
 - **ComfyUI textures:** seamless 4096² masters of the organic surfaces a brief names. SDXL never makes metals, twill, guilloché or anything exact.
 - **Blender swatches:** 4096² tiles (seamless) or discs (radial patterns) of the procedural materials a brief names, with normal and rough/metal/height passes.
 - **Blender sprites:** hardware whose size the brief states (rings, caps, LED and lamp lenses, crystals), at the rest key and the two G-swing keys, 2 px per 4K px for the master and box-filtered to 1:1 in git.
+- **Computed maps (CPU, exact):** for the liquid-metal dashes (`OilSlickChrome`, `FaradayMandala`, added 08:20 when TJX split KineticLiquidMetal's three directions into separate dashes): the liquid-metal studio as an octahedral environment (4096² master) and a 256×1 env band, matcaps of chrome and liquid mercury, Fresnel tables, and thin-film tables of an n = 1.47 oil film on each metal by thickness and angle. They come from measured optical constants (Cr: Johnson & Christy 1974; liquid Hg: Inagaki et al. 1981; refractiveindex.info, CC0), the exact complex Fresnel and Airy sums of `docs/specs/optics.md` §3 and §9, and the analytic studio, so Cycles or SDXL would only add noise (`tools/asset-forge/src/prebuild/liquid.rs`, tested against the optics.md values). No GPU is needed.
 
 Not pre-built: housings, yokes and binnacles (their shape is the layout), Psychedelic and Abstract figures (the dash's maths draws them; noise never draws the figure), clear optical glass (computed by the kit, `docs/specs/optics.md`), and the AMG MBUX parts, which wait for each dash's step-1 frame grabs (no housing slab; the display floats on black).
 
@@ -16,7 +17,7 @@ Not pre-built: housings, yokes and binnacles (their shape is the layout), Psyche
 
 - Run: `gpu-lock.exe run --lane cloud --thread "<thread>" --job prebuild -- cargo run --release -p asset-forge -- --lane cloud prebuild <snake>` (code in `tools/asset-forge/src/prebuild/`). `prebuild --plan` prints the list below from the code; `--list` gives counts.
 - Masters: `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake>\prebuild\` (`textures`, `swatches`, `sprites`, the contact sheet and the manifest).
-- Repo: `assets/clusters/<snake>/prebuild/manifest.json` and `README.md` list every file with its generator, seed, prompt, licence and use; `sprites/` holds the 1:1 runtime sprites. Textures and swatches have no runtime copy: the dash's own recipe downsizes the master to the size its layout needs.
+- Repo: `assets/clusters/<snake>/prebuild/manifest.json` and `README.md` list every file with its generator, seed, prompt, licence and use; `sprites/` holds the 1:1 runtime sprites and `computed/` the runtime copies of the computed maps (env 2048² and matcaps 1024² in sRGB 8-bit, look-up tables 16-bit linear). Textures and swatches have no runtime copy: the dash's own recipe downsizes the master to the size its layout needs.
 - A ring width marked "proposed" is a guess where the brief gives only the diameter: step 1 confirms it, and the thread changes the number in `kits.rs` and re-runs if it differs.
 
 ## Dashes with nothing to pre-build
@@ -189,4 +190,27 @@ VisionSpatialGlass, DriftGlass, VernierLoupe, GlyphDotMatrix, WindshieldHud, F35
 
 - Texture `etched_glass_grain` (ComfyUI, seed 720001): labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths
 - Sprite `disc_rim_ring_400` (Blender, 416 px): the 400 px thin machined rim (8 px width proposed); one render, mirrored for both discs
+
+### #73 `OilSlickChrome` (`oil_slick_chrome`)
+
+- Computed `liquid_metal_studio_env` (CPU, exact): what the metal mirrors: the octahedral environment for the kit's reflection lookup (gain 16); turn it about the view axis with the G-light
+- Computed `liquid_metal_env_band` (CPU, exact): the 256x1 HDR env band for 2D SDF metal shading (the brief's env-band LUT): index by the mirror direction's angle in the key plane
+- Computed `chrome_matcap` (CPU, exact): the chrome ribbon and any bare chrome: one lookup by view-space normal, Fresnel and studio included
+- Computed `mercury_matcap` (CPU, exact): the liquid-metal blob where the film has drained to nothing
+- Computed `chrome_fresnel` (CPU, exact): bare chrome reflectance over cos theta, for shading with the environment map instead of the matcap
+- Computed `mercury_fresnel` (CPU, exact): bare liquid-metal reflectance over cos theta
+- Computed `oil_on_mercury_film` (CPU, exact): the skin's colour: reflectance of an n = 1.47 oil film on liquid metal by thickness (Jeffreys drainage, 900 to 100 nm) and cos theta; multiply the mirrored studio by it
+- Computed `oil_on_chrome_film` (CPU, exact): the same film on solid chrome, for the ribbon where oil runs onto it
+- Left to the thread: the metaball skin and its thickness field: computed live from the brief's equations (Jeffreys h = sqrt(mu s / (rho g t)), skin at sum q^2 / |x - c|^2 = 1), never a texture
+- Left to the thread: a polished chrome swatch: a smooth mirror has no surface texture to bake, so chrome_matcap and chrome_fresnel replace it
+
+### #74 `FaradayMandala` (`faraday_mandala`)
+
+- Computed `liquid_metal_studio_env` (CPU, exact): what the metal mirrors: the octahedral environment for the kit's reflection lookup (gain 16); turn it about the view axis with the G-light
+- Computed `liquid_metal_env_band` (CPU, exact): the 256x1 HDR env band for 2D SDF metal shading (the brief's env-band LUT): index by the mirror direction's angle in the key plane
+- Computed `mercury_matcap` (CPU, exact): the liquid-metal disc: shade the wave field's normal with one lookup
+- Computed `mercury_fresnel` (CPU, exact): liquid-metal reflectance over cos theta, for shading with the environment map
+- Computed `chrome_matcap` (CPU, exact): the rim ring and the gear's still centre node if they are solid chrome
+- Left to the thread: the Faraday wave field and its normals: the brief's exact zeta = A sqrt(eps) sum cos(k e_i x + phi_i) is cheaper live than any flipbook, and its amplitude follows the revs
+- Left to the thread: the rpm rim ring's hardware: its diameter comes from the layout
 

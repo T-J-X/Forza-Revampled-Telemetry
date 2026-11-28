@@ -32,6 +32,7 @@
 //!
 //! The shared ledger (`assets/ASSETS.md` and friends) is never touched.
 pub mod kits;
+pub mod liquid;
 
 use crate::error::{io_err, tool_err, ForgeError, Result};
 use crate::hero::frame::Frame;
@@ -97,6 +98,32 @@ pub struct Sprite {
     pub use_: &'static str,
 }
 
+/// What a computed asset is (exact maths on the CPU, [`liquid`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Calc {
+    /// The liquid-metal studio as an octahedral environment map.
+    StudioEnv,
+    /// The studio's 256 x 1 env band through the key.
+    EnvBand,
+    /// A smooth metal sphere in the studio.
+    Matcap(liquid::Metal),
+    /// The metal's Fresnel reflectance over cos θ.
+    Fresnel(liquid::Metal),
+    /// A lossless film of this index on the metal: thickness x cos θ.
+    Film(f32, liquid::Metal),
+}
+
+/// A computed asset.
+#[derive(Debug, Clone)]
+pub struct Computed {
+    /// File stem.
+    pub name: &'static str,
+    /// What to compute.
+    pub calc: Calc,
+    /// What the dash uses it for.
+    pub use_: &'static str,
+}
+
 /// Everything pre-built for one dash.
 #[derive(Debug, Clone, Default)]
 pub struct Kit {
@@ -110,6 +137,8 @@ pub struct Kit {
     pub swatches: Vec<Swatch>,
     /// Blender sprites.
     pub sprites: Vec<Sprite>,
+    /// Computed maps (CPU, exact).
+    pub computed: Vec<Computed>,
     /// Layout-dependent assets left to the dash thread.
     pub deferred: Vec<&'static str>,
     /// A line for the README.
@@ -147,11 +176,12 @@ pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
         for snake in kits::ORDER {
             if let Some(k) = kits::kit(snake) {
                 println!(
-                    "#{:<3} {snake:<28} {} textures, {} swatches, {} sprites",
+                    "#{:<3} {snake:<28} {} textures, {} swatches, {} sprites, {} computed",
                     k.build,
                     k.textures.len(),
                     k.swatches.len(),
-                    k.sprites.len()
+                    k.sprites.len(),
+                    k.computed.len()
                 );
             }
         }
@@ -409,6 +439,13 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         });
     }
 
+    for c in &kit.computed {
+        println!("  computed {}", c.name);
+        let (row, th) = computed(c, preview, &scratch, masters.as_deref(), &repo, &repo_rel)?;
+        thumbs.push(th);
+        rows.push(row);
+    }
+
     // Contact sheet: every item at 512 px on black, four across.
     if !thumbs.is_empty() {
         let sheet = img::atlas(&thumbs, 4.min(thumbs.len()));
@@ -433,6 +470,80 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
     Ok(())
 }
 
+/// Makes one computed asset: the master (16-bit linear) to the scratch and the Drive masters, the
+/// runtime copy into the repo. Returns its manifest row and a thumbnail.
+fn computed(
+    c: &Computed,
+    preview: bool,
+    scratch: &Path,
+    masters: Option<&Path>,
+    repo: &Path,
+    repo_rel: &str,
+) -> Result<(Row, Img)> {
+    use liquid::Metal;
+    let div = if preview { 4 } else { 1 };
+    let src = |m: Metal| m.source();
+    // (master, runtime, runtime is sRGB 8-bit, kind, generator)
+    let (master, runtime, srgb8, kind, generator): (Img, Img, bool, &str, String) = match c.calc {
+        Calc::StudioEnv => {
+            let m = liquid::studio_env(MASTER / div);
+            let r = liquid::encode_srgb(&m.resize(2048 / div, 2048 / div, false));
+            (m, r, true, "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
+             "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer".into())
+        }
+        Calc::EnvBand => {
+            let m = liquid::env_band(256);
+            (m.clone(), m, false, "env band LUT 256x1, 16-bit linear (white = radiance 16): x = angle -180..180 deg round the vertical great circle through the key (az -135), 0 at the key-side horizon, 0.75 at the viewer",
+             "computed: prebuild::liquid::env_band, 8x supersampled slice of the studio".into())
+        }
+        Calc::Matcap(metal) => {
+            let m = liquid::matcap(metal, MASTER / div);
+            let r = liquid::encode_srgb(&m.resize(1024 / div, 1024 / div, false));
+            (m, r, true, "matcap (view-space normal u, v = -1..1, y down), straight alpha = disc coverage; runtime sRGB 8-bit RGBA, master 16-bit linear; white = radiance 16",
+             format!("computed: prebuild::liquid::matcap, perfectly smooth sphere, mirror direction into the studio x exact spectral Fresnel ({}), 4x4 supersampled", src(metal)))
+        }
+        Calc::Fresnel(metal) => {
+            let m = liquid::fresnel_lut(metal);
+            (m.clone(), m, false, "Fresnel LUT 256x1, 16-bit linear sRGB reflectance, x = cos theta 0..1",
+             format!("computed: prebuild::liquid::conductor_reflectance, exact unpolarised, integrated 380..780 nm with the CIE 1931 fit (Wyman 2013), flat spectrum = white; {}", src(metal)))
+        }
+        Calc::Film(n, metal) => {
+            let m = liquid::film_lut(n, metal, 512 / div, 128 / div);
+            (m.clone(), m, false, "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
+             format!("computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = {n}, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); {}", src(metal)))
+        }
+    };
+    let dir = scratch.join("computed");
+    std::fs::create_dir_all(&dir).map_err(|e| io_err(&dir, e))?;
+    let mfile = dir.join(format!("{}_master.png", c.name));
+    img::save_png(&master, &mfile, true, false)?;
+    let msink = sink(masters, "computed", &mfile)?;
+    let rel = format!("{repo_rel}/computed/{}.png", c.name);
+    let abs = repo.join("computed").join(format!("{}.png", c.name));
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
+    }
+    if srgb8 {
+        img::save_png(&runtime, &abs, false, true)?;
+    } else {
+        img::save_png(&runtime, &abs, true, false)?;
+    }
+    // Thumbnail: sRGB-encoded so the sheet shows what the eye sees; LUTs stretched to square.
+    let th = liquid::encode_srgb(&master.to_channels(4).resize(512, 512, false));
+    let row = Row {
+        name: c.name.into(),
+        kind,
+        master: msink,
+        runtime: vec![rel],
+        dims: format!("{}x{} runtime ({}x{} master)", runtime.w, runtime.h, master.w, master.h),
+        fp: file_fp(&abs)?,
+        generator,
+        licence: "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
+        use_: c.use_.into(),
+    };
+    Ok((row, thumb(&th)))
+}
+
 /// The kits as Markdown, one section per dash in build order (`prebuild --plan`).
 #[must_use]
 pub fn plan() -> String {
@@ -453,6 +564,9 @@ pub fn plan() -> String {
         }
         for s in &k.sprites {
             let _ = writeln!(md, "- Sprite `{}` (Blender, {} px): {}", s.name, s.size, s.use_);
+        }
+        for c in &k.computed {
+            let _ = writeln!(md, "- Computed `{}` (CPU, exact): {}", c.name, c.use_);
         }
         for d in &k.deferred {
             let _ = writeln!(md, "- Left to the thread: {d}");
@@ -554,7 +668,7 @@ fn manifest(kit: &Kit, snake: &str, rows: &[Row], preview: bool) -> Value {
 
 fn readme(kit: &Kit, snake: &str, rows: &[Row]) -> String {
     let mut md = format!(
-        "# {} pre-built assets\n\nMade before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild {snake}` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `{}/{snake}/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.\n\n{}\n\n| Name | Kind | Size | Master (Drive) | Use | Generator |\n|---|---|---|---|---|---|\n",
+        "# {} pre-built assets\n\nMade before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild {snake}` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `{}/{snake}/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`, and computed maps (environment, matcaps, look-up tables) at their runtime size in `computed/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.\n\n{}\n\n| Name | Kind | Size | Master (Drive) | Use | Generator |\n|---|---|---|---|---|---|\n",
         kit.key,
         crate::lane::MASTERS_FOLDER,
         kit.notes
@@ -635,6 +749,7 @@ mod tests {
             let mut names: Vec<&str> = k.textures.iter().map(|t| t.recipe.name).collect();
             names.extend(k.swatches.iter().map(|s| s.name));
             names.extend(k.sprites.iter().map(|s| s.name));
+            names.extend(k.computed.iter().map(|c| c.name));
             let n = names.len();
             names.sort_unstable();
             names.dedup();

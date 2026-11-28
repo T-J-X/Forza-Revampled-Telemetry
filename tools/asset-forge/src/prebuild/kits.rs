@@ -15,7 +15,8 @@
 //! IsochromaticLoadPath, Lightpainter, AeroPlasmaBlade, RackFocus, AeroSmokeTunnel, LumenEtch,
 //! TreadSeismograph, AbyssalShearBloom, HopfFibration, FibreOpticCorona, CarplayIsland,
 //! VernierLoupe (procedural only, or waiting for step-1 frame grabs on the AMG dashes).
-use super::{Kit, Sprite, Swatch, Tex};
+use super::liquid::Metal;
+use super::{Calc, Computed, Kit, Sprite, Swatch, Tex};
 use crate::hero::geom::BezelSpec;
 use crate::hero::mat::{self, metal, Mat};
 use crate::hero::part::Part;
@@ -52,7 +53,30 @@ pub const ORDER: &[&str] = &[
     "bionic_spaceframe",
     "star_sail_origami",
     "hyperbolic_tiles",
+    "oil_slick_chrome",
+    "faraday_mandala",
 ];
+
+/// A computed map.
+const fn calc(name: &'static str, calc: Calc, use_: &'static str) -> Computed {
+    Computed { name, calc, use_ }
+}
+
+/// The liquid-metal studio, shared by the liquid-metal dashes.
+fn studio_pair() -> [Computed; 2] {
+    [
+        calc(
+            "liquid_metal_studio_env",
+            Calc::StudioEnv,
+            "what the metal mirrors: the octahedral environment for the kit's reflection lookup (gain 16); turn it about the view axis with the G-light",
+        ),
+        calc(
+            "liquid_metal_env_band",
+            Calc::EnvBand,
+            "the 256x1 HDR env band for 2D SDF metal shading (the brief's env-band LUT): index by the mirror direction's angle in the key plane",
+        ),
+    ]
+}
 
 const fn tex(name: &'static str, prompt: &'static str, negative: &'static str, seed: u64, use_: &'static str) -> Tex {
     Tex {
@@ -192,6 +216,47 @@ const CRACKLE: Tex = tex(
 #[allow(clippy::too_many_lines)]
 pub fn kit(snake: &str) -> Option<Kit> {
     let k = match snake {
+        "oil_slick_chrome" => Kit {
+            key: "OilSlickChrome",
+            build: 73,
+            computed: [
+                studio_pair().to_vec(),
+                vec![
+                    calc("chrome_matcap", Calc::Matcap(Metal::Chrome), "the chrome ribbon and any bare chrome: one lookup by view-space normal, Fresnel and studio included"),
+                    calc("mercury_matcap", Calc::Matcap(Metal::Mercury), "the liquid-metal blob where the film has drained to nothing"),
+                    calc("chrome_fresnel", Calc::Fresnel(Metal::Chrome), "bare chrome reflectance over cos theta, for shading with the environment map instead of the matcap"),
+                    calc("mercury_fresnel", Calc::Fresnel(Metal::Mercury), "bare liquid-metal reflectance over cos theta"),
+                    calc("oil_on_mercury_film", Calc::Film(1.47, Metal::Mercury), "the skin's colour: reflectance of an n = 1.47 oil film on liquid metal by thickness (Jeffreys drainage, 900 to 100 nm) and cos theta; multiply the mirrored studio by it"),
+                    calc("oil_on_chrome_film", Calc::Film(1.47, Metal::Chrome), "the same film on solid chrome, for the ribbon where oil runs onto it"),
+                ],
+            ]
+            .concat(),
+            deferred: vec![
+                "the metaball skin and its thickness field: computed live from the brief's equations (Jeffreys h = sqrt(mu s / (rho g t)), skin at sum q^2 / |x - c|^2 = 1), never a texture",
+                "a polished chrome swatch: a smooth mirror has no surface texture to bake, so chrome_matcap and chrome_fresnel replace it",
+            ],
+            notes: "Everything here is computed on the CPU from measured optical constants (Cr: Johnson & Christy 1974; liquid Hg: Inagaki et al. 1981, the measured stand-in for the brief's liquid metal) and the analytic studio, so it is exact, has no seams or noise, and needs no GPU.",
+            ..Kit::default()
+        },
+        "faraday_mandala" => Kit {
+            key: "FaradayMandala",
+            build: 74,
+            computed: [
+                studio_pair().to_vec(),
+                vec![
+                    calc("mercury_matcap", Calc::Matcap(Metal::Mercury), "the liquid-metal disc: shade the wave field's normal with one lookup"),
+                    calc("mercury_fresnel", Calc::Fresnel(Metal::Mercury), "liquid-metal reflectance over cos theta, for shading with the environment map"),
+                    calc("chrome_matcap", Calc::Matcap(Metal::Chrome), "the rim ring and the gear's still centre node if they are solid chrome"),
+                ],
+            ]
+            .concat(),
+            deferred: vec![
+                "the Faraday wave field and its normals: the brief's exact zeta = A sqrt(eps) sum cos(k e_i x + phi_i) is cheaper live than any flipbook, and its amplitude follows the revs",
+                "the rpm rim ring's hardware: its diameter comes from the layout",
+            ],
+            notes: "The brief's metal is galinstan (rho 6440, sigma 0.534); no measured galinstan constants are in the refractiveindex.info database, so liquid mercury (Inagaki et al. 1981), the other room-temperature liquid metal and close in reflectance, stands in. All maps are computed on the CPU, exact and seamless.",
+            ..Kit::default()
+        },
         "valkyrie_lmp1" => Kit {
             key: "ValkyrieLmp1",
             build: 9,
