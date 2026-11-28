@@ -114,7 +114,7 @@ pub(super) const HOOD: Geom = Geom {
     tick_y: [-60.0, -34.0],
     ticks: 95,
     tick_w: 5.0,
-    tick_r: 1.5,
+    tick_r: 2.5,
     bar_c: vec2(0.0, -47.0),
     bar_size: vec2(788.0, 46.0),
     bar_r: 13.0,
@@ -550,6 +550,8 @@ mod tests {
             assert_eq!(recipe(name), want, "{name}");
         }
         assert_eq!(recipe("SUG_OUTER"), flat(&[g.sug_outer]));
+        assert_eq!(recipe("TICK_R"), vec![g.tick_r]);
+        assert_eq!(recipe("SUG_R"), vec![g.sug_r]);
         assert_eq!(recipe("SUG_FACE"), flat(&[g.sug_face]));
         assert!(g.bar_c.x.abs() < 1e-6, "the recipe centres the light bar on x 0");
         // The tile's enamel is the warning role, so the sprite and the fallback agree.

@@ -21,7 +21,7 @@
 //! | Pedals | brake (left) and throttle (right) fills in black-glass slots | x ∓442, 16 × 150 | 4 |
 //! | Tyre diagram | carbon car chip, four tyre lenses lit by tyre load | chip (−795, 18) 70 × 160 | 4 |
 //! | Boost gauge | polished scale, a fill from 0 (−1..2 bar) and its label | (−600, 6), r 60 | 4 |
-//! | Trip tile | distance since the dash started, GT7's odometer box | (−600, 108), 200 × 36, cap 22 | 4 |
+//! | Trip tile | distance since the view was entered, GT7's odometer box | (−600, 108), 200 × 36, cap 22 | 4 |
 //! | Telltales | slide (left) and limiter (right) lamps | (∓497, −36), r 24 | 4 |
 //! | Logo zone | the car's logo or the custom name | x 540..860, y −40..60 | 5 |
 //!
@@ -81,6 +81,15 @@ const TICK_RELEASE_TAU: f32 = 0.025;
 /// 50 rpm from one frame to the next), so the head LED holds still there; a pull is drawn at
 /// most 30 rpm behind, a third of one LED at the review car's span.
 const REV_BAND: f32 = 60.0;
+/// Off-hysteresis of the shift point and of the alert (tokens' shift hysteresis, rpm, as
+/// PorscheAnalog): an rpm hovering on a threshold neither flashes the tile nor restarts the
+/// strobe's clock.
+const SHIFT_HYSTERESIS_RPM: f32 = 120.0;
+/// Below this limiter (rpm) the telemetry has not named the car's limiter (a zero packet gives
+/// 1 rpm): the bar stays dark and no alert runs.
+const MIN_LIMITER_RPM: f32 = 1000.0;
+/// The kit's tabular cell (em): a user face's tracking is its widest digit less this.
+const TABULAR_CELL_EM: f32 = 0.6;
 /// Keeps a strobe phase edge that falls on a frame from rounding either way (the pilot's).
 const STROBE_LEAD: f32 = 1e-4;
 /// Share of the shift colour's light the LEDs keep in the strobe's dark phase.
@@ -102,9 +111,9 @@ const CORE_LIGHT: f32 = 0.9;
 const MARK_W: f32 = 2.0;
 const MARK_RPM: [f32; 2] = [1000.0, 20_000.0];
 /// The pedal fills' share of the ink (under the speed, so a full bar never outlasts it).
-const PEDAL_LIGHT: f32 = 0.8;
-/// The boost fill's share of the ink.
-const BOOST_LIGHT: f32 = 0.9;
+const PEDAL_LIGHT: f32 = 0.7;
+/// The boost fill's share of the ink (under the lit run's, rank 4 below rank 3).
+const BOOST_LIGHT: f32 = 0.7;
 /// The trip digits' share of the ink (GT7's odometer is light grey, under the speed).
 const TRIP_LIGHT: f32 = 0.72;
 /// Tyre load per g of felt force on each axis, round the rest load of a half.
@@ -143,6 +152,8 @@ const POP: f32 = 0.08;
 /// while it fades, whole, with its digit.
 const HAND_SLIDE: f32 = 90.0;
 const HAND_SHRINK: f32 = 0.45;
+/// The tile's digit keeps this far from the face's sides.
+const TILE_MARGIN: f32 = 10.0;
 /// The tile's face brightens on the frame the driver takes the gear (a click of light, kept
 /// below the gear's own light so the new gear leads).
 const FLASH_ALPHA: f32 = 0.4;
@@ -159,9 +170,12 @@ const KEYLINE_SOFT: [(usize, f32, f32); 2] = [(12, 1.7, 0.25), (8, 1.0, KEYLINE_
 /// The speed's synthetic weight: Michroma has one weight, and its thin strokes faded before
 /// the side groups in the squint view.
 const SPEED_WEIGHT: f32 = 0.3;
-/// Labels' tracking (em) and the logo zone's wordmark cap.
+/// Labels' tracking (em) and the logo zone's wordmark cap and tracking. A wordmark that would
+/// shrink under the label floor to fit is set in the label face at that floor instead.
 const LABEL_TRACKING: f32 = 0.08;
 const LOGO_CAP: f32 = 28.0;
+const LOGO_TRACKING: f32 = 0.3;
+const LOGO_MIN_CAP: f32 = 22.0;
 /// Metres per mile and per kilometre.
 const M_PER_MILE: f64 = 1609.344;
 const M_PER_KM: f64 = 1000.0;
@@ -184,10 +198,9 @@ struct Faces {
     label: FontId,
     /// The logo zone's wordmark.
     wide: FontId,
-    /// Extra tabular tracking (em) for the speed face.
-    tracking: f32,
-    /// The display role at creation, to notice a user font.
-    role_display: FontId,
+    /// Extra tabular tracking (em) for the speed face; `None` for a user face, whose tracking
+    /// is measured from its digits when it is drawn.
+    tracking: Option<f32>,
 }
 
 /// The rev bar's state: the LED run, GT7's alert and the strobe's clock.
@@ -216,7 +229,12 @@ impl RevBar {
         } else {
             backlash(self.rpm, sig.rpm, REV_BAND)
         };
-        self.target = fraction(self.rpm, sig.max_rpm) * ticks as f32;
+        let known = finite(sig.max_rpm) >= MIN_LIMITER_RPM;
+        self.target = if known {
+            fraction(self.rpm, sig.max_rpm) * ticks as f32
+        } else {
+            0.0
+        };
         if fresh || self.target >= self.lit {
             self.lit = self.target;
         } else {
@@ -224,8 +242,15 @@ impl RevBar {
             self.lit += (self.target - self.lit) * k;
         }
         let shift = finite(sig.shift_fraction);
-        self.over = shift >= 1.0;
-        self.alert = shift >= palette.stages[2];
+        // Same-frame attack; a crossing back releases only 120 rpm below the threshold.
+        let h = if known && !fresh {
+            SHIFT_HYSTERESIS_RPM / finite(sig.shift_rpm).max(MIN_LIMITER_RPM)
+        } else {
+            0.0
+        };
+        self.over = known && shift >= if self.over { 1.0 - h } else { 1.0 };
+        let stage = palette.stages[2];
+        self.alert = known && (self.over || shift >= if self.alert { stage - h } else { stage });
         self.since = match (self.over, self.since) {
             (false, _) => None,
             (true, None) => Some(0.0),
@@ -371,6 +396,11 @@ impl Tile {
 #[derive(Debug, Clone)]
 pub struct Gt7HoodPro {
     faces: Faces,
+    /// The faces resolved in `new()`, brought back when the user clears their display font.
+    own: Faces,
+    /// The display role at creation, and the display font last seen, to notice a user font.
+    role_display: FontId,
+    seen_display: FontId,
     sprites: Sprites,
     sig: Signals,
     calm: bool,
@@ -388,7 +418,8 @@ pub struct Gt7HoodPro {
     /// The boost fill (bar) on the tokens' needle spring, and its target.
     boost: Spring,
     boost_target: f32,
-    /// Metres driven since the dash started (while racing).
+    /// Metres driven since this view was last entered (while racing): the app builds the
+    /// cluster again on a camera or theme change, so the trip starts again then.
     trip_m: f64,
     /// The telltales.
     slide: bool,
@@ -406,8 +437,8 @@ impl Gt7HoodPro {
         let text = setup.fonts.role(FontRole::Text);
         let wide = setup.fonts.role(FontRole::Wide);
         let (speed, tracking) = match setup.fonts.find("Michroma", 400, false) {
-            Some(face) => (face, MICHROMA_TRACKING),
-            None => (wide, 0.0),
+            Some(face) => (face, Some(MICHROMA_TRACKING)),
+            None => (wide, None),
         };
         let faces = Faces {
             speed,
@@ -415,10 +446,12 @@ impl Gt7HoodPro {
             label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
             wide,
             tracking,
-            role_display: display,
         };
         Self {
             faces,
+            own: faces,
+            role_display: display,
+            seen_display: display,
             sprites,
             sig: Signals::default(),
             calm: false,
@@ -451,12 +484,21 @@ impl Cluster for Gt7HoodPro {
         let sig = *input.signals;
         self.sig = sig;
         self.calm = input.reduced_flash;
-        // A user display font (FontChoice.display differs from the role) replaces the numerals.
-        if input.fonts.display != self.faces.role_display {
-            self.faces.speed = input.fonts.display;
-            self.faces.gear = input.fonts.display;
-            self.faces.tracking = 0.0;
-            self.faces.role_display = input.fonts.display;
+        // A user display font (FontChoice.display differs from the role) replaces the numerals;
+        // back on the role, the dash's own faces return.
+        let display = input.fonts.display;
+        if display != self.seen_display {
+            self.seen_display = display;
+            self.faces = if display == self.role_display {
+                self.own
+            } else {
+                Faces {
+                    speed: display,
+                    gear: display,
+                    tracking: None,
+                    ..self.own
+                }
+            };
         }
         if self.logo != *input.logo {
             self.logo.clone_from(input.logo);
@@ -471,6 +513,10 @@ impl Cluster for Gt7HoodPro {
         self.gear.update(sig.gear, 0.0, dt);
         let changed = !fresh && self.gear.since_change() == 0.0;
         self.tile.update(sig.gear, changed, self.rev.over, dt);
+        if fresh {
+            // A tile found on the first frame is shown at rest, with no pop.
+            self.tile.pop.reset(0.0);
+        }
         self.speed.update(sig.speed);
 
         self.steer_target = (f32::from(input.telemetry.steer) / STEER_FULL).clamp(-1.0, 1.0);
@@ -490,12 +536,19 @@ impl Cluster for Gt7HoodPro {
 
         let slip = finite(sig.slip_deg).abs();
         let moving = finite(sig.speed_ms);
-        self.slide = if self.slide {
-            slip > SLIDE_OFF_DEG && moving > SLIDE_MIN_MS * 0.75
+        // Reversing in a straight line travels at about 180° of slip: not a slide.
+        let forward = sig.gear != Gear::Reverse;
+        self.slide = forward
+            && if self.slide {
+                slip > SLIDE_OFF_DEG && moving > SLIDE_MIN_MS * 0.75
+            } else {
+                slip >= SLIDE_ON_DEG && moving >= SLIDE_MIN_MS
+            };
+        let at = if finite(sig.max_rpm) >= MIN_LIMITER_RPM {
+            fraction(self.rev.rpm, sig.max_rpm)
         } else {
-            slip >= SLIDE_ON_DEG && moving >= SLIDE_MIN_MS
+            0.0
         };
-        let at = fraction(self.rev.rpm, sig.max_rpm);
         self.limiter = if self.limiter { at > LIM_OFF } else { at >= LIM_ON };
 
         self.light.update(sig.g_lat, dt);
@@ -537,6 +590,23 @@ impl Cluster for Gt7HoodPro {
 }
 
 impl Gt7HoodPro {
+    /// The tabular tracking (em) of the speed face at `cap`: the dash's own for Michroma, or
+    /// for a user face the widest digit's advance less the kit's cell, so its digits never
+    /// overlap.
+    fn tracking(&self, p: &Painter<'_>, cap: f32) -> f32 {
+        if let Some(t) = self.faces.tracking {
+            return t;
+        }
+        let style = TextStyle::new(self.faces.speed, cap);
+        let em = cap / p.fonts().cap_ratio(self.faces.speed).max(0.1);
+        let widest = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            .iter()
+            .map(|d| p.measure(d, &style).width)
+            .filter(|w| w.is_finite())
+            .fold(0.0, f32::max);
+        (widest / em.max(1e-3) - TABULAR_CELL_EM).max(0.0)
+    }
+
     /// The lit LEDs over the plate's lenses (the unlit lenses are the plate's).
     fn draw_rev(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let n = self.rev.count(g.ticks);
@@ -587,8 +657,7 @@ impl Gt7HoodPro {
 
     /// The steering dot over the rev bar's centre, with a black keyline.
     fn draw_steer(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let x = finite(self.steer.value()).clamp(-1.0, 1.0) * g.dot_travel;
-        let c = vec2(x, g.dot_y);
+        let c = vec2(dot_x(g, self.steer.value()), g.dot_y);
         p.fill(
             &Shape::circle(c, g.dot_r + 2.5),
             pal.roles.oled_black.with_alpha(KEYLINE_ALPHA),
@@ -688,7 +757,7 @@ impl Gt7HoodPro {
         let style = TextStyle::new(self.faces.speed, g.trip_cap)
             .paint(ink)
             .tabular()
-            .tracking(self.faces.tracking)
+            .tracking(self.tracking(p, g.trip_cap))
             .align(Align::Right, VAlign::CapMiddle);
         let cell = p.fonts().tabular_cell(&style);
         let bias = tabular_bias(p, &style);
@@ -741,7 +810,7 @@ impl Gt7HoodPro {
         let mut speed = TextStyle::new(self.faces.speed, g.speed_cap)
             .paint(pal.roles.ink)
             .tabular()
-            .tracking(self.faces.tracking)
+            .tracking(self.tracking(p, g.speed_cap))
             .align(Align::Right, VAlign::CapTop);
         speed.weight = SPEED_WEIGHT;
         let bias = tabular_bias(p, &speed);
@@ -841,11 +910,17 @@ impl Gt7HoodPro {
                     },
                     pal.roles.ink,
                 );
-                let style = TextStyle::new(self.faces.gear, g.sug_cap)
+                // A proportional run, set smaller when "10" would overflow the face.
+                let label = Gear::Forward(d).label();
+                let mut style = TextStyle::new(self.faces.gear, g.sug_cap)
                     .paint(pal.roles.ink)
                     .align(Align::Center, VAlign::CapMiddle);
-                let at = vec2(x, g.sug_digit_y);
-                p.number(at, i64::from(d), if d >= 10 { 2 } else { 1 }, &style, None);
+                let width = p.measure(label, &style).width;
+                let room = g.sug_face.x - 2.0 * TILE_MARGIN;
+                if width > room && width.is_finite() {
+                    style.cap = g.sug_cap * room / width;
+                }
+                p.text(vec2(x, g.sug_digit_y), label, &style);
             });
         });
     }
@@ -853,16 +928,29 @@ impl Gt7HoodPro {
     /// The car's logo, or the custom name, at the band's right end (static, so it is dimmed),
     /// with a keyline like the glyphs.
     fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let zone = rect(g.logo);
+        // A long wordmark in the wide face would shrink below the label floor: set it in the
+        // label face at the floor instead (the logo then fits it to the zone as before).
+        let (mut font, mut cap, mut tracking) = (self.faces.wide, LOGO_CAP, LOGO_TRACKING);
+        if self.logo.image.is_none() {
+            let mut buf = [0u8; 64];
+            let name = logo::wordmark(&self.logo, &mut buf);
+            let inner = zone.width() - 2.0 * zone.width().min(zone.height()) * logo::SAFE_PADDING;
+            let wide = TextStyle::new(font, cap).tracking(tracking);
+            let w = p.measure(name, &wide).width;
+            if w.is_finite() && w > 0.0 && cap * inner / w < LOGO_MIN_CAP {
+                (font, cap, tracking) = (self.faces.label, LOGO_MIN_CAP, LABEL_TRACKING);
+            }
+        }
         let style = |c: Color| LogoStyle {
             tint: c,
             text: Paint::Solid(c),
-            font: self.faces.wide,
-            cap: LOGO_CAP,
-            tracking: 0.3,
+            font,
+            cap,
+            tracking,
         };
-        let zone = rect(g.logo);
         let key = style(pal.roles.oled_black.with_alpha(KEYLINE_ALPHA));
-        let r = keyline_width(LOGO_CAP);
+        let r = keyline_width(cap);
         for i in 0..8 {
             logo::draw(p, zone.translate(keyline_offset(i, 8, r)), &self.logo, &key);
         }
@@ -877,6 +965,11 @@ fn finite(v: f32) -> f32 {
     } else {
         0.0
     }
+}
+
+/// The steering dot's x for `steer` (−1 full left .. 1 full right).
+fn dot_x(g: &Geom, steer: f32) -> f32 {
+    finite(steer).clamp(-1.0, 1.0) * g.dot_travel
 }
 
 /// `rpm` as a share of the limiter (0..=1).
@@ -1150,6 +1243,54 @@ mod tests {
             ..Signals::default()
         };
         assert!(tyre_load(g, 3, &wild).is_finite());
+    }
+
+    #[test]
+    fn the_shift_point_holds_through_a_dip_and_an_unknown_limiter_stays_dark() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(8000.0), &pal, 95, 1.0 / 60.0, true);
+        rev.update(&signals(8500.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(rev.over && rev.since == Some(0.0));
+        // The revs hover 60 rpm under the shift point: the strobe's clock keeps running.
+        for _ in 0..4 {
+            rev.update(&signals(8380.0), &pal, 95, 1.0 / 60.0, false);
+            assert!(rev.over);
+        }
+        assert!(rev.since.is_some_and(|t| t > 0.06));
+        // Well under it, the shift point and then the alert let go.
+        rev.update(&signals(8200.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(!rev.over && rev.alert);
+        rev.update(&signals(6000.0), &pal, 95, 1.0 / 60.0, false);
+        assert!(!rev.alert);
+        // A zero packet's limiter (1 rpm): no run, no alert, no strobe.
+        let zero = Signals {
+            rpm: 1.1,
+            max_rpm: 1.0,
+            shift_rpm: 0.97,
+            shift_fraction: 1.1,
+            ..Signals::default()
+        };
+        let mut dark = RevBar::default();
+        dark.update(&zero, &pal, 95, 1.0 / 60.0, true);
+        dark.update(&zero, &pal, 95, 1.0 / 60.0, false);
+        assert!(!dark.over && !dark.alert && dark.count(95) == 0 && dark.since.is_none());
+    }
+
+    #[test]
+    fn the_steering_dot_spans_its_travel() {
+        let g = &HOOD;
+        assert_eq!(dot_x(g, 1.0), g.dot_travel);
+        assert_eq!(dot_x(g, -128.0 / STEER_FULL), -g.dot_travel);
+        assert_eq!(dot_x(g, 0.0), 0.0);
+        assert_eq!(dot_x(g, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn the_side_groups_burn_below_the_lit_run() {
+        for k in [PEDAL_LIGHT, BOOST_LIGHT, TRIP_LIGHT, PILL_LIGHT[1]] {
+            assert!(k < TICK_BODY, "{k}");
+        }
     }
 
     #[test]

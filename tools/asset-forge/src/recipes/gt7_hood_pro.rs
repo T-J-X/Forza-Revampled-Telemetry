@@ -70,6 +70,8 @@ const REV_X: [f32; 2] = [-380.0, 380.0];
 const TICK_Y: [f32; 2] = [-60.0, -34.0];
 const TICKS: usize = 95;
 const TICK_W: f32 = 5.0;
+/// Each lens's corner radius: a pill, as the lit LED the cluster draws over it.
+const TICK_R: f32 = 2.5;
 const BAR: (f32, f32, f32, f32) = (-47.0, 788.0, 46.0, 13.0);
 /// The polished plinth under the light bar shows this far round it.
 const PLINTH: f32 = 8.0;
@@ -125,6 +127,8 @@ const TRIP_FACE: [f32; 2] = [200.0, 36.0];
 const SUG_C: [f32; 2] = [211.0, 49.0];
 const SUG_OUTER: [f32; 2] = [94.0, 86.0];
 const SUG_FACE: [f32; 2] = [88.0, 80.0];
+/// The tile face's corner radius (its base's is 3 px more).
+const SUG_R: f32 = 11.0;
 /// Its sprite's frame (local px).
 const SUG_FRAME: [f32; 4] = [156.0, -2.0, 110.0, 102.0];
 /// The tile's enamel: the palette's fixed `warning` role (#FF2D3A) in linear light, so the
@@ -448,7 +452,7 @@ fn plate(carbon: &Path) -> Scene {
             &format!("lens_{i:02}"),
             [cx, tick_cy],
             [TICK_W, TICK_Y[1] - TICK_Y[0]],
-            TICK_W * 0.5,
+            TICK_R,
             BAR_H,
             LENS_H,
             LENS_BEVEL,
@@ -629,7 +633,7 @@ fn suggest() -> Scene {
         "sug_base",
         SUG_C,
         SUG_OUTER,
-        14.0,
+        SUG_R + 3.0,
         0.0,
         PLINTH_H,
         PLINTH_BEVEL,
@@ -639,7 +643,7 @@ fn suggest() -> Scene {
         "sug_tile",
         SUG_C,
         SUG_FACE,
-        11.0,
+        SUG_R,
         0.0,
         8.0,
         6.0,

@@ -4,7 +4,7 @@
 //! light, and the procedural fallbacks drawn when a file is missing.
 use super::geom::{rect, Geom};
 use fh6_kit::cluster::Setup;
-use fh6_kit::{vec2, Cap, Color, ImageId, ImagePaint, Painter, Palette, Rect, Shape, Stroke, Vec2};
+use fh6_kit::{vec2, BlendMode, Cap, Color, ImageId, ImagePaint, Painter, Palette, Rect, Shape, Stroke, Vec2};
 
 /// Key azimuths of each sprite: rest, then the light's swing to each side.
 const AZIMUTHS: usize = 3;
@@ -64,16 +64,33 @@ impl Sprites {
     }
 }
 
-/// Draws `set[0]` over `rect`, then the swing renders on top at their weights.
+/// Draws `set[0]` over `rect` and the swing renders at their weights, so the weights sum to one
+/// coverage: the rest render at `1 - swing` and each swing render added at its own weight. A plain
+/// cross-fade over the rest render counted every anti-aliased edge twice during a swing, so the
+/// rims thickened and the tile's bloom doubled (the code audit, RL-1 and RL-2). Nothing of the
+/// dash is drawn under the plate or the tile, so adding their light is exact.
 fn blend(p: &mut Painter<'_>, set: &[Option<ImageId>; AZIMUTHS], rect: Rect, w: &[f32; AZIMUTHS]) -> bool {
     let Some(base) = set[0] else {
         return false;
     };
-    p.fill(&Shape::rect(rect), ImagePaint::new(base, rect));
+    let mut swing = 0.0;
+    for (image, &weight) in set.iter().zip(w).skip(1) {
+        if image.is_some() && weight > 0.003 {
+            swing += weight.clamp(0.0, 1.0);
+        }
+    }
+    let swing = swing.min(1.0);
+    if swing < 1.0 {
+        p.scoped(|p| {
+            p.set_opacity(1.0 - swing);
+            p.fill(&Shape::rect(rect), ImagePaint::new(base, rect));
+        });
+    }
     for (image, &weight) in set.iter().zip(w).skip(1) {
         if let Some(image) = image {
             if weight > 0.003 {
                 p.scoped(|p| {
+                    p.set_blend(BlendMode::Add);
                     p.set_opacity(weight.min(1.0));
                     p.fill(&Shape::rect(rect), ImagePaint::new(*image, rect));
                 });
