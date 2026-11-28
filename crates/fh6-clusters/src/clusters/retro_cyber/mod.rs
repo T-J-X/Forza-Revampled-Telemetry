@@ -167,6 +167,8 @@ const SURROUND_DARK: f32 = 0.07;
 /// is dark, and a flat face mirroring the full studio greys the VFD windows' black (rejection
 /// pattern e). The key light's highlight and the rims keep their full strength.
 const LENS_ENV: f32 = 0.04;
+/// Margin round the Blender surround render (local px; the recipe's `MARGIN`).
+const SURROUND_MARGIN: f32 = 4.0;
 /// The lens is polished: a broad satin lobe lit the whole flat face grey; a polished face keeps
 /// the key light's highlight to the rims, whose normals turn towards it.
 const LENS_ROUGHNESS: f32 = 0.04;
@@ -628,6 +630,8 @@ pub struct RetroCyber {
     boot: Boot,
     mesh: Option<ImageId>,
     phosphor: Option<ImageId>,
+    /// The Blender surround per view (cockpit, hood), two key lights each.
+    surround: [Option<[ImageId; 2]>; 2],
 }
 
 impl RetroCyber {
@@ -650,6 +654,12 @@ impl RetroCyber {
         };
         let mesh = load("scifi/vfd_hex_mesh.png");
         let phosphor = load("clusters/retro_cyber/phosphor_grain.png");
+        let mut pair = |view: &str| -> Option<[ImageId; 2]> {
+            let a = load(&format!("clusters/retro_cyber/surround_{view}_l160.png"))?;
+            let b = load(&format!("clusters/retro_cyber/surround_{view}_l110.png"))?;
+            Some([a, b])
+        };
+        let surround = [pair("cockpit"), pair("hood")];
         let gear = Seg7Digit::new(t, Reveal::Instant)
             .with_segments(Segments::Diagonal)
             .with_phosphor(Phosphor::Ink)
@@ -694,6 +704,7 @@ impl RetroCyber {
             boot: Boot::default(),
             mesh,
             phosphor,
+            surround,
         }
     }
 
@@ -920,8 +931,9 @@ impl Cluster for RetroCyber {
 }
 
 impl RetroCyber {
-    /// The slim satin-graphite surround: an opaque black body under the lens, the face shaded
-    /// along the light, a light-driven 1 px outer rim and a polished inner chamfer at the lens.
+    /// The slim satin-graphite surround: an opaque black body under the lens, then the Blender
+    /// render (two key lights blended by lateral G), or without it the face shaded along the
+    /// light, a light-driven 1 px outer rim and a polished inner chamfer at the lens.
     fn draw_surround(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let roles = pal.roles;
         let ink = roles.ink;
@@ -930,6 +942,28 @@ impl RetroCyber {
         p.fill(&Shape::round_rect(outer, r_out), roles.oled_black);
         let c = g.lens.center();
         let light = self.light.angle();
+        let art = match self.view {
+            View::Hood => self.surround[1],
+            View::Cockpit | View::Chase => self.surround[0],
+        };
+        if let Some(lights) = art {
+            // The two key lights (−160° → −110°) blended by the virtual light's azimuth; the
+            // render's centre is transparent, so the lens body stays black.
+            let image_rect = outer.expand(SURROUND_MARGIN);
+            let lo = -160f32.to_radians();
+            let k = ((light - lo) / 50f32.to_radians()).clamp(0.0, 1.0);
+            for (img, share, blend) in [(lights[0], 1.0 - k, BlendMode::Normal), (lights[1], k, BlendMode::Add)] {
+                if share > 0.001 {
+                    p.scoped(|p| {
+                        p.set_blend(blend);
+                        let paint = ImagePaint::new(img, image_rect).tint(Color::WHITE.with_alpha(share));
+                        p.fill(&Shape::round_rect(outer.expand(1.0), r_out + 1.0), paint);
+                    });
+                }
+            }
+            p.fill(&Shape::round_rect(g.lens, g.lens_r), roles.oled_black);
+            return;
+        }
         let l = Vec2::from_angle(light);
         let ext = outer.size().length() * 0.5;
         let face = Gradient::linear(c + l * ext, c - l * ext)
@@ -1184,10 +1218,18 @@ impl RetroCyber {
         p.text(vec2(g.speed.x, y), "SPEED", &label);
         p.text(vec2(g.gear.x, y), "GEAR", &label);
         p.text(vec2(g.slip.center().x, y), "SLIP", &label);
-        for (k, name) in ["POWER", "BOOST"].into_iter().enumerate() {
-            let (x0, w) = g.slant_base(k);
-            p.text(vec2(x0 + w * 0.5 + lean * 0.5, y), name, &label);
-        }
+        // The gauge window's two names sit at its ends, under their bars' feet, so they never
+        // run into each other.
+        let left = TextStyle {
+            align: Align::Left,
+            ..label
+        };
+        let right = TextStyle {
+            align: Align::Right,
+            ..label
+        };
+        p.text(vec2(g.gauges.min.x + 6.0, y), "POWER", &left);
+        p.text(vec2(g.gauges.max.x - 6.0, y), "BOOST", &right);
     }
 
     /// The boot self-test: every segment lit.
