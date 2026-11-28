@@ -87,7 +87,9 @@ What makes those photographs recognisable (each **Cited**):
 | C3 | Large aspect ratio is needed to study patterns without the side walls; moderate-viscosity patterns in large containers are not strongly bound by the walls. | **Cited**, Chen & Viñals introduction; Skeldon & Rucklidge §2 |
 | C4 | At the container wall a meniscus oscillates at the driving frequency and sends out waves of its own; in the EGaIn experiment the Faraday threshold was taken as the point where the meniscus-wave pattern breaks. | **Cited**, Tang, Zhao & Liu §II, §IV.1 |
 
-**Computed:** with a 30 mm radius, kR is 10.8 at 800 rpm (3.4 cells across) and 65.6 at 9,000 rpm. At idle the dish is a small-aspect-ratio cell where the circular modes of C2 lead, and at high revs it is a large-aspect-ratio layer where the lattice of §2.3 leads. **Our reading:** a true mandala (a Bessel mode J_l(kr) cos lθ: l petals and m rings) is what the real dish would show near idle.
+**Computed:** with a 30 mm radius, kR is 10.8 at 800 rpm (3.4 cells across) and 65.6 at 9,000 rpm. At idle the dish is a small-aspect-ratio cell where the circular modes of C2 lead, and at high revs it is a large-aspect-ratio layer where the lattice of §2.3 leads. **Computed (the dish's own modes near idle, four cylinders, R 30 mm, from J_l′(kR) = 0):** the nearest modes are (l, m) = (8, 1), (4, 2), (2, 3) at 700 rpm (kR 9.58); (9, 1), (5, 2), (3, 3) at 800 rpm (kR 10.81); (10, 1), (6, 2), (1, 4) at 900 rpm; (2, 4), (0, 4), (7, 2) at 1,000 rpm; (9, 2), (6, 3), (13, 1) at 1,200 rpm. The modes sit about 0.2–0.6 apart in kR, so as the revs rise the dish passes from one mode to the next every 50 to 100 rpm, near-degenerate pairs and all, which is where Ciliberto and Gollub saw modes compete (C2). The pinned post makes the true modes annular (J_l and Y_l terms); the plain-disc forms are a close guide away from the post. Figure: `/mnt/project-files/faraday_mandala/research_idle_modes_and_amplitude.png` (a maths study, not a design).
+
+**Our reading:** a true mandala (a Bessel mode J_l(kr) cos lθ: l petals and m rings) is what the real dish would show near idle.
 
 ## 3. The maths the code will assert (no GPU)
 
