@@ -18,6 +18,7 @@
 //! A key missing from the file takes its value from [`AppConfig::default`], never zero. Keys this
 //! version does not know (a dash's own settings, a newer build's) are kept in
 //! [`AppConfig::extra`] and written back.
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -488,6 +489,12 @@ pub struct AppConfig {
     pub reduced_flash: bool,
     /// Bend the captured game frame through glass pieces (screen capture; off by default).
     pub glass_refraction: bool,
+    /// The driver's housing choice per dash, by dash name (`"Housing": {"ValkyrieLmp1": false}`):
+    /// whether a dash that has a housing (a slab, bezel or wheel face round its display) draws
+    /// it. A dash with no entry uses its own default (`fh6_clusters::housing`). Read it with
+    /// [`AppConfig::housing`].
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "housing_lenient")]
+    pub housing: BTreeMap<String, bool>,
 
     // OSD and controller.
     /// Pause the game while the OSD is open.
@@ -653,6 +660,7 @@ impl Default for AppConfig {
             steering_wheel_offset_y_m: -0.035,
             camera_patch_auto: false,
             game_install_dir: String::new(),
+            housing: BTreeMap::new(),
             extra: Map::new(),
         }
     }
@@ -689,6 +697,18 @@ impl AppConfig {
             FitView::Hood => self.bonnet_hud_style = theme,
             FitView::Chase => self.chase_hud_style = Some(theme),
         }
+    }
+
+    /// The driver's housing choice for `theme`, or `None` when they made none (the dash's own
+    /// default applies).
+    #[must_use]
+    pub fn housing(&self, theme: ClusterTheme) -> Option<bool> {
+        self.housing.get(theme.name()).copied()
+    }
+
+    /// Records the driver's housing choice for `theme`.
+    pub fn set_housing(&mut self, theme: ClusterTheme, on: bool) {
+        self.housing.insert(theme.name().to_string(), on);
     }
 
     /// The listening and forwarding ports, with invalid values replaced by the defaults.
@@ -1027,6 +1047,28 @@ fn migrate_key_spellings(raw: &mut Map<String, Value>) {
 
 /// Step 2 of a load: types every value. A value that does not fit its setting is dropped with a
 /// warning, so that it takes its default and the rest of the file still loads.
+/// The `Housing` map, keeping each entry that reads as on or off (`true`, `false`, or the text
+/// `on`, `off`, `true`, `false` in any case) and dropping any other, so one bad entry loses only
+/// itself. Anything but an object reads as no choices.
+fn housing_lenient<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, bool>, D::Error> {
+    let raw = Value::deserialize(d)?;
+    let Value::Object(map) = raw else {
+        return Ok(BTreeMap::new());
+    };
+    Ok(map
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let on = match &v {
+                Value::Bool(b) => Some(*b),
+                Value::String(t) if t.eq_ignore_ascii_case("on") || t.eq_ignore_ascii_case("true") => Some(true),
+                Value::String(t) if t.eq_ignore_ascii_case("off") || t.eq_ignore_ascii_case("false") => Some(false),
+                _ => None,
+            };
+            on.map(|on| (k, on))
+        })
+        .collect())
+}
+
 fn deserialize_lenient(raw: Map<String, Value>) -> AppConfig {
     let err = match AppConfig::deserialize(&raw) {
         Ok(cfg) => return cfg,
@@ -1617,5 +1659,24 @@ mod tests {
             "prefers config.json beside the exe"
         );
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn housing_choices_round_trip_and_bad_entries_drop_alone() {
+        let d = AppConfig::default();
+        assert_eq!(d.housing(ClusterTheme::ValkyrieLmp1), None, "no choice by default");
+        let json = serde_json::to_string(&d).expect("serializes");
+        assert!(!json.contains("Housing"), "an empty map is not written");
+
+        let cfg = load(r#"{"Housing": {"ValkyrieLmp1": false, "AmgMbuxSuperscreen": "On", "LiquidGlass": 3}}"#);
+        assert_eq!(cfg.housing(ClusterTheme::ValkyrieLmp1), Some(false));
+        assert_eq!(cfg.housing(ClusterTheme::AmgMbuxSuperscreen), Some(true), "text on reads as on");
+        assert_eq!(cfg.housing(ClusterTheme::LiquidGlass), None, "a bad entry drops alone");
+        assert_eq!(load(r#"{"Housing": "off"}"#).housing, BTreeMap::new(), "not an object: no choices");
+
+        let mut cfg = AppConfig::default();
+        cfg.set_housing(ClusterTheme::AmgMbuxClassic, true);
+        let back = load(&serde_json::to_string(&cfg).expect("serializes"));
+        assert_eq!(back.housing(ClusterTheme::AmgMbuxClassic), Some(true));
     }
 }

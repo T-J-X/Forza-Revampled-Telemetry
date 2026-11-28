@@ -98,6 +98,7 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "mclaren_slim_display" => crate::recipes::mclaren_slim_display::build(ctx),
         "hopf_fibration" => crate::recipes::hopf_fibration::build(ctx),
         "hyperbolic_tiles" => crate::recipes::hyperbolic_tiles::build(ctx),
+        "faraday_mandala" => crate::recipes::faraday_mandala::build(ctx),
         _ => Ok(()),
     }
 }

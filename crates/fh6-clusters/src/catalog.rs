@@ -1,6 +1,7 @@
 //! The Phase 7 dash catalog as data: one row per dash in
-//! `program/phases/07-cluster-factory/CATALOG.md` (72 dashes in 9 categories of 8: the 48 of the
-//! first catalog and the 24 added on 2026-11-28), with its module name, display name, category,
+//! `program/phases/07-cluster-factory/CATALOG.md` (73 dashes in 9 categories: eight in each, and
+//! nine in Abstract; the 48 of the first catalog, the 24 added on 2026-11-28 and the liquid-metal
+//! dash added later that morning), with its module name, display name, category,
 //! shelf, family, target, views, build order and pattern-setter flag.
 //!
 //! This table is the only source of display names: the registry, the OSD, the golden tests,
@@ -12,9 +13,7 @@ use fh6_core::ClusterTheme;
 pub use fh6_kit::Family;
 
 /// Number of dashes in the catalog.
-pub const COUNT: usize = 72;
-/// Dashes per category.
-pub const PER_CATEGORY: u8 = 8;
+pub const COUNT: usize = 73;
 
 /// Whether the catalog row rebuilds a v1 theme or is new.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -104,6 +103,16 @@ impl Category {
         }
     }
 
+    /// How many dashes the category holds: eight, and nine in Abstract (TJX, 2026-11-28: the
+    /// liquid-metal dash `FaradayMandala`).
+    #[must_use]
+    pub const fn size(self) -> u8 {
+        match self {
+            Category::Abstract => 9,
+            _ => 8,
+        }
+    }
+
     /// True for the two categories whose figure follows the colour law of CATALOG.md
     /// ("Psychedelic and Abstract: pattern first, colour from the model"): their colour budget is
     /// measured outside the rank-4 figure ([`fh6_kit::Cluster::figure_zone`]).
@@ -161,7 +170,7 @@ impl Views {
 /// One catalog row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CatalogEntry {
-    /// Catalog row in CATALOG.md (1..=72): permanent, unlike the build order.
+    /// Catalog row in CATALOG.md (1..=73): permanent, unlike the build order.
     pub row: u8,
     /// The config identifier (the dash's key).
     pub theme: ClusterTheme,
@@ -171,7 +180,7 @@ pub struct CatalogEntry {
     pub display: &'static str,
     /// TJX's category.
     pub category: Category,
-    /// Place on its category's shelf (1..=8; 1 is the category's lead dash).
+    /// Place on its category's shelf (1..=[`Category::size`]; 1 is the category's lead dash).
     pub shelf: u8,
     /// Design family.
     pub family: Family,
@@ -195,8 +204,8 @@ impl CatalogEntry {
     }
 }
 
-/// Every catalog row, in CATALOG.md order (catalog rows 1 to 72).
-pub static CATALOG: [CatalogEntry; 72] = [
+/// Every catalog row, in CATALOG.md order (catalog rows 1 to 73).
+pub static CATALOG: [CatalogEntry; COUNT] = [
     CatalogEntry {
         row: 1,
         theme: ClusterTheme::LiquidGlass,
@@ -1205,6 +1214,20 @@ pub static CATALOG: [CatalogEntry; 72] = [
         build_order: 72,
         pattern_setter: false,
     },
+    CatalogEntry {
+        row: 73,
+        theme: ClusterTheme::FaradayMandala,
+        snake: "faraday_mandala",
+        display: "Faraday Mandala",
+        category: Category::Abstract,
+        shelf: 9,
+        family: Family::FluidGenerative,
+        kind: Kind::New,
+        target: Target::Concept,
+        views: Views::COCKPIT,
+        build_order: 73,
+        pattern_setter: false,
+    },
 ];
 
 /// The catalog row for `theme` (every theme has one).
@@ -1246,10 +1269,10 @@ pub fn in_build_order() -> [&'static CatalogEntry; COUNT] {
 #[must_use]
 pub fn in_browse_order() -> [&'static CatalogEntry; COUNT] {
     let mut out = [&CATALOG[0]; COUNT];
-    for e in &CATALOG {
-        let slot = e.category as usize * usize::from(PER_CATEGORY) + usize::from(e.shelf) - 1;
-        out[slot] = e;
+    for (slot, e) in out.iter_mut().zip(&CATALOG) {
+        *slot = e;
     }
+    out.sort_unstable_by_key(|e| (e.category, e.shelf));
     out
 }
 
@@ -1271,7 +1294,7 @@ mod tests {
         for (i, e) in CATALOG.iter().enumerate() {
             assert_eq!(usize::from(e.row), i + 1, "{}", e.theme);
         }
-        // Rows 30 to 72 were appended in theme order; the first 29 keep their v1 values.
+        // Rows 30 to 73 were appended in theme order; the first 29 keep their v1 values.
         for e in &CATALOG[29..] {
             assert_eq!(usize::from(e.row), e.theme as usize + 1, "{}", e.theme);
         }
@@ -1306,23 +1329,25 @@ mod tests {
     }
 
     #[test]
-    fn categories_hold_eight_dashes_on_shelves_one_to_eight() {
+    fn each_category_fills_its_shelves_once() {
         for c in Category::ALL {
-            let mut shelves = [0u8; PER_CATEGORY as usize];
+            let size = usize::from(c.size());
+            let mut shelves = vec![0u8; size];
             for e in CATALOG.iter().filter(|e| e.category == c) {
-                assert!((1..=PER_CATEGORY).contains(&e.shelf), "{} shelf {}", e.theme, e.shelf);
+                assert!((1..=c.size()).contains(&e.shelf), "{} shelf {}", e.theme, e.shelf);
                 shelves[usize::from(e.shelf) - 1] += 1;
             }
-            assert_eq!(shelves, [1; PER_CATEGORY as usize], "{c:?}");
+            assert_eq!(shelves, vec![1; size], "{c:?}");
         }
-        assert_eq!(Category::ALL.len() * usize::from(PER_CATEGORY), COUNT);
+        let total: usize = Category::ALL.iter().map(|c| usize::from(c.size())).sum();
+        assert_eq!(total, COUNT);
     }
 
     #[test]
     fn browse_order_is_category_then_shelf() {
         let order = in_browse_order();
         assert_eq!(order[0].theme, ClusterTheme::AmgMbuxSupersport);
-        assert_eq!(order[COUNT - 1].theme, ClusterTheme::HyperbolicTiles);
+        assert_eq!(order[COUNT - 1].theme, ClusterTheme::FaradayMandala);
         for pair in order.windows(2) {
             assert!(
                 (pair[0].category, pair[0].shelf) < (pair[1].category, pair[1].shelf),
@@ -1336,13 +1361,13 @@ mod tests {
     #[test]
     fn the_re_cut_dashes_are_new_and_follow_their_build_order() {
         let added = &CATALOG[48..];
-        assert_eq!(added.len(), 24);
+        assert_eq!(added.len(), 25);
         assert!(added.iter().all(|e| e.kind == Kind::New && !e.pattern_setter));
         // Theme values and catalog rows follow the build order of the added dashes.
         for pair in added.windows(2) {
             assert!(pair[0].build_order < pair[1].build_order, "{}", pair[1].theme);
         }
-        assert_eq!(CATALOG.iter().filter(|e| e.category == Category::Abstract).count(), 8);
+        assert_eq!(CATALOG.iter().filter(|e| e.category == Category::Abstract).count(), 9);
         assert!(CATALOG
             .iter()
             .filter(|e| e.category == Category::Abstract)

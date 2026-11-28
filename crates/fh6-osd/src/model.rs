@@ -124,6 +124,8 @@ pub enum RowId {
     EditView,
     /// The cluster carousel for the edited view.
     Cluster,
+    /// The edited view's dash draws its housing (shown only for a dash that has one).
+    Housing,
     /// mph / km/h.
     SpeedUnit,
     /// kW / hp.
@@ -444,9 +446,12 @@ pub fn rows(tab: Tab, ctx: Ctx<'_>) -> RowList {
     let mut r = RowList::new();
     match tab {
         Tab::Cluster => {
+            r.push(RowId::EditView);
+            r.push(RowId::Cluster);
+            if fh6_clusters::housing::has_housing(theme_for_view(ctx.cfg, ctx.edit.view)) {
+                r.push(RowId::Housing);
+            }
             for id in [
-                RowId::EditView,
-                RowId::Cluster,
                 RowId::SpeedUnit,
                 RowId::PowerUnit,
                 RowId::ShiftPoint,
@@ -543,6 +548,7 @@ pub fn kind(row: RowId, fit: &dyn CockpitFit) -> RowKind {
         RowId::PaletteLock
         | RowId::GlassRefraction
         | RowId::ShowLogo
+        | RowId::Housing
         | RowId::CameraPatch
         | RowId::AutoPause
         | RowId::Stats => RowKind::Toggle,
@@ -557,6 +563,7 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
     match row {
         RowId::EditView => "Edit view",
         RowId::Cluster => "Cluster",
+        RowId::Housing => "Housing",
         RowId::SpeedUnit => "Speed units",
         RowId::PowerUnit => "Power units",
         RowId::ShiftPoint => "Shift point",
@@ -636,6 +643,7 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
     Some(match row {
         RowId::EditView => "The live view follows the view you edit",
         RowId::Cluster => "Left and right browse every cluster",
+        RowId::Housing => "Off: the dash floats on black",
         RowId::ShiftPoint => "Where the shift lights reach the last stage",
         RowId::LimiterStyle => "Gentle pulse avoids the 10 Hz flash",
         RowId::FactorySwatches => "From the car's brand colours",
@@ -790,7 +798,7 @@ pub fn format_value(row: RowId, ctx: Ctx<'_>, out: &mut Line) {
                 spec.unit
             )
         }
-        RowKind::Toggle => out.write_str(if toggle_value(row, cfg) { "On" } else { "Off" }),
+        RowKind::Toggle => out.write_str(if toggle_value(row, cfg, edit.view) { "On" } else { "Off" }),
         _ => match row {
             RowId::EditView => out.write_str(view_label(edit.view)),
             RowId::Cluster => out.write_str(theme_label(theme_for_view(cfg, edit.view))),
@@ -827,10 +835,11 @@ pub fn format_value(row: RowId, ctx: Ctx<'_>, out: &mut Line) {
     };
 }
 
-/// The on/off state of a toggle row.
+/// The on/off state of a toggle row; `view` is the view the Cluster rows edit.
 #[must_use]
-pub fn toggle_value(row: RowId, cfg: &AppConfig) -> bool {
+pub fn toggle_value(row: RowId, cfg: &AppConfig, view: View) -> bool {
     match row {
+        RowId::Housing => fh6_clusters::housing::shown(cfg, theme_for_view(cfg, view)),
         RowId::PaletteLock => cfg.palette_seed.is_some(),
         RowId::GlassRefraction => cfg.glass_refraction,
         RowId::ShowLogo => cfg.show_logo,
@@ -908,8 +917,9 @@ pub fn adjust(
             e
         }
         RowKind::Toggle => {
-            let on = !toggle_value(row, cfg);
+            let on = !toggle_value(row, cfg, edit.view);
             match row {
+                RowId::Housing => fh6_clusters::housing::set(cfg, theme_for_view(cfg, edit.view), on),
                 RowId::PaletteLock => cfg.palette_seed = on.then(|| new_seed(0)),
                 RowId::GlassRefraction => cfg.glass_refraction = on,
                 RowId::ShowLogo => cfg.show_logo = on,
@@ -960,9 +970,15 @@ fn adjust_choice(row: RowId, d: i32, cfg: &mut AppConfig, edit: &mut EditState) 
             }
         }
         RowId::Cluster => {
-            let next = theme_step(theme_for_view(cfg, edit.view), d);
+            let before = theme_for_view(cfg, edit.view);
+            let next = theme_step(before, d);
             set_theme_for_view(cfg, edit.view, next);
-            Effect::CHANGED
+            Effect {
+                changed: true,
+                // The Housing row comes and goes with the dash.
+                rows: fh6_clusters::housing::has_housing(before) != fh6_clusters::housing::has_housing(next),
+                ..Effect::default()
+            }
         }
         RowId::SpeedUnit => {
             cfg.speed_unit = match cfg.speed_unit {
@@ -1081,6 +1097,46 @@ mod tests {
     }
 
     #[test]
+    fn housing_row_follows_the_edited_dash_and_toggles_its_choice() {
+        let mut cfg = AppConfig::default();
+        let mut edit = EditState::default();
+        let mut fit = ConfigOnlyFit;
+        let has_row = |cfg: &AppConfig, edit: &EditState| {
+            rows(Tab::Cluster, Ctx { cfg, edit, fit: &ConfigOnlyFit })
+                .as_slice()
+                .contains(&RowId::Housing)
+        };
+        cfg.cockpit_hud_style = ClusterTheme::BoschDdu;
+        assert!(!has_row(&cfg, &edit), "no housing, no row");
+
+        // Gt7HoodPro (index 7) steps to AmgMbuxSuperscreen (index 8): the row appears.
+        cfg.cockpit_hud_style = ClusterTheme::Gt7HoodPro;
+        let e = adjust(RowId::Cluster, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.cockpit_hud_style, ClusterTheme::AmgMbuxSuperscreen);
+        assert!(e.changed && e.rows, "the row list changes with the dash");
+        assert!(has_row(&cfg, &edit));
+        assert!(!toggle_value(RowId::Housing, &cfg, edit.view), "MBUX: off by default");
+        let mut line = Line::new();
+        format_value(RowId::Housing, ctx(&cfg, &edit), &mut line);
+        assert_eq!(line.as_str(), "Off");
+
+        let e = adjust(RowId::Housing, 1, 1, &mut cfg, &mut edit, &mut fit);
+        assert!(e.changed);
+        assert_eq!(cfg.housing(ClusterTheme::AmgMbuxSuperscreen), Some(true));
+        assert!(toggle_value(RowId::Housing, &cfg, edit.view));
+
+        // The hood view edits its own dash.
+        edit.view = View::Hood;
+        cfg.bonnet_hud_style = ClusterTheme::ValkyrieLmp1;
+        assert!(toggle_value(RowId::Housing, &cfg, edit.view), "ValkyrieLmp1: on by default");
+        adjust(RowId::Housing, -1, 1, &mut cfg, &mut edit, &mut fit);
+        assert_eq!(cfg.housing(ClusterTheme::ValkyrieLmp1), Some(false));
+        assert_eq!(cfg.housing(ClusterTheme::AmgMbuxSuperscreen), Some(true), "per dash");
+        assert_eq!(label(RowId::Housing, &fit), "Housing");
+        assert_eq!(kind(RowId::Housing, &fit), RowKind::Toggle);
+    }
+
+    #[test]
     fn cluster_carousel_writes_the_edited_view() {
         let mut cfg = AppConfig::default();
         let mut edit = EditState::default();
@@ -1144,7 +1200,7 @@ mod tests {
         assert_eq!(saved_and_loaded(&cfg), cfg);
 
         // The camera patch switch drives the notice under the camera rows.
-        assert!(!toggle_value(RowId::CameraPatch, &cfg), "off by default");
+        assert!(!toggle_value(RowId::CameraPatch, &cfg, View::Cockpit), "off by default");
         adjust(RowId::FovCockpit, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(help(RowId::FovCockpit, &edit), Some(CameraApply::PatchOff.notice()));
         assert!(adjust(RowId::CameraPatch, 1, 1, &mut cfg, &mut edit, &mut fit).changed);
@@ -1201,7 +1257,7 @@ mod tests {
         adjust(RowId::ColourMode, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(cfg.color_mode, ColorMode::Random);
         adjust(RowId::Reroll, 1, 1, &mut cfg, &mut edit, &mut fit);
-        assert!(toggle_value(RowId::PaletteLock, &cfg));
+        assert!(toggle_value(RowId::PaletteLock, &cfg, View::Cockpit));
         adjust(RowId::PaletteLock, 1, 1, &mut cfg, &mut edit, &mut fit);
         assert_eq!(cfg.palette_seed, None);
         // A config in Brand mode shows as Factory, and stepping from it leaves Brand.
