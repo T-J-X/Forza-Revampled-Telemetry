@@ -16,19 +16,23 @@ The teal frosted slab is gone. The menu is light text on OLED black, and glass i
 
 ## Verification
 
-Final PC run (RTX 3070 Ti Laptop GPU, DX12) at 4bbe604, under `gpu.lock`; the commits after it are listed under "After the PC run".
+Final PC run (RTX 3070 Ti Laptop GPU, DX12, driver 32.0.16.2124) at 195452b, under `gpu.lock`, with the GPU idle beforehand (1 to 2%, 1410 MHz, P0, about 48 °C):
 
 ```
-cargo test --workspace                       passed 1010, failed 0, ignored 1 (exit 0)
-cargo clippy -p fh6-osd -p preview-export -p fh6-app --all-targets --no-deps -- -D warnings   clean (exit 0)
-kit GPU tests (release): render_gpu 13 passed, glass_gpu 8 passed, fluid_gpu 2 passed
-preview-export --osd (two runs): 16 states, 0.975–1.289 ms GPU median; no wgpu validation error or warning
-live bench --demo --open-osd: CPU p50 0.903 / 0.797 / 0.820 ms (carousel / Colour / Fit), OSD closed 0.681
+cargo check --workspace                      exit 0
+cargo clippy -p fh6-osd -p preview-export -p fh6-app -p fh6-kit --all-targets --no-deps -- -D warnings   clean (exit 0)
+cargo test --workspace                       passed 1065, failed 0, ignored 1 (exit 0)
+kit GPU tests (release): render_gpu 16 passed, glass_gpu 8 passed, fluid_gpu 2 passed
+preview-export --osd (two runs): 16 states, 0.987–1.285 ms GPU median; no wgpu validation error or warning
+preview-export --osd --no-assets --no-timing: exit 0, all 16 states and the sequence, no warning
+live bench --demo --open-osd: CPU p50 0.899 / 0.817 / 0.841 ms (carousel / Colour / Fit), OSD closed 0.696
 ```
+
+Then at 81856ae (the code of 6f1e700, after merging main's 72-dash re-cut): `cargo clippy -p fh6-osd -p preview-export --all-targets` 0 warnings; `cargo test -p fh6-osd -p preview-export` 64 and 14 passed; one timed `--osd` run 0.985–1.308 ms GPU median, within about 0.05 ms of 195452b. The earlier PC run at 4bbe604 (1010 tests, 0.975–1.289 ms) is in `docs/perf/osd.md`.
 
 In this container (Linux, lavapipe for renders): `cargo test -p fh6-osd` 64 passed; `cargo test -p preview-export` 13 passed; `cargo test -p asset-forge` 165 passed and 4 failed, the four known `cloud::remote` tests that expect Windows paths (they pass on the PC, inside the 1010); `cargo clippy -p fh6-osd -p fh6-kit -p preview-export -p asset-forge --all-targets --no-deps -- -D warnings` clean apart from the toolchain's unknown-lint note `chunks_exact_to_as_chunks`, which predates the branch; `rustfmt --edition 2021 --config newline_style=Unix --check` clean on every changed `.rs` file. `cargo check --workspace` cannot run here (the Windows-only `wgc-bench` and the C build of `libdeflate-sys` for the Windows target), so the workspace check is the PC's.
 
-**After the PC run:** b11602e (wording, the hold bar's position, the default-height line's gap), 378cfa5 (the scroll bar was clipped and is now drawn; rows hide while a platter rim crosses them; a tab change starts the platter on the new row; help rows 16 px taller; quiet ink 17% → 21%; remap cancel and time-out notices), the merge of main's `--no-assets` (626cf12), the 16 board renders (195452b), 3bf1634 (the dark ink on the accent and the last-resort accent read from the tokens), the merges of main's 72-dash re-cut and catalog notes (6f1e700, 407416e: no conflict in the OSD, 64 and 14 tests pass here), and the board renders at the final head (eef705d). None adds a pass or more than a few draws; the PC re-run on the final head is recorded in the PR.
+**Since 4bbe604** (all covered by the runs above except the last merge of main, which touches no OSD code): b11602e (wording, the hold bar's position, the default-height line's gap), 378cfa5 (the scroll bar was clipped and is now drawn; rows hide while a platter rim crosses them; a tab change starts the platter on the new row; help rows 16 px taller; quiet ink 17% → 21%; remap cancel and time-out notices), the merge of main's `--no-assets` (626cf12), the 16 board renders (195452b), 3bf1634 (the dark ink on the accent and the last-resort accent read from the tokens), the merges of main's 72-dash re-cut and catalog notes (6f1e700, 407416e: no conflict in the OSD, 64 and 14 tests pass here), the board renders at the final head (eef705d), and a last merge of main (scaffold goldens and PorscheAnalog only; fh6-osd 64 and preview-export 14 tests pass here). None adds a pass or more than a few draws; 
 
 ## Closing review: the 41 lines
 
@@ -38,14 +42,14 @@ In this container (Linux, lavapipe for renders): `cargo test -p fh6-osd` 64 pass
 2. **yes.** `grep -n "todo!|unimplemented!|TODO|FIXME|placeholder|stub" crates/fh6-osd/src/*.rs` finds nothing. Every row reads and writes the live `AppConfig`; the previews drive the same `OsdHost`.
 3. **yes.** The workspace lint table denies `unwrap_used`, `expect_used` and `panic` outside tests, and clippy `-D warnings` is clean; `fh6-osd` keeps `#![forbid(unsafe_code)]`. The Rust review found none on the branch's added lines.
 4. **yes.** `host.rs`'s gate runs a warm frame of `update` and `draw` on wgpu's no-op device and counts allocations with `allocation-counter`: zero (in the 64 passing tests). `tracing::` and `std::fs` appear only in `drive::load` and the studio load, which run once per kit. The review notes one first-use allocation, `defaults()` building an `AppConfig` the first time a slider is drawn (a `OnceLock`, once per process).
-5. **yes.** All 16 states 0.975–1.289 ms GPU median at 3840×2160 on the PC (two runs, table in `docs/perf/osd.md`), under 1.5 ms. Before the rebuild the same GPU measured 1.371–1.512 ms, and the Hood view 2.855 ms.
-6. **yes.** `--demo --open-osd` ran without error in all four cases. CPU per frame and the render-thread rows are in `docs/perf/osd.md`. The OSD's own work ("build": navigate, prepare, anim) is p50 0.012–0.017 ms against main's 0.013–0.017; its p99 (0.047–0.063 against 0.040–0.060) moves 0.03 ms run to run at this size. The p99 of whole CPU per frame is over 1 ms with the carousel (1.110) and once on the Fit tab (1.276, one hitch in upload, record and submit); the OSD only shows while the game is paused.
+5. **yes.** All 16 states 0.987–1.285 ms GPU median at 3840×2160 on the PC at 195452b (two runs), and 0.985–1.308 ms at the final code (tables in `docs/perf/osd.md`), under 1.5 ms. Before the rebuild the same GPU measured 1.371–1.512 ms, and the Hood view 2.855 ms.
+6. **yes.** `--demo --open-osd` ran without error in all four cases, at 4bbe604 and again at 195452b. CPU per frame and the render-thread rows are in `docs/perf/osd.md`. The OSD's own work ("build": navigate, prepare, anim) is p50 0.014–0.018 ms against main's 0.013–0.017, p99 0.041–0.045. Whole CPU per frame meets 1 ms at p50 (0.817–0.899 with the OSD open, 0.696 closed); its p99 is over 1 ms with the OSD open (1.246 / 1.159 / 1.092 at 195452b; 1.110 / 0.976 / 1.276 at 4bbe604), moving about ±0.15 ms run to run, and the spread is in upload, record and submit, not in the OSD's build or draw. The OSD only shows while the game is paused.
 7. **yes.** The rebuild does not touch the visibility rules: `render_loop.rs`'s diff only adds `load_osd` (fonts and assets per kit), the kit counter and the blocker or pool under the live cluster. The OSD still draws only through the existing open path.
 8. **yes.** No `.py` or other script file was added; the bpy is a Rust string in `recipes/osd.rs`. The one non-Rust source added is `crates/fh6-kit/src/shaders/pool.wgsl`, a shader beside the kit's five existing WGSL files.
 9. **yes.** `git log origin/main..HEAD --no-merges` lists 24 commits, all `TJX <TJX@Ngage.com>`, with no co-author trailer. `git grep` for a `C:\Users\<name>` path, a real name or a personal email finds only the Saira font's OFL notice (the font project's own address). The research note's links are public product and documentation pages.
 10. **yes.** Every PC report ends "nothing copied to the game folder"; the PC worked only in its own worktree.
 11. **yes.** The only new dependency is a dev-dependency, `allocation-counter = "0.8.1"` (with wgpu's `noop` feature) for the allocation gates; its decision-log row is the 2026-11-28 "start-up loading … allocation gates" row in `docs/PROGRESS.md`.
-12. **yes.** The PC's `cargo test --workspace` (1010 passed) and clippy `-D warnings` are above, with the container's runs; rustfmt is clean. `cargo check --workspace` runs on the PC (the re-run on the final head is in the PR).
+12. **yes.** The PC's `cargo test --workspace` (1065 passed at 195452b) and clippy `-D warnings` are above, with the container's runs; rustfmt is clean. `cargo check --workspace` passed on the PC at 195452b.
 
 **B. Rendering laws**
 
