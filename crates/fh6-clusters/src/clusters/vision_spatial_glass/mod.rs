@@ -14,7 +14,7 @@
 //! |---|---|---|---|---|
 //! | Sky | horizon and floor glow | horizon through the vanishing point (0, −45) | – | ambient: tilts with felt G |
 //! | Rev tunnel | 16 rounded-rect rings | centred on (0, −45); nearest 700 × 270 half size, radius 90 | – | rank 3: rpm, back to front |
-//! | Wings | tapered capsules, toed in 14° | x ±250..±700, half height 95 inside, 120 outside | 18 / 30 / 8 | rank 4–5: the rpm numerals, labels and the logo zone |
+//! | Wings | tapered capsules, toed in 14° | x ±296..±700, half height 95 inside, 120 outside | 18 / 30 / 8 | rank 4–5: the rpm numerals, labels and the logo zone |
 //! | Front pane | rounded rect | x −280..280, y −246..150, radius 72 | 28 / 24 / 14 | rank 1: the gear (cap 200); rank 2: the speed (cap 88) |
 //! | Puck | disc | (0, 170), r 54 | dome 27 / whole / 8 | rank 4: felt G bead, brake caution arcs, slip halo |
 //! | Blade | pill | x −520..520, y −312..−268 | dome 22 / whole / 4 | rank 1: 15 shift pods, outside-in |
@@ -72,7 +72,14 @@ const RING_IDLE: f32 = 0.045;
 /// so its outermost ring never reads as a frame round the whole stack.
 const RING_IDLE_FADE: f32 = 0.7;
 /// Brightness of the lit tunnel (rank 3) as a share of its colour, so the gear outshines it.
-const TUNNEL_LEVEL: f32 = 0.62;
+const TUNNEL_LEVEL: f32 = 0.75;
+/// The ring the rpm is reaching (the head of the fill) burns brighter than the rest, leaning this
+/// far to white, and this much wider (still under the speed, rank 2), so the tunnel reads as a gauge at a glance and not as decor.
+const HEAD_LEVEL: f32 = 0.85;
+const HEAD_WHITE: f32 = 0.3;
+const HEAD_WIDEN: f32 = 2.0;
+/// Light of a wing numeral the rpm has passed, as a share of its ring's colour leaned to white.
+const NUMERAL_LIT: f32 = 0.9;
 /// The nearest lit rings lean to this pale sky blue (board: primary at the back, #C7E9FF at the
 /// front).
 const NEAR_TINT: u32 = 0xC7_E9_FF;
@@ -109,7 +116,7 @@ const RECEDE_S: f32 = 0.2;
 /// Opacity (linear) of the black core under the pane: the lit rings behind it still glow
 /// faintly through, so the tunnel's vanishing point and its first rings stay readable (board
 /// 02), while the digits keep their contrast.
-const CORE_ALPHA: f32 = 0.86;
+const CORE_ALPHA: f32 = 0.92;
 /// The brightest a part that never changes may show on black (tokens
 /// `motion.idle.staticLumaMaxPct` is 20%): labels, units, numerals and the logo.
 const STATIC_LUMA: f32 = 0.19;
@@ -165,7 +172,7 @@ const COCKPIT: Geom = Geom {
     vanish: vec2(0.0, -45.0),
     ring_half: vec2(700.0, 270.0),
     ring_radius: 90.0,
-    wing_inner: vec2(-345.0, 0.0),
+    wing_inner: vec2(-391.0, 0.0),
     wing_outer: vec2(-580.0, 0.0),
     wing_inner_r: 95.0,
     wing_outer_r: 120.0,
@@ -762,14 +769,21 @@ impl VisionSpatialGlass {
         }
         for (i, _) in lit.iter().enumerate().filter(|(_, c)| c.is_none()) {
             if !g.ring_hidden(i) {
-                ring(p, g, v, i, roles.ink.with_alpha(idle_ring(i)));
+                ring(p, g, v, i, roles.ink.with_alpha(idle_ring(i)), 0.0);
             }
         }
+        let head = lit.iter().rposition(Option::is_some);
         p.layer(LayerOptions::bloom(), |p| {
             for (i, color) in lit.iter().enumerate() {
                 // Lit rings behind the pane are drawn too: they glow through its core.
                 if let Some(c) = color {
-                    ring(p, g, v, i, *c);
+                    if Some(i) == head {
+                        let on = (fill - i as f32).clamp(0.0, 1.0);
+                        let full = c.intensity(HEAD_LEVEL / (TUNNEL_LEVEL * on).max(1e-3));
+                        ring(p, g, v, i, full.lerp(roles.ink, HEAD_WHITE).fade(on), HEAD_WIDEN);
+                    } else {
+                        ring(p, g, v, i, *c, 0.0);
+                    }
                 }
             }
         });
@@ -807,8 +821,17 @@ impl VisionSpatialGlass {
             });
         }
         let speed_at = vec2(dx, g.speed_baseline - g.speed_cap * 0.5);
-        self.speed
-            .draw(p, speed_at, self.faces.speed, g.speed_cap, pal.roles.ink, None);
+        let digits = TextStyle::new(self.faces.speed, g.speed_cap)
+            .paint(pal.roles.ink)
+            .align(Align::Center, VAlign::CapMiddle)
+            .tabular();
+        let field = p.number(speed_at, self.speed.value(), 3, &digits, None);
+        // The unit sits on the speed's baseline, just right of its three cells, in the static ink.
+        let unit = TextStyle::new(self.faces.label, self.label_cap)
+            .paint(static_ink(pal.roles.ink, 1.0))
+            .tracking(self.tracking)
+            .align(Align::Left, VAlign::Baseline);
+        p.text(vec2(field.max.x + 12.0, g.speed_baseline), self.sig.unit.label(), &unit);
     }
 
     /// Rank 4 under the puck: a tilted reference ring (felt G tilts the puck as a gimbal), the
@@ -958,6 +981,7 @@ impl VisionSpatialGlass {
         // Drawn over the glass, so nothing dims them on the way to the eye.
         let ink = static_ink(roles.ink, 1.0);
         let red = static_ink(roles.warning, 1.0);
+        let near = Color::rgb_u32(NEAR_TINT);
         let dx = self.shear_px(Some(0));
         let numeral = TextStyle::new(self.faces.numeral, NUMERAL_CAP)
             .align(Align::Center, VAlign::CapMiddle)
@@ -973,7 +997,22 @@ impl VisionSpatialGlass {
             if !u.is_finite() || !g.numeral_fits(x) {
                 continue;
             }
-            let style = numeral.paint(if rpm >= self.sig.shift_rpm { red } else { ink });
+            // Once the rpm passes it, a numeral lights in its ring's colour: the wings read as
+            // the tunnel's scale.
+            let over_shift = rpm >= self.sig.shift_rpm;
+            let paint = if self.rev_rpm >= rpm {
+                let hue = if over_shift {
+                    pal.shift
+                } else {
+                    pal.primary.lerp(near, u / (RINGS - 1) as f32)
+                };
+                hue.lerp(roles.ink, 0.5).intensity(NUMERAL_LIT)
+            } else if over_shift {
+                red
+            } else {
+                ink
+            };
+            let style = numeral.paint(paint);
             for sign in [-1.0, 1.0] {
                 p.number(vec2(x * -sign + dx, y), n, 1, &style, None);
             }
@@ -984,7 +1023,7 @@ impl VisionSpatialGlass {
             .align(Align::Center, VAlign::CapMiddle);
         let wing_mid = (g.wing_inner.x + g.wing_outer.x) * 0.5;
         p.text(vec2(wing_mid + dx, g.label_y), "RPM \u{d7}1000", &label);
-        p.text(vec2(-wing_mid + dx, g.label_y), self.sig.unit.label(), &label);
+        p.text(vec2(-wing_mid + dx, g.label_y), "RPM \u{d7}1000", &label);
         let style = LogoStyle {
             tint: ink,
             text: ink.into(),
@@ -1069,11 +1108,11 @@ fn caution_steps(brake: f32) -> usize {
     [0.1, 0.4, 0.7].iter().filter(|&&t| brake >= t).count()
 }
 
-/// Strokes ring `i` round `v` as four straight sides and four corner arcs, so each draw covers
-/// only its own band and not the whole ring's box.
-fn ring(p: &mut Painter<'_>, g: &Geom, v: Vec2, i: usize, color: Color) {
+/// Strokes ring `i` round `v` (`widen` px wider than its own stroke) as four straight sides and
+/// four corner arcs, so each draw covers only its own band and not the whole ring's box.
+fn ring(p: &mut Painter<'_>, g: &Geom, v: Vec2, i: usize, color: Color, widen: f32) {
     let (half, r) = g.ring(i as f32);
-    let w = Geom::ring_stroke(i);
+    let w = Geom::ring_stroke(i) + widen;
     let (hx, hy) = (half.x, half.y);
     let r = r.min(hx).min(hy);
     for (a, b) in [
@@ -1138,9 +1177,14 @@ mod tests {
             .atan2(G.wing_inner.x - G.wing_outer.x)
             .to_degrees();
         assert!((4.0..=16.0).contains(&toe), "taper {toe}°");
-        // Inner tip at x −250, outer tip at x −700 (board).
-        assert!((G.wing_inner.x + G.wing_inner_r + 250.0).abs() < 0.5);
+        // Outer tip at x −700 (board); the inner tip stops short of the pane (glass never sits on
+        // glass), even with the pane sheared to its limit.
         assert!((G.wing_outer.x - G.wing_outer_r + 700.0).abs() < 0.5);
+        let pane_reach = G.pane.min.x - SHEAR[1] * G_LIMIT;
+        assert!(
+            G.wing_inner.x + G.wing_inner_r < pane_reach - 4.0,
+            "wing tip meets the pane"
+        );
     }
 
     #[test]
