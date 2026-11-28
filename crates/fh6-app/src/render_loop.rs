@@ -582,8 +582,11 @@ impl Loop {
         self.active = None;
         self.refraction = None;
         self.gpu = Some(Gpu { ctx, surface, kit });
-        // The new kit has none of the dials: each loads again the next time its brand shows.
+        // The new kit has none of the dials: each loads again the next time its brand shows, and
+        // `ensure_palette` shows the car again on the next frame (the new kit needs its palette
+        // and font override too).
         self.logo.new_kit();
+        self.palette_cache = None;
         self.lost_since = None;
     }
 
@@ -660,7 +663,9 @@ impl Loop {
         // `ShowLogo: false` empties the logo zone (no image, wordmark or name) and loads nothing.
         // A brand seen for the first time leaves the zone empty until its dial is in
         // (`poll_logos`), so the name does not show first and the dial a moment later; only a
-        // read that hangs for `NAME_AFTER_FRAMES` shows the name meanwhile.
+        // read that hangs for `NAME_AFTER_FRAMES` shows the name meanwhile. The dial loads
+        // whichever dash is active, so it is ready when the driver switches to one that draws
+        // it or opens the OSD carousel, which draws other dashes with this frame's logo.
         let brand = cfg
             .show_logo
             .then(|| self.resources.logos.car_brand(&self.resources.cars, car_ordinal));

@@ -380,7 +380,7 @@ fn a_parked_car_greets_its_brand_while_the_dial_loads_never_driver_1() {
 }
 
 #[test]
-fn the_logo_zone_stays_empty_while_the_cars_dial_loads() {
+fn the_logo_zone_shows_no_name_while_the_cars_dial_loads() {
     let (car, maker) = (Some(7_u32), Some(1_u32));
     let names = Logo {
         brand_name: "Porsche".into(),
@@ -391,8 +391,9 @@ fn the_logo_zone_stays_empty_while_the_cars_dial_loads() {
         loading: true,
         ..names.clone()
     };
-    // Not the maker's wordmark and not the name while the car's own dial is on its way.
-    assert_eq!(zone_art(None, maker, &loading), ZoneArt::Nothing);
+    // While the car's own dial is on its way: a maker car shows the maker's wordmark at once,
+    // any other car nothing, and never the name.
+    assert_eq!(zone_art(None, maker, &loading), ZoneArt::Image(1));
     assert_eq!(zone_art::<u32>(None, None, &loading), ZoneArt::Nothing);
     assert_eq!(zone_art(car, maker, &names), ZoneArt::Image(7), "the car's dial wins");
     assert_eq!(zone_art(None, maker, &names), ZoneArt::Image(1), "else the maker's");

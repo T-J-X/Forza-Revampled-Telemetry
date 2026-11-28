@@ -412,7 +412,8 @@ struct Faces {
 /// What the logo zone shows ([`zone_art`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ZoneArt<I> {
-    /// Nothing: the logo is turned off, or the car's dial is still loading.
+    /// Nothing: the logo is turned off, or the car's dial is still loading and the dash has no
+    /// wordmark of its own for the car.
     Nothing,
     /// An image, engraved on the dial: the car's logo, else this dash's maker wordmark.
     Image(I),
@@ -422,15 +423,18 @@ enum ZoneArt<I> {
 
 /// What the logo zone shows: `image` (the car's logo, [`Logo::image`]), else `maker` (the
 /// maker's wordmark when the car is one of theirs), else the names in `logo`. While the car's
-/// dial is loading the zone stays empty, so neither the maker's wordmark nor a name shows first
-/// and the car's dial a moment later. The images are any handle, so tests need no kit.
+/// dial is loading a maker car shows the maker's wordmark at once (the same file as the car's
+/// dial, drawn the same way, so the change to the dial cannot be seen) and any other car shows
+/// nothing, so a name never shows first and a dial a moment later. The images are any handle,
+/// so tests need no kit.
 fn zone_art<I>(image: Option<I>, maker: Option<I>, logo: &Logo) -> ZoneArt<I> {
     let off = image.is_none() && logo.brand_name.trim().is_empty() && logo.custom_name.trim().is_empty();
-    if off || logo.loading {
+    if off {
         return ZoneArt::Nothing;
     }
     match image.or(maker) {
         Some(image) => ZoneArt::Image(image),
+        None if logo.loading => ZoneArt::Nothing,
         None => ZoneArt::Names,
     }
 }
@@ -1017,8 +1021,8 @@ impl PorscheAnalog {
     }
 
     /// The logo zone (the host's logo image, else this dash's maker wordmark on the maker's own
-    /// cars, else the brand or custom name; nothing when the logo is turned off or while the
-    /// car's dial is loading, [`zone_art`]) and
+    /// cars, else the brand or custom name; nothing when the logo is turned off, and no name
+    /// while the car's dial is loading, [`zone_art`]) and
     /// "1/min × 1000" under it. Its side of the hub follows the car's scale, not the turning
     /// one, so it never jumps in the middle of a turn.
     fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
