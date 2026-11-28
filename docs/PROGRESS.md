@@ -38,6 +38,24 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after Rust fix phase G, 2026-11-28)
+| Check | Result |
+|---|---|
+| `cargo test --workspace` | ✅ in the cloud: 810 passed, 88 failed, 1 ignored, the 88 being the container's known reds (no DX12 adapter, Windows paths); the GPU tests and image goldens pass on a software GPU (lavapipe), every golden frame byte-identical to main's. The PC's GPU run is pending (its session paused on the usage limit) |
+| `cargo test -p fh6-clusters --test dash_gates` | ✅ 10 passed, no GPU, about 50 s |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean, with the workspace lint table |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK, 0 orphaned goldens |
+| MSRV 1.90 (`cargo +1.90.0 check`) | ✅ |
+| `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
+
+What fix phase G changed (the test findings and findings 16 and 18 of the 2026-11-27 Rust assessment; `program/phases/fix-g-gates/HANDOVER.md`):
+- **Every dash is gated without a GPU.** `crates/fh6-clusters/tests/dash_gates.rs` builds all 48 registry dashes on wgpu's no-op backend and checks the telemetry matrix input by input (G2, G3), hostile telemetry and odd targets (G5), warm-frame allocation and the no-asset fallback. A dash thread runs it and keeps its row in `docs/TELEMETRY_USAGE_MATRIX.md` true.
+- **Packet floats are cleaned once.** `decode` turns NaN and the infinities into 0 and clamps to `±MAX_ABS`; zeros still pass, so divisions need a guard. `normalized_rpm` is gone.
+- **The goldens mean something.** `golden_telemetry` checks every field bit for bit, and `parity-dump` fails on a missing or orphaned golden.
+- **The rules are checks.** One `[workspace.lints]` table denies `unsafe` outside `fh6-win` and `fh6-input`'s `xinput`, and `unwrap`, `expect`, `panic!`, `todo!` and `dbg!` outside tests; the safe crates forbid `unsafe`. The MSRV is 1.90, checked.
+- **The kit counts what it hides** (`fh6_kit::math::repairs`), and `Scene::fingerprint` tells a test whether an input reached the frame.
+
 ## State of the code (after Rust fix phase D, 2026-11-27)
 | Check | Result |
 |---|---|
