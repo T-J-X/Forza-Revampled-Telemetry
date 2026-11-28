@@ -96,3 +96,89 @@ Its findings, each fixed (round t8) or not:
 - V15 yes (both orders). V16 yes. V17 yes: paint, glass, rubber, lamps nameable at full frame, one overhead key. V19 NOT ASSESSED: no glass on this dash. V20 yes.
 
 Decision: **go with changes.** Changes made (t8): the road pool and contact shadows, calmer cars, the softer path and glow, the short parked fade, centred figures, full-ink figures, the rev grey, the figure hysteresis. Still to do before the closing review: the car model pass (shut lines and the scale of the roof's lamp reflections) in the next cloud asset run.
+
+## What was built
+- `crates/fh6-clusters/src/clusters/tesla_adas/`
+  - `mod.rs`: the zone tables (`Geom`, one for the cockpit and one for the hood), the cluster (`update`, `draw`), the shift line (16 thin pills along the top that fill with revs from the outside in, take the palette's stage colours and strobe at the shift point), the left card (logo zone, the two-language Track Mode label, the G-meter with its peak history in 24 direction bins, the rpm and power figures), the right column (gear, speed with its unit, the R · N · D row), the centre-zero power line, and the hood view's legibility halos. 6 unit tests (the layout inside both envelopes with the zone minimums, the halos per view, the rev fill, the shift stages, the peak history, the Japanese glyphs preloaded).
+  - `scene.rs`: the road scene. One fixed chase camera (3.2 m up, 7.2 m behind, 16° down); a three-lane expressway with lane lines 8 m on and 12 m off, solid edge lines and an orange reflector post every 50 m on both sides; curvature from the measured lateral acceleration with a speed floor; the path band; under braking the slow-down dashes and, at the predicted stop point, a stop bar with 止まれ written before it; four seeded road users that keep left; the ego car from an 11-cell yaw atlas with its glow and brake-lamp layers; the parked view with hysteresis; a procedural fallback for every image. 8 unit tests (curvature, the stop point, the ego's place against the recipe, the yaw cell, the seeded traffic, where the road text shows, the first frame and the parked hysteresis, the road's wrap).
+  - `RESEARCH.md`, `README.md`, this file. `spec.md` is the catalog brief and is unchanged.
+- `tools/asset-forge/src/recipes/tesla_adas.rs`: the jobs `font` (checks the vendored font subset against its recorded hash), `night` (the ComfyUI plate, with everything but the lights taken to black), `ego` (11 yaws, each with a glow and a brake-lamp pass), `parked` and `traffic` (three bodies at four elevations and five headings), the atlases and this dash's `ASSETS.md`. 3 unit tests.
+- `assets/clusters/tesla_adas/`: eight PNGs, the Noto Sans JP subset with its licence, and `ASSETS.md`. The old build's ten images are removed.
+- `crates/fh6-kit/src/text.rs`: `Fonts::preload_text` (8 lines; see "Shared places touched").
+- `docs/TELEMETRY_USAGE_MATRIX.md`: this dash's row.
+- `tests/golden/images/TeslaAdas_*.png`: the eight goldens (four states, cockpit and hood).
+- `docs/handover-shots/cluster-tesla_adas-*.png`: the before and after pair and the review crops.
+
+## Telemetry
+Every field the dash reads is one the golden packets cover, or is derived from one:
+- **Read as they are (through `fh6_kit::Signals`):** rpm (current, limiter, idle), gear, speed, brake, the race flag.
+- **Read from the packet:** power (W).
+- **Derived:** lateral and longitudinal G from acceleration (the kit's smoothing); the road's curvature from lateral acceleration over the square of the speed, with a 3 m/s floor; the stop point from speed and measured deceleration (`v² / 2a`, with a 2 m/s² floor, shown up to 80 m); the shift stages from the limiter and `ShiftPointPct`; the power line's full scale from the highest power seen (110 kW floor).
+- **Velocity:** read through the kit's body slip angle (`atan2(velocity_x, velocity_z)`), which turns the ego car's yaw cell. The matrix row lists `velocity` (gates G2 and G3 pass; with the dash's images present the gate sees the yaw change, so the no-sprite fallback car turns too and the dash reads the same inputs with or without assets).
+- **Not read:** yaw rate, steer, throttle, suspension, wheel speeds, world position and every other offset the golden packets do not cover.
+- **Not from telemetry at all:** the traffic. It is a seeded ambient simulation (`scene.rs`, `Traffic`), it carries no distance or closing-speed label, and nothing in the scene is drawn as a detection.
+
+## Changes from the real display and from the brief
+From `RESEARCH.md`, "Deliberate changes and why" and "Japan-inspired":
+- A. The gear leads and the speed follows (Tesla shows the speed biggest and no gear).
+- B. A shift light Tesla does not have, drawn as 16 thin pills where Tesla's telltale row sits.
+- C. Tesla's centre-zero power meter is the power display; the revs are carried by the shift line.
+- D. Only verified data: no speed limit, cruise or Autopilot state, map, range, telltales or turn signals.
+- E. The traffic is a seeded simulation with no distance labels.
+- F. The power meter's left side fills green only when the packet reports negative power.
+- G. No lit screen rectangle: every part floats on true black.
+- H. One generic ego coupe, rendered in Blender; the under-car glow shows the shift colour and the drift, not an Autopilot state; the camera is fixed.
+- I. No start-up show.
+- J. The driven car's logo, small and grey, at the top of the left card.
+- K. Track Mode's G-meter fills the card that holds Tesla's map.
+- L. Noto Sans (OFL) for every figure and label.
+- M. (TJX, 28 Nov 2026: "make it japan inspired as we are in horizon 6") The road is a three-lane Japanese expressway at night that keeps left, with NEXCO lane lines, orange reflector posts, a kei box car in the slow lane, and a tunnel's ceiling lamps mirrored in the car's glass.
+- N. Two-language labels, Japanese above and Latin below.
+- O. Braking is written on the road: slow-down dashes and a stop bar with 止まれ.
+- P. Left out on purpose: speed-limit roundels, route numbers, destination names and tourist motifs.
+
+Against the catalog brief (`spec.md`): the brief's ten pods, gear pill with neighbour ghosts, SLIP / LOCK / LIM chips, blind-spot arcs, lead-car lock boxes, glTF mesh cars, suspension-driven ride height and per-corner detail are not built. The real display has none of them (`CLUSTER_PROMPT.md`: "Where the brief invents a concept the real car doesn't have, follow the real car"), and the lock boxes and arcs would present simulated traffic as detections. AGENTS.md's Agent 3D text still describes that older concept.
+
+## Shared places touched
+- `crates/fh6-kit/src/text.rs`: one new method, `Fonts::preload_text(font, text)` (8 lines, no change to existing behaviour). The kit preloads a fixed Latin set per face; a face for another script would rasterise its glyphs on the first frame it is drawn, which allocates in a warm frame (the warm-frame allocation gate) and shows the label one frame late. The method lets a dash name the characters it draws when it is built. It is a kit change made by a dash thread, so the coordinator should look at it at the merge.
+- `docs/TELEMETRY_USAGE_MATRIX.md`: this dash's row only.
+- `docs/handover-shots/cluster-tesla_adas-*.png`.
+- Nothing in `common/`, the registry, the catalog table, the hero library, `docs/specs/optics.md`, `docs/PROGRESS.md` or the shared ledgers (`assets/ASSETS.md`, `assets/assets.json`, `assets/forge.lock.json`, `assets/contact-sheet.html`), which every build rewrites and this thread restored each time. The asset-forge registration lines for the `tesla_adas` set were already there from the old build.
+
+## Requests for shared code
+1. **OSD: a label and a switch for simulated traffic.** The road users are an ambient simulation. The OSD should say so beside this dash ("simulated traffic") and offer a switch that turns them off; the dash would read it as a config extra key. Until then the handover and `README.md` say it.
+2. **`common::adas_road`:** this dash now uses four of its constants (`EGO_Z`, `LANE_WIDTH`, `MAX_DT`, `MIN_CURVE_SPEED`) and none of its functions. If no other ADAS dash takes the rest, the module can shrink to those constants.
+3. **A perspective image paint in the kit.** Road text (止まれ) is drawn as glyphs scaled per character by depth, which reads at the sizes shown but is not a true ground projection. A paint that maps an image or a text run through a homography would make road markings exact for every road-scene dash.
+4. **The 8-bit premultiplied resolve and dark overlays.** `post.wgsl`'s `fs_resolve` writes `encode(covered / a) * a`, which is right for what DWM blends, but it means black with alpha laid over faint content makes that content brighter on screen. A note in `docs/kit/README.md` would save the next dash the search (see "What sibling dashes must know").
+5. **asset-forge: light-only plates.** `lights_only` (keep an image's light, take the rest to black, keep each pixel's hue) lives in this recipe; any dash that hangs a ComfyUI plate as a light card needs the same step, so it could move to `img`.
+6. **AGENTS.md, Agent 3D:** its text describes the old concept (lock boxes, proximity arcs, a gear pill, brand-tinted ego). It should follow the rebuilt dash, or say that the catalog and `RESEARCH.md` lead.
+7. **Device folder tools for cloud threads:** this thread's session was never offered the device folder tools, so it could not stage PC files. The route that worked, every time: the PC's Remote Control session copies the files into the dash's Drive masters folder, the cloud thread downloads them with the Drive connector and checks each SHA-256 before committing.
+
+## What sibling dashes must know
+- **Judge the cockpit view on `<state>_cockpit.png`, never on the over-black `<state>.png`.** Over black the resolve's display-space alpha keeps a 3 % ink surface at sRGB 7; in the cockpit composite the opaque scrim sits under the cluster and everything adds linearly, so the same surface shows at sRGB 46 and a lane line goes from 154 to 199. A faint layer that looks right over black is a grey slab in the real view. Fade such a layer with an eased (squared) fall, because a straight ramp reads as an edge once added linearly.
+- **Contact shadows go in with the multiply blend.** Multiplied into the road's light they take light only where there is some and lay nothing over black, so they cannot make the box described next.
+- **Do not bake a shadow or any black-with-alpha layer into a sprite that sits over faint content.** The kit's 8-bit resolve treats alpha in display space, so a soft black shadow over a 3 % road surface shows as a lighter box round the car. Render sprites without a shadow catcher (a hidden ground plane still bounces light), and keep a hood view's halo and a faint surface from overlapping.
+- **A ComfyUI plate can light a Blender scene instead of being drawn.** Hung over the car as an emission card that the camera does not see, it puts the plate's lights into glass and paint. Reflections of a card only reach a near-horizontal roof when the lights sit almost overhead; lights off to the side miss it.
+- **SDXL draws a tunnel in perspective whatever the prompt says about a flat view.** Plan the card for the picture SDXL gives, or prompt for a subject that is flat by nature.
+- **A second script needs its glyphs preloaded** (`Fonts::preload_text`) and a font subset: Noto Sans JP Medium cut down to the characters drawn is 160 KB; the full face is over 5 MB. Keep the list of characters in one constant and test that every string drawn is inside it.
+- **Ghost digits behind a proportional-looking number misread** ("74" over ghost 8s read as "874" at a glance in this family). This family draws no ghost digits and hangs the unit from the field's right edge.
+- **Seeded traffic must open the scene in a believable order** (a slow car just ahead on the left, a passing car further ahead on the right), or the first frame shows cars stacked at one depth.
+- **Fade lane paint per piece with a gradient**, not per line: a long edge line with one alpha pops at the far end as the road bends.
+- **Shut lines can be cut in the shader.** A lofted body has no panel gaps; bands in object space (across the top for the boot lid and bonnet, down the sides for the doors, across the tail for the bumper line), dark and with no clear coat, read as gaps at about a pixel wide in the dash.
+- **Hold the small figures through the limiter.** The limiter swings the revs and the power every frame; a figure that follows each step flickers its last digits at 30 Hz (the flash audit marks it). Display hysteresis of 1.5 steps fixes it without lag the eye sees.
+- **The cloud container can render Blender previews on the CPU** (bpy 5.3.0 in a venv) and the dash on a software GPU, which is enough to iterate on a recipe before the paid run; ComfyUI is not available there, so the plate needs a stand-in until the cloud run.
+
+## Penpot
+
+File `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, page `07 · TeslaAdas` `b568ed3f-64cd-806f-8008-fd974581b17e`. Boards (exported at 3840 × 2160 to the Drive folder `tesla_adas/boards/`):
+
+| Board | ID |
+|---|---|
+| cockpit 1 idle | `347e5ae2-9e0b-80b1-8009-0355cb14872f` |
+| cockpit 2 cruise | `347e5ae2-9e0b-80b1-8009-035605af3009` |
+| cockpit 3 redline | `347e5ae2-9e0b-80b1-8009-03562540c162` |
+| cockpit 4 drift-braking | `347e5ae2-9e0b-80b1-8009-0356659edb39` |
+| hood 1 idle | `347e5ae2-9e0b-80b1-8009-035681f73b9f` |
+| hood 2 cruise | `347e5ae2-9e0b-80b1-8009-0356855632f5` |
+| hood 3 redline | `347e5ae2-9e0b-80b1-8009-03568907d954` |
+| hood 4 drift-braking | `347e5ae2-9e0b-80b1-8009-03568caa256e` |
