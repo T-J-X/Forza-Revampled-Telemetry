@@ -232,3 +232,5 @@ New edge cases: wheel speeds are zero or equal when stationary or airborne (the 
 ## 17. Direction from TJX (2026-11-28 10:53)
 
 On the night meters and the real MFD dials (16.1, 16.4): "Yes these old school ones that look realistic is what I'm looking for." The board leads with the real stock meters at night (black faces, cool-white numerals, crimson needles, deep red zone) and the real MFD dial template, drawn realistically at 4K, with the twist (floating MFD tiles) and the filled-in parts kept in that period look.
+
+TJX, 10:55: "Yes and you can change for example needle color etc." The realistic look is customisable through the palette roles and OSD options. Real presets from the photos: **Stock night** (black face, cool-white numerals, crimson needles; 16.4), **Stock day** (black face, white numerals, orange-red needles; 8.10), **Nismo black** (yellow numerals, orange lighting; 8.11) and **Nismo white** (white face, black numerals, red needles; 8.11), plus free choice of needle colour, numeral and backlight colour, and face colour within the house luminance rules.
