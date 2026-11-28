@@ -164,7 +164,7 @@ On the LG C1 a 4K pixel is 0.277 mm (48"), 0.317 mm (55") or 0.375 mm (65") wide
 
 **Shared parts it can reuse.** The Liquid Glass pilot's `assets/clusters/liquid_glass/studio_env.png` (octahedral studio, 4096², gain 16, black within 44° of the viewer), as CarplayIsland and others do; the kit's analytic studio as fallback; the font files already in `assets/fonts/` (Saira, Saira Condensed, Barlow Semi Condensed, Titillium Web, Michroma).
 
-LIBRARY GAP: optics.md §4 law and CPU test for a contact magnifier with a base, m = n / (n − (n − 1) t / R), with t/R = 1, the aplanatic n², ×2.5 at t/R = 1.3811 and the fold radius; no size; the loupe and the G-lens depend on it and optics.md requires it before use; the dash thread in `crates/fh6-kit/src/optics.rs`.
+CLOSED (was a LIBRARY GAP): the contact magnifier is in the kit since main 1d456d2: `docs/specs/optics.md` §4 and `Profile::magnifier(radius, m, n)` with the helpers in `fh6_kit::optics`. The kit's finding: a ×2.5 sapphire loupe is the flattest choice, and folding starts at ×2.75. The dash uses that profile instead of its own law.
 LIBRARY GAP: optics.md entry for the image velocity under a moving lens, (1 − m) v, and the exposure smear it gives; no size; needed only if the whip smear is kept; the dash thread in `optics.rs`.
 
 ## 9. Departures and open questions for the board
