@@ -203,7 +203,7 @@ TJS, 2026-11-28: "Do this more so also for dashes not made yet", "if each has it
 | 30 | `GtrNismoMfd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gtr_nismo_mfd/RESEARCH.md) | `gtr_nismo_mfd\references\SOURCES.md` | researching |
 | 31 | `SimInputTrace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sim_input_trace/RESEARCH.md) | [`sim_input_trace\references\`](https://drive.google.com/drive/folders/1nN_hXAx0nuLtMF6kjJrl-rXeVRQM6wNA) with `SOURCES.md` | written |
 | 32 | `AuroraVeil` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aurora_veil/RESEARCH.md) | [`aurora_veil\references\`](https://drive.google.com/drive/folders/16YxqscXV85I3EK_4TQLsj_0w-jdhLsNZ) with `SOURCES.md` | written |
-| 33 | `LorenzButterfly` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lorenz_butterfly/RESEARCH.md) | `lorenz_butterfly\references\SOURCES.md` | researching |
+| 33 | `LorenzButterfly` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lorenz_butterfly/RESEARCH.md) | [`lorenz_butterfly\references\`](https://drive.google.com/drive/folders/1Zlaim1FFMNR8x27A8unePgbKMQXrAe3J) with `SOURCES.md` | written |
 | 34 | `PaganiHorologerie` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/RESEARCH.md) | [`pagani_horologerie\references\`](https://drive.google.com/drive/folders/1RAwEJtOsIX4bxEe6NpNDbqlTMQFsSSHs) with `SOURCES.md` | written |
 | 35 | `SapphireMystery` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/RESEARCH.md) | `sapphire_mystery\references\SOURCES.md` | researching |
 | 36 | `ArNavWayfinder` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/RESEARCH.md) | `ar_nav_wayfinder\references\SOURCES.md` | researching |
