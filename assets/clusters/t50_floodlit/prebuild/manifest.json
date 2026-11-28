@@ -1,0 +1,76 @@
+{
+  "build": 43,
+  "dash": "T50Floodlit",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/t50_floodlit/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "d89aad65a49c669a",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=430001 prompt=\"macro photograph of black full-grain nappa leather, fine natural pebble grain, soft satin sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"stitching, perforation, plastic, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3891",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/textures/leather_binnacle_black.png",
+      "name": "leather_binnacle_black",
+      "runtime": [],
+      "use": "the binnacle surround (leather(...).set(\"texture\")) for edges and reflections"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "50598fc6b780edc8",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"aniso\":0.9,\"color\":[0.9129999876022339,0.921999990940094,0.9240000247955322],\"finish\":\"spun\",\"grain\":0.8,\"kind\":\"metal\",\"name\":\"spun_aluminium_chapter\",\"rough\":0.25999999046325684}",
+      "kind": "swatch disc (Blender, 16-bit sRGB, straight alpha) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/swatches/spun_aluminium_chapter.png",
+      "name": "spun_aluminium_chapter",
+      "runtime": [],
+      "use": "the chapter ring's fine circular brushing"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "8b91f5f9e81ed254",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2080 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_pane_frame\",\"rough\":0.3199999928474426,\"tow\":10.0}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/swatches/carbon_twill_pane_frame.png",
+      "name": "carbon_twill_pane_frame",
+      "runtime": [],
+      "use": "frames of the two 300x220 panes"
+    },
+    {
+      "dims": "496x496 at 1:1 (992x992 master)",
+      "fingerprint_fnv64": "419e9a00a3ea4253,e30b7ba1e359d261,5d310236fbc2e232",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 496 local px at 2 px/px, hero rig, box-filtered to 1:1; parts well, ring",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/sprites/dial_ring_480_0.png",
+      "name": "dial_ring_480",
+      "runtime": [
+        "assets/clusters/t50_floodlit/prebuild/sprites/dial_ring_480_0.png",
+        "assets/clusters/t50_floodlit/prebuild/sprites/dial_ring_480_1.png",
+        "assets/clusters/t50_floodlit/prebuild/sprites/dial_ring_480_2.png"
+      ],
+      "use": "the 480 px thin polished bezel over a satin spun chapter blank, no numerals (the scale follows the car's max rpm)"
+    },
+    {
+      "dims": "212x212 at 1:1 (424x424 master)",
+      "fingerprint_fnv64": "242676c8f6813177,bfc87eb6b4698157,55293f1c66334992",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 212 local px at 2 px/px, hero rig, box-filtered to 1:1; parts cap",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/sprites/centre_cap_200_0.png",
+      "name": "centre_cap_200",
+      "runtime": [
+        "assets/clusters/t50_floodlit/prebuild/sprites/centre_cap_200_0.png",
+        "assets/clusters/t50_floodlit/prebuild/sprites/centre_cap_200_1.png",
+        "assets/clusters/t50_floodlit/prebuild/sprites/centre_cap_200_2.png"
+      ],
+      "use": "the 200 px machined cap over the hub"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "The needle's floodlit shadow is the dash's projection maths; these are the hardware it falls on.",
+  "preview": false,
+  "schema": 1,
+  "snake": "t50_floodlit"
+}

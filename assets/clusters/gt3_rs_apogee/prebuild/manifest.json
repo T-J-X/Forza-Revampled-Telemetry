@@ -1,0 +1,91 @@
+{
+  "build": 20,
+  "dash": "Gt3RsApogee",
+  "deferred": [
+    "the attitude ball and its gimbal cage: markings settle in step 1 against the reference ball"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/gt3_rs_apogee/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "cccf0a53974d8a79",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=200001 prompt=\"macro photograph of crumpled thin insulation foil, dense random crinkles and soft folds, uniform mid grey, relief only, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"gold colour, metallic reflections, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.8797",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/textures/mli_foil_crinkle_height.png",
+      "name": "mli_foil_crinkle_height",
+      "runtime": [],
+      "use": "height only: the dash's gold-foil dial backing shades it with metal GOLD (SDXL never draws the metal)"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "b43f394ab0068d20",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=200004 prompt=\"macro photograph of a continuous black glassy ceramic coating, fine pitting and subtle mottled matte-to-satin variation across one uninterrupted surface, charcoal black, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"tiles, squares, panels, gaps, grid, grout lines, borders, edges, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 2.1405",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/textures/heat_shield_tile_coating.png",
+      "name": "heat_shield_tile_coating",
+      "runtime": [],
+      "use": "surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "23034f94d5c535bb",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=200003 prompt=\"photograph of a faint star field in deep black space, sparse dim stars of varied brightness, no nebula, seamless tileable texture\" extra negative=\"planets, nebula, galaxy, spacecraft, text, objects, perspective, seams, blur, cartoon\", tile seam score 1.0866",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/textures/star_field_tile.png",
+      "name": "star_field_tile",
+      "runtime": [],
+      "use": "environment for reflections in the titanium and gold (a tile, not a figure)"
+    },
+    {
+      "dims": "516x516 at 1:1 (1032x1032 master)",
+      "fingerprint_fnv64": "c6adb7fd5b97cdf9,22396953a6d4ddaa,dc9ee15da13fc26e",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 516 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/sprites/rev_counter_ring_500_0.png",
+      "name": "rev_counter_ring_500",
+      "runtime": [
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/rev_counter_ring_500_0.png",
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/rev_counter_ring_500_1.png",
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/rev_counter_ring_500_2.png"
+      ],
+      "use": "the 500 px machined titanium rev-counter ring, no hub (22 px width proposed)"
+    },
+    {
+      "dims": "38x38 at 1:1 (76x76 master)",
+      "fingerprint_fnv64": "a917dd2b22a68796,463d5f3ef4965854,07f74ea510016f79",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 38 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/sprites/docking_light_off_0.png",
+      "name": "docking_light_off",
+      "runtime": [
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/docking_light_off_0.png",
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/docking_light_off_1.png",
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/docking_light_off_2.png"
+      ],
+      "use": "the 12 docking lights on the 760x30 strip: 30 px caps, unlit and lit"
+    },
+    {
+      "dims": "38x38 at 1:1 (76x76 master)",
+      "fingerprint_fnv64": "268f931514ab15c0",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 38 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "gt3_rs_apogee/prebuild/sprites/docking_light_on_0.png",
+      "name": "docking_light_on",
+      "runtime": [
+        "assets/clusters/gt3_rs_apogee/prebuild/sprites/docking_light_on_0.png"
+      ],
+      "use": "the 12 docking lights on the 760x30 strip: 30 px caps, unlit and lit"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Space-instrument materials for an out-of-this-world GT3 RS dash.",
+  "preview": false,
+  "schema": 1,
+  "snake": "gt3_rs_apogee"
+}

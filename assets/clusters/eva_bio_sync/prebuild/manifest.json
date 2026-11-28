@@ -1,0 +1,24 @@
+{
+  "build": 64,
+  "dash": "EvaBioSync",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/eva_bio_sync/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "06cf448c4d3d2195",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=640001 prompt=\"macro photograph of translucent cell nucleus material under a microscope, soft granular chromatin texture, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"cell outlines, hexagons, stain colours, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.5620",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "eva_bio_sync/prebuild/textures/cell_nucleus_grain.png",
+      "name": "cell_nucleus_grain",
+      "runtime": [],
+      "use": "optional modulation of the lit-cell gradient"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "eva_bio_sync"
+}

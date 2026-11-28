@@ -1,0 +1,24 @@
+{
+  "build": 61,
+  "dash": "RattrapanteSector",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/rattrapante_sector/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "9f7296f6ccaf05b2",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"aniso\":0.9,\"color\":[0.5419999957084656,0.4970000088214874,0.4490000009536743],\"finish\":\"spun\",\"grain\":0.8,\"kind\":\"metal\",\"name\":\"spun_titanium_arc_rail\",\"rough\":0.25999999046325684}",
+      "kind": "swatch disc (Blender, 16-bit sRGB, straight alpha) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "rattrapante_sector/prebuild/swatches/spun_titanium_arc_rail.png",
+      "name": "spun_titanium_arc_rail",
+      "runtime": [],
+      "use": "the arc rail's tangential grain"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "rattrapante_sector"
+}

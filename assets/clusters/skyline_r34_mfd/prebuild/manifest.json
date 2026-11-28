@@ -1,0 +1,41 @@
+{
+  "build": 12,
+  "dash": "SkylineR34Mfd",
+  "deferred": [
+    "the MFD tile housings and the dial-face print: layout and text"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/skyline_r34_mfd/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "ec07d2c04a170177",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=120001 prompt=\"macro photograph of a dim late-1990s liquid crystal display panel, soft cloudy backlight mura and faint uneven brightness, very fine diffuser grain, dark grey-green, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"text, pixel grid, numerals, segments, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 6.7470",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "skyline_r34_mfd/prebuild/textures/lcd_backlight_mura.png",
+      "name": "lcd_backlight_mura",
+      "runtime": [],
+      "use": "modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural"
+    },
+    {
+      "dims": "456x456 at 1:1 (912x912 master)",
+      "fingerprint_fnv64": "385f5e93852a2a43,53354b813d9be54c,e2cd10d26ea76335",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 456 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "skyline_r34_mfd/prebuild/sprites/tach_ring_440_0.png",
+      "name": "tach_ring_440",
+      "runtime": [
+        "assets/clusters/skyline_r34_mfd/prebuild/sprites/tach_ring_440_0.png",
+        "assets/clusters/skyline_r34_mfd/prebuild/sprites/tach_ring_440_1.png",
+        "assets/clusters/skyline_r34_mfd/prebuild/sprites/tach_ring_440_2.png"
+      ],
+      "use": "the 440 px tach ring: matte period black plastic with a polished inner chamfer (14 px width proposed; step 1 checks the R34 ring)"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Period LCD and plastics.",
+  "preview": false,
+  "schema": 1,
+  "snake": "skyline_r34_mfd"
+}

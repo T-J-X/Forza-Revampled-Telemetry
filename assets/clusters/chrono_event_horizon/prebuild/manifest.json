@@ -1,0 +1,24 @@
+{
+  "build": 19,
+  "dash": "ChronoEventHorizon",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/chrono_event_horizon/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "57ebd5546c140d38",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=190001 prompt=\"macro photograph of fine sheared luminous smoke filaments all streaming in one horizontal direction, turbulent wisps of varied brightness on black, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"vortex, spiral, galaxy, stars, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.2458",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "chrono_event_horizon/prebuild/textures/accretion_shear_filaments.png",
+      "name": "accretion_shear_filaments",
+      "runtime": [],
+      "use": "greyscale shear texture wrapped polar onto the 1100x190 disk and tinted by the dash; the lensing itself is the dash's deflection table, never this texture"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Only the disk's material grain; the black-hole optics are the dash's maths.",
+  "preview": false,
+  "schema": 1,
+  "snake": "chrono_event_horizon"
+}

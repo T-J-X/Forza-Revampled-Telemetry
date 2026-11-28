@@ -1,0 +1,24 @@
+{
+  "build": 33,
+  "dash": "LorenzButterfly",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/lorenz_butterfly/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "6b76bd53770bddb5",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=330001 prompt=\"macro photograph of matte black powder-coat paint, very fine uniform grain with tiny soft flecks, near black, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"orange peel bumps, scratches, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.6691",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "lorenz_butterfly/prebuild/textures/pad_rim_powder_coat.png",
+      "name": "pad_rim_powder_coat",
+      "runtime": [],
+      "use": "labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "lorenz_butterfly"
+}

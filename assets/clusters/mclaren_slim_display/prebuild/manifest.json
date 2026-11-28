@@ -1,0 +1,35 @@
+{
+  "build": 65,
+  "dash": "MclarenSlimDisplay",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/mclaren_slim_display/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "6ee9e589b8ced2f1",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=160001 prompt=\"macro photograph of the anti-glare matte coating of a switched-off black display screen, fine random etched micro-grain, uniform soft frosted surface, dark charcoal grey, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"pixel grid, subpixels, moire, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 4.0635",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "mclaren_slim_display/prebuild/textures/antiglare_matte_grain.png",
+      "name": "antiglare_matte_grain",
+      "runtime": [],
+      "use": "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "3059701c1ab65e96",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=650002 prompt=\"macro photograph of black alcantara microfibre suede, soft dense nap with faint directional sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"leather pores, stitching, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 0.9897",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "mclaren_slim_display/prebuild/textures/alcantara_black.png",
+      "name": "alcantara_black",
+      "runtime": [],
+      "use": "the dash top the slab folds into (alcantara(...).set(\"texture\"))"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "mclaren_slim_display"
+}

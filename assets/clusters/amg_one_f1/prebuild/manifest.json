@@ -1,0 +1,37 @@
+{
+  "build": 16,
+  "dash": "AmgOneF1",
+  "deferred": [
+    "the housing, the rim arc and the F1 shift-light caps: need the Penpot layout and the cap pitch"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/amg_one_f1/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "6ee9e589b8ced2f1",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=160001 prompt=\"macro photograph of the anti-glare matte coating of a switched-off black display screen, fine random etched micro-grain, uniform soft frosted surface, dark charcoal grey, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"pixel grid, subpixels, moire, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 4.0635",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "amg_one_f1/prebuild/textures/antiglare_matte_grain.png",
+      "name": "antiglare_matte_grain",
+      "runtime": [],
+      "use": "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "17914c6bbf53a69d",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2016 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_rim\",\"rough\":0.3199999928474426,\"tow\":12.0}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_one_f1/prebuild/swatches/carbon_twill_rim.png",
+      "name": "carbon_twill_rim",
+      "runtime": [],
+      "use": "surface of the 780 px carbon rim arc (2x2 twill, 12 px tows)"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Twill carbon is Blender, never SDXL.",
+  "preview": false,
+  "schema": 1,
+  "snake": "amg_one_f1"
+}

@@ -1,0 +1,24 @@
+{
+  "build": 37,
+  "dash": "NeuralCyberSynapse",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/neural_cyber_synapse/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "f109bfca992d2bc3",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=370001 prompt=\"macro photograph of a translucent biological cell membrane under a microscope, soft cytoplasm granules and faint fibrous texture, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"cell outlines, nucleus, stain colours, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.5039",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "neural_cyber_synapse/prebuild/textures/soma_membrane_grain.png",
+      "name": "soma_membrane_grain",
+      "runtime": [],
+      "use": "optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "neural_cyber_synapse"
+}

@@ -1,0 +1,27 @@
+{
+  "build": 56,
+  "dash": "RevueltoCorsa",
+  "deferred": [
+    "the hex-mesh grille: the hero library has no hexagon perforation yet",
+    "the 300 px hexagon pod: the library has no hexagon outline yet, and the anodise tint is not in the brief"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/revuelto_corsa/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "2fb0d18d4647fb0c",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=560001 prompt=\"macro photograph of forged carbon composite with large flat chopped carbon flakes, broad overlapping chips under glossy resin, black and graphite grey with soft fibre sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"woven, twill, grid, checker pattern, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.5517",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "revuelto_corsa/prebuild/textures/forged_composite_large_chips.png",
+      "name": "forged_composite_large_chips",
+      "runtime": [],
+      "use": "the hexagon pod body"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "revuelto_corsa"
+}

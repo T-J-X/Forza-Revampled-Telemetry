@@ -1,0 +1,39 @@
+{
+  "build": 72,
+  "dash": "HyperbolicTiles",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/hyperbolic_tiles/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "2d7cf65b6adae7c9",
+      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=720001 prompt=\"macro photograph of finely acid-etched frosted glass, uniform fine matte grain, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"scratches, fingerprints, patterns, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.1423",
+      "kind": "texture (ComfyUI, seamless, sRGB)",
+      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
+      "master": "hyperbolic_tiles/prebuild/textures/etched_glass_grain.png",
+      "name": "etched_glass_grain",
+      "runtime": [],
+      "use": "labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths"
+    },
+    {
+      "dims": "416x416 at 1:1 (832x832 master)",
+      "fingerprint_fnv64": "a8ddd7480817b6b8,a3eeb97140092f5a,ba15562f2318ce06",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 416 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_0.png",
+      "name": "disc_rim_ring_400",
+      "runtime": [
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_0.png",
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_1.png",
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_2.png"
+      ],
+      "use": "the 400 px thin machined rim (8 px width proposed); one render, mirrored for both discs"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "hyperbolic_tiles"
+}
