@@ -1,4 +1,4 @@
-//! Computed assets for the liquid-metal dashes (`OilSlickChrome`, `FaradayMandala`): a studio
+//! Computed assets for the liquid-metal dashes (`KineticLiquidMetal`, the oil-slick chrome blob since 08:50, and `FaradayMandala`): a studio
 //! environment, metal matcaps, Fresnel and thin-film look-up tables. Each one is exact maths, so
 //! it is made here on the CPU instead of being rendered or generated: a mirror of emissive panels
 //! on black is the panels' own radiance, and a measured metal's reflectance is its Fresnel sum,
@@ -18,7 +18,7 @@
 //!   a flat spectrum is white (`spectrum_to_linear_srgb`, copied here because asset-forge does not
 //!   link the kit).
 //! - **Thin film** ([`film_reflectance`]): the Airy sum of `optics.md` §9 with the metal as a
-//!   complex-index substrate (CATALOG.md, OilSlickChrome's maths row).
+//!   complex-index substrate (CATALOG.md, the oil-slick maths row).
 use crate::img::{self, Img};
 use std::f32::consts::PI;
 
@@ -454,7 +454,7 @@ pub fn matcap(metal: Metal, n: usize) -> Img {
 
 // -------------------------------------------------------------------------------- thin film
 
-/// Thickest film in the thin-film tables (nm): OilSlickChrome's drainage runs 900 to 100 nm.
+/// Thickest film in the thin-film tables (nm): The oil-slick blob's drainage runs 900 to 100 nm.
 pub const FILM_MAX_NM: f32 = 1200.0;
 
 /// A thin-film table: x = thickness 0..[`FILM_MAX_NM`] nm (`w` steps, first column bare metal),

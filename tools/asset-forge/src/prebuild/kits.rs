@@ -24,6 +24,7 @@ use crate::hero::texture::Recipe;
 
 /// Dashes with a kit, in build order.
 pub const ORDER: &[&str] = &[
+    "kinetic_liquid_metal",
     "valkyrie_lmp1",
     "skyline_r34_mfd",
     "amg_one_f1",
@@ -53,7 +54,6 @@ pub const ORDER: &[&str] = &[
     "bionic_spaceframe",
     "star_sail_origami",
     "hyperbolic_tiles",
-    "oil_slick_chrome",
     "faraday_mandala",
 ];
 
@@ -216,9 +216,9 @@ const CRACKLE: Tex = tex(
 #[allow(clippy::too_many_lines)]
 pub fn kit(snake: &str) -> Option<Kit> {
     let k = match snake {
-        "oil_slick_chrome" => Kit {
-            key: "OilSlickChrome",
-            build: 73,
+        "kinetic_liquid_metal" => Kit {
+            key: "KineticLiquidMetal",
+            build: 7,
             computed: [
                 studio_pair().to_vec(),
                 vec![

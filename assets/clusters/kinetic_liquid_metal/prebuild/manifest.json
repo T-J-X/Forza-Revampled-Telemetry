@@ -1,11 +1,11 @@
 {
-  "build": 73,
-  "dash": "OilSlickChrome",
+  "build": 7,
+  "dash": "KineticLiquidMetal",
   "deferred": [
     "the metaball skin and its thickness field: computed live from the brief's equations (Jeffreys h = sqrt(mu s / (rho g t)), skin at sum q^2 / |x - c|^2 = 1), never a texture",
     "a polished chrome swatch: a smooth mirror has no surface texture to bake, so chrome_matcap and chrome_fresnel replace it"
   ],
-  "drive_folder": "FH6 WheelDash v2 - 4K Masters/oil_slick_chrome/prebuild",
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/kinetic_liquid_metal/prebuild",
   "items": [
     {
       "dims": "2048x2048 runtime (4096x4096 master)",
@@ -13,10 +13,10 @@
       "generator": "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer",
       "kind": "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/liquid_metal_studio_env_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/liquid_metal_studio_env_master.png",
       "name": "liquid_metal_studio_env",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/liquid_metal_studio_env.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/liquid_metal_studio_env.png"
       ],
       "use": "what the metal mirrors: the octahedral environment for the kit's reflection lookup (gain 16); turn it about the view axis with the G-light"
     },
@@ -26,10 +26,10 @@
       "generator": "computed: prebuild::liquid::env_band, 8x supersampled slice of the studio",
       "kind": "env band LUT 256x1, 16-bit linear (white = radiance 16): x = angle -180..180 deg round the vertical great circle through the key (az -135), 0 at the key-side horizon, 0.75 at the viewer",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/liquid_metal_env_band_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/liquid_metal_env_band_master.png",
       "name": "liquid_metal_env_band",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/liquid_metal_env_band.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/liquid_metal_env_band.png"
       ],
       "use": "the 256x1 HDR env band for 2D SDF metal shading (the brief's env-band LUT): index by the mirror direction's angle in the key plane"
     },
@@ -39,10 +39,10 @@
       "generator": "computed: prebuild::liquid::matcap, perfectly smooth sphere, mirror direction into the studio x exact spectral Fresnel (Cr, Johnson & Christy, Phys. Rev. B 9, 5056 (1974), via refractiveindex.info (CC0)), 4x4 supersampled",
       "kind": "matcap (view-space normal u, v = -1..1, y down), straight alpha = disc coverage; runtime sRGB 8-bit RGBA, master 16-bit linear; white = radiance 16",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/chrome_matcap_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/chrome_matcap_master.png",
       "name": "chrome_matcap",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/chrome_matcap.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/chrome_matcap.png"
       ],
       "use": "the chrome ribbon and any bare chrome: one lookup by view-space normal, Fresnel and studio included"
     },
@@ -52,10 +52,10 @@
       "generator": "computed: prebuild::liquid::matcap, perfectly smooth sphere, mirror direction into the studio x exact spectral Fresnel (liquid Hg, Inagaki, Arakawa & Williams, Phys. Rev. B 23, 5246 (1981), via refractiveindex.info (CC0)), 4x4 supersampled",
       "kind": "matcap (view-space normal u, v = -1..1, y down), straight alpha = disc coverage; runtime sRGB 8-bit RGBA, master 16-bit linear; white = radiance 16",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/mercury_matcap_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/mercury_matcap_master.png",
       "name": "mercury_matcap",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/mercury_matcap.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/mercury_matcap.png"
       ],
       "use": "the liquid-metal blob where the film has drained to nothing"
     },
@@ -65,10 +65,10 @@
       "generator": "computed: prebuild::liquid::conductor_reflectance, exact unpolarised, integrated 380..780 nm with the CIE 1931 fit (Wyman 2013), flat spectrum = white; Cr, Johnson & Christy, Phys. Rev. B 9, 5056 (1974), via refractiveindex.info (CC0)",
       "kind": "Fresnel LUT 256x1, 16-bit linear sRGB reflectance, x = cos theta 0..1",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/chrome_fresnel_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/chrome_fresnel_master.png",
       "name": "chrome_fresnel",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/chrome_fresnel.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/chrome_fresnel.png"
       ],
       "use": "bare chrome reflectance over cos theta, for shading with the environment map instead of the matcap"
     },
@@ -78,10 +78,10 @@
       "generator": "computed: prebuild::liquid::conductor_reflectance, exact unpolarised, integrated 380..780 nm with the CIE 1931 fit (Wyman 2013), flat spectrum = white; liquid Hg, Inagaki, Arakawa & Williams, Phys. Rev. B 23, 5246 (1981), via refractiveindex.info (CC0)",
       "kind": "Fresnel LUT 256x1, 16-bit linear sRGB reflectance, x = cos theta 0..1",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/mercury_fresnel_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/mercury_fresnel_master.png",
       "name": "mercury_fresnel",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/mercury_fresnel.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/mercury_fresnel.png"
       ],
       "use": "bare liquid-metal reflectance over cos theta"
     },
@@ -91,10 +91,10 @@
       "generator": "computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = 1.47, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); liquid Hg, Inagaki, Arakawa & Williams, Phys. Rev. B 23, 5246 (1981), via refractiveindex.info (CC0)",
       "kind": "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/oil_on_mercury_film_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/oil_on_mercury_film_master.png",
       "name": "oil_on_mercury_film",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/oil_on_mercury_film.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/oil_on_mercury_film.png"
       ],
       "use": "the skin's colour: reflectance of an n = 1.47 oil film on liquid metal by thickness (Jeffreys drainage, 900 to 100 nm) and cos theta; multiply the mirrored studio by it"
     },
@@ -104,10 +104,10 @@
       "generator": "computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = 1.47, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); Cr, Johnson & Christy, Phys. Rev. B 9, 5056 (1974), via refractiveindex.info (CC0)",
       "kind": "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
-      "master": "oil_slick_chrome/prebuild/computed/oil_on_chrome_film_master.png",
+      "master": "kinetic_liquid_metal/prebuild/computed/oil_on_chrome_film_master.png",
       "name": "oil_on_chrome_film",
       "runtime": [
-        "assets/clusters/oil_slick_chrome/prebuild/computed/oil_on_chrome_film.png"
+        "assets/clusters/kinetic_liquid_metal/prebuild/computed/oil_on_chrome_film.png"
       ],
       "use": "the same film on solid chrome, for the ribbon where oil runs onto it"
     }
@@ -116,5 +116,5 @@
   "notes": "Everything here is computed on the CPU from measured optical constants (Cr: Johnson & Christy 1974; liquid Hg: Inagaki et al. 1981, the measured stand-in for the brief's liquid metal) and the analytic studio, so it is exact, has no seams or noise, and needs no GPU.",
   "preview": false,
   "schema": 1,
-  "snake": "oil_slick_chrome"
+  "snake": "kinetic_liquid_metal"
 }
