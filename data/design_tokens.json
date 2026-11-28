@@ -345,6 +345,13 @@
         "accent": "#FFC21A",
         "shift": "#FFFFFF"
       },
+      "amgMbux": {
+        "doc": "The AMG MBUX dashes' own default palette (TJX, 2026-11-28: the Sporty dash is red like the real display, past the red budget). Used while the palette is factory or family; Custom and Random override it.",
+        "primary": "#E3122E",
+        "secondary": "#C3C8CF",
+        "accent": "#FFFFFF",
+        "shift": "#FFFFFF"
+      },
       "modernDigital": {
         "primary": "#00D2FF",
         "secondary": "#8A96A8",
