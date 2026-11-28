@@ -106,7 +106,7 @@ TJS, 09:07: "The animated clouds should match the ingame weather so also rain wo
 **What the game sends.** The official FH6 Data Out page (support.forza.net, article 51744149102611, read 09:12) lists no weather, rain or wetness field. The only puddle channel is `WheelInPuddle{FrontLeft,FrontRight,RearLeft,RearRight}` at bytes 132, 136, 140 and 144. It is an S32 that the page defines as 1 in a puddle and 0 out of one, so it is a flag, not a depth (the Motorsport name `WheelInPuddleDepth` does not apply). `SurfaceRumble*` (148 to 160) is a force-feedback value with no stated range. fh6-core does not decode bytes 132 to 147 today. All 20 golden packets carry 0 there, so no recorded rain capture exists yet. The page's own field list adds up to 323 bytes against its stated 324, so check the offsets on a real capture before trusting them.
 
 **What follows for Auto.** A puddle flag fires only while a tyre crosses standing water, so it cannot say "it is raining" frame by frame. Auto therefore keeps a wetness level from 0 to 1:
-- each frame with any wheel flagged adds `dt / 2 s` (two seconds of puddle contact makes it fully wet);
+- each **new** puddle (a rising edge on any wheel's flag) adds 0.15, and contact time adds only `dt / 60 s`, so one long ford counts as about one puddle. A first draft that added `dt / 2 s` of contact tripped rain on a single 6 s ford in simulation (`research/auto_weather_sim.png`, synthetic logs, not real data). With the hit rule, a ford peaks at 0.24 and a splash every two minutes at 0.21, and neither shows rain. Ten minutes of rain (a puddle every 5 to 20 s) shows rain after about 30 s of hits and clears about 2.5 minutes after the last one;
 - it decays with a 90 s time constant, so rain stays on between puddles and fades about three minutes after the last one;
 - rain shows above 0.35 and clears below 0.15 (hysteresis, so it never flickers);
 - the rain layer fades in and out over 4 s.
@@ -200,7 +200,7 @@ So the wet road shows the clouds mirrored in the horizon, strong just under it a
 1. **Parked in rain** (speed under 0.5 m/s): the streaks become vertical falls with no fan, and the beads still sit on the ribs. The source formula needs a guard for v = 0, using the vertical limit and no division.
 2. **Reverse:** `velocity_z` goes negative, so the source would flip behind the camera. Clamp to forward travel (use |v_z| and treat reverse as slow forward), and never draw streaks converging.
 3. **Airborne:** puddle flags read 0 in the air. The decay is slow (90 s), so a jump never clears the rain.
-4. **Fords and splashes on a dry day:** a long ford can push the wetness over the threshold. Two seconds of contact to saturate is short, so test it in the real game. If it trips, need 3 or more separate puddle hits within 60 s instead.
+4. **Fords and splashes on a dry day:** handled by counting separate puddles, not contact time (see Auto above; simulated). The real-game check confirms the hit rate in real rain.
 5. **Packets stop** (menu, pause, rewind, replay; the FH6 page says data flows only while driving): hold the wetness frozen and never decay it while no packets arrive. This needs a timestamp check, `timestamp_ms` not advancing.
 6. **Car change or a new session:** keep the wetness (the weather didn't change).
 7. **Setting changed mid-drive:** Clear forces 0 and Rain forces 1, each fading over 4 s. Auto resumes from the current accumulator.
