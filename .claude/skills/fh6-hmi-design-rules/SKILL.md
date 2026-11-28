@@ -32,7 +32,7 @@ Hero gear, speed and shift lights must read in under 150 ms in peripheral vision
 A domed binnacle shape, not a rectangle. The inner core is 100% `#000000` at alpha 255 and covers about 80% of the area behind the cluster. A feathered skirt fades from alpha 255 to 0, and the steering-column gap is masked out.
 
 ## Cluster briefs
-Each cluster's brief is `crates/fh6-clusters/src/clusters/<snake_name>/spec.md` and its row in `program/phases/07-cluster-factory/CATALOG.md` (72 dashes in 9 categories of 8: Supercar, Hypercar, Motorsport, Retro, Liquid Glass, Apple Vision, Psychedelic, Sci-Fi and Abstract; the catalog as data is `crates/fh6-clusters/src/catalog.rs` and the theme list `crates/fh6-core/src/theme.rs`). The brief is a starting point: the real car's display comes first (`RESEARCH.md` in the same folder). Glass, reflective and spectral optics follow `docs/specs/optics.md`.
+Each cluster's brief is `crates/fh6-clusters/src/clusters/<snake_name>/spec.md` and its row in `program/phases/07-cluster-factory/CATALOG.md` (74 dashes in 9 categories, eight in each and nine in Psychedelic and Abstract: Supercar, Hypercar, Motorsport, Retro, Liquid Glass, Apple Vision, Psychedelic, Sci-Fi and Abstract; the catalog as data is `crates/fh6-clusters/src/catalog.rs` and the theme list `crates/fh6-core/src/theme.rs`). The brief is a starting point: the real car's display comes first (`RESEARCH.md` in the same folder). Glass, reflective and spectral optics follow `docs/specs/optics.md`.
 
 ## Hybrid rendering
 Composite the cached PNG from `assets/` when it is present, and always have a procedural fallback; never fail on a missing asset. Take colours and typography from `data/design_tokens.json`, not hardcoded hex values.

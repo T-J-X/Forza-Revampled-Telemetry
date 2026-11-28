@@ -96,8 +96,8 @@ Dash scenarios (`DASH_SCENARIOS`):
 ## Dashes
 
 Six dashes have their own code today (Liquid Glass, Bonnet Line, Porsche Analog, Bosch DDU,
-Tesla ADAS, Retro Cyber). The other 66 (42 from the first catalog and the 24 added on 2026-11-28,
-at the end of the table) draw the shared scaffold (`common::scaffold`), which reads rpm, the
+Tesla ADAS, Retro Cyber). The other 68 (42 from the first catalog, the 24 added on 2026-11-28
+and the two liquid-metal dashes added later that day, at the end of the table) draw the shared scaffold (`common::scaffold`), which reads rpm, the
 limiter, gear and speed.
 
 | Theme | Dash | Reads |
@@ -174,3 +174,5 @@ limiter, gear and speed.
 | `MclarenSlimDisplay` | McLaren Slim Display | `rpm`, `max_rpm`, `gear`, `speed` |
 | `HopfFibration` | Hopf Fibration | `rpm`, `max_rpm`, `gear`, `speed` |
 | `HyperbolicTiles` | Hyperbolic Tiles | `rpm`, `max_rpm`, `gear`, `speed` |
+| `OilSlickChrome` | Oil-Slick Chrome | `rpm`, `max_rpm`, `gear`, `speed` |
+| `FaradayMandala` | Faraday Mandala | `rpm`, `max_rpm`, `gear`, `speed` |

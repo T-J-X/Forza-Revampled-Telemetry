@@ -22,7 +22,7 @@ You are joining **FH6 WheelDash v2**, a Rust overlay for Forza Horizon 6. Work r
 crates/fh6-core      telemetry decoder (golden-tested), UDP engine, config, car/brand data, cockpit fit model
 crates/fh6-gpu       wgpu DX12 device and the premultiplied overlay surface
 crates/fh6-kit       the GPU render kit every v2 dash draws with: shapes, glass, text, springs, tokens, scrim and wash
-crates/fh6-clusters  the catalog (72 rows, 9 categories) and one module per dash
+crates/fh6-clusters  the catalog (74 rows, 9 categories) and one module per dash
 crates/fh6-osd       OSD model and rendering
 crates/fh6-input     XInput (ABXY lock)
 crates/fh6-win       window and Win32, camera patcher

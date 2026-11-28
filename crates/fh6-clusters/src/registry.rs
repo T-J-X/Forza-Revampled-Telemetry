@@ -443,6 +443,18 @@ pub static REGISTRY: &[ClusterEntry] = &[
         family: Family::FluidGenerative,
         make: clusters::hyperbolic_tiles::make,
     },
+    ClusterEntry {
+        theme: ClusterTheme::OilSlickChrome,
+        name: "Oil-Slick Chrome",
+        family: Family::FluidGenerative,
+        make: clusters::oil_slick_chrome::make,
+    },
+    ClusterEntry {
+        theme: ClusterTheme::FaradayMandala,
+        name: "Faraday Mandala",
+        family: Family::FluidGenerative,
+        make: clusters::faraday_mandala::make,
+    },
 ];
 
 /// The registry row for `theme`.

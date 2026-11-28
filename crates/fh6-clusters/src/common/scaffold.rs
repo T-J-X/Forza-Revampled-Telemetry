@@ -1,5 +1,5 @@
 //! The Phase 7 scaffold every catalog cluster starts from: a quiet "under construction" frame
-//! drawn with the kit, so all 72 dashes are selectable, render in `preview-export` and run live
+//! drawn with the kit, so all 74 dashes are selectable, render in `preview-export` and run live
 //! before their cluster chat builds them.
 //!
 //! It is still a working dash (live gear, tabular speed, rev bar and outside-in shift lights from
