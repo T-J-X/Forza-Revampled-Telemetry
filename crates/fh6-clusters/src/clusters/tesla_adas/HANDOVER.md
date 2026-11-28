@@ -210,8 +210,32 @@ Every field the dash reads is one the golden packets cover, or is derived from o
 - **Read from the packet:** power (W).
 - **Derived:** lateral and longitudinal G from acceleration (the kit's smoothing); the road's curvature from lateral acceleration over the square of the speed, with a 3 m/s floor; the stop point from speed and measured deceleration (`v² / 2a`, with a 2 m/s² floor, shown up to 80 m); the shift stages from the limiter and `ShiftPointPct`; the power line's full scale from the highest power seen (110 kW floor).
 - **Velocity:** read through the kit's body slip angle (`atan2(velocity_x, velocity_z)`), which turns the ego car's yaw cell. The matrix row lists `velocity` (gates G2 and G3 pass; with the dash's images present the gate sees the yaw change, so the no-sprite fallback car turns too and the dash reads the same inputs with or without assets).
-- **Not read:** yaw rate, steer, throttle, suspension, wheel speeds, world position and every other offset the golden packets do not cover.
+- **From the full Data Out list (rework of 2026-11-28, below):** the driving line and the AI brake difference, the rumble-strip and puddle flags, combined tyre slip, the lap data. Their offsets follow the official page's field order and are unconfirmed until real-game check C.
+- **Not read:** yaw rate, steer, throttle, suspension, wheel speeds, slip ratio, surface rumble, tyre temperature (no unit on the page), torque, fuel, world position.
 - **Not from telemetry at all:** the traffic. It is a seeded ambient simulation (`scene.rs`, `Traffic`), it carries no distance or closing-speed label, and nothing in the scene is drawn as a detection.
+
+## Rework on the full telemetry (2026-11-28, thread "Rework Tesla ADAS dash for real telemetry")
+
+TJS, 28 Nov 10:52: "Yeah that can be reweworked ASAP to be accurate". The decoder on `main` (60c99c9) now reads all 88 Data Out fields; this rework puts them in the scene where they fit and keeps the parts the game sends nothing for (traffic, lanes) as the seeded scenery they were.
+
+| Field(s) | What it drives | Where |
+|---|---|---|
+| `normalized_driving_line` | the blue path leaves the nose straight and merges onto the game's driving line over 18 m (full scale 127 = one lane, 3.5 m, our display scale) | `scene.rs` `draw_path`, `driving_line_offset` |
+| `normalized_ai_brake_difference` | the path ahead turns caution, then warning red, and brightens, as Forza's braking line does; full at 96 of 127 | `draw_path`, `brake_cue` |
+| `wheel_on_rumble_strip_*` | the ego lane's line on that side (left wheels: left) turns solid red beside the car, its light falling off over 29 m (Tesla's lane departure warning); held 0.35 s so kerb hits in a row read as one warning | `draw_departure` |
+| `wheel_in_puddle_*` | each side's wheels in a puddle start or lengthen a wet patch (a soft sheen ellipse with the overhead lights' streak) that then scrolls back with the road; 8 patches kept | `update_puddles`, `draw_puddles` |
+| `tire_combined_slip_*` | past 1.0 (Forza's normalised edge of grip) a glow under that wheel, caution to warning by 1.6, placed at the wheel (Model S track and wheelbase) and turned with the car's yaw | `draw_grip`, `grip_level` |
+| `current_race_time`, `current_lap`, `lap_number`, `race_position` | while a race runs (any of the first three non-zero) the card's TRACK MODE label becomes Track Mode's lap timer: the lap time (m:ss.t, cap 20) and "LAP n · Pp" under it | `mod.rs` `LapTimer`, `draw_lap` |
+
+Unverified and named so check C can flip them: `LINE_SIGN` (positive reading taken as the car right of the line), `BRAKE_CUE_SIGN` (positive taken as the game braking harder than the driver), `LINE_FULL_M`, and the lap number counting from 0 on the first lap (Forza Motorsport's convention). Times are taken in seconds.
+
+**Unchanged at zero.** With every new field at zero the frame is bit-identical to the merged build: the scene fingerprints of the five gate scenarios (cruise, idle, redline, drift braking, lift off) at the gate's four check frames, in both views, are the same before and after (40 of 40). The goldens are not rewritten.
+
+**Speed.** CPU, no-op kit in the cloud container, update plus draw, 3000 frames after a warm-up: 26.5 to 28.0 µs with the new fields at zero, 30.5 to 30.6 µs with all of them active, so about 3 to 4 µs added to the 0.147 ms share measured on the PC. GPU, lavapipe A/B in the container (`preview-export`, every new feature forced on, two runs each): +1 draw and +29 instances, and a frame-time change inside lavapipe's run-to-run noise (cockpit drift 61.4 / 58.8 ms off against 70.0 / 62.9 ms on; hood drift 68.7 / 81.7 against 77.6 / 73.8; cruise unchanged). On the card the worst state was hood drift at 0.434 ms; the PC's bench confirms the new figure at check C.
+
+**Renders** (lavapipe, `mockups/TeslaAdas/telemetry/`, both views): `05_driving_line`, `06_brake_cue`, `07_rumble_left`, `08b_puddle_in`, `08_puddles`, `09_grip_drift`, `10_race_lap`; the sheet is `docs/handover-shots/cluster-tesla_adas-telemetry-rework.png`.
+
+**No new assets.** Penpot, ComfyUI and Blender work waits for the 4K library's LIBRARY DONE (CLUSTER_PROMPT.md); nothing here needed any.
 
 ## Changes from the real display and from the brief
 From `RESEARCH.md`, "Deliberate changes and why" and "Japan-inspired":

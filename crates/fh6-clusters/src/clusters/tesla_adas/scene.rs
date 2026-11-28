@@ -6,11 +6,16 @@
 //! this same camera ([`EYE_HEIGHT`], [`EYE_BACK`], [`PITCH_DEG`] are the recipe's `CAM_H`, `CAM_D`
 //! and `PITCH_DEG`), so a sprite's ground centre lands on its projected point at any scale.
 //!
-//! **What is measured and what is scenery.** The path's bend is `a_lat / v²`, the ego car's yaw is
-//! the body slip angle, the brake light is the brake input, and the stop bar with 止まれ before it
-//! stands where the car stops at its measured deceleration. The lanes, the reflectors and the
-//! traffic are scenery: the packet has no map and no other cars, so the traffic is a seeded
-//! ambient simulation that carries no numbers and never changes colour.
+//! **What is measured and what is scenery.** The path's bend is `a_lat / v²`, and the path leads
+//! onto the game's own driving line (`NormalizedDrivingLine`) and turns caution, then warning,
+//! where the game says the driver should be braking harder (`NormalizedAIBrakeDifference`), as
+//! Forza's braking line does. The ego car's yaw is the body slip angle, the brake light is the
+//! brake input, and the stop bar with 止まれ before it stands where the car stops at its measured
+//! deceleration. A wheel on a rumble strip lights the lane line on its side in red, as Tesla's lane
+//! departure warning does; a wheel in a puddle leaves a wet patch on the road that scrolls away
+//! with the road; a tyre past the edge of grip (its combined slip) glows under its wheel. The
+//! lanes, the reflectors and the traffic are scenery: the packet has no map and no other cars, so
+//! the traffic is a seeded ambient simulation that carries no numbers and never changes colour.
 use crate::common::adas_road::{EGO_Z, LANE_WIDTH, MAX_DT, MIN_CURVE_SPEED};
 use fh6_kit::cluster::Setup;
 use fh6_kit::math::{finite_or, smoothstep, vec3};
@@ -130,6 +135,43 @@ const SLOW_INSET: f32 = 0.38;
 const SLOW_MAX: usize = 26;
 const SLOW_FULL_DECEL: f32 = 9.0;
 const SLOW_REACH: f32 = 60.0;
+
+/// The ego car's wheel contact points from its ground centre (m): half the track and half the
+/// wheelbase of a Model S (1.66 m and 2.96 m).
+const WHEEL_X: f32 = 0.83;
+const WHEEL_Z: f32 = 1.48;
+/// Forza's combined slip is normalised: 1 is the edge of grip. A tyre's glow starts there and is
+/// full at the second value; its radius on the road (m) and its level at full.
+const GRIP_FROM: f32 = 1.0;
+const GRIP_FULL: f32 = 1.6;
+const GRIP_RADIUS_M: f32 = 0.62;
+const GRIP_LEVEL: f32 = 0.80;
+const GRIP_FADE_S: f32 = 0.10;
+/// Lane departure: the red line runs from behind the tail to this far ahead (m) in this many
+/// steps of falling light, stays lit this long after the last wheel leaves the strip (s, so
+/// kerb hits in a row read as one warning) and fades in and out over this time (s).
+const DEPART_BACK: f32 = 3.0;
+const DEPART_AHEAD: f32 = 26.0;
+const DEPART_STEPS: usize = 6;
+const DEPART_HOLD_S: f32 = 0.35;
+const DEPART_FADE_S: f32 = 0.10;
+/// The game's driving line: a full-scale reading (127) sits this far (m) from the car. The page
+/// gives no scale; one lane is our display scale. The path merges onto the line over this
+/// distance ahead of the nose (m).
+const LINE_FULL_M: f32 = LANE_WIDTH;
+const LINE_MERGE_M: f32 = 18.0;
+/// The signs of the two driving-line fields, which the Data Out page does not state: a positive
+/// `NormalizedDrivingLine` is taken as the car right of the line (so the line lies to its left),
+/// a positive `NormalizedAIBrakeDifference` as the game braking harder than the driver. Real-game
+/// check C confirms them; a wrong sign is a flip here.
+const LINE_SIGN: f32 = -1.0;
+const BRAKE_CUE_SIGN: f32 = 1.0;
+/// The brake cue's reading (of 127) at which the path is fully warning red.
+const BRAKE_CUE_FULL: f32 = 96.0;
+/// Puddle patches kept on the road, each patch's half width (m) and its sheen at the centre.
+const PUDDLES: usize = 8;
+const PUDDLE_HALF_W: f32 = 0.85;
+const PUDDLE_ALPHA: f32 = 0.22;
 
 /// The car stands still below the first speed and counts as moving again above the second (m/s).
 const PARK_ON: f32 = 0.5;
@@ -251,6 +293,53 @@ pub struct SceneInput {
     pub shift_level: f32,
     /// At or above the shift point.
     pub over_shift: bool,
+    /// Where the game's driving line lies from the car (m, positive to the right).
+    pub line_m: f32,
+    /// How much harder the game would be braking (0..1).
+    pub brake_cue: f32,
+    /// A wheel on a rumble strip on the left side, on the right side.
+    pub rumble: [bool; 2],
+    /// Each wheel in a puddle: front left, front right, rear left, rear right.
+    pub puddle: [bool; 4],
+    /// Each tyre's combined slip (normalised; 1 is the edge of grip), in the same order.
+    pub grip: [f32; 4],
+}
+
+/// The driving line's position from the car (m, positive right) for a `NormalizedDrivingLine`
+/// reading. Clamped to one lane each way.
+#[must_use]
+pub fn driving_line_offset(raw: i8) -> f32 {
+    LINE_SIGN * f32::from(raw) / 127.0 * LINE_FULL_M
+}
+
+/// The brake cue (0..1) for a `NormalizedAIBrakeDifference` reading: 0 when the driver brakes as
+/// hard as the game would or harder.
+#[must_use]
+pub fn brake_cue(raw: i8) -> f32 {
+    (BRAKE_CUE_SIGN * f32::from(raw) / BRAKE_CUE_FULL).clamp(0.0, 1.0)
+}
+
+/// A tyre's grip glow (0..1) for its combined slip.
+#[must_use]
+pub fn grip_level(combined_slip: f32) -> f32 {
+    smoothstep(GRIP_FROM, GRIP_FULL, finite_or(combined_slip, 0.0).abs())
+}
+
+/// A wet patch a wheel left on the road: its centre line (m from the path) and the depths it spans.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct Puddle {
+    x: f32,
+    z0: f32,
+    z1: f32,
+    live: bool,
+}
+
+/// Eases `s` toward `target`, landing on it once within a hair so it settles.
+fn ease(s: &mut Smoothed<f32>, target: f32, dt: f32) {
+    let v = s.update(target, dt);
+    if (v - target).abs() < 2e-3 {
+        s.reset(target);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -576,6 +665,20 @@ pub struct Scene {
     is_parked: bool,
     glow: f32,
     over_shift: bool,
+    /// The driving line's offset (m) and the brake cue (0..1).
+    line: Smoothed<f32>,
+    cue: Smoothed<f32>,
+    /// Their last readings.
+    targets: [f32; 2],
+    /// The lane departure warning's light on the left and right, and how long each stays lit.
+    depart: [f32; 2],
+    depart_hold: [f32; 2],
+    /// Each tyre's grip glow (0..1).
+    grip: [f32; 4],
+    puddles: [Puddle; PUDDLES],
+    /// The patch each side's wheels are still making, and the next slot to fill.
+    wet: [Option<usize>; 2],
+    next_puddle: usize,
     started: bool,
 }
 
@@ -598,6 +701,15 @@ impl Scene {
             is_parked: true,
             glow: 0.0,
             over_shift: false,
+            line: Smoothed::new(0.0, 0.25),
+            cue: Smoothed::new(0.0, 0.10),
+            targets: [0.0; 2],
+            depart: [0.0; 2],
+            depart_hold: [0.0; 2],
+            grip: [0.0; 4],
+            puddles: [Puddle::default(); PUDDLES],
+            wet: [None; 2],
+            next_puddle: 0,
             started: false,
         }
     }
@@ -632,6 +744,18 @@ impl Scene {
             0.0
         };
         let parked = if self.is_parked { 1.0 } else { 0.0 };
+        let line = finite_or(input.line_m, 0.0).clamp(-LINE_FULL_M, LINE_FULL_M);
+        let cue = finite_or(input.brake_cue, 0.0).clamp(0.0, 1.0);
+        for (side, on) in input.rumble.into_iter().enumerate() {
+            self.depart_hold[side] = if on {
+                DEPART_HOLD_S
+            } else {
+                (self.depart_hold[side] - dt).max(0.0)
+            };
+        }
+        let depart = self.depart_hold.map(|h| if h > 0.0 { 1.0 } else { 0.0 });
+        let grip = input.grip.map(grip_level);
+        self.targets = [line, cue];
         if self.started {
             self.kappa.update(kappa, dt);
             self.yaw.update(yaw, dt);
@@ -640,6 +764,14 @@ impl Scene {
             self.braking = approach(self.braking, braking, dt, BRAKE_FADE_S);
             self.stop_level = approach(self.stop_level, stop_on, dt, STOP_FADE_S);
             self.parked = approach(self.parked, parked, dt, PARK_FADE_S);
+            ease(&mut self.line, line, dt);
+            ease(&mut self.cue, cue, dt);
+            for (level, target) in self.depart.iter_mut().zip(depart) {
+                *level = approach(*level, target, dt, DEPART_FADE_S);
+            }
+            for (level, target) in self.grip.iter_mut().zip(grip) {
+                *level = approach(*level, target, dt, GRIP_FADE_S);
+            }
         } else {
             self.kappa.reset(kappa);
             self.yaw.reset(yaw);
@@ -648,8 +780,13 @@ impl Scene {
             self.braking = braking;
             self.stop_level = stop_on;
             self.parked = parked;
+            self.line.reset(line);
+            self.cue.reset(cue);
+            self.depart = depart;
+            self.grip = grip;
             self.started = true;
         }
+        self.update_puddles(input.puddle, v * dt);
         self.speed = v;
         self.travelled = (self.travelled + v * dt).rem_euclid(ROAD_PERIOD);
         self.traffic.update(dt, v);
@@ -661,7 +798,62 @@ impl Scene {
     #[must_use]
     pub fn animating(&self) -> bool {
         let mid = |x: f32| x > 0.0 && x < 1.0;
-        self.speed > 0.05 || mid(self.braking) || mid(self.stop_level) || mid(self.parked)
+        self.speed > 0.05
+            || mid(self.braking)
+            || mid(self.stop_level)
+            || mid(self.parked)
+            || self.depart.into_iter().chain(self.grip).any(mid)
+            || self.depart_hold.iter().any(|h| *h > 0.0)
+            || self.line_moving()
+    }
+
+    /// True while the driving line or the brake cue is still easing toward its reading (`ease`
+    /// lands each on its target).
+    fn line_moving(&self) -> bool {
+        self.line.value() != self.targets[0] || self.cue.value() != self.targets[1]
+    }
+
+    /// Moves the wet patches back with the road (`step` m this frame) and lets each side's wheels
+    /// in a puddle start or lengthen the patch on that side.
+    fn update_puddles(&mut self, wet: [bool; 4], step: f32) {
+        let step = finite_or(step, 0.0).max(0.0);
+        for pd in self.puddles.iter_mut().filter(|pd| pd.live) {
+            pd.z0 -= step;
+            pd.z1 -= step;
+            if pd.z1 < WRAP_NEAR {
+                pd.live = false;
+            }
+        }
+        for side in 0..2 {
+            let (front, rear) = (wet[side], wet[2 + side]);
+            if !(front || rear) {
+                self.wet[side] = None;
+                continue;
+            }
+            let lead = EGO_Z + if front { WHEEL_Z } else { -WHEEL_Z };
+            match self.wet[side] {
+                Some(i) if self.puddles[i].live => {
+                    let pd = &mut self.puddles[i];
+                    pd.z1 = pd.z1.max(lead + 0.4);
+                }
+                _ => {
+                    let i = self.next_puddle;
+                    self.next_puddle = (i + 1) % PUDDLES;
+                    if self.wet[1 - side] == Some(i) {
+                        self.wet[1 - side] = None;
+                    }
+                    let tail = if rear { EGO_Z - WHEEL_Z } else { lead };
+                    let x = if side == 0 { -WHEEL_X } else { WHEEL_X };
+                    self.puddles[i] = Puddle {
+                        x,
+                        z0: tail - 0.4,
+                        z1: lead + 0.4,
+                        live: true,
+                    };
+                    self.wet[side] = Some(i);
+                }
+            }
+        }
     }
 
     /// Draws the scene into `g.viewport`. `kanji` is the Japanese face for the road text.
@@ -676,6 +868,7 @@ impl Scene {
                     self.draw_surface(p, &f, pal);
                     self.draw_lanes(p, &f, pal);
                     self.draw_reflectors(p, &f, pal);
+                    self.draw_puddles(p, &f, pal);
                     self.draw_path(p, &f, pal);
                     self.draw_braking(p, &f, pal, kanji);
                     self.draw_glow(p, &f, pal);
@@ -771,6 +964,64 @@ impl Scene {
                 );
             }
         }
+        self.draw_departure(p, f, pal);
+    }
+
+    /// Tesla's lane departure warning: the ego lane's line on the side of a wheel on a rumble
+    /// strip turns solid red beside the car, its light falling away ahead.
+    fn draw_departure(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        let red = pal.roles.warning;
+        let piece = (DEPART_AHEAD + DEPART_BACK) / DEPART_STEPS as f32;
+        for (side, level) in [-1.0f32, 1.0].into_iter().zip(self.depart) {
+            if level < 0.01 {
+                continue;
+            }
+            let x = side * 0.5 * LANE_WIDTH;
+            for k in 0..DEPART_STEPS {
+                let z0 = EGO_Z - DEPART_BACK + k as f32 * piece;
+                let k_level = level * (1.0 - k as f32 / DEPART_STEPS as f32);
+                // A soft band of red light on the road, then the painted line in it.
+                f.paint(p, x, z0, z0 + piece, 0.5, red.fade(0.16 * k_level), 2, 1.0);
+                f.paint(p, x, z0, z0 + piece, LINE_M * 1.5, red.fade(0.92 * k_level), 2, 1.0);
+            }
+        }
+    }
+
+    /// The wet patches the wheels left: a cool sheen on the road with the overhead lights' streak
+    /// along it, scrolling away with the road.
+    fn draw_puddles(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        let sheen = pal.roles.ink.lerp(pal.primary, 0.35);
+        for pd in self.puddles.iter().filter(|pd| pd.live) {
+            let (z0, z1) = (pd.z0.max(f.z_near), pd.z1.min(f.z_far));
+            if z1 <= z0 + 0.1 {
+                continue;
+            }
+            // A soft pool of light, not a plate: an ellipse across the patch whose sheen falls
+            // to nothing at its rim.
+            let zc = (z0 + z1) * 0.5;
+            let (Some(q), Some(near), Some(far)) = (f.ground(pd.x, zc), f.ground(pd.x, z0), f.ground(pd.x, z1)) else {
+                continue;
+            };
+            let alpha = f.fade(q, zc);
+            let rx = PUDDLE_HALF_W * f.scale(zc);
+            let ry = ((near.y - far.y) * 0.5).max(1.0);
+            if alpha < 0.01 || rx < 1.0 {
+                continue;
+            }
+            let centre = vec2(q.x, (near.y + far.y) * 0.5);
+            let k = PUDDLE_ALPHA * alpha;
+            p.scoped(|p| {
+                p.transform(&squash(centre, vec2(rx, ry)));
+                p.fill(
+                    &Shape::circle(centre, rx),
+                    Gradient::radial(centre, rx)
+                        .stop(0.0, sheen.with_alpha(k))
+                        .stop(0.55, sheen.with_alpha(k * 0.7))
+                        .stop(1.0, sheen.with_alpha(0.0)),
+                );
+            });
+            f.paint(p, pd.x, z0, z1, 0.06, sheen.fade(0.6 * alpha), 3, 1.0);
+        }
     }
 
     /// The edge reflectors: a post and a round orange reflector every 50 m on both sides.
@@ -816,11 +1067,39 @@ impl Scene {
             return;
         };
         let c = pal.primary;
-        let end = if self.stop_level > 0.5 { 0.4 } else { 0.0 };
+        let end: f32 = if self.stop_level > 0.5 { 0.4 } else { 0.0 };
+        // The game's driving line: the band leaves the nose straight and merges onto the line.
+        let line = self.line.value();
+        let shift = |z: f32| {
+            if line == 0.0 {
+                0.0
+            } else {
+                line * smoothstep(near, near + LINE_MERGE_M, z)
+            }
+        };
+        // The brake cue: the band ahead turns caution, then warning, as Forza's braking line does.
+        let cue = self.cue.value();
+        let (mid_c, far_c, end) = if cue > 0.001 {
+            let roles = pal.roles;
+            let warn = c
+                .lerp(roles.caution, (cue * 2.0).min(1.0))
+                .lerp(roles.warning, (cue * 2.0 - 1.0).max(0.0));
+            (warn, warn, end.max(0.9 * cue))
+        } else {
+            (c, c, end)
+        };
+        // The brake zone ahead is drawn brighter than the cruising band, so the cue reads.
+        let mid_alpha = PATH_ALPHA * (0.55 + 0.45 * cue.max(0.0));
+        let b = if line == 0.0 {
+            b
+        } else {
+            f.ground(shift(far), far).unwrap_or(b)
+        };
         let mut pts = [Vec2::ZERO; 2 * PATH_SAMPLES];
         for i in 0..PATH_SAMPLES {
             let z = near + (far - near) * (i as f32 / (PATH_SAMPLES - 1) as f32).powf(1.6);
-            let (Some(l), Some(r)) = (f.ground(-PATH_HALF, z), f.ground(PATH_HALF, z)) else {
+            let x = shift(z);
+            let (Some(l), Some(r)) = (f.ground(x - PATH_HALF, z), f.ground(x + PATH_HALF, z)) else {
                 return;
             };
             pts[i] = l;
@@ -831,8 +1110,8 @@ impl Scene {
             &Shape::Polygon { points: &pts },
             Gradient::linear(a, b)
                 .stop(0.0, c.with_alpha(PATH_ALPHA))
-                .stop(0.55, c.with_alpha(PATH_ALPHA * 0.55))
-                .stop(1.0, c.with_alpha(PATH_ALPHA * end)),
+                .stop(0.55, mid_c.with_alpha(mid_alpha))
+                .stop(1.0, far_c.with_alpha(PATH_ALPHA * end)),
             Glow {
                 fill_inside: true,
                 ..Glow::new(PATH_SOFT_PX, 1.0)
@@ -1104,6 +1383,7 @@ impl Scene {
         };
         let cell = ego_cell(self.yaw.value());
         let warning = pal.roles.warning;
+        self.draw_grip(p, f, pal);
         match self.sprites.ego {
             Some(img) => sprite(p, img, EGO_GRID, cell, false, rect, grey(CAR_LEVEL)),
             None => {
@@ -1134,6 +1414,50 @@ impl Scene {
                     sprite(p, img, EGO_GRID, cell, false, rect, warning.fade(self.braking));
                 });
             }
+        }
+    }
+
+    /// A tyre past the edge of grip glows on the road under its wheel, caution turning to
+    /// warning, at the wheel's place on the car as the car yaws. Drawn under the car, so the glow
+    /// shows round the tyre.
+    fn draw_grip(&self, p: &mut Painter<'_>, f: &Frame, pal: &Palette) {
+        let (s, c) = self.yaw.value().to_radians().sin_cos();
+        for (i, level) in self.grip.into_iter().enumerate() {
+            if level < 0.01 {
+                continue;
+            }
+            let (x, dz) = (
+                if i % 2 == 0 { -WHEEL_X } else { WHEEL_X },
+                if i < 2 { WHEEL_Z } else { -WHEEL_Z },
+            );
+            // Nose to the right turns the front wheels right.
+            let (x, z) = (x * c + dz * s, EGO_Z - x * s + dz * c);
+            let (Some(q), Some(near), Some(far)) = (
+                f.ground(x, z),
+                f.ground(x, z - GRIP_RADIUS_M),
+                f.ground(x, z + GRIP_RADIUS_M),
+            ) else {
+                continue;
+            };
+            let rx = GRIP_RADIUS_M * f.scale(z);
+            let ry = ((near.y - far.y) * 0.5).max(1.0);
+            if rx < 1.0 {
+                continue;
+            }
+            let centre = vec2(q.x, (near.y + far.y) * 0.5);
+            let color = pal.roles.caution.lerp(pal.roles.warning, smoothstep(0.5, 1.0, level));
+            let k = GRIP_LEVEL * level;
+            p.scoped(|p| {
+                p.set_blend(BlendMode::Add);
+                p.transform(&squash(centre, vec2(rx, ry)));
+                p.fill(
+                    &Shape::circle(centre, rx),
+                    Gradient::radial(centre, rx)
+                        .stop(0.0, color.fade(k))
+                        .stop(0.5, color.fade(k * 0.5))
+                        .stop(1.0, color.fade(0.0)),
+                );
+            });
         }
     }
 
@@ -1356,6 +1680,11 @@ mod tests {
             brake: 0.0,
             shift_level: 0.0,
             over_shift: false,
+            line_m: 0.0,
+            brake_cue: 0.0,
+            rumble: [false; 2],
+            puddle: [false; 4],
+            grip: [0.0; 4],
         };
         let mut s = Scene::new(Sprites::default());
         s.update(&input(30.0), 1.0 / 60.0);
