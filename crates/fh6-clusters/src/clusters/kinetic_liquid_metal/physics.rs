@@ -103,6 +103,7 @@ impl UTube {
 
     /// The surface slope tan θ now.
     #[must_use]
+    #[cfg(test)]
     pub fn slope(&self) -> f32 {
         self.slope
     }
@@ -111,12 +112,6 @@ impl UTube {
     #[must_use]
     pub fn tilt(&self) -> f32 {
         self.slope.atan()
-    }
-
-    /// The slope's rate of change (1/s).
-    #[must_use]
-    pub fn rate(&self) -> f32 {
-        self.rate
     }
 
     /// Jumps to `slope`, still.
@@ -209,6 +204,7 @@ pub fn meniscus_height(a: f32, contact_deg: f32) -> f32 {
 
 /// The radius of the cap's sphere for the same meniscus: a ÷ |cos θc|.
 #[must_use]
+#[cfg(test)]
 pub fn meniscus_radius(a: f32, contact_deg: f32) -> f32 {
     let c = contact_deg.to_radians().cos().abs().max(1e-3);
     a.max(0.0) / c
@@ -330,12 +326,14 @@ impl Drips {
 
     /// Mercury in reserve, in flight and in the pool: constant.
     #[must_use]
+    #[cfg(test)]
     pub fn total(&self) -> f32 {
         self.reservoir + self.in_flight() + self.pool
     }
 
     /// Mercury in flight.
     #[must_use]
+    #[cfg(test)]
     pub fn in_flight(&self) -> f32 {
         self.flight.iter().filter(|f| **f >= 0.0).count() as f32 * self.drop_volume()
     }
