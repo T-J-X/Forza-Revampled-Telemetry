@@ -24,9 +24,10 @@
 //! Ranks:
 //! - 1: the gear (cockpit cap 190) and the shift bracket over the approach to the shift point
 //!   (pods fill left to right with the bars under them; at the shift point every pod takes the
-//!   shift colour and strobes on the strip's own clock; the gear turns accent, steady).
+//!   shift colour and strobes on the strip's own clock; the gear keeps its white phosphor and
+//!   takes a soft glow, so it holds the 7:1 glance contrast).
 //! - 2: the speed (cap 128, ghost 8s, 0.6 hysteresis).
-//! - 3: the tach bars.
+//! - 3: the tach bars (whole bars switch; the next bar's duty follows the rpm between them).
 //! - 4: pedal columns, slip bar, power and boost slants, the G readout (5 Hz with hysteresis).
 //! - 5: tach numerals, printed labels, scale figures, lens and surround.
 //!
@@ -237,7 +238,7 @@ const COCKPIT: Geom = Geom {
     gear: vec2(175.0, 20.0),
     gear_cap: 190.0,
     readout: vec2(-420.0, 70.0),
-    readout_cap: 44.0,
+    readout_cap: 62.0,
     label_y: 176.0,
     label_cap: 16.0,
     figure_cap: 15.0,
@@ -265,7 +266,7 @@ const HOOD: Geom = Geom {
     gear: vec2(250.0, 26.0),
     gear_cap: 150.0,
     readout: vec2(-590.0, 40.0),
-    readout_cap: 36.0,
+    readout_cap: 50.0,
     label_y: 120.0,
     label_cap: 14.0,
     figure_cap: 13.0,
@@ -323,10 +324,18 @@ impl Scale {
         self.top * BARS_PER_K
     }
 
-    /// Bars lit at `rpm`.
-    fn lit(&self, rpm: f32) -> usize {
+    /// Whole bars lit at `rpm`, and the duty (0..1) of the next bar: a VFD driver dims a
+    /// segment by its grid duty, so the rpm between two bars shows on the frame it changes.
+    fn lit(&self, rpm: f32) -> (usize, f32) {
         let rpm = if rpm.is_finite() { rpm.max(0.0) } else { 0.0 };
-        ((rpm / (1000.0 / BARS_PER_K as f32)).round() as usize).min(self.bars())
+        let x = rpm / (1000.0 / BARS_PER_K as f32);
+        let n = self.bars();
+        let whole = x.floor();
+        if whole >= n as f32 {
+            (n, 0.0)
+        } else {
+            (whole as usize, x - whole)
+        }
     }
 }
 
@@ -625,6 +634,7 @@ pub struct RetroCyber {
     cue: LimiterCue,
     scale: Scale,
     bars_lit: usize,
+    tip_duty: f32,
     gear: Seg7Digit,
     speed_value: SpeedReadout,
     speed: Seg7Number<3>,
@@ -706,6 +716,7 @@ impl RetroCyber {
             cue: LimiterCue::new(),
             scale,
             bars_lit: 0,
+            tip_duty: 0.0,
             gear,
             speed_value: SpeedReadout::new(),
             speed: Seg7Number::new(t, Reveal::Instant),
@@ -791,15 +802,15 @@ impl Cluster for RetroCyber {
 
         // Tach scale, bars, bracket and the limiter cue.
         self.scale = Scale::new(sig.max_rpm, sig.shift_rpm, self.palette.stages[0]);
-        self.bars_lit = self.scale.lit(sig.rpm);
+        (self.bars_lit, self.tip_duty) = self.scale.lit(sig.rpm);
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.cue.update(self.shift.over_shift(), 0.12, dt);
 
-        // Gear: white phosphor, accent while the limiter cue holds, warning in reverse, neutral
-        // at 72%. Segments switch on the frame the gear changes (a VFD has no morph).
+        // Gear: white phosphor (soft glow while the limiter cue holds, drawn below), warning in
+        // reverse, neutral at 72%. Segments switch on the frame the gear changes (a VFD has no
+        // morph).
         self.gear.set_phosphor(match sig.gear {
             Gear::Reverse => Phosphor::Warning,
-            Gear::Neutral | Gear::Forward(_) if self.cue.level() > 0.5 => Phosphor::Accent,
             Gear::Neutral | Gear::Forward(_) => Phosphor::Ink,
         });
         self.gear.set_brightness(match sig.gear {
@@ -1038,6 +1049,7 @@ impl RetroCyber {
     fn draw_tach(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, all: bool) {
         let n = self.scale.bars();
         let lit = if all { n } else { self.bars_lit };
+        let duty = if all { 0.0 } else { self.tip_duty };
         let c = pal.primary;
         let off = ghost(c);
         for i in lit..n {
@@ -1053,6 +1065,14 @@ impl RetroCyber {
             p.fill(
                 &Shape::Polygon { points: &pts },
                 phosphor_paint(self.phosphor, c.intensity(PLATE_GAIN)),
+            );
+        }
+        // The next bar at its duty, over its ghost (no halo: it is never fully lit).
+        if lit < n && duty > 0.0 {
+            let pts = g.bar(lit, n);
+            p.fill(
+                &Shape::Polygon { points: &pts },
+                phosphor_paint(self.phosphor, c.intensity(PLATE_GAIN * duty)),
             );
         }
     }
@@ -1473,10 +1493,11 @@ mod tests {
         let s = Scale::new(7000.0, 6790.0, 0.75);
         assert_eq!((s.top, s.red_from), (8, 7));
         assert_eq!(s.bars(), 32);
-        assert_eq!(s.lit(0.0), 0);
-        assert_eq!(s.lit(3000.0), 12);
-        assert_eq!(s.lit(1e9), 32);
-        assert_eq!(s.lit(f32::NAN), 0);
+        assert_eq!(s.lit(0.0), (0, 0.0));
+        assert_eq!(s.lit(3000.0), (12, 0.0));
+        assert_eq!(s.lit(3125.0), (12, 0.5));
+        assert_eq!(s.lit(1e9), (32, 0.0));
+        assert_eq!(s.lit(f32::NAN), (0, 0.0));
         assert!(s.bracket.0 < s.bracket.1 && s.bracket.1 <= 1.0);
         let hi = Scale::new(9000.0, 8730.0, 0.75);
         assert_eq!((hi.top, hi.red_from), (10, 9));
