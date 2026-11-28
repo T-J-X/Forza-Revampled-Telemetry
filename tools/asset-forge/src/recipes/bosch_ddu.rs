@@ -143,10 +143,11 @@ const GLASS_COLOR: [f32; 3] = [0.0004, 0.0004, 0.0005];
 const GLASS_ROUGH: f32 = 0.07;
 const GLASS_IOR: f32 = 1.5;
 /// The smoked LED lenses and the sensor window (darker and glossier than the glass). Nothing is
-/// mirrored in the face (see [`housing_rig`]), so an unlit lens reads by its own milky grey under
-/// the key, as on the press image (about sRGB 60 to 90 there), not by a reflection.
-const LENS_COLOR: [f32; 3] = [0.027, 0.027, 0.029];
-const LENS_ROUGH: f32 = 0.35;
+/// mirrored in the face (see [`housing_rig`]), so an unlit lens reads by its own smoky grey under
+/// the key, not by a reflection: about sRGB 45 to 80 (the press image shows 60 to 90), dark
+/// enough that a lit side LED stands at least 3:1 over an unlit one (WCAG 1.4.11).
+const LENS_COLOR: [f32; 3] = [0.014, 0.014, 0.015];
+const LENS_ROUGH: f32 = 0.22;
 const SENSOR_COLOR: [f32; 3] = [0.0006, 0.0006, 0.0007];
 const SENSOR_ROUGH: f32 = 0.02;
 /// The rig's power over the housing: the static plate stays dark (the dash draws the lit parts on
@@ -295,14 +296,19 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     for (i, master) in beauty.iter().enumerate() {
         let name = format!("housing_{i}.png");
         let small = box_filter(&img::load(master)?, k as usize);
-        let bytes = img::save_png(&small, &out_dir.join(&name), false, true)?;
+        // Measured before it is written: a sprite over the static cap, or one that lays a veil
+        // on the screen, never reaches the files git keeps.
         let b = brightness(&small);
         if b.p95 > LIMIT_P95 || b.screen_p99 > LIMIT_SCREEN_P99 {
-            eprintln!(
-                "  bosch_ddu {name}: brighter than the static limits (p95 {:.3} > {LIMIT_P95}, or screen p99 {:.4} > {LIMIT_SCREEN_P99}); lower HOUSING_LIGHT",
-                b.p95, b.screen_p99
-            );
+            return Err(tool_err(
+                "bosch_ddu",
+                format!(
+                    "{name}: brighter than the static limits (p95 {:.3} > {LIMIT_P95}, or screen p99 {:.4} > {LIMIT_SCREEN_P99}); lower HOUSING_LIGHT",
+                    b.p95, b.screen_p99
+                ),
+            ));
         }
+        let bytes = img::save_png(&small, &out_dir.join(&name), false, true)?;
         rows.push(format!(
             "| `{name}` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at {az}° (sRGB, straight alpha) | {rw}x{rh} | {kb} KB | blender:hero (bosch_ddu::housing_scene, Cycles {SAMPLES} samples, ortho at {MASTER_SCALE} px per 4K px over x {fx0}..{fx1}, y {fy0}..{fy1}, box-filtered to 1:1; the housing's rig (no softbox over the face, no HDRI) at {HOUSING_LIGHT} power; body sheared {SLIVER} px for the driver's eye) seed=0; luminance p95 {p95:.3}, screen p99 {sp:.4} | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/{master}` |",
             az = key_azimuth(&scene, i),
@@ -590,7 +596,7 @@ fn render(scene: &Scene, paths: &Paths, out: &Path) -> Result<Vec<PathBuf>> {
     std::fs::create_dir_all(out).map_err(|e| io_err(out, e))?;
     let source = script()?;
     let params = scene.to_json(out);
-    let text = serde_json::to_string(&params).unwrap_or_default();
+    let text = serde_json::to_string(&params).map_err(|e| tool_err("bosch_ddu", e.to_string()))?;
     let fp = crate::ledger::fingerprint(&[source.as_bytes(), crate::recipes::PRELUDE.as_bytes(), text.as_bytes()]);
     let fp_path = out.join(".fp");
     let n = if scene.passes.swing { 1 + scene.swing.len() } else { 1 };

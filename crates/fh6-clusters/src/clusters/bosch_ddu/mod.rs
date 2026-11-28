@@ -59,8 +59,9 @@
 //!   from there to the shift point, so nine are lit just under it and the tenth lights at it.
 //!   Each LED has its group's colour as BMW sets the M4 GT3's: two green, six amber, two red
 //!   (the palette's three stage colours). At the shift point all ten turn the shift lamp with a
-//!   hotter core, the brow's brightest state for any palette (lens and halo), and the middle six strobe at 10 Hz on their own clock
-//!   (the strobe's first frame is lit) while the outer pairs stay lit, as the shared
+//!   hotter core, the brow's brightest state for any palette (lens and halo), and the middle
+//!   six strobe at 10 Hz on their own clock (the strobe's first frame is lit) while the outer
+//!   pairs stay lit, as the shared
 //!   `ShiftLights` strobes from the shift point too (the tokens' text says "at the limiter").
 //!   The LEDs go out within 50 ms of the rpm falling. Over the shift point the band cross-fades
 //!   to ink in 0.1 s (held at least 0.35 s, no bloom while ink). Over the shift point, or on a
@@ -74,9 +75,9 @@
 //!
 //! The first frame, a race-flag change and the first frame after a gap take the car's state as
 //! it is (no latch, peak, fade or glyph motion carries over, and the G ball and the virtual light
-//! are put at rest on that frame's force, so nothing drifts after it). Telemetry: rpm, limiter and shift point,
-//! gear, speed, pedals, smoothed G and body slip (derived from the verified velocity) from
-//! `Signals`; power and boost from the packet. Boost reads in psi, the packet's own unit,
+//! are put at rest on that frame's force, so nothing drifts after it). Telemetry: rpm, limiter
+//! and shift point, gear, speed, pedals, smoothed G and body slip (derived from the verified
+//! velocity) from `Signals`; power and boost from the packet. Boost reads in psi, the packet's own unit,
 //! whatever the speed unit (the config has no pressure unit yet). Every readout shows its raw
 //! value on the frame it moves, held by `fh6_kit::Hysteresis` (rpm by 30, power by 1 % and at
 //! least 3, boost by 0.3 psi, total G by 0.03).
@@ -193,8 +194,8 @@ const BEAM_BAND: f32 = 22.0;
 /// on the chin under the screen.
 const GEAR_BLOOM: f32 = 0.05;
 /// The horizon's soft band of light: alpha of `primary` at the line over the panels and inside
-/// the rev gauge's disc (held under [`STATIC_CAP`]), and the height of each band (px). The disc's is the lower one, so the
-/// "rpm" unit stands on black over it.
+/// the rev gauge's disc (held under [`STATIC_CAP`]), and the height of each band (px). The
+/// disc's is the lower one, so the "rpm" unit stands on black over it.
 const HORIZON_GLOW: f32 = 0.07;
 const DISC_GLOW: f32 = 0.18;
 const HORIZON_BAND: f32 = 24.0;
@@ -242,8 +243,9 @@ const ARC_BLOOM: f32 = 0.35;
 const ARC_FADE_S: f32 = 0.1;
 const ARC_HOLD_S: f32 = 0.35;
 /// The ticks across the scale ring (px): how far each reaches inside and outside the ring and
-/// its width (the line's ends are round, half the width further on). The limiter's tick is wider
-/// and starts much further inside, so it differs by shape and not by its red alone; outside the
+/// its width (the line's ends are round, half the width further on). The limiter's tick (on the
+/// first whole thousand at or over the limiter, which is the scale's end, as the scale tops out
+/// there) is wider and starts much further inside, so it differs by shape and not by its red alone; outside the
 /// ring its round end stops where the other ticks' ends do, clear of the numeral beside it.
 const TICK_IN: f32 = 4.0;
 const TICK_OUT: f32 = 5.0;
@@ -818,7 +820,7 @@ impl ArcInk {
 
     /// True while the band has ink to lose: in its fade, or held with the rpm back under the
     /// shift point.
-    fn animating(&self, over: bool) -> bool {
+    fn animating(self, over: bool) -> bool {
         self.mix > 0.0 && (self.mix < 1.0 || !over)
     }
 }
@@ -1167,7 +1169,7 @@ impl Cluster for BoschDdu {
         let dt = input.dt.max(0.0);
         let sig = *input.signals;
         let race_edge = sig.race_on != self.sig.race_on;
-        // A gap on the cluster's clock or in `dt`: the clock sees it whatever the host's cap.
+        // A gap in `dt` (the host caps `dt` at 0.1 s, over [`RESUME_DT`]).
         let gap = input.dt >= RESUME_DT;
         let snap = self.fresh || race_edge || gap;
         self.fresh = false;
@@ -1420,8 +1422,9 @@ impl BoschDdu {
     }
 
     /// One LED lens: lit as one soft oval of light with a hot centre ([`lens_core`]), a 1 px
-    /// inner rim and a tight halo ([`led_halo`]), or an unlit lens in `ink_ghost` (left to the housing render when it loaded: its
-    /// lenses are the real hardware). Only the shift lights (`bloom`, rank 1) feed the bloom.
+    /// inner rim and a tight halo ([`led_halo`]), or an unlit lens in `ink_ghost` (left to the
+    /// housing render when it loaded: its lenses are the real hardware). Only the shift lights
+    /// (`bloom`, rank 1) feed the bloom.
     fn led(&self, p: &mut Painter<'_>, rect: Rect, lit: Option<Color>, core: f32, bloom: bool, pal: &Palette) {
         let r = rect.width().min(rect.height()) * 0.5;
         let shape = Shape::round_rect(rect, r);
@@ -1634,27 +1637,27 @@ impl BoschDdu {
             .stop(1.0, pal.primary.with_alpha(0.0));
         // The beam starts under the horizon rule's bottom edge, so its light never stacks on the
         // rule's (the static cap holds for the stack, `beam_rest`).
-        p.save();
-        p.clip(
-            Rect::from_points(vec2(g.screen.min.x, g.horizon + 1.0), g.screen.max),
-            0.0,
-        );
-        p.fill(&Shape::Polygon { points: &beam }, body);
-        // The edge bands: each a strip inside its edge, at one strength along the edge and
-        // fading inwards along the edge's normal.
-        let edge = (edge_rest * flare).min(1.0);
-        let along = (beam[2] - beam[1]).normalize_or_zero();
-        for (side, top, base) in [(1.0, beam[1], beam[2]), (-1.0, beam[0], beam[3])] {
-            // The inward normal of this edge, and the strip's width along x.
-            let normal = vec2(-side * along.y, along.x);
-            let across = vec2(-side * BEAM_BAND / along.y.max(0.1), 0.0);
-            let strip = [top, base, base + across, top + across];
-            let fade = Gradient::linear(top, top + normal * BEAM_BAND)
-                .stop(0.0, edge_ink.with_alpha(edge))
-                .stop(1.0, edge_ink.with_alpha(0.0));
-            p.fill(&Shape::Polygon { points: &strip }, fade);
-        }
-        p.restore();
+        p.scoped(|p| {
+            p.clip(
+                Rect::from_points(vec2(g.screen.min.x, g.horizon + 1.0), g.screen.max),
+                0.0,
+            );
+            p.fill(&Shape::Polygon { points: &beam }, body);
+            // The edge bands: each a strip inside its edge, at one strength along the edge and
+            // fading inwards along the edge's normal.
+            let edge = (edge_rest * flare).min(1.0);
+            let along = (beam[2] - beam[1]).normalize_or_zero();
+            for (side, top, base) in [(1.0, beam[1], beam[2]), (-1.0, beam[0], beam[3])] {
+                // The inward normal of this edge, and the strip's width along x.
+                let normal = vec2(-side * along.y, along.x);
+                let across = vec2(-side * BEAM_BAND / along.y.max(0.1), 0.0);
+                let strip = [top, base, base + across, top + across];
+                let fade = Gradient::linear(top, top + normal * BEAM_BAND)
+                    .stop(0.0, edge_ink.with_alpha(edge))
+                    .stop(1.0, edge_ink.with_alpha(0.0));
+                p.fill(&Shape::Polygon { points: &strip }, fade);
+            }
+        });
         // The shared glyph's own colours are left out: its red R would stand over the beam's
         // colour, so reverse is ink like every gear (neutral at the glyph's 72 %).
         let ink = if reverse { pal.roles.ink } else { self.gear.color(pal) };
@@ -1819,7 +1822,11 @@ impl BoschDdu {
         let w = p.measure(field, &printed).width + 2.0 * SHIFT_PAD;
         let boxed = Shape::round_rect(Rect::from_points(vec2(x1 - w, y0), vec2(x1, y1)), 4.0);
         p.stroke(&boxed, shift_box(pal), Stroke::inner(2.0));
-        p.number(vec2(x1 - SHIFT_PAD, cy), shift, cells, &printed, None);
+        // With no limiter from the car there is no shift point to print: the box stays empty,
+        // as the strip stays dark and the red zone is left out.
+        if limiter_known(&self.sig) {
+            p.number(vec2(x1 - SHIFT_PAD, cy), shift, cells, &printed, None);
+        }
     }
 
     /// SPEED: tabular digits flush right, as every value in a panel is (no ghost 8s: at a glance
