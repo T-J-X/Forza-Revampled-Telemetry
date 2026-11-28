@@ -1012,11 +1012,9 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
     // 3, conductors) has n in these lanes and k in the absorption lanes, and transmits nothing.
     let eta = pa.g0.xyz;
     let ci = clamp(n.z, 0.0, 1.0);
-    var fres: vec3<f32>;
+    var fres = fresnel3(ci, eta);
     if (metal) {
         fres = fresnel_metal3(ci, eta, pa.g2.xyz);
-    } else {
-        fres = fresnel3(ci, eta);
     }
     let ct = sqrt(max(vec3<f32>(1.0) - vec3<f32>(1.0 - ci * ci) / (eta * eta), vec3<f32>(0.0)));
     let bend = vec3<f32>(ci) / eta - ct;
@@ -1111,11 +1109,9 @@ fn optic_glass(in: VsOut, p: vec2<f32>, frag: vec2<f32>, kind: u32, flags: u32) 
         let lam_l = 0.5 * (sqrt(1.0 + a2 * (1.0 - nl * nl) / (nl * nl)) - 1.0);
         let lam_v = 0.5 * (sqrt(1.0 + a2 * (1.0 - ci * ci) / (ci * ci)) - 1.0);
         let dg = a2 / (PI * dd * dd) / (1.0 + lam_l + lam_v);
-        var f_h: vec3<f32>;
+        var f_h = fresnel3(hv.z, eta);
         if (metal) {
             f_h = fresnel_metal3(hv.z, eta, pa.g2.xyz);
-        } else {
-            f_h = fresnel3(hv.z, eta);
         }
         spec = f_h * pa.colors[0].xyz * (dg / (4.0 * ci));
     }
