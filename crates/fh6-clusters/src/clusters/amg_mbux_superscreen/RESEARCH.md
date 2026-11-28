@@ -116,10 +116,12 @@ This needs the real-game check (session C): drive in FH6 rain and in clear weath
 **Rain, as drawn on board v5.**
 - Streaks radiate from the vanishing point, and their length and speed scale with `speed_ms`.
 - Beads sit on the near ribs below the horizon.
-- The sky darkens by about a third, and the road takes a wet sheen.
+- The sky darkens by about a third, and the road takes a wet sheen. The clouds always stay. TJS, 09:16: "Just don't lose the clouds they look sick and will animate nice". Rain dims and greys them but never replaces them, and they keep drifting with speed in every weather.
 - The streaks are thin (1 to 2 px) and grey-white at low alpha, and they change position, not brightness. That keeps them out of the flash audit's scope: they are motion, not flashing.
 
 **Road logo.** The car's logo (from `fh6-kit::logo::draw`, never an AMG or Mercedes mark) is painted flat on the road near y 150 under a vertical squash of about 0.34. It is a faint satin decal that turns glossy when wet. It is static, so `static` must show it under the 20% cap. It replaces the bottom-left logo box.
+
+**Rejected idea, 09:16.** TJS asked for the crescent mesh to change colour as the rev limiter, then withdrew it: "Actually no the portal is fine for that". The portal rings stay the rev counter and limiter.
 
 **Housing.** The OSD thread is adding `housing::shown(config, ClusterTheme::AmgMbuxSuperscreen)`, with MBUX dashes off by default. This dash draws an optional slab only when that returns true.
 
