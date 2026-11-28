@@ -12,9 +12,9 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-/// The golden's fields, keyed in sorted order. A `BTreeMap` keeps that order whatever
-/// `serde_json` features the build unifies (`fh6-win` turns on `preserve_order`, which would
-/// otherwise write the keys in insertion order and mismatch every golden in a workspace build).
+/// The golden's fields, keyed in sorted order like the checked-in goldens. A `BTreeMap` keeps
+/// that order whatever `serde_json` features the build unifies (`fh6-core` turns on
+/// `preserve_order`, which would otherwise write new goldens in insertion order).
 fn telemetry_to_json(data: &fh6_core::telemetry::FH6TelemetryData) -> BTreeMap<&'static str, Value> {
     BTreeMap::from([
         ("IsRaceOn", json!(data.is_race_on)),
@@ -44,9 +44,18 @@ fn telemetry_to_json(data: &fh6_core::telemetry::FH6TelemetryData) -> BTreeMap<&
     ])
 }
 
-/// Git may check the goldens out with CRLF on Windows; compare line content only.
-fn normalise(text: &str) -> String {
-    text.replace("\r\n", "\n").trim().to_string()
+/// Whether a golden's text holds the same values as `written`, the text this tool would write.
+/// The values are compared, not the text, so line endings (git may check the goldens out with
+/// CRLF on Windows) and key order do not matter (fix phase D). Both sides are parsed from text,
+/// so an f32 compares as the shortest form it is written in.
+fn matches(expected: &str, written: &str) -> bool {
+    match (
+        serde_json::from_str::<Value>(expected),
+        serde_json::from_str::<Value>(written),
+    ) {
+        (Ok(expected), Ok(written)) => expected == written,
+        _ => false,
+    }
 }
 
 /// What checking one packet found.
@@ -97,7 +106,7 @@ fn process_file(bin_path: &Path, write_missing: bool) -> Result<Outcome, String>
         }
     }
     match fs::read_to_string(&out_path) {
-        Ok(expected) if normalise(&expected) == normalise(&pretty) => Ok(Outcome::Match),
+        Ok(expected) if matches(&expected, &pretty) => Ok(Outcome::Match),
         Ok(_) => Ok(Outcome::Mismatch),
         Err(e) if e.kind() == ErrorKind::NotFound => Ok(Outcome::Missing),
         Err(e) => Err(format!("read expected: {e}")),
@@ -218,9 +227,13 @@ mod tests {
     }
 
     #[test]
-    fn line_endings_do_not_matter() {
-        assert_eq!(normalise("{\r\n  \"a\": 1\r\n}\r\n"), normalise("{\n  \"a\": 1\n}"));
-        assert_ne!(normalise("{\"a\": 1}"), normalise("{\"a\": 2}"));
+    fn line_endings_and_key_order_do_not_matter_but_values_do() {
+        let written = "{\n  \"a\": [1, 2],\n  \"b\": 0.5\n}";
+        assert!(matches("{\r\n  \"a\": [1, 2],\r\n  \"b\": 0.5\r\n}\r\n", written));
+        assert!(matches("{\"b\": 0.5, \"a\": [1, 2]}", written));
+        assert!(!matches("{\"a\": [1, 2], \"b\": 0.25}", written));
+        assert!(!matches("{\"a\": [1, 2]}", written));
+        assert!(!matches("not json", written));
     }
 
     #[test]
@@ -267,10 +280,15 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// The checked-in goldens all pass, with nothing written.
+    /// The 20 checked-in goldens all pass, with nothing written.
     #[test]
-    fn the_repo_goldens_pass() {
+    fn every_shipped_golden_matches_its_packet() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/packets");
+        let bins = files_with(&dir, "bin").unwrap();
+        assert_eq!(bins.len(), 20);
+        for bin in &bins {
+            assert_eq!(process_file(bin, false).unwrap(), Outcome::Match, "{}", bin.display());
+        }
         assert!(run(&dir, false).unwrap());
     }
 }

@@ -31,7 +31,7 @@ use fh6_clusters::catalog;
 use fh6_clusters::registry::REGISTRY;
 use fh6_clusters::review::{sequence_frame, DriveContext, Driver, SEQUENCE_DT, SEQUENCE_FRAMES, STATES};
 use fh6_core::telemetry::{decode, encode, MAX_ABS, PACKET_LEN};
-use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
+use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData, PowerUnit, SpeedUnit};
 use fh6_kit::math::repairs;
 use fh6_kit::testing::{Offscreen, OFFSCREEN_FORMAT};
 use fh6_kit::{wgpu, Cluster, ClusterEntry, FontChoice, Kit, Layout, Logo, Palette, Tokens, View};
@@ -615,7 +615,7 @@ impl Drive {
     fn new(nk: &NoopKit, entry: &ClusterEntry) -> Self {
         Self {
             config: AppConfig::default(),
-            palette: Palette::family(&nk.tokens, entry.family),
+            palette: Palette::family(&nk.tokens, entry.family.key()),
             tokens: nk.tokens.clone(),
             fonts: nk.kit.font_choice(None),
             logo: Logo::default(),
@@ -623,9 +623,10 @@ impl Drive {
         }
     }
 
-    /// Speed in km/h and reduced flash on, or the defaults (mph, full flash).
+    /// Speed in km/h, power in kW and reduced flash on, or the defaults (mph, hp, full flash).
     fn set_kmh_and_reduced_flash(&mut self, on: bool) {
-        self.config.speed_unit = if on { "KMH" } else { "MPH" }.to_owned();
+        self.config.speed_unit = if on { SpeedUnit::Kmh } else { SpeedUnit::Mph };
+        self.config.power_unit = if on { PowerUnit::Kw } else { PowerUnit::Hp };
         self.reduced_flash = on;
     }
 
@@ -1132,10 +1133,10 @@ fn robustness(
     let theme = entry.theme.name();
     let mut drive = Drive::new(nk, entry);
     // Whole packets from a cold start, then after a normal reading at odd frame times, in every
-    // view and with km/h and reduced flash.
+    // view and with km/h, kW and reduced flash.
     for (variant, view, kmh) in [
         ("cockpit", View::Cockpit, false),
-        ("cockpit, km/h, reduced flash", View::Cockpit, true),
+        ("cockpit, km/h, kW, reduced flash", View::Cockpit, true),
         ("hood", View::Hood, false),
         ("chase", View::Chase, false),
     ] {
