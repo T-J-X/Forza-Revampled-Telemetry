@@ -174,6 +174,76 @@ One thread per dash, at most 8 at once (TJX, 2026-11-28, raised from 4 to 6, the
 | 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 | 73 | 73 | `FaradayMandala` | Abstract | concept | Fluid / Generative | cockpit | ◐ |
 
+### Pre-research (2026-11-28)
+TJS, 2026-11-28: "Do this more so also for dashes not made yet", "if each has its research done in the background it would save alot of time in the future" and "Make sure it links to each one and when it launches it knows to access that Info". The thread "Research the upcoming dashes ahead" writes the step-1 research of every dash that has not started, in build order, before its dash thread exists. This table links each note; it is not the build-order table, and its State column is not a dash's Status.
+
+- **The note** is the dash's own `RESEARCH.md` in its module folder: the benchmark or real display, reference photos, how the real thing behaves with motion notes, the maths, the telemetry mapping with a replacement idea for every part the game cannot send, edge cases, signature-moment ideas, what it needs from the 4K library, and departures. Every fact is marked Cited, Computed or Our reading.
+- **The references** are in the dash's Drive masters folder, `G:\My Drive\FH6 WheelDash v2 - 4K Masters\<snake_name>\references\`, with `SOURCES.md` listing every photo and source by URL. The cloud research could not download most images, so a photo that is not in the folder is listed there by URL for the PC to fetch.
+- **A dash thread that starts later** reads its note and `SOURCES.md` first and extends them at step 1 (`CLUSTER_PROMPT.md`, "If your dash was pre-researched"). The note alone does not make a dash done: the Done rule also needs `HANDOVER.md` and a real `mod.rs`.
+- The brief every pre-research run follows is `dash-research/PRE_RESEARCH_BRIEF.md` in the project's shared files.
+
+| Build # | Dash | Note | Drive references | State |
+|---|---|---|---|---|
+| 14 | `CymaticResonanceField` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/cymatic_resonance_field/RESEARCH.md) | `cymatic_resonance_field\references\SOURCES.md` | researching |
+| 15 | `VisionPetals` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vision_petals/RESEARCH.md) | `vision_petals\references\SOURCES.md` | researching |
+| 16 | `AmgOneF1` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_one_f1/RESEARCH.md) | `amg_one_f1\references\SOURCES.md` | researching |
+| 17 | `VernierLoupe` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/vernier_loupe/RESEARCH.md) | `vernier_loupe\references\SOURCES.md` | researching |
+| 18 | `CarplayIsland` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/carplay_island/RESEARCH.md) | `carplay_island\references\SOURCES.md` | researching |
+| 19 | `ChronoEventHorizon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_event_horizon/RESEARCH.md) | `chrono_event_horizon\references\SOURCES.md` | queued |
+| 20 | `Gt3RsApogee` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt3_rs_apogee/RESEARCH.md) | `gt3_rs_apogee\references\SOURCES.md` | queued |
+| 21 | `GlyphDotMatrix` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/glyph_dot_matrix/RESEARCH.md) | `glyph_dot_matrix\references\SOURCES.md` | queued |
+| 22 | `Gt7CockpitPro` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt7_cockpit_pro/RESEARCH.md) | `gt7_cockpit_pro\references\SOURCES.md` | queued |
+| 23 | `ChronoMultiverse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/chrono_multiverse/RESEARCH.md) | `chrono_multiverse\references\SOURCES.md` | queued |
+| 24 | `LiquidMorph` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/liquid_morph/RESEARCH.md) | `liquid_morph\references\SOURCES.md` | queued |
+| 25 | `BugattiTourbillon` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/bugatti_tourbillon/RESEARCH.md) | `bugatti_tourbillon\references\SOURCES.md` | queued |
+| 26 | `ShibuyaChromaticPrisma` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/shibuya_chromatic_prisma/RESEARCH.md) | `shibuya_chromatic_prisma\references\SOURCES.md` | queued |
+| 27 | `WindshieldHud` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/windshield_hud/RESEARCH.md) | `windshield_hud\references\SOURCES.md` | queued |
+| 28 | `F35HelmetHmd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/f35_helmet_hmd/RESEARCH.md) | `f35_helmet_hmd\references\SOURCES.md` | queued |
+| 29 | `AmgMbuxTrackPace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_track_pace/RESEARCH.md) | `amg_mbux_track_pace\references\SOURCES.md` | queued |
+| 30 | `GtrNismoMfd` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gtr_nismo_mfd/RESEARCH.md) | `gtr_nismo_mfd\references\SOURCES.md` | queued |
+| 31 | `SimInputTrace` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sim_input_trace/RESEARCH.md) | `sim_input_trace\references\SOURCES.md` | queued |
+| 32 | `AuroraVeil` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aurora_veil/RESEARCH.md) | `aurora_veil\references\SOURCES.md` | queued |
+| 33 | `LorenzButterfly` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lorenz_butterfly/RESEARCH.md) | `lorenz_butterfly\references\SOURCES.md` | queued |
+| 34 | `PaganiHorologerie` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/pagani_horologerie/RESEARCH.md) | `pagani_horologerie\references\SOURCES.md` | queued |
+| 35 | `SapphireMystery` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sapphire_mystery/RESEARCH.md) | `sapphire_mystery\references\SOURCES.md` | queued |
+| 36 | `ArNavWayfinder` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/ar_nav_wayfinder/RESEARCH.md) | `ar_nav_wayfinder\references\SOURCES.md` | queued |
+| 37 | `NeuralCyberSynapse` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/neural_cyber_synapse/RESEARCH.md) | `neural_cyber_synapse\references\SOURCES.md` | queued |
+| 38 | `AmgMbuxClassic` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/amg_mbux_classic/RESEARCH.md) | `amg_mbux_classic\references\SOURCES.md` | queued |
+| 39 | `SynthwaveOutrun` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/synthwave_outrun/RESEARCH.md) | `synthwave_outrun\references\SOURCES.md` | queued |
+| 40 | `Gt7ModularTripod` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/gt7_modular_tripod/RESEARCH.md) | `gt7_modular_tripod\references\SOURCES.md` | queued |
+| 41 | `HarmonographDrive` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/harmonograph_drive/RESEARCH.md) | `harmonograph_drive\references\SOURCES.md` | queued |
+| 42 | `SuminagashiMarble` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/suminagashi_marble/RESEARCH.md) | `suminagashi_marble\references\SOURCES.md` | queued |
+| 43 | `T50Floodlit` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/t50_floodlit/RESEARCH.md) | `t50_floodlit\references\SOURCES.md` | queued |
+| 44 | `DichroicLouvre` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/dichroic_louvre/RESEARCH.md) | `dichroic_louvre\references\SOURCES.md` | queued |
+| 45 | `GeodesicWell` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/geodesic_well/RESEARCH.md) | `geodesic_well\references\SOURCES.md` | queued |
+| 46 | `SolarisWarpCore` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/solaris_warp_core/RESEARCH.md) | `solaris_warp_core\references\SOURCES.md` | queued |
+| 47 | `LfaV10Nurburgring` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lfa_v10_nurburgring/RESEARCH.md) | `lfa_v10_nurburgring\references\SOURCES.md` | queued |
+| 48 | `HakosukaS20` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/hakosuka_s20/RESEARCH.md) | `hakosuka_s20\references\SOURCES.md` | queued |
+| 49 | `SimPitWall` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/sim_pit_wall/RESEARCH.md) | `sim_pit_wall\references\SOURCES.md` | queued |
+| 50 | `IsochromaticLoadPath` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/isochromatic_load_path/RESEARCH.md) | `isochromatic_load_path\references\SOURCES.md` | queued |
+| 51 | `KaleidoscopeMirror` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/kaleidoscope_mirror/RESEARCH.md) | `kaleidoscope_mirror\references\SOURCES.md` | queued |
+| 52 | `KoenigseggGyro` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/koenigsegg_gyro/RESEARCH.md) | `koenigsegg_gyro\references\SOURCES.md` | queued |
+| 53 | `ApertureNine` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aperture_nine/RESEARCH.md) | `aperture_nine\references\SOURCES.md` | queued |
+| 54 | `Lightpainter` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lightpainter/RESEARCH.md) | `lightpainter\references\SOURCES.md` | queued |
+| 55 | `AeroPlasmaBlade` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aero_plasma_blade/RESEARCH.md) | `aero_plasma_blade\references\SOURCES.md` | queued |
+| 56 | `RevueltoCorsa` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/revuelto_corsa/RESEARCH.md) | `revuelto_corsa\references\SOURCES.md` | queued |
+| 57 | `ZNismoSport` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/z_nismo_sport/RESEARCH.md) | `z_nismo_sport\references\SOURCES.md` | queued |
+| 58 | `RackFocus` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/rack_focus/RESEARCH.md) | `rack_focus\references\SOURCES.md` | queued |
+| 59 | `AeroSmokeTunnel` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/aero_smoke_tunnel/RESEARCH.md) | `aero_smoke_tunnel\references\SOURCES.md` | queued |
+| 60 | `GoldenAngle` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/golden_angle/RESEARCH.md) | `golden_angle\references\SOURCES.md` | queued |
+| 61 | `RattrapanteSector` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/rattrapante_sector/RESEARCH.md) | `rattrapante_sector\references\SOURCES.md` | queued |
+| 62 | `LumenEtch` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/lumen_etch/RESEARCH.md) | `lumen_etch\references\SOURCES.md` | queued |
+| 63 | `TreadSeismograph` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/tread_seismograph/RESEARCH.md) | `tread_seismograph\references\SOURCES.md` | queued |
+| 64 | `EvaBioSync` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/eva_bio_sync/RESEARCH.md) | `eva_bio_sync\references\SOURCES.md` | queued |
+| 65 | `MclarenSlimDisplay` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/mclaren_slim_display/RESEARCH.md) | `mclaren_slim_display\references\SOURCES.md` | queued |
+| 66 | `AbyssalShearBloom` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/abyssal_shear_bloom/RESEARCH.md) | `abyssal_shear_bloom\references\SOURCES.md` | queued |
+| 67 | `HopfFibration` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/hopf_fibration/RESEARCH.md) | `hopf_fibration\references\SOURCES.md` | queued |
+| 68 | `BionicSpaceframe` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/bionic_spaceframe/RESEARCH.md) | `bionic_spaceframe\references\SOURCES.md` | queued |
+| 69 | `FibreOpticCorona` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/fibre_optic_corona/RESEARCH.md) | `fibre_optic_corona\references\SOURCES.md` | queued |
+| 70 | `StarSailOrigami` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/star_sail_origami/RESEARCH.md) | `star_sail_origami\references\SOURCES.md` | queued |
+| 71 | `ArcLadderCascade` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/arc_ladder_cascade/RESEARCH.md) | `arc_ladder_cascade\references\SOURCES.md` | queued |
+| 72 | `HyperbolicTiles` | [`RESEARCH.md`](../../../crates/fh6-clusters/src/clusters/hyperbolic_tiles/RESEARCH.md) | `hyperbolic_tiles\references\SOURCES.md` | queued |
+
 ## The auto-chain
 TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 6 dashes are built at once (TJX, 2026-11-28, raised from 4), and a free slot is never left idle.
 
@@ -200,7 +270,7 @@ TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, star
 3. **Settle the requests.** For each open request: if the coordinator has answered with a thread id, bind it and close the request. If it answered that it started none, close the request and log the reason. A request with no answer is sent once more after 2 hours. After 4 hours without an answer the run writes one line to TJX in the chain thread, once.
 4. **Find strays and doubles.** A thread whose title holds a dash's exact key and that is not in the ledger is read: if its introduction opens with `DASH <Name>`, it is bound and holds a slot (TJX or the coordinator started it by hand). If two live threads claim one key, start nothing for that key and tell the coordinator once.
 5. **Count.** Slots in use = bound dashes that are not done + open requests.
-6. **Start.** While fewer than 8 slots are in use and a startable dash exists: take the next one (first any startable dash on the start-first list below, then the lowest build #), write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
+6. **Start.** While fewer than 8 slots are in use and a startable dash exists: take the next one (first any startable dash on the start-first list below, then the lowest build #), write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key. The line also carries the dash's pre-research (TJX, 2026-11-28 10:40: "Make sure it links to each one and when it launches it knows to access that Info"): `Pre-research: crates/fh6-clusters/src/clusters/<snake_name>/RESEARCH.md (<sha or branch>) · Drive: <snake_name>/references/ (<folder link>) with SOURCES.md`, and the coordinator puts it in the thread's opening message. If the thread "Research the upcoming dashes ahead" has not finished that dash yet, the line says `Pre-research: not yet` and the dash does step 1 itself.
 7. **Mark.** Work out the Status cell each dash should show: ✅ done; ◐ bound and not done; ⧖ module missing; ☐ otherwise. If the table on `origin/main` differs, change only those cells in one commit (as `TJX <TJX@Ngage.com>`, no trailer) and get it onto `main`: a plain push, or a pull request merged at once where the push is refused. If neither works, drop the commit; the next run does it. No rule reads the Status cell. It is there for people.
 8. **Watch.** A bound thread that is failed or stopped, or has posted nothing for 2 hours, gets one message: `CHAIN CHECK <Name>`. If nothing has changed 2 hours later, the run asks the coordinator to restart the thread or to set the dash aside. A dash that posted `READY FOR MERGE` and is still not done 2 hours later: send its thread `CHAIN CHECK <Name>` (it merges itself, AGENTS.md rule 16), then remind the coordinator every 4 hours, three times at most, then one line to TJX.
 9. **Save.** Write the ledger and bring the chain thread's checklist up to date. If nothing needs TJX, end without a message.

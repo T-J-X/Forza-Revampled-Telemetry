@@ -15,3 +15,24 @@ Renders of the kit's liquid-metal paint (`OpticalGlass::metal`, `docs/specs/opti
 | `chromium_6_waves_twelvefold.png` | chromium | 6 at 30° | 80 | 2.2 |
 
 They are references for layout and look, not runtime assets: a dash draws the surface live, with its own wavenumber, amplitudes and phases every frame. The light and the environment a dash uses change what the metal mirrors; on black, a metal shows only what it reflects.
+
+## In Penpot
+
+Master file `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, page `00 · Kit · Liquid metal` (`347e5ae2-9e0b-80b1-8009-03ab8d7699dd`), added 28 Nov 2026. Images come from this folder at commit `266f471`.
+
+- Overview board `Kit · Liquid metal — overview` (3840×2160): `347e5ae2-9e0b-80b1-8009-03abb25d9481`. The nine discs as instances at 560 px, with captions and the API note.
+- Components, local library path `Kit / Liquid metal`: each a 1600×1600 black board holding one locked render rectangle at 1:1 (constraints "scale", so a smaller instance scales its disc). The main boards sit below the overview at y = 2600.
+
+| Component | Component ID | Main board ID |
+|---|---|---|
+| mercury_still | `347e5ae2-9e0b-80b1-8009-03aba2532abe` | `347e5ae2-9e0b-80b1-8009-03aba244e694` |
+| mercury_2_waves_squares | `347e5ae2-9e0b-80b1-8009-03aba25d53bb` | `347e5ae2-9e0b-80b1-8009-03aba25470a2` |
+| mercury_3_waves_hexagons | `347e5ae2-9e0b-80b1-8009-03aba26614c4` | `347e5ae2-9e0b-80b1-8009-03aba25e6023` |
+| mercury_3_waves_fine | `347e5ae2-9e0b-80b1-8009-03aba26dabb2` | `347e5ae2-9e0b-80b1-8009-03aba266d85e` |
+| mercury_6_waves_twelvefold | `347e5ae2-9e0b-80b1-8009-03aba2753b11` | `347e5ae2-9e0b-80b1-8009-03aba26e04ee` |
+| mercury_6_waves_coarse | `347e5ae2-9e0b-80b1-8009-03aba27fa6a7` | `347e5ae2-9e0b-80b1-8009-03aba2760532` |
+| chromium_still | `347e5ae2-9e0b-80b1-8009-03aba286fbf7` | `347e5ae2-9e0b-80b1-8009-03aba2808ebf` |
+| chromium_3_waves_hexagons | `347e5ae2-9e0b-80b1-8009-03aba28ed7ca` | `347e5ae2-9e0b-80b1-8009-03aba28758e3` |
+| chromium_6_waves_twelvefold | `347e5ae2-9e0b-80b1-8009-03aba296501c` | `347e5ae2-9e0b-80b1-8009-03aba28fbd09` |
+
+The page sits at the end of the file (the plugin API cannot reorder pages); drag it beside `00 · Asset library` in the Pages panel once that page exists.

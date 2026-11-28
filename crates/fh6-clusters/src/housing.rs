@@ -10,7 +10,11 @@
 //!    off); the OSD shows its "Housing" row only for dashes listed there;
 //! 2. reads [`shown`] in its `update` (`housing::shown(input.config, ClusterTheme::Mine)`), so a
 //!    change applies on the next frame, and draws the housing only when it is true; with the
-//!    housing off, everything else floats on OLED black.
+//!    housing off, everything else floats on OLED black;
+//! 3. gives each translucent part that sits on the housing its opacity with
+//!    [`crate::common::bezel::level_alpha`]`(level, shown)`, not `bezel::on_screen(level)`:
+//!    `on_screen` is right only over an opaque body, and over the overlay's transparent pixels
+//!    it shows about 2.5 times too dim.
 //!
 //! [`shown`] is a map lookup by name with no allocation, cheap enough for every frame.
 
