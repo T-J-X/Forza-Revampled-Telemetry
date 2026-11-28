@@ -96,14 +96,14 @@ with b the centre-of-mass-to-rear-axle distance. The packet has no wheelbase; b 
 
 ### 6.4 The score: a DOSS-style slide score
 
-DOSS's formula is not published [S2, S3, S5, S6]. DriftBox's 0 to 10 grade uses average angle and average lateral G between sector gates [S9]; VDrift adds distance, a length bonus, max speed and max angle [S12]. **Our model**, built from the four things DOSS is cited to judge (B7), each from verified fields, scored per slide (a run by the DriftBox rule, B3):
+DOSS's formula is not published [S2, S3, S5, S6]. DriftBox's 0 to 10 grade uses average angle and average lateral G between sector gates [S9]; VDrift adds distance, a length bonus, max speed and max angle [S12]. **Our model**, built from the four things DOSS is cited to judge (B7), each from verified fields, scored per slide. A run starts by the DriftBox rule (B3: over 5° and 25 km/h) and ends after 300 ms under 4°, or under 25 km/h, so that a transition through zero stays inside one run (E7):
 
 | Term | What it measures | From |
 |---|---|---|
 | A, angle | the slide's mean \|β\| against a 45° reference | velocity |
 | S, speed | the mean speed in the slide against 100 km/h | speed |
 | K, stability | 1 − the RMS of β's deviation from its 0.5 s running mean, against 10° | velocity |
-| W, swing-back | the peak \|dβ/dt\| through each change of side, against 120°/s | velocity |
+| W, swing-back | the peak \|dβ/dt\| through each change of side, against 180°/s (§6.7 F3) | velocity |
 
 Score = 100 × (0.35·min(A, 1.2) + 0.25·min(S, 1.2) + 0.25·K + 0.15·min(W, 1.2)), clamped to 0..120 and shown to two decimals. The caps let a big slide pass 100, as D1GP's do (B6). Straightening up ends the run and freezes its score (B4). The weights are ours; the handover lists them as a call, and the unit tests assert the score for fixed traces without a GPU.
 
@@ -114,6 +114,22 @@ SPIN shows when \|β\| > 100°, or \|β\| > 45° below 10 km/h (B5). It voids th
 ### 6.6 What is verified
 
 Verified: rpm, speed, gear, pedals, acceleration, velocity (the kit's lessons, `docs/kit/README.md`). Steer, the hand brake and angular velocity are decoded raw fields; the dash uses them as inputs only (a tick, a label, a feed-forward), and the handover names them as not yet checked against the golden packets. No tyre slip, suspension or weather field is read.
+
+### 6.7 Study: what a real drift does to these numbers
+
+No source read gives a measured drift-entry or transition rate in deg/s [S24 to S27], and the repo's drive scenarios and review states are synthetic (`tools/mock-udp`, `fh6_clusters::review`; the drift review state is a fixed 27°). So the numbers below come from a trace built on the real figures that the sources do give, through the kinematic identity a_y = V(β̇ + r) (the rearranged lateral equation of the single-track model in [S24, S26]; with the path turn rate a_y / V, r = a_y / V − β̇).
+
+**Cited real figures.** A production Mercedes-AMG GT 63 S drifting under automated control held a target sideslip of 0.6 rad (34°), peaked at 0.66 rad (38°), with a peak yaw rate of 0.95 rad/s and speeds of 12.6 to 14.4 m/s; Stanford's MARTY held 0.7 rad (40°) with yaw rates up to 2 rad/s at 10.8 to 13.8 m/s [S24]. A BMW M3 held 30° on a skid pad [S25]. MARTY with a professional driver counter-steered about 25° at the wheel [S26]. Stanford reports sideslip "as high as 45 degrees" [S27]. In these sources β and r have opposite signs in a held drift (an example equilibrium: r = 0.6 rad/s, β = −0.7 rad, V = 13.8 m/s [S24]).
+
+**The trace** (`/mnt/project-files/drift_glass/research/study_slip_trace.png`, made 2026-11-28 from a script kept outside the repo): straight, entry to −38° over 0.6 s, a held slide with ±2° of wander, a transition to +38° over 0.6 s, a held slide, exit over 0.8 s. Path turn rate ±0.95 rad/s at 13.5 m/s, so a held lateral acceleration of about 1.26 g.
+
+| Finding | Number | What changes |
+|---|---|---|
+| F1 | Through the transition β crosses the ±4° band in about 50 ms, at a peak β rate near 190°/s, with the yaw rate reversing at up to about 200°/s. | The 300 ms end rule (E7) keeps a transition inside one run, with a margin of six times. Confirmed. |
+| F2 | **The brief's 8° / 4° wedge hysteresis closes the wedge for about 70 ms mid-transition**, then reopens it: a blink at exactly the signature moment. | The wedge follows the run's rule instead: it opens above 8° and closes only after 300 ms under 4°. Through a transition it sweeps across the centre without closing (as §12 says). The brief's hysteresis is kept for the opening edge. |
+| F3 | The swing-back term saturated: 190°/s against the 120°/s reference. | The reference becomes 180°/s, so a fast, clean transition earns full marks and a faster one only reaches the cap. |
+| F4 | In the held slide, β_r − β stays at 4 to 6° all the time. It is r·b / V by construction (§6.2), so it restates the yaw rate and says nothing about grip. | **β_r is dropped as the amber edge's input** (kept here as considered). The amber edge becomes an **over-rotation warning**: lit while \|β\| is over 55° and still growing faster than 30°/s, the moment before a spin (SPIN comes at 100°). A first rule (over 30° and growing faster than 60°/s) lit falsely at the end of every entry and transition in the trace, where β still grows at up to 119°/s past 30°; held drifts in the sources sit at 30 to 45° [S24, S25, S27], so 55° is past any held angle. It needs only β̇, from verified velocity, and no sign of r. |
+| F5 | The sample slide (38°, 48 km/h, steady) scores 75.30: angle 0.73, speed 0.47, stability 0.80, swing-back at the cap. | Speeds in Forza drifting run well above this test's 48 km/h, so the 100 km/h speed reference stays; the direction check revisits the weights with the review states. |
 
 ## 7. Parts the game can't drive, and what replaces them
 
@@ -130,7 +146,7 @@ From the benchmark and the category, these parts need data the packet does not s
 ## 8. Departures from the brief, and why
 
 - **Tint by absorption, not alpha 56 to 64.** The category note and optics.md §11 rule out a flat alpha (§3).
-- **Combined slip replaced by β_r** (§6.2): the field is not in the decoder and FH6's slip angle is normalised and unverified.
+- **Combined slip replaced by an over-rotation warning** (§6.2, §6.7 F4): the field is not in the decoder, FH6's slip angle is normalised and unverified, and the rear-axle slip β_r turned out to restate the yaw rate.
 - **Score added.** The brief names the dash "a drift scoring tool" but gives it no score; the benchmark's score and its two-decimal D1GP format are added (B4, B6).
 - **Run rule.** The score's run follows the DriftBox (5°, 25 km/h); the wedge keeps the brief's 8° / 4° hysteresis and its 5 m/s floor, so the score starts a little before the wedge shows.
 - **SPIN** added from the benchmark (B5).
@@ -148,7 +164,68 @@ These wait for LIBRARY DONE (the rule at the top of CLUSTER_PROMPT.md); TJS adde
 
 **Earlier assets found.** The Drive holds Phase 6 Blender renders of a DriftGlass visor from 2026-11-23 (`visor_l.png`, `visor_c.png`, `visor_r.png`, 2528 × 728 at 128 samples, seed 1010, three light keys at azimuths −9°, 0° and 9°), made from a bpy script in an old worktree. They predate the 2026-11-27 rules (all assets 4K and 1:1 at the 3840 × 2160 frame; Penpot before assets), so they are not reused as the final plate. Their three-key approach (one render per light azimuth, swapped by lateral G) matches the brief's facet swap and is worth keeping in the new Blender recipe.
 
-## 10. Sources
+## 10. Telemetry mapping
+
+Every input the dash reads, what it drives, and how it is held. "Verified" follows §6.6. Spring names are the tokens' `motion.springs` (`data/design_tokens.json`): `snap` T 0.102 s ζ 1, `fast` T 0.168 s ζ 0.9, `ribbon` T 0.07 s ζ 0.9 with feed-forward, `light` T 0.15 s ζ 1, `gBall` T 0.168 s ζ 0.9, parallax ω 12 rad/s for 0 / 2 / 4 px per g. Thresholds are kept in m/s and degrees inside, whatever unit the driver shows.
+
+| Element | Input | Derived as | Motion | Held by | Verified |
+|---|---|---|---|---|---|
+| Gear | `gear` | `Gear::from_raw` (0 = R, 1 to 10, else N) | glyph change on the `fast` spring plus the family's rim light sweep | none: it changes on the frame the gear does | yes |
+| Speed | `signals.speed` in the driver's unit | as sent | none (AGENTS 7) | `Hysteresis` of 1 unit, on the raw value | yes |
+| Shift pills | `shift_fraction`, `rpm`, `max_rpm` | the kit's `ShiftLights` stages from the tokens | lamps step; the strobe runs on the strip's own clock (time since the shift point) | stage edges only | yes |
+| Light pipe and meniscus | `rpm_fraction` (idle to limiter), `throttle`, rpm steadiness | meniscus position from rpm, its brightness from throttle, its ripple from the RMS of rpm about its 0.5 s running mean (§7) | `ribbon` with `rpm_rate` feed-forward | peak-held rpm above the shift point (lesson: limiter flicker) | yes |
+| Drift-angle readout | `velocity_x`, `velocity_z` | β of §6.1, computed here from the raw velocity and unwrapped across ±180° (edge case E3) | none: the digits are the live value | whole degrees, `Hysteresis` of 1° (B8: the real meter is accurate to 1°) | yes |
+| Slip wedge | β, `angular_velocity_y` | opening = β; target led by r·dt (feed-forward) | `snap` | opens above 8° (brief); closes after 300 ms under 4°, so it never blinks in a transition (§6.7 F2); hidden below 5 m/s | β yes; r raw |
+| Wedge colour band | \|β\| | 8 to 20° primary, 20 to 40° accent, over 40° caution (brief) | 150 ms crossfade (brief) | a 2° hysteresis at each band edge, so a slide at 20° does not blink between bands (our addition) | yes |
+| Peak scribe and `PEAK` | max \|β\| of the run | moves outward only during the run | appears with the run end | tick held 2 s; `PEAK nn°` shown 1.5 s after the slide ends (brief) | yes |
+| Counter-steer tick | `steer` | steer / 127, no wheel angle claimed | `ribbon` | none | raw |
+| G comet | `g_lat`, `g_long` (the kit smooths them over 60 ms) | direction and length on the fan's pivot | `gBall` | none | yes |
+| Over-rotation edge | β, β̇ | lit while \|β\| is over 55° and growing faster than 30°/s (§6.7 F4) | 150 ms fade | 100 ms minimum on-time | yes (from velocity) |
+| HB label | `handbrake` | lit above 0.1 | 100 ms fade | none | raw |
+| Visor light and facet swap | `g_lat` | light azimuth from lateral G | `light` | none | yes |
+| Parallax | `g_lat`, `g_long` | 0 / 2 / 4 px per g by layer | parallax ω | none | yes |
+| Visor lower lip | `brake`; the limiter | warms with brake (the decel-light idea, §7); steady `shift` at the limiter (brief) | 100 ms fade | none | yes |
+| Slide score | the run's statistics (§6.4) | computed at the run's end | shown at the run's end | until the next run starts | yes (from β, speed) |
+| Chain total | consecutive runs (§7) | the sum of a chain's slide scores, one decimal | shown with the slide score | until a straight of over 1 s at under 4° | yes |
+| Ghost | the last run's β(t) | sampled at 30 Hz into a fixed buffer made in `new()` (20 s, 600 values) | replays from the next run's start | the last finished run | yes |
+| SPIN | β, speed | §6.5 | appears at once | 1.5 s, and voids the run | yes |
+
+## 11. Edge cases
+
+| # | Case | What happens | Our plan |
+|---|---|---|---|
+| E1 | Standing still or crawling (under 1 m/s) | `car_slip_angle_rad` returns 0; β is undefined at zero speed. | Wedge and readout hidden below 5 m/s (brief); the score's run needs 25 km/h (B3). |
+| E2 | Reverse gear, or rolling backwards | v_z < 0, so β is near ±180°. | No wedge, readout or SPIN while the gear is R; rolling backwards in a forward gear above 10 km/h is a SPIN by B5. |
+| E3 | β crosses ±180° | The kit's `Signals::slip_deg` is smoothed by a linear lerp, which crosses 0 on the way from +179° to −179°: for a frame or two it shows a small angle and could end a run falsely. | Compute β from the raw velocity in the dash, unwrapped (take the step of least magnitude between frames), and latch SPIN, which comes first above 100°. |
+| E4 | Airborne over a jump | v_y grows; a_x falls to near 0, so r_est = a_x / v carries no sign. | β from v_x and v_z still holds. The sign gate keeps the last agreed sign while \|r_est\| is under 0.2 rad/s; the score's run is frozen while \|a_y\| < 0.3 g, so a jump neither ends nor scores a run. |
+| E5 | Donuts at low speed | Large β below 10 km/h. | SPIN by B5, as the DriftBox calls it; no score. |
+| E6 | Grip cornering at the limit | Body slip of 2 to 6° in fast grip corners can cross the 5° run start. | A run only scores if its peak reached 8° (the wedge was shown); otherwise it is dropped silently. |
+| E7 | Transition through zero (left to right) | β passes through 0, below 4° for a moment. | The run ends only after 300 ms under 4° (brief) or under 25 km/h, so a transition stays one run and its swing-back rate is scored (B7). The §12 study checks 300 ms against real transition times. |
+| E8 | Bouncing off the limiter mid-slide | rpm flickers about 50 rpm a frame. | Only the pills strobe; the light pipe takes the peak-held rpm; the meniscus ripple is the steadiness cue, not a flicker. With `reduced_flash` the pills hold steady. |
+| E9 | Gear change mid-slide | | The gear's change motion never disturbs the wedge or the run. |
+| E10 | `max_rpm` 0, or idle above max | | The kit's `Signals` guards `shift_fraction` and `rpm_fraction`; the meniscus clamps to 0..1. |
+| E11 | Hostile packets | `decode` returns finite floats within bounds; zeros pass through. | atan2(0, 0) is 0; every division (score terms, r_est) guards its denominator. The G5 gate must pass with no repairs. |
+| E12 | Pause, menu or a stale stream | The host hides the dash (AGENTS 9). | On the first frame back, if `dt` exceeds 0.5 s, the run, the peak and the chain reset; the ghost keeps the last finished run. |
+| E13 | A slide longer than the ghost buffer | | The ghost keeps the first 20 s of the run. |
+| E14 | Units | The driver may show mph or km/h. | Thresholds stay in m/s and degrees; only the shown speed changes unit. |
+
+## 12. Motion notes
+
+What each moment does, in time. The look of each moment is drawn on the Penpot board.
+
+| Moment | Trigger | Behaviour |
+|---|---|---|
+| Idle | race on, speed under 5 m/s | The visor rests with its light centred; the pills, the wedge and the readouts are dark; gear and speed show. Nothing moves. |
+| Entry | \|β\| rises past 8° above 5 m/s | The wedge snaps open from the travel axis to the body heading on the `snap` spring, led by the yaw rate so it does not trail the slide. The angle readout appears; its first band colour is primary. |
+| Hold | in the slide | The wedge tracks β. Crossing a band edge crossfades over 150 ms. The peak scribe moves outward only. The counter-steer tick and the G comet live on the same pivot. |
+| Transition | β changes sign within the run | The wedge sweeps through the centre to the other side without closing; the swing-back rate is recorded for the score. |
+| Exit | \|β\| under 4° for 300 ms | The wedge closes on `snap`. The peak tick stays 2 s, then fades. `PEAK nn°` shows for 1.5 s. The slide score appears, and the chain total if the slide was chained. |
+| Spin | §6.5 | `SPIN` in the caution role; the wedge closes at once; the run's score shows as a dash; 1.5 s. |
+| Limiter | rpm at the limiter | Only the pill strip strobes, on its own clock, with its outer pills steady in the shift colour (lesson: a dark still frame reads as "no shift"); the visor lip holds a steady `shift`. With `reduced_flash`, no strobe. |
+| Gear change | `gear` changes | The family's glyph motion on the `fast` spring and a light sweep across the lozenge rim. |
+| Cornering G | any | The visor's light azimuth follows lateral G on the `light` spring, so the bright facet swaps sides in corners; layers shift 0 / 2 / 4 px per g. |
+
+## 13. Sources
 
 Read 2026-11-28.
 
@@ -175,3 +252,7 @@ Read 2026-11-28.
 - [S21] IEEE Spectrum, augmented-reality car HUDs: https://spectrum.ieee.org/augmented-reality-car-hud
 - [S22] Mercedes-Benz, "Augmented reality": https://www.mercedes-benz.co.nz/passengercars/brand/mercedes-me-magazine/innovation/articles/augmented-reality.html
 - [S23] Forza, "Forza Horizon 6 Data Out Documentation": https://support.forza.net/hc/en-us/articles/51744149102611-Forza-Horizon-6-Data-Out-Documentation
+- [S24] Werner et al., "Drifting in the Future" (ICRA 2026; Mercedes-AMG GT 63 S, with MARTY's figures in its Table II): https://arxiv.org/pdf/2606.27914
+- [S25] Meijer, Bertipaglia, Shyrokau, NMPC drifting of a BMW M3 Competition (2024): https://arxiv.org/pdf/2405.10859
+- [S26] Righetti et al., phase-plane analysis of MARTY drift data: https://www.iris.unina.it/retrieve/4f72239f-ac09-49e0-9d9d-f219bc8842a1/paper_062.pdf
+- [S27] Goh and Gerdes, "Simultaneous stabilization and tracking of basic automobile drifting trajectories" (IV 2016): https://ddl.stanford.edu/publications/conference-proceeding/simultaneous-stabilization-and-tracking-basic-automobile
