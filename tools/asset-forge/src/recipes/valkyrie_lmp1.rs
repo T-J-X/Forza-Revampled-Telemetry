@@ -3,8 +3,9 @@
 //!
 //! - **Forged carbon (ComfyUI, SDXL + 4x-UltraSharp, seamless 4096²):** the macro of resin-cast
 //!   chopped carbon that the pre-build made for this dash (`prebuild/kits.rs`, texture
-//!   `forged_carbon_marble`, seed 90001). The recipe asks for the same texture through the same
-//!   cache, so on the machine that ran the pre-build it is not generated again. It is the surface
+//!   `forged_carbon_marble`, seed 90002; seed 90001 was rejected for coal-like chunks). The
+//!   recipe asks for the same texture (same prompt, negative and seed) through the same cache, so
+//!   on the machine that ran the pre-build it is not generated again. It is the surface
 //!   of the Blender wheel face (colour, fibre sparkle and bump under the clear coat).
 //! - **Wheel face (Blender, Cycles, the hero library):** the Valkyrie's carbon steering-wheel face
 //!   as the cluster's hardware: the angled-shoulder yoke in forged carbon, the OLED window's
@@ -34,9 +35,9 @@ const SAMPLES: u32 = 256;
 /// the same cached master).
 const FORGED: texture::Recipe = texture::Recipe {
     name: "forged_carbon_marble",
-    prompt: "macro photograph of forged carbon composite, marbled chopped carbon fibre flakes of mixed size swirled under clear glossy resin, black and charcoal with fine silvery fibre glints, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-    negative: "woven, twill, checker pattern, grid, objects, lighting falloff, perspective, seams, blur, cartoon",
-    seed: 90_001,
+    prompt: "macro photograph of a flat polished forged carbon fibre composite panel, smooth glossy clear resin surface, thin flattened black and dark grey carbon fibre strands in a swirling marbled pattern, satin sheen on the fibres, flat top-down view, even diffuse light, seamless tileable texture, material scan",
+    negative: "woven, twill, checker pattern, grid, rocks, stones, coal, crumpled, rough relief, cracks, beige, brown, white specks, objects, lighting falloff, perspective, seams, blur, cartoon",
+    seed: 90_002,
 };
 /// Texture master size, and one tile on the wheel face (local px at cockpit scale).
 const TEX_SIZE: usize = 4096;

@@ -60,3 +60,20 @@ The real display is a small screen on a wheel, so by step 1's rule the dash take
 
 ### House rules that outrank the real display
 Rank order (gear and shift lights, then speed, then the tach), OLED black outside the hardware, palette roles instead of fixed colours, the swappable font (`race` Saira Condensed by default), the flash rule (at the limiter only the LED strip strobes at 10 Hz; the dial's red-zone rim holds a steady `shift` and never flashes), and telemetry honesty (nothing shown without a decoded or derived source).
+
+## Second pass, 28 Nov 09:10: reference photos and the texture plan
+
+**Reference photos.** Looked again for a picture of the real wheel screen. Four more pages were read (The Drive, 2 Nov 2018: "a race-inspired display which shows the gauge cluster and most important vehicle status information"; HotHardware, 2018: a "rectangular steering 'wheel' with a large embedded display"; The Week, 12 Jul 2017: "three OLED displays … The first acts as an instrument panel"; designboom, 11 Jun 2025, the Valkyrie LM: "lighting and a built-in screen to show the user their driving information"). None of them describes the screen's layout, colours or typeface, and the proxy refuses the image hosts (designboom, The Drive, Wikimedia Commons), so no photo could be looked at. V15 (the look matches the reference) stays *not assessed*; the open points in "The real display" stay open. The new pages add nothing that changes the board.
+
+**How the new forged carbon goes onto the wheel face.** The wheel face is the only part of this dash that uses a texture; everything else on it is the hero library's procedural materials (anodised partition, knurled encoders, LED caps, cover glass, piano-black wells).
+
+| Step | Plan |
+|---|---|
+| Which file | The pre-build kit's `forged_carbon_marble` as the manifest lists it when the cloud batch ends. Today that is seed 90002 with the "flat polished panel" prompt (kit commit 06a4eff); the recipe (`tools/asset-forge/src/recipes/valkyrie_lmp1.rs`, `FORGED`) now carries the same prompt, negative and seed, so the cache reuses the file instead of making it again. If the 4090 batch changes any of the three, `FORGED` changes with it before the build runs. |
+| Check before use | SHA-256 against the manifest; a 1:1 crop of the 4096² master and a 2 × 2 tile (seams); the batch-1 failure signs are absent: no rock or coal relief, no beige or white specks, no grid. Strands read as flat fibre under resin. |
+| Scale | `TILE_PX` 900: one 4096² tile covers 900 local px of the cockpit face (4.5 texels per screen px, so no mip blur at 4K), 630 px in the hood view (scale 0.7). The yoke is 1400 px wide, so about 1.6 repeats across it; with a seamless master no seam shows, and the marble is irregular enough that the repeat does not read. If the strands come out finer than about 6 px on screen, raise `TILE_PX` (fibre that fine turns to noise at seat distance). |
+| Material | `mat::forged`: the texture as base colour, a normal from its luminance at low strength, and a clear coat. The strands carry a satin sheen; the resin is glossy. The three key lights (-135°, -160°, -110°) and the G swing between them make the strands glint as the car corners, which is why the plate has three keys. |
+| What stays dark | The face must not out-shine the data. Its brightest glint at the rest key stays below the dimmest lit readout (the gear's ink); the cluster already dims the plate through the tint (`BAKED_GAIN` 0.55), and the closing review checks it with `stretch` and `glance`. |
+| After the renders | The PC renders `wheel_{cockpit,hood}_k{0,1,2}.png` to Drive `valkyrie_lmp1/build1` with sizes and SHA-256. This thread downloads them, checks the hashes, commits them with their `ASSETS.md`, re-renders the eight states, and runs V16 and V17 on the result. |
+
+No board change came out of this pass, so Penpot stays as v2.
