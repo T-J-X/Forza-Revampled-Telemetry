@@ -42,6 +42,7 @@ Five things keep the cost down, and none of them depends on a thread remembering
    - The volume keeps costing $28 a month, also after the lane closes, until it is deleted.
    - If a line of the spend log is damaged, the budget cannot be counted, and no pod starts until the line is fixed or removed.
    - Only TJX raises the budget. A thread never edits `budget_usd`.
+   - TJX will not raise it (2026-11-28: "when we run out we will work here instead only"). Once it is spent, the lane stays closed and every job runs on the local lane: take `gpu.lock` and run the same command without `--lane cloud`.
 2. **No pod over the price cap.** `max_usd_per_hour` in `lane.json` is $0.90. `cloud setup` lists only GPU types at or under it, and a pod that comes back dearer is deleted at once and booked. A pod whose answer gives no price is booked at the cap.
 3. **Idle shut-off.** A watchdog inside the pod deletes it after `idle_minutes` (10) without use. "Use" is a command from this PC, a beat from an open asset-forge run, a running Blender, or a busy GPU. The run sends a beat every 15 seconds, and the pod stops counting them a minute after the last one. So a PC that sleeps, crashes or loses its network frees the pod about 11 minutes later. The watchdog is part of the pod's start command, so it works with this PC off.
 4. **Lifetime cap.** The same watchdog deletes the pod at `max_hours` (4), whatever it is doing, or earlier when the budget is nearly used up. A second loop that needs nothing but the clock enforces this too, in case the first one hangs. Nothing in the watchdog waits without a time limit. asset-forge replaces a pod that is within 30 minutes of the cap before it starts a job on it.
@@ -155,7 +156,7 @@ TJX's own choices on 2026-11-27: the volume was created at 30 GB, grown to 100 G
 | What you see | What it means | What to do |
 |---|---|---|
 | `the cloud lane is not locked` | The lock file is missing. | Take `gpu-cloud.lock` (SKILLS.md, section 5). |
-| `the cloud lane is closed: ... of the ... budget is spent` | The budget is used up. | Run the job on the local lane and tell TJX. Only TJX raises `budget_usd`. |
+| `the cloud lane is closed: ... of the ... budget is spent` | The budget is used up. | Run this job and every later one on the local lane (take `gpu.lock`, drop `--lane cloud`), and say in your thread that the lane is closed. TJX keeps the budget as it is (2026-11-28). |
 | `too little of the budget is left to start a pod` | The rest of the budget pays for less than 10 minutes. | The same. |
 | `no pod could be started in EU-RO-1` | None of the GPU types has room right now. | Run the job on the local lane, or try again later. |
 | `the Runpod balance is too low` | The credit ran out and auto-pay did not refill it. | Tell TJX. |
