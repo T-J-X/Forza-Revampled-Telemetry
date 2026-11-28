@@ -25,10 +25,17 @@ pub(super) struct Geom {
     pub bar_r: f32,
     /// The polished plinth shows this far round the light bar.
     pub plinth: f32,
+    /// The first LED of the alert zone, whose lenses are red in the plate: the head LED on the
+    /// frame the run takes the shift colour.
+    pub alert_from: usize,
+    /// The thousand-rpm marks under the plinth: top and bottom.
+    pub mark_y: [f32; 2],
     /// The steering dot: its height, radius and travel either side of the centre line.
     pub dot_y: f32,
     pub dot_r: f32,
     pub dot_travel: f32,
+    /// The steering rail the dot rides on, in the plate: half length, centre y, height.
+    pub rail: [f32; 3],
     /// The speed: right edge, cap top, cap height, digit cells.
     pub speed_right: f32,
     pub speed_top: f32,
@@ -53,6 +60,10 @@ pub(super) struct Geom {
     pub sug_r: f32,
     pub sug_cap: f32,
     pub sug_frame: [f32; 4],
+    /// The tile's digit: the middle of its caps. Its up chevron above it: the apex's y, the
+    /// arms' drop, their half width and the stroke.
+    pub sug_digit_y: f32,
+    pub sug_chevron: [f32; 4],
     /// The pedal slots (brake left, throttle right): centre x of each, centre y, base size,
     /// slot size, and the fill's inset inside the slot.
     pub slots_x: [f32; 2],
@@ -60,6 +71,9 @@ pub(super) struct Geom {
     pub slot_outer: Vec2,
     pub slot_inner: Vec2,
     pub fill_inset: f32,
+    /// The pedal labels under the slots: cap top and cap height.
+    pub slot_label_top: f32,
+    pub slot_label_cap: f32,
     /// The tyre diagram: the car chip and the four tyre lenses (front left, front right, rear
     /// left, rear right).
     pub car_c: Vec2,
@@ -105,9 +119,12 @@ pub(super) const HOOD: Geom = Geom {
     bar_size: vec2(788.0, 46.0),
     bar_r: 13.0,
     plinth: 8.0,
+    alert_from: 85,
+    mark_y: [-12.0, -5.0],
     dot_y: -94.0,
     dot_r: 8.0,
     dot_travel: 340.0,
+    rail: [350.0, -94.0, 6.0],
     speed_right: -26.0,
     speed_top: 8.0,
     speed_cap: 58.0,
@@ -123,13 +140,17 @@ pub(super) const HOOD: Geom = Geom {
     sug_outer: vec2(94.0, 86.0),
     sug_face: vec2(88.0, 80.0),
     sug_r: 11.0,
-    sug_cap: 52.0,
+    sug_cap: 42.0,
     sug_frame: [156.0, -2.0, 110.0, 102.0],
+    sug_digit_y: 61.0,
+    sug_chevron: [20.0, 10.0, 15.0, 5.0],
     slots_x: [-442.0, 442.0],
     slot_cy: 13.0,
     slot_outer: vec2(24.0, 158.0),
     slot_inner: vec2(16.0, 150.0),
     fill_inset: 3.0,
+    slot_label_top: 100.0,
+    slot_label_cap: 22.0,
     car_c: vec2(-795.0, 18.0),
     car_size: vec2(70.0, 160.0),
     pills: [
@@ -196,7 +217,28 @@ impl Geom {
         self.bar_rect().expand(self.plinth)
     }
 
+    /// The steering rail.
+    pub fn rail_rect(&self) -> Rect {
+        let [half, y, h] = self.rail;
+        Rect::from_xywh(-half, y - h * 0.5, 2.0 * half, h)
+    }
+
+    /// The x of `rpm` on the rev bar whose right end is `max_rpm`.
+    pub fn rev_x_at(&self, rpm: f32, max_rpm: f32) -> f32 {
+        let t = rpm / max_rpm.max(1.0);
+        let t = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 };
+        self.rev_x[0] + t * (self.rev_x[1] - self.rev_x[0])
+    }
+
+    /// The label zone under pedal slot `i`, `width` wide.
+    #[cfg(test)]
+    pub fn slot_label_rect(&self, i: usize, width: f32) -> Rect {
+        let x = self.slots_x[i.min(1)];
+        Rect::from_xywh(x - width * 0.5, self.slot_label_top, width, self.slot_label_cap)
+    }
+
     /// The speed field: `cells` digit cells `cell` wide, right-aligned on the divider side.
+    #[cfg(test)]
     pub fn speed_field(&self, cell: f32) -> Rect {
         let w = cell * f32::from(self.speed_cells);
         Rect::from_xywh(self.speed_right - w, self.speed_top, w, self.speed_cap)
@@ -321,6 +363,7 @@ mod tests {
         for i in 0..2 {
             z.push(("slot", g.slot_rect(i, false)));
             z.push(("lamp", lamp_rect(g, i)));
+            z.push(("label", g.slot_label_rect(i, 64.0)));
         }
         for i in 0..4 {
             z.push(("tyre", g.pill_rect(i)));
@@ -472,7 +515,7 @@ mod tests {
     #[test]
     fn the_recipe_renders_the_same_band() {
         let g = &HOOD;
-        let pairs: [(&str, Vec<f32>); 27] = [
+        let pairs: [(&str, Vec<f32>); 29] = [
             ("PLATE", g.plate.to_vec()),
             ("REV_X", g.rev_x.to_vec()),
             ("TICK_Y", g.tick_y.to_vec()),
@@ -480,6 +523,8 @@ mod tests {
             ("TICK_W", vec![g.tick_w]),
             ("BAR", vec![g.bar_c.y, g.bar_size.x, g.bar_size.y, g.bar_r]),
             ("PLINTH", vec![g.plinth]),
+            ("ALERT_FROM", vec![g.alert_from as f32]),
+            ("RAIL", g.rail.to_vec()),
             ("CAR_C", flat(&[g.car_c])),
             ("CAR_WH", flat(&[g.car_size])),
             ("PILL_WH", flat(&[g.pill_size])),
@@ -524,5 +569,40 @@ mod tests {
         assert!((empty.max.y - full.max.y).abs() < 1e-4, "both sit on the floor");
         assert!(g.slot_rect(0, true).contains(full.min) && g.slot_rect(0, true).contains(full.max));
         assert_eq!(g.fill_rect(1, f32::NAN).height(), 0.0);
+    }
+
+    #[test]
+    fn the_alert_zone_starts_where_the_run_changes_colour() {
+        let g = &HOOD;
+        let t = Tokens::default();
+        // The run takes the shift colour at the warning stage of the shift point: the LED its
+        // head is on then is the first red lens.
+        let onset = t.rev_stages.stage3 * t.rev_stages.shift_pct;
+        let head = (onset * g.ticks as f32 + 0.5).floor() as usize - 1;
+        assert_eq!(g.alert_from, head, "onset at {onset} of the limiter");
+        assert!(g.alert_from < g.ticks);
+        // The marks sit between the plinth and the readout, and follow the car's limiter.
+        assert!(g.mark_y[0] >= g.plinth_rect().max.y + 3.0 && g.mark_y[1] <= g.speed_top - 6.0);
+        assert!((g.rev_x_at(4350.0, 8700.0)).abs() < 1e-3);
+        assert_eq!(g.rev_x_at(f32::NAN, 8700.0), g.rev_x[0]);
+        assert_eq!(g.rev_x_at(9000.0, 0.0), g.rev_x[1]);
+    }
+
+    #[test]
+    fn the_rail_carries_the_dot_and_the_tile_holds_its_chevron() {
+        let g = &HOOD;
+        let rail = g.rail_rect();
+        assert!((rail.center().y - g.dot_y).abs() < 1e-4);
+        assert!(g.rail[0] >= g.dot_travel + g.dot_r, "the dot stops on the rail");
+        assert!(g.rail[2] < 2.0 * g.dot_r, "the dot is wider than its rail");
+        assert!(g.plate_rect().contains(rail.min) && g.plate_rect().contains(rail.max));
+        assert!(rail.max.y + 6.0 <= g.plinth_rect().min.y);
+        // The chevron, then the digit, inside the tile's face.
+        let face = g.sug_face_rect();
+        let [apex, drop, half, stroke] = g.sug_chevron;
+        assert!(apex - stroke * 0.5 >= face.min.y + 6.0);
+        assert!(apex + drop + stroke * 0.5 + 4.0 <= g.sug_digit_y - g.sug_cap * 0.5);
+        assert!(g.sug_digit_y + g.sug_cap * 0.5 + 5.0 <= face.max.y);
+        assert!(half + stroke <= face.width() * 0.3);
     }
 }

@@ -63,9 +63,9 @@ use core::f32::consts::TAU;
 use fh6_kit::cluster::Setup;
 use fh6_kit::logo::{self, LogoStyle};
 use fh6_kit::{
-    vec2, Affine, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, LayerOptions, Layout, Logo,
-    Paint, Painter, Palette, Shape, Signals, Smoothed, SpeedUnit, Spring, Strobe, Stroke, TextStyle, Tokens, VAlign,
-    Vec2,
+    vec2, Align, BlendMode, Bloom, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Gradient, LayerOptions,
+    Layout, Logo, Paint, Painter, Palette, Rect, Shape, Signals, Smoothed, SpeedUnit, Spring, Strobe, Stroke,
+    TextStyle, Tokens, VAlign, Vec2,
 };
 use geom::{rect, Geom, HOOD};
 use hardware::Sprites;
@@ -87,16 +87,32 @@ const STROBE_LEAD: f32 = 1e-4;
 const STROBE_FLOOR: f32 = 0.2;
 /// Luminance cap of the parts that never change (labels, divider, scale mark, logo).
 const STATIC_LUMA: f32 = 0.19;
-/// The pedal fills' share of the ink.
-const PEDAL_LIGHT: f32 = 0.92;
+/// The alert run's bloom: the shift colour is under the tokens' bloom threshold and would not
+/// bloom at all, so the alert run glowed less than the white run it replaces. The white run
+/// keeps the tokens' bloom.
+const ALERT_BLOOM: Bloom = Bloom {
+    threshold: 0.2,
+    intensity: 0.8,
+};
+/// An alert LED's hot core: its inset inside the LED (x, y) and its share of the ink. The core
+/// makes the alert run brighter than the white run it replaces, as an LED driven harder is.
+const CORE_INSET: [f32; 2] = [1.5, 4.0];
+const CORE_LIGHT: f32 = 0.9;
+/// The thousand-rpm marks: their width, and the limiter range they are drawn for.
+const MARK_W: f32 = 2.0;
+const MARK_RPM: [f32; 2] = [1000.0, 20_000.0];
+/// The pedal fills' share of the ink (under the speed, so a full bar never outlasts it).
+const PEDAL_LIGHT: f32 = 0.8;
 /// The boost fill's share of the ink.
 const BOOST_LIGHT: f32 = 0.9;
 /// The trip digits' share of the ink (GT7's odometer is light grey, under the speed).
 const TRIP_LIGHT: f32 = 0.72;
 /// Tyre load per g of felt force on each axis, round the rest load of a half.
 const LOAD_PER_G: f32 = 0.35;
-/// A tyre lens's light at no load and at full load (below the speed's full ink: rank 4).
-const PILL_LIGHT: [f32; 2] = [0.15, 0.6];
+/// A tyre lens's light at no load and at full load (below the speed's full ink: rank 4), and
+/// the share of it left at the lens's ends: the light sits inside the lens, hot in the middle.
+const PILL_LIGHT: [f32; 2] = [0.1, 0.5];
+const PILL_EDGE: f32 = 0.2;
 /// The lit tyre fill's inset inside its lens.
 const PILL_INSET: f32 = 3.0;
 /// Pounds per square inch to bar (x100 kPa).
@@ -117,29 +133,45 @@ const LIM_OFF: f32 = 0.975;
 const LAMP_GLOW: f32 = 0.32;
 /// The highest gear the telemetry can name.
 const TOP_GEAR: u8 = 10;
-/// The suggested-gear tile: how long it folds after the driver takes the gear, how fast it
-/// fades when the revs drop without a shift (time constant: five of them, 50 ms, take it out),
-/// and how much larger it pops up.
+/// The suggested-gear tile: how long its hand-over runs after the driver takes the gear, how
+/// fast it fades when the revs drop without a shift (time constant: five of them, 50 ms, take it
+/// out), and how much larger it pops up.
 const FOLD_S: f32 = 0.1;
 const FADE_TAU: f32 = 0.01;
 const POP: f32 = 0.08;
+/// The hand-over: the tile slides this far towards the gear and loses this share of its size
+/// while it fades, whole, with its digit.
+const HAND_SLIDE: f32 = 90.0;
+const HAND_SHRINK: f32 = 0.45;
 /// The tile's face brightens on the frame the driver takes the gear (a click of light, kept
 /// below the gear's own light so the new gear leads).
 const FLASH_ALPHA: f32 = 0.4;
 /// Hood keylines (tokens `type.keyline`: a black ring round the strokes, never a box, alpha
 /// 230): the ring's width per cap height, its narrowest and widest, and its coverage.
-const KEYLINE_PER_CAP: f32 = 0.08;
+const KEYLINE_PER_CAP: f32 = 0.1;
 const KEYLINE_MIN: f32 = 3.0;
 const KEYLINE_MAX: f32 = 8.0;
 const KEYLINE_ALPHA: f32 = 0.9;
+/// The rings of a keyline: copies, radius in keyline widths and coverage, the outermost first.
+/// The gear and the speed add a wider, soft ring, so their edge holds over a sunlit road.
+const KEYLINE_HARD: [(usize, f32, f32); 1] = [(8, 1.0, KEYLINE_ALPHA)];
+const KEYLINE_SOFT: [(usize, f32, f32); 2] = [(12, 1.7, 0.25), (8, 1.0, KEYLINE_ALPHA)];
+/// The speed's synthetic weight: Michroma has one weight, and its thin strokes faded before
+/// the side groups in the squint view.
+const SPEED_WEIGHT: f32 = 0.3;
 /// Labels' tracking (em) and the logo zone's wordmark cap.
 const LABEL_TRACKING: f32 = 0.08;
 const LOGO_CAP: f32 = 28.0;
 /// Metres per mile and per kilometre.
 const M_PER_MILE: f64 = 1609.344;
 const M_PER_KM: f64 = 1000.0;
-/// The trip tile shows five whole digits and tenths.
-const TRIP_MAX_TENTHS: i64 = 999_999;
+/// The trip tile shows three whole digits, tenths and the unit.
+const TRIP_MAX_TENTHS: i64 = 9_999;
+/// The trip tile: the text's inset from the face's right edge, the gap between the number and
+/// its unit, and the decimal point's size.
+const TRIP_PAD: f32 = 12.0;
+const TRIP_GAP: f32 = 8.0;
+const TRIP_POINT: f32 = 5.0;
 
 /// The faces, resolved once in `new()`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -216,21 +248,32 @@ impl RevBar {
         self.since.map_or(0.0, |t| t + STROBE_LEAD)
     }
 
+    /// The strobe's share of the light this frame (1 below the shift point).
+    fn level(&self, calm: bool) -> f32 {
+        if !self.over {
+            1.0
+        } else if calm {
+            Strobe::breath(self.clock()).max(STROBE_FLOOR)
+        } else if Strobe::LIMITER.on(self.clock()) {
+            1.0
+        } else {
+            STROBE_FLOOR
+        }
+    }
+
     /// The colours of the lit run's body and its head LED.
     fn colors(&self, pal: &Palette, calm: bool) -> (Color, Color) {
         if self.over {
-            let level = if calm {
-                Strobe::breath(self.clock()).max(STROBE_FLOOR)
-            } else if Strobe::LIMITER.on(self.clock()) {
-                1.0
-            } else {
-                STROBE_FLOOR
-            };
-            let c = pal.shift.intensity(level);
+            let c = pal.shift.intensity(self.level(calm));
             return (c, c);
         }
         let base = if self.alert { pal.shift } else { pal.roles.ink };
         (base.intensity(TICK_BODY), base)
+    }
+
+    /// The hot core of every lit LED while the alert runs (`None` below it).
+    fn core(&self, pal: &Palette, calm: bool) -> Option<Color> {
+        (self.alert || self.over).then(|| pal.roles.ink.intensity(CORE_LIGHT * self.level(calm)))
     }
 
     fn animating(&self) -> bool {
@@ -241,15 +284,15 @@ impl RevBar {
 /// The suggested-gear tile: GT7's red gear box, here naming the next gear at the shift point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Tile {
-    /// The gear the tile names (`None` while it is hidden or folding).
+    /// The gear the tile names (`None` while it is hidden).
     digit: Option<u8>,
     /// How much of the tile shows (0..=1).
     level: f32,
     /// The pop as it appears: 1 falling to 0 on the `snap` spring (the tile starts 8% larger).
     pop: Spring,
-    /// The fold after the driver takes the gear (0..1), `None` when not folding.
+    /// The hand-over after the driver takes the gear (0..1), `None` when it is not running.
     fold: Option<f32>,
-    /// True on the frame the fold starts: the face flashes white.
+    /// True on the frame the hand-over starts: the face brightens.
     flash: bool,
     /// The tile may show: false from a gear change until the revs fall below the shift point.
     armed: bool,
@@ -277,7 +320,6 @@ impl Tile {
             if took {
                 self.fold = Some(0.0);
                 self.flash = true;
-                self.digit = None;
             }
         }
         if !over {
@@ -296,11 +338,12 @@ impl Tile {
             self.fold = None;
             self.flash = false;
         } else if let Some(f) = self.fold {
-            // The flash frame shows the whole tile; the fold runs from the next frame.
+            // The flash frame shows the tile where it stood; the hand-over runs from the next.
             let f = if self.flash { f } else { f + dt / FOLD_S };
             if f >= 1.0 {
                 self.fold = None;
                 self.level = 0.0;
+                self.digit = None;
             } else {
                 self.fold = Some(f);
             }
@@ -471,6 +514,7 @@ impl Cluster for Gt7HoodPro {
                 hardware::fallback_plate(p, g, &pal);
             }
             self.draw_rev(p, g, &pal);
+            self.draw_marks(p, g, &pal);
             self.draw_steer(p, g, &pal);
             self.draw_pedals(p, g, &pal);
             self.draw_tyres(p, g, &pal);
@@ -500,12 +544,45 @@ impl Gt7HoodPro {
             return;
         }
         let (body, head) = self.rev.colors(pal, self.calm);
-        p.layer(LayerOptions::bloom(), |p| {
+        let core = self.rev.core(pal, self.calm);
+        let opts = LayerOptions {
+            bloom: Some(if core.is_some() { ALERT_BLOOM } else { Bloom::default() }),
+            ..LayerOptions::default()
+        };
+        p.layer(opts, |p| {
             for i in 0..n {
+                let r = g.tick_rect(i);
                 let color = if i + 1 == n { head } else { body };
-                p.fill(&Shape::round_rect(g.tick_rect(i), g.tick_r), color);
+                p.fill(&Shape::round_rect(r, g.tick_r), color);
+                if let Some(core) = core {
+                    let hot = Rect::from_points(
+                        r.min + vec2(CORE_INSET[0], CORE_INSET[1]),
+                        r.max - vec2(CORE_INSET[0], CORE_INSET[1]),
+                    );
+                    p.fill(&Shape::round_rect(hot, 1.0), core);
+                }
             }
         });
+    }
+
+    /// The thousand-rpm marks under the bar, placed by the car's limiter: they make the bar a
+    /// scale. A limiter the telemetry has not named yet draws none.
+    fn draw_marks(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let max = finite(self.sig.max_rpm);
+        if !(MARK_RPM[0]..=MARK_RPM[1]).contains(&max) {
+            return;
+        }
+        let ink = static_ink(pal.roles.ink);
+        let black = pal.roles.oled_black.with_alpha(KEYLINE_ALPHA);
+        let [top, bottom] = g.mark_y;
+        let mut rpm = MARK_RPM[0];
+        while rpm <= max {
+            let x = g.rev_x_at(rpm, max);
+            let mark = Rect::from_xywh(x - MARK_W * 0.5, top, MARK_W, bottom - top);
+            p.fill(&Shape::round_rect(mark.expand(2.0), 2.0), black);
+            p.fill(&Shape::rect(mark), ink);
+            rpm += MARK_RPM[0];
+        }
     }
 
     /// The steering dot over the rev bar's centre, with a black keyline.
@@ -519,7 +596,7 @@ impl Gt7HoodPro {
         p.fill(&Shape::circle(c, g.dot_r), pal.primary_text);
     }
 
-    /// The brake and throttle fills, rising in their slots.
+    /// The brake and throttle fills, rising in their slots, and their labels.
     fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let ink = pal.roles.ink.intensity(PEDAL_LIGHT);
         for (i, level) in [self.sig.brake, self.sig.throttle].into_iter().enumerate() {
@@ -528,16 +605,33 @@ impl Gt7HoodPro {
                 p.fill(&Shape::round_rect(r, 2.0), ink);
             }
         }
+        let style = TextStyle::new(self.faces.label, g.slot_label_cap)
+            .paint(static_ink(pal.roles.ink))
+            .tracking(LABEL_TRACKING)
+            .align(Align::Center, VAlign::CapTop);
+        for (i, label) in ["BRK", "THR"].into_iter().enumerate() {
+            let pos = vec2(g.slots_x[i], g.slot_label_top);
+            keyline_text(p, pos, label, &style, pal.roles.oled_black, &KEYLINE_HARD);
+            p.text(pos, label, &style);
+        }
     }
 
     /// The tyre lenses lit by tyre load: the felt force moves weight to the outside of a turn
     /// and to the front under braking.
     fn draw_tyres(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        for i in 0..4 {
-            let level = PILL_LIGHT[0] + (PILL_LIGHT[1] - PILL_LIGHT[0]) * tyre_load(g, i, &self.sig);
-            let r = g.pill_rect(i).inset(PILL_INSET);
-            p.fill(&Shape::round_rect(r, r.width() * 0.4), pal.roles.ink.intensity(level));
-        }
+        p.scoped(|p| {
+            // Screened over the plate, so the lens keeps its own highlights over the light.
+            p.set_blend(BlendMode::Screen);
+            for i in 0..4 {
+                let level = PILL_LIGHT[0] + (PILL_LIGHT[1] - PILL_LIGHT[0]) * tyre_load(g, i, &self.sig);
+                let r = g.pill_rect(i).inset(PILL_INSET);
+                let ink = pal.roles.ink.intensity(level);
+                let light = Gradient::radial(r.center(), r.height() * 0.5)
+                    .stop(0.0, ink)
+                    .stop(1.0, ink.intensity(PILL_EDGE));
+                p.fill(&Shape::round_rect(r, r.width() * 0.4), light);
+            }
+        });
     }
 
     /// The boost fill from zero along the plate's groove, the zero mark and the label.
@@ -569,31 +663,49 @@ impl Gt7HoodPro {
             .tracking(LABEL_TRACKING)
             .align(Align::Center, VAlign::CapTop);
         let pos = vec2(g.boost_c.x, g.boost_label_top);
-        keyline_text(p, pos, "BOOST", &style, pal.roles.oled_black);
+        keyline_text(p, pos, "BOOST", &style, pal.roles.oled_black, &KEYLINE_HARD);
         p.text(pos, "BOOST", &style);
     }
 
-    /// The trip: five whole digits and tenths in the user's unit, as GT7's odometer box.
+    /// The trip in the user's unit, as GT7's odometer box: whole units, a point, tenths and the
+    /// unit, set from the right so the digits never move as the number grows.
     fn draw_trip(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let per_unit = match self.sig.unit {
-            SpeedUnit::Mph => M_PER_MILE,
-            SpeedUnit::Kmh => M_PER_KM,
+        let (per_unit, unit) = match self.sig.unit {
+            SpeedUnit::Mph => (M_PER_MILE, "mi"),
+            SpeedUnit::Kmh => (M_PER_KM, "km"),
         };
-        let tenths = (self.trip_m / per_unit * 10.0).floor();
-        let tenths = if tenths.is_finite() {
-            (tenths as i64).clamp(0, TRIP_MAX_TENTHS)
-        } else {
-            0
-        };
-        let mut buf = [0u8; 7];
-        let text = trip_text(tenths, &mut buf);
+        let (whole, tenth) = trip_parts(self.trip_m / per_unit);
+        let y = g.trip_c.y;
+        let unit_style = TextStyle::new(self.faces.label, g.trip_cap)
+            .paint(static_ink(pal.roles.ink))
+            .tracking(LABEL_TRACKING)
+            .align(Align::Right, VAlign::CapMiddle);
+        let right = g.trip_face_rect().max.x - TRIP_PAD;
+        p.text(vec2(right, y), unit, &unit_style);
+        let unit_w = finite(p.measure(unit, &unit_style).width);
+
+        let ink = pal.roles.ink.intensity(TRIP_LIGHT);
         let style = TextStyle::new(self.faces.speed, g.trip_cap)
-            .paint(pal.roles.ink.intensity(TRIP_LIGHT))
+            .paint(ink)
             .tabular()
             .tracking(self.faces.tracking)
-            .align(Align::Center, VAlign::CapMiddle);
+            .align(Align::Right, VAlign::CapMiddle);
+        let cell = p.fonts().tabular_cell(&style);
         let bias = tabular_bias(p, &style);
-        p.text(g.trip_c + vec2(bias, 0.0), text, &style);
+        let tenth_right = right - unit_w - TRIP_GAP;
+        p.number(vec2(tenth_right + bias, y), tenth, 1, &style, None);
+        // The point sits on the baseline between the two fields, a narrow cell of its own.
+        let point_x = tenth_right - cell - TRIP_POINT;
+        let point = Rect::from_xywh(point_x, y + g.trip_cap * 0.5 - TRIP_POINT, TRIP_POINT, TRIP_POINT);
+        p.fill(&Shape::round_rect(point, 1.0), ink);
+        let cells = if whole >= 100 {
+            3
+        } else if whole >= 10 {
+            2
+        } else {
+            1
+        };
+        p.number(vec2(point_x - TRIP_POINT * 0.4 + bias, y), whole, cells, &style, None);
     }
 
     /// The telltales: grey when off (GT7), the slide lamp amber and the limiter lamp red when on.
@@ -626,16 +738,16 @@ impl Gt7HoodPro {
     /// The speed, its unit, the divider and the gear, each glyph with a black keyline.
     fn draw_readout(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let black = pal.roles.oled_black;
-        let speed = TextStyle::new(self.faces.speed, g.speed_cap)
+        let mut speed = TextStyle::new(self.faces.speed, g.speed_cap)
             .paint(pal.roles.ink)
             .tabular()
             .tracking(self.faces.tracking)
             .align(Align::Right, VAlign::CapTop);
-        let cell = p.fonts().tabular_cell(&speed);
+        speed.weight = SPEED_WEIGHT;
         let bias = tabular_bias(p, &speed);
         let pos = vec2(g.speed_right + bias, g.speed_top);
         let value = self.speed.value().clamp(0, 999);
-        keyline_number(p, pos, value, g.speed_cells, &speed, black);
+        keyline_number(p, pos, value, g.speed_cells, &speed, black, &KEYLINE_SOFT);
         p.number(pos, value, g.speed_cells, &speed, None);
 
         let ink = static_ink(pal.roles.ink);
@@ -643,12 +755,13 @@ impl Gt7HoodPro {
             SpeedUnit::Mph => "mph",
             SpeedUnit::Kmh => "km/h",
         };
+        // Right-aligned with the digits, so it sits under the speed whether that is 7 or 207.
         let unit_style = TextStyle::new(self.faces.label, g.unit_cap)
             .paint(ink)
             .tracking(LABEL_TRACKING)
-            .align(Align::Center, VAlign::CapTop);
-        let unit_pos = vec2(g.speed_field(cell).center().x, g.unit_top);
-        keyline_text(p, unit_pos, unit, &unit_style, black);
+            .align(Align::Right, VAlign::CapTop);
+        let unit_pos = vec2(g.speed_right - bias, g.unit_top);
+        keyline_text(p, unit_pos, unit, &unit_style, black, &KEYLINE_HARD);
         p.text(unit_pos, unit, &unit_style);
         let divider = rect(g.divider);
         p.fill(
@@ -657,10 +770,15 @@ impl Gt7HoodPro {
         );
         p.fill(&Shape::rect(divider), ink);
 
-        // The gear: a two-digit gear is set smaller to keep clear of the tile.
+        // The gear: a two-digit gear is set smaller to keep clear of the tile. Neutral is the
+        // full ink like a forward gear (rank 1 in every state); reverse keeps its warning colour.
         let label = self.gear.gear().label();
+        let color = match self.gear.gear() {
+            Gear::Neutral => pal.roles.ink,
+            _ => self.gear.color(pal),
+        };
         let mut style = TextStyle::new(self.faces.gear, g.gear_cap)
-            .paint(self.gear.color(pal))
+            .paint(color)
             .align(Align::Left, VAlign::CapTop);
         let width = p.measure(label, &style).width;
         if width > g.gear_max_w && width.is_finite() {
@@ -673,36 +791,33 @@ impl Gt7HoodPro {
         p.scoped(|p| {
             p.translate(center + vec2(0.0, dy));
             p.scale(scale);
-            keyline_text(p, at, label, &style, black);
+            keyline_text(p, at, label, &style, black, &KEYLINE_SOFT);
             p.text(at, label, &style);
         });
     }
 
-    /// The suggested-gear tile: it pops up at the shift point, flashes and folds shut towards
-    /// the gear when the driver takes it, and fades when the revs drop without a shift.
+    /// The suggested-gear tile: it pops up at the shift point with an up chevron over the next
+    /// gear. When the driver takes that gear the face brightens for a frame, then the whole tile,
+    /// digit and all, slides towards the gear, shrinking and fading (the hand-over). When the
+    /// revs drop without a shift it fades where it stands.
     fn draw_tile(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, w: [f32; 3]) {
         let t = &self.tile;
         if !t.shown() {
             return;
         }
-        let fold = t.fold.map_or(0.0, |f| {
+        let hand = t.fold.map_or(0.0, |f| {
             let f = f.clamp(0.0, 1.0);
             f * f * (3.0 - 2.0 * f)
         });
-        let sx = (1.0 - fold).max(0.0);
-        if sx <= 0.001 {
+        let opacity = t.level.clamp(0.0, 1.0) * (1.0 - hand) * (1.0 - hand);
+        if opacity <= 0.004 {
             return;
         }
         let pop = 1.0 + POP * finite(t.pop.value()).clamp(0.0, 1.0);
-        let pivot = vec2(g.sug_outer_rect().min.x, g.sug_c.y);
         p.scoped(|p| {
-            p.set_opacity(t.level.clamp(0.0, 1.0));
-            // Fold about the tile's gear-side edge, pop about its centre.
-            p.translate(pivot);
-            p.transform(&Affine::scale_xy(sx, 1.0));
-            p.translate(-pivot);
-            p.translate(g.sug_c);
-            p.scale(pop);
+            p.set_opacity(opacity);
+            p.translate(g.sug_c + vec2(-HAND_SLIDE * hand, 0.0));
+            p.scale(pop * (1.0 - HAND_SHRINK * hand));
             p.translate(-g.sug_c);
             p.layer(LayerOptions::bloom(), |p| {
                 if !self.sprites.draw_tile(p, g, w) {
@@ -714,12 +829,23 @@ impl Gt7HoodPro {
                         pal.roles.ink.with_alpha(FLASH_ALPHA),
                     );
                 }
-                if let (Some(d), None) = (t.digit, t.fold) {
-                    let style = TextStyle::new(self.faces.gear, g.sug_cap)
-                        .paint(pal.roles.ink)
-                        .align(Align::Center, VAlign::CapMiddle);
-                    p.number(g.sug_c, i64::from(d), if d >= 10 { 2 } else { 1 }, &style, None);
-                }
+                let Some(d) = t.digit else { return };
+                let [apex, drop, half, stroke] = g.sug_chevron;
+                let x = g.sug_c.x;
+                let arms = [vec2(x - half, apex + drop), vec2(x, apex), vec2(x + half, apex + drop)];
+                p.fill(
+                    &Shape::Polyline {
+                        points: &arms,
+                        width: stroke,
+                        closed: false,
+                    },
+                    pal.roles.ink,
+                );
+                let style = TextStyle::new(self.faces.gear, g.sug_cap)
+                    .paint(pal.roles.ink)
+                    .align(Align::Center, VAlign::CapMiddle);
+                let at = vec2(x, g.sug_digit_y);
+                p.number(at, i64::from(d), if d >= 10 { 2 } else { 1 }, &style, None);
             });
         });
     }
@@ -738,7 +864,7 @@ impl Gt7HoodPro {
         let key = style(pal.roles.oled_black.with_alpha(KEYLINE_ALPHA));
         let r = keyline_width(LOGO_CAP);
         for i in 0..8 {
-            logo::draw(p, zone.translate(keyline_offset(i, r)), &self.logo, &key);
+            logo::draw(p, zone.translate(keyline_offset(i, 8, r)), &self.logo, &key);
         }
         logo::draw(p, zone, &self.logo, &style(static_ink(pal.roles.ink)));
     }
@@ -807,17 +933,15 @@ fn tabular_bias(p: &Painter<'_>, style: &TextStyle) -> f32 {
     0.5 * style.tracking * em
 }
 
-/// The trip as five whole digits, a point and the tenths (`00012.3`), written into `buf`.
-fn trip_text(tenths: i64, buf: &mut [u8; 7]) -> &str {
-    let mut n = tenths.clamp(0, TRIP_MAX_TENTHS);
-    buf[6] = b'0' + (n % 10) as u8;
-    n /= 10;
-    buf[5] = b'.';
-    for slot in buf[..5].iter_mut().rev() {
-        *slot = b'0' + (n % 10) as u8;
-        n /= 10;
-    }
-    core::str::from_utf8(buf).unwrap_or("00000.0")
+/// The trip's whole units and its tenths digit for `units` driven, held at the tile's limit.
+fn trip_parts(units: f64) -> (i64, i64) {
+    let tenths = (units * 10.0).floor();
+    let tenths = if tenths.is_finite() {
+        (tenths as i64).clamp(0, TRIP_MAX_TENTHS)
+    } else {
+        0
+    };
+    (tenths / 10, tenths % 10)
 }
 
 /// The keyline's width for a cap height.
@@ -825,27 +949,46 @@ fn keyline_width(cap: f32) -> f32 {
     (cap * KEYLINE_PER_CAP).clamp(KEYLINE_MIN, KEYLINE_MAX)
 }
 
-/// Offset `i` of the eight keyline copies.
-fn keyline_offset(i: usize, r: f32) -> Vec2 {
-    Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / 8.0)
+/// Offset `i` of a keyline ring's `n` copies.
+fn keyline_offset(i: usize, n: usize, r: f32) -> Vec2 {
+    Vec2::polar(Vec2::ZERO, r, i as f32 * TAU / n.max(1) as f32)
 }
 
-/// Hood keyline: eight black copies of a text run round `pos`, so it reads over a bright road
-/// or sky. The width follows the cap height.
-fn keyline_text(p: &mut Painter<'_>, pos: Vec2, text: &str, style: &TextStyle, black: Color) {
-    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = keyline_width(style.cap);
-    for i in 0..8 {
-        p.text(pos + keyline_offset(i, r), text, &key);
+/// Hood keyline: black copies of a text run in `rings` round `pos`, so it reads over a bright
+/// road or sky. The width follows the cap height.
+fn keyline_text(
+    p: &mut Painter<'_>,
+    pos: Vec2,
+    text: &str,
+    style: &TextStyle,
+    black: Color,
+    rings: &[(usize, f32, f32)],
+) {
+    let width = keyline_width(style.cap);
+    for &(n, k, alpha) in rings {
+        let key = style.paint(black.with_alpha(alpha));
+        for i in 0..n {
+            p.text(pos + keyline_offset(i, n, width * k), text, &key);
+        }
     }
 }
 
 /// [`keyline_text`] for a tabular number.
-fn keyline_number(p: &mut Painter<'_>, pos: Vec2, value: i64, cells: u8, style: &TextStyle, black: Color) {
-    let key = style.paint(black.with_alpha(KEYLINE_ALPHA));
-    let r = keyline_width(style.cap);
-    for i in 0..8 {
-        p.number(pos + keyline_offset(i, r), value, cells, &key, None);
+fn keyline_number(
+    p: &mut Painter<'_>,
+    pos: Vec2,
+    value: i64,
+    cells: u8,
+    style: &TextStyle,
+    black: Color,
+    rings: &[(usize, f32, f32)],
+) {
+    let width = keyline_width(style.cap);
+    for &(n, k, alpha) in rings {
+        let key = style.paint(black.with_alpha(alpha));
+        for i in 0..n {
+            p.number(pos + keyline_offset(i, n, width * k), value, cells, &key, None);
+        }
     }
 }
 
@@ -964,15 +1107,18 @@ mod tests {
         // The upshift lands while the revs are still past the shift point (the review sequence's
         // frame 42): the tile flashes, folds and does not come back naming 5.
         tile.update(Gear::Forward(4), true, true, 1.0 / 60.0);
-        assert!(tile.flash && tile.fold == Some(0.0) && tile.digit.is_none());
+        assert!(tile.flash && tile.fold == Some(0.0));
+        assert_eq!(tile.digit, Some(4), "the tile keeps its digit through the hand-over");
         let mut frames = 1;
         while tile.shown() {
+            assert_eq!(tile.digit, Some(4), "frame {frames}: never a blank tile");
             tile.update(Gear::Forward(4), false, true, 1.0 / 60.0);
-            assert!(!tile.flash && tile.digit.is_none(), "frame {frames}");
+            assert!(!tile.flash, "frame {frames}");
             frames += 1;
-            assert!(frames < 12, "the fold ends");
+            assert!(frames < 12, "the hand-over ends");
         }
-        assert!((6..=8).contains(&frames), "folds in about 100 ms: {frames} frames");
+        assert!(tile.digit.is_none());
+        assert!((6..=8).contains(&frames), "hands over in about 100 ms: {frames} frames");
         // Once the revs have dropped below the shift point it may show again.
         tile.update(Gear::Forward(4), false, false, 1.0 / 60.0);
         tile.update(Gear::Forward(4), false, true, 1.0 / 60.0);
@@ -1007,13 +1153,29 @@ mod tests {
     }
 
     #[test]
-    fn the_trip_reads_like_gt7s_odometer() {
-        let mut buf = [0u8; 7];
-        assert_eq!(trip_text(0, &mut buf), "00000.0");
-        assert_eq!(trip_text(77, &mut buf), "00007.7");
-        assert_eq!(trip_text(123_456, &mut buf), "12345.6");
-        assert_eq!(trip_text(-5, &mut buf), "00000.0");
-        assert_eq!(trip_text(i64::MAX, &mut buf), "99999.9");
+    fn the_trip_counts_tenths_and_holds_at_its_limit() {
+        assert_eq!(trip_parts(0.0), (0, 0));
+        assert_eq!(trip_parts(7.79), (7, 7));
+        assert_eq!(trip_parts(123.45), (123, 4));
+        assert_eq!(trip_parts(-5.0), (0, 0));
+        assert_eq!(trip_parts(1e12), (999, 9));
+        assert_eq!(trip_parts(f64::NAN), (0, 0));
+    }
+
+    #[test]
+    fn the_alert_run_is_brighter_than_the_white_run() {
+        let pal = palette();
+        let mut rev = RevBar::default();
+        rev.update(&signals(6000.0), &pal, 95, 1.0 / 60.0, true);
+        assert_eq!(rev.core(&pal, false), None, "no core below the alert");
+        rev.update(&signals(8000.0), &pal, 95, 1.0 / 60.0, false);
+        let core = rev.core(&pal, false).expect("the alert run has a hot core");
+        assert!(core.luminance() > pal.roles.ink.intensity(TICK_BODY).luminance());
+        // On the strobe the core follows the run into its dark phase.
+        rev.update(&signals(8690.0), &pal, 95, 1.0 / 60.0, false);
+        rev.since = Some(0.06);
+        let dark = rev.core(&pal, false).expect("a core on the strobe");
+        assert!(dark.luminance() < core.luminance() * 0.3);
     }
 
     #[test]

@@ -31,7 +31,7 @@ use crate::hero::frame::Frame;
 use crate::hero::geom::Outline;
 use crate::hero::mat::{self, metal, Mat};
 use crate::hero::part::Part;
-use crate::hero::rig::SWING;
+use crate::hero::rig::{Light, Rig, SWING};
 use crate::hero::texture::{self, Recipe};
 use crate::hero::{Passes, Scene};
 use crate::img::{self, Img};
@@ -48,8 +48,18 @@ const MASTER_SCALE: f32 = 2.0;
 /// Cycles samples.
 const SAMPLES: u32 = 192;
 /// The band sits outdoors over the bonnet but every static part must stay dim (the review's
-/// static-parts cap), so the hero rig runs at this power: chamfers still clip to white glints.
+/// static-parts cap), so the rig runs at this power: chamfers still clip to white glints.
 const RIG_POWER: f32 = 0.55;
+/// Seen from straight above, a flat polished face mirrors only the zenith, so the hero rig's
+/// overhead sky turned every flat black-glass face one even grey that read as matte (the first
+/// build). The sky is turned down to this share of the hero rig's, the studio world with it,
+/// and a window softbox on the key side, low enough to stay off the zenith, lights the curved
+/// edges instead: the pillowed bar, the lenses, the domes and the half-round slots carry one
+/// bright band each on the key side, and the flat faces stay deep black glass.
+const SKY_SHARE: f32 = 0.4;
+const HDRI_SHARE: f32 = 0.5;
+/// The window: elevation (degrees), distance and size (shares of the span), and power.
+const WINDOW: (f32, f32, f32, f32) = (52.0, 2.0, 1.0, 0.5);
 
 /// The plate's frame (local px round the hood anchor): the band's static parts plus a margin.
 const PLATE: [f32; 4] = [-880.0, -100.0, 1760.0, 240.0];
@@ -63,10 +73,21 @@ const TICK_W: f32 = 5.0;
 const BAR: (f32, f32, f32, f32) = (-47.0, 788.0, 46.0, 13.0);
 /// The polished plinth under the light bar shows this far round it.
 const PLINTH: f32 = 8.0;
-/// Heights (px above the plate's floor): plinth, bar, lens.
-const PLINTH_H: f32 = 3.0;
-const BAR_H: f32 = 6.0;
-const LENS_H: f32 = 1.0;
+/// Heights (px above the plate's floor) and rounded edges: the plinth's polished chamfer, the
+/// light bar pillowed down to a flat centre just taller than the LED field, and each lens a
+/// small domed cell, so every unlit LED catches the light.
+const PLINTH_H: f32 = 4.0;
+const PLINTH_BEVEL: f32 = 3.5;
+const BAR_H: f32 = 10.0;
+const BAR_BEVEL: f32 = 9.0;
+const LENS_H: f32 = 2.0;
+const LENS_BEVEL: f32 = 2.0;
+/// The first LED of the alert zone: from it the lenses are smoked red, so the bar shows where
+/// the run takes the shift colour even unlit (the cluster's `Geom::alert_from`).
+const ALERT_FROM: usize = 85;
+/// The steering rail the dot rides on: half length, centre y, height (the cluster's
+/// `Geom::rail`), with a notch at the centre and a stop at each end.
+const RAIL: [f32; 3] = [350.0, -94.0, 6.0];
 
 /// The tyre diagram: the car chip's centre and size, the canopy, and the four tyre lenses.
 const CAR_C: [f32; 2] = [-795.0, 18.0];
@@ -234,6 +255,66 @@ fn smoked_lens() -> Mat {
         .set("coat_rough", 0.0)
 }
 
+/// The band's rig: the hero rig with its overhead sky and world turned down and the window
+/// softbox added on the key side (see [`SKY_SHARE`]), at [`RIG_POWER`].
+fn band_rig(rest: &Rig) -> Rig {
+    let mut r = rest.clone();
+    let span = r.lights.first().map_or(1000.0, |l| l.dist / 2.2);
+    let key_az = r.lights.first().map_or(SWING[0], |l| l.az);
+    for l in &mut r.lights {
+        if l.name.starts_with("sky") {
+            l.power *= SKY_SHARE;
+        }
+    }
+    r.hdri *= HDRI_SHARE;
+    let (el, dist, size, power) = WINDOW;
+    r.lights
+        .push(Light::soft("window", key_az, el, span * dist, span * size, power).tint([0.96, 0.98, 1.0]));
+    r.power(RIG_POWER)
+}
+
+/// An unlit LED lens of the alert zone: the smoked lens with a deep red tint.
+fn alert_lens() -> Mat {
+    Mat::new("dielectric", "gt_alert_lens")
+        .color([0.05, 0.004, 0.006])
+        .rough(0.05)
+        .set("coat", 1.0)
+        .set("coat_rough", 0.0)
+}
+
+/// The car seen from above, inside the chip's `half` size round `c` (front up): a narrower
+/// nose, mirrors, and hips over the rear wheels.
+fn car_outline(c: [f32; 2], half: [f32; 2], segs: usize) -> Outline {
+    let base = superellipse([0.0, 0.0], half, 3.2, segs);
+    let bump = |t: f32, at: f32, w: f32| (-((t - at) / w).powi(2)).exp();
+    let points = base
+        .points
+        .iter()
+        .map(|p| {
+            let t = p[1] / half[1].max(1.0); // -1 at the nose, 1 at the tail
+            let k = 0.8 + 0.1 * (t + 1.0) * 0.5 + 0.06 * bump(t, -0.32, 0.08) + 0.12 * bump(t, 0.5, 0.22);
+            [c[0] + p[0] * k.min(1.0), c[1] + p[1]]
+        })
+        .collect();
+    Outline { points }
+}
+
+/// A radial mark at `deg` (clockwise from 3 o'clock, y down) from radius `r` out by `len`,
+/// `w` wide, round `c`.
+fn radial_mark(c: [f32; 2], deg: f32, r: f32, len: f32, w: f32) -> Outline {
+    let (s, co) = deg.to_radians().sin_cos();
+    let (n, t) = ([co, s], [-s, co]);
+    let at = |rad: f32, side: f32| {
+        [
+            c[0] + n[0] * rad + t[0] * side * w * 0.5,
+            c[1] + n[1] * rad + t[1] * side * w * 0.5,
+        ]
+    };
+    Outline {
+        points: vec![at(r, -1.0), at(r + len, -1.0), at(r + len, 1.0), at(r, 1.0)],
+    }
+}
+
 /// A rounded rectangle extruded `thick` px from `z`.
 fn slab(name: &str, c: [f32; 2], wh: [f32; 2], r: f32, z: f32, thick: f32, bevel: f32, m: Mat) -> Part {
     Part::extrude(name, Outline::rrect(c[0], c[1], wh[0], wh[1], r, 8), z, thick, bevel, m)
@@ -288,7 +369,7 @@ fn arc_band(c: [f32; 2], r: f32, width: f32, a0: f32, a1: f32, segs: usize) -> O
 fn plate(carbon: &Path) -> Scene {
     let [x, y, w, h] = PLATE;
     let mut s = Scene::new("gt7_hood_pro_plate", Frame::rect(x, y, w, h).scaled(MASTER_SCALE));
-    s.rig = s.rig.clone().power(RIG_POWER);
+    s.rig = band_rig(&s.rig);
     s.samples = SAMPLES;
     s.passes = Passes {
         beauty: true,
@@ -299,7 +380,44 @@ fn plate(carbon: &Path) -> Scene {
         emission: false,
     };
 
-    // The rev bar: polished plinth, black-glass bar, 95 smoked lenses.
+    // The steering rail: a black-glass track with a polished notch at the centre and a stop at
+    // each end of the dot's travel.
+    let [rail_half, rail_y, rail_h] = RAIL;
+    s.add(slab(
+        "steer_rail",
+        [0.0, rail_y],
+        [2.0 * rail_half, rail_h],
+        rail_h * 0.5,
+        0.0,
+        3.0,
+        2.5,
+        black_glass(),
+    ));
+    s.add(slab(
+        "steer_notch",
+        [0.0, rail_y],
+        [3.0, 10.0],
+        1.5,
+        0.0,
+        4.0,
+        1.4,
+        black_chrome(),
+    ));
+    for (i, sx) in [-1.0f32, 1.0].into_iter().enumerate() {
+        s.add(slab(
+            &format!("steer_stop_{i}"),
+            [sx * (rail_half - 3.0), rail_y],
+            [6.0, 10.0],
+            3.0,
+            0.0,
+            4.0,
+            2.5,
+            black_chrome(),
+        ));
+    }
+
+    // The rev bar: polished plinth, black-glass bar pillowed to a flat centre, 95 domed smoked
+    // lenses (red from the alert zone).
     let bar_c = [0.0, BAR.0];
     s.add(slab(
         "rev_plinth",
@@ -308,7 +426,7 @@ fn plate(carbon: &Path) -> Scene {
         BAR.3 + PLINTH,
         0.0,
         PLINTH_H,
-        2.0,
+        PLINTH_BEVEL,
         black_chrome(),
     ));
     s.add(slab(
@@ -318,22 +436,23 @@ fn plate(carbon: &Path) -> Scene {
         BAR.3,
         0.0,
         BAR_H,
-        2.5,
+        BAR_BEVEL,
         black_glass(),
     ));
     let pitch = (REV_X[1] - REV_X[0]) / TICKS as f32;
     let tick_cy = (TICK_Y[0] + TICK_Y[1]) * 0.5;
     for i in 0..TICKS {
         let cx = REV_X[0] + pitch * (i as f32 + 0.5);
+        let lens = if i >= ALERT_FROM { alert_lens() } else { smoked_lens() };
         s.add(slab(
             &format!("lens_{i:02}"),
             [cx, tick_cy],
             [TICK_W, TICK_Y[1] - TICK_Y[0]],
-            1.5,
+            TICK_W * 0.5,
             BAR_H,
             LENS_H,
-            0.5,
-            smoked_lens(),
+            LENS_BEVEL,
+            lens,
         ));
     }
 
@@ -347,18 +466,18 @@ fn plate(carbon: &Path) -> Scene {
         .rough(0.28);
     s.add(Part::extrude(
         "car_body",
-        superellipse(CAR_C, [CAR_WH[0] * 0.5, CAR_WH[1] * 0.5], 3.2, 96),
+        car_outline(CAR_C, [CAR_WH[0] * 0.5, CAR_WH[1] * 0.5], 128),
         0.0,
         7.0,
-        3.5,
+        5.0,
         car,
     ));
     s.add(Part::extrude(
         "car_canopy",
-        superellipse([CAR_C[0], CAR_C[1] + CANOPY.0], [CANOPY.1, CANOPY.2], 2.6, 64),
+        car_outline([CAR_C[0], CAR_C[1] + CANOPY.0], [CANOPY.1, CANOPY.2], 96),
         7.0,
-        2.5,
-        1.5,
+        3.0,
+        2.8,
         black_glass(),
     ));
     for (i, p) in PILLS.iter().enumerate() {
@@ -368,9 +487,9 @@ fn plate(carbon: &Path) -> Scene {
             PILL_WH,
             8.0,
             0.0,
-            4.0,
-            2.0,
-            smoked_lens(),
+            5.0,
+            4.5,
+            black_glass(),
         ));
     }
 
@@ -380,9 +499,22 @@ fn plate(carbon: &Path) -> Scene {
         arc_band(BOOST_C, BOOST_R, BOOST_BAND, BOOST_SWEEP[0], BOOST_SWEEP[1], 72),
         0.0,
         3.0,
-        1.5,
-        mat::polished(metal::ALUMINIUM).named("gt_polished_alu"),
+        2.5,
+        mat::polished(metal::GUNMETAL).named("gt_polished_gunmetal"),
     ));
+    for (i, bar) in BOOST_MARKS.iter().enumerate() {
+        let t = (bar - BOOST_BAR[0]) / (BOOST_BAR[1] - BOOST_BAR[0]);
+        let deg = BOOST_SWEEP[0] + t * (BOOST_SWEEP[1] - BOOST_SWEEP[0]);
+        let [r, len, w] = BOOST_MARK;
+        s.add(Part::extrude(
+            &format!("boost_mark_{i}"),
+            radial_mark(BOOST_C, deg, r, len, w),
+            0.0,
+            2.0,
+            0.8,
+            black_chrome(),
+        ));
+    }
     s.add(Part::extrude(
         "boost_groove",
         arc_band(
@@ -409,17 +541,17 @@ fn plate(carbon: &Path) -> Scene {
             6.0,
             0.0,
             PLINTH_H,
-            1.5,
+            PLINTH_BEVEL,
             black_chrome(),
         ));
         s.add(slab(
             &format!("slot_{i}"),
             c,
             SLOT_INNER,
-            4.0,
+            SLOT_INNER[0] * 0.5,
             0.0,
-            5.0,
-            1.5,
+            7.0,
+            6.0,
             black_glass(),
         ));
     }
@@ -432,10 +564,18 @@ fn plate(carbon: &Path) -> Scene {
             0.0,
             TELL_R[0],
             TELL_R[1],
-            3.0,
+            4.0,
             black_chrome(),
         ));
-        s.add(Part::face(&format!("tell_lamp_{i}"), *c, 0.0, TELL_R[0], black_glass()));
+        s.add(Part::dome(
+            &format!("tell_lamp_{i}"),
+            *c,
+            0.0,
+            TELL_R[0],
+            6.0,
+            1.0,
+            [black_glass(), black_chrome()],
+        ));
     }
 
     // The trip tile.
@@ -445,8 +585,8 @@ fn plate(carbon: &Path) -> Scene {
         TRIP_OUTER,
         12.0,
         0.0,
-        2.5,
-        1.2,
+        PLINTH_H,
+        PLINTH_BEVEL,
         black_chrome(),
     ));
     s.add(slab(
@@ -455,8 +595,8 @@ fn plate(carbon: &Path) -> Scene {
         TRIP_FACE,
         9.0,
         0.0,
+        5.0,
         4.0,
-        1.5,
         Mat::new("dielectric", "gt_graphite_glass")
             .color([0.035, 0.036, 0.04])
             .rough(0.08)
@@ -466,11 +606,16 @@ fn plate(carbon: &Path) -> Scene {
     s
 }
 
+/// The boost scale's major marks (bar), engraved outside its arc: inner radius, length, width.
+const BOOST_MARKS: [f32; 4] = [-1.0, 0.0, 1.0, 2.0];
+const BOOST_BAR: [f32; 2] = [-1.0, 2.0];
+const BOOST_MARK: [f32; 3] = [65.0, 5.0, 2.0];
+
 /// The suggested-gear tile over [`SUG_FRAME`].
 fn suggest() -> Scene {
     let [x, y, w, h] = SUG_FRAME;
     let mut s = Scene::new("gt7_hood_pro_suggest", Frame::rect(x, y, w, h).scaled(MASTER_SCALE));
-    s.rig = s.rig.clone().power(RIG_POWER);
+    s.rig = band_rig(&s.rig);
     s.samples = SAMPLES;
     s.passes = Passes {
         beauty: true,
@@ -480,15 +625,24 @@ fn suggest() -> Scene {
         rmh: false,
         emission: false,
     };
-    s.add(slab("sug_base", SUG_C, SUG_OUTER, 14.0, 0.0, 3.0, 1.5, black_chrome()));
+    s.add(slab(
+        "sug_base",
+        SUG_C,
+        SUG_OUTER,
+        14.0,
+        0.0,
+        PLINTH_H,
+        PLINTH_BEVEL,
+        black_chrome(),
+    ));
     s.add(slab(
         "sug_tile",
         SUG_C,
         SUG_FACE,
         11.0,
         0.0,
+        8.0,
         6.0,
-        2.5,
         mat::enamel(WARNING_RED).named("gt_red_enamel"),
     ));
     s
@@ -609,6 +763,51 @@ mod tests {
             assert!((BOOST_R - BOOST_BAND..=BOOST_R + BOOST_BAND).contains(&d), "{d}");
         }
         assert!(o.points.len() > 2 * 72);
+    }
+
+    #[test]
+    fn the_car_outline_stays_in_the_chip_with_a_narrower_nose() {
+        let half = [CAR_WH[0] * 0.5, CAR_WH[1] * 0.5];
+        let o = car_outline(CAR_C, half, 128);
+        let width_at = |front: bool| {
+            o.points
+                .iter()
+                .filter(|p| ((p[1] - CAR_C[1]) / half[1] - if front { -0.75 } else { 0.5 }).abs() < 0.08)
+                .map(|p| (p[0] - CAR_C[0]).abs())
+                .fold(0.0, f32::max)
+        };
+        assert!(
+            width_at(true) < width_at(false) * 0.95,
+            "nose {} hips {}",
+            width_at(true),
+            width_at(false)
+        );
+        for p in &o.points {
+            assert!((p[0] - CAR_C[0]).abs() <= half[0] + 1e-3 && (p[1] - CAR_C[1]).abs() <= half[1] + 1e-3);
+        }
+    }
+
+    #[test]
+    fn the_rig_keeps_the_zenith_dark_and_lights_the_edges() {
+        let s = plate(Path::new("carbon.png"));
+        for r in s.rigs() {
+            let window = r.lights.iter().find(|l| l.name == "window").expect("a window");
+            // The window's angular half size stays off the zenith.
+            let half = (window.size[0] * 0.5 / window.dist).atan().to_degrees();
+            assert!(window.el + half < 80.0, "window reaches {}°", window.el + half);
+            assert!(
+                (window.az - r.lights[0].az).abs() < 1e-3,
+                "the window turns with the key"
+            );
+        }
+        let lenses = s.parts.iter().filter(|p| p.name.starts_with("lens_")).count();
+        assert_eq!(lenses, TICKS);
+        const { assert!(ALERT_FROM < TICKS) };
+        // The pillowed bar keeps a flat centre for the LED field.
+        assert!(BAR.2 - 2.0 * BAR_BEVEL >= TICK_Y[1] - TICK_Y[0]);
+        const { assert!(BAR_BEVEL <= BAR_H && LENS_BEVEL <= LENS_H) };
+        // Every boost mark stays clear of the arc.
+        const { assert!(BOOST_MARK[0] >= BOOST_R + BOOST_BAND * 0.5 + 1.5) };
     }
 
     #[test]
