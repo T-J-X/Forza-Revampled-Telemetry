@@ -27,6 +27,7 @@ pub mod dichroic_louvre;
 pub mod drift_glass;
 pub mod eva_bio_sync;
 pub mod f35_helmet_hmd;
+pub mod faraday_mandala;
 pub mod fibre_optic_corona;
 pub mod fluid;
 pub mod geodesic_well;

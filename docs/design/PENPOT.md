@@ -61,7 +61,7 @@ Penpot shape IDs are UUIDs (`shape.id`). Record board IDs, not names, in catalog
 | `03 · Family templates` | `6fe75c5e-bb22-8084-8008-fd8a2bca0c17` | 7 template boards, 3840×2160, with a `Guides · <view> (from tokens)` group: envelope, anchor and safe margins |
 | `04 · Heroes` | `6fe75c5e-bb22-8084-8008-fd8a2bcb3427` | 28 hero boards, 3840×2160 (7 families × 4 review states) |
 | `08 · Scrim fit` | `6fe75c5e-bb22-8084-8008-fd8a2bcc057a` | 3 scrim-fit boards with the dome core outline (`fh6-core::fit` defaults) and a spec table |
-| `09 · OSD` | `6fe75c5e-bb22-8084-8008-fd8a2bcd3335` | 11 OSD states with a `Grid · OSD.md (4K units)` group (shown on OSD 09, hidden on the rest), the Phase 3 OSD direction, and the grid/type and navigation tables |
+| `09 · OSD` | `6fe75c5e-bb22-8084-8008-fd8a2bcd3335` | 16 OSD states (the Liquid Glass rebuild's final renders from eef705d, 2026-11-28) with a `Grid · OSD.md (4K units)` group (shown on OSD 09, hidden on the rest), the Phase 3 OSD direction, and the grid/type and navigation tables |
 | `10 · Configurator` | `6fe75c5e-bb22-8084-8008-fd8a2bce3f4e` | The Phase 3 configurator direction (1920×1080); Phase 10 builds here |
 | `07 · <Name>` | one per cluster; 11 exist as of 2026-11-27 (list them with `penpotUtils.getPages()`) | Phase 7 cluster pages, made by each cluster thread in step 2 of `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`; page and board IDs go in `CATALOG.md` |
 | `11 · Showcase` | not created | Phase 11 |
@@ -148,6 +148,11 @@ Where the sources disagree, the library follows `data/design_tokens.json` and th
 | OSD 09 · Controls | `6fe75c5e-bb22-8084-8008-fd8aeefb62ed` |
 | OSD 10 · On-screen keyboard | `6fe75c5e-bb22-8084-8008-fd8aeeff0834` |
 | OSD 11 · Remapper | `6fe75c5e-bb22-8084-8008-fd8aef02ce42` |
+| OSD 12 · Fit & camera · seat height | `347e5ae2-9e0b-80b1-8009-039932ddaebe` |
+| OSD 13 · Fit & camera · wheel offset | `347e5ae2-9e0b-80b1-8009-0399339dd4cb` |
+| OSD 14 · Accent · navy palette | `347e5ae2-9e0b-80b1-8009-03993439fd02` |
+| OSD 15 · Accent · violet palette | `347e5ae2-9e0b-80b1-8009-039934d498e8` |
+| OSD 16 · Accent · pale palette | `347e5ae2-9e0b-80b1-8009-0399358c001d` |
 | OSD direction (Phase 3, OSD_DIRECTION.md) | `6fe75c5e-bb22-8084-8008-fd8af204c0ef` |
 | OSD · grid and type (4K units) | `6fe75c5e-bb22-8084-8008-fd8b0755efba` |
 | OSD · navigation | `6fe75c5e-bb22-8084-8008-fd8b088f2686` |

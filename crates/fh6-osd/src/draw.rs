@@ -1217,7 +1217,7 @@ fn draw_row(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, top
             return;
         }
         RowKind::Toggle => {
-            let on = model::toggle_value(row, inp.cfg);
+            let on = model::toggle_value(row, inp.cfg, inp.ctl.edit.view);
             let pill = Rect::from_xywh(VX - 96.0, ly - 24.0, 96.0, 48.0);
             // On and focused: a dark knob on the lit pill. On and unfocused: an ink knob on a
             // dimmed pill. Off: an outlined pill with the knob at the left. Each over 3:1.

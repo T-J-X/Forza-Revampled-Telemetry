@@ -238,6 +238,17 @@ const STATES: &[OsdState] = &[
         drive: false,
         setup: |h, c| custom_accent(h, c, "#A7F3D0"),
     },
+    OsdState {
+        name: "17_cluster_housing",
+        caption: "Cluster tab · an AMG MBUX dash: its Housing row, off by default (the dash floats on black)",
+        drive: false,
+        setup: |h, c| {
+            c.cockpit_hud_style = ClusterTheme::AmgMbuxSuperscreen;
+            h.open(c, View::Cockpit, c.cockpit_anchor_x as f32);
+            focus(h, c, Tab::Cluster, RowId::Housing);
+            Duration::ZERO
+        },
+    },
 ];
 
 /// One OSD render for the gallery and the perf report.

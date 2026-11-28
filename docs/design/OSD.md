@@ -81,7 +81,7 @@ Unchanged by the rebuild:
 
 | Tab | Rows |
 |---|---|
-| Cluster | Edit view (Cockpit / Hood / Chase; the live view follows), Cluster (carousel of 5 live thumbnails, all 29 themes), Speed units, Power units, Shift point (80–100%), Limiter light (10 Hz strobe / Gentle pulse) |
+| Cluster | Edit view (Cockpit / Hood / Chase; the live view follows), Cluster (carousel of 5 live thumbnails, every dash in the catalog), Housing (on / off, only for a dash that has a housing: its slab, bezel or wheel face; stored per dash in the config key `Housing`, defaults in `fh6_clusters::housing`; AMG MBUX dashes off, ValkyrieLmp1 on), Speed units, Power units, Shift point (80–100%), Limiter light (10 Hz strobe / Gentle pulse) |
 | Colour | Colour mode (Factory / Custom / Random). Factory: brand swatches. Custom: Colour (primary, secondary, accent, shift light), Hue on a spectrum track, Saturation, Brightness, Preset (6). Random: Re-roll, Same palette on every car. Then Glass refraction |
 | Type & logo | Font (pack default plus every loaded family), Logo, Custom name (on-screen keyboard, 14 characters) |
 | Fit & camera | Cockpit / Hood / Chase FOV (40–110°), Seat height (−100..+50 mm), Wheel offset (−80..+20 mm), Camera patch, Cluster height (±240 px, per view), Cluster scale (70–140%), the nine dash-blocker rows, Resync when the patcher offers it |
