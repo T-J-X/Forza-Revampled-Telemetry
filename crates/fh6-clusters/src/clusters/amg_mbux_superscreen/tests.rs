@@ -1,5 +1,5 @@
 use super::geom::{Geom, RINGS, SHIFT_PER_SIDE};
-use super::hardware;
+use super::hardware::{crescent_band, crescent_polygon};
 use super::*;
 use fh6_kit::Tokens;
 use std::path::Path;
@@ -19,92 +19,102 @@ fn circle_rect(c: Vec2, r: f32) -> Rect {
 }
 
 #[test]
-fn the_unit_sits_inside_the_cockpit_envelope_and_every_zone_on_its_glass() {
+fn every_part_floats_inside_the_cockpit_envelope() {
     let t = Tokens::default();
+    let env = t.layout.cockpit_envelope.inset(4.0);
     let g = Geom::COCKPIT;
-    assert!(inside(t.layout.cockpit_envelope, g.housing), "{:?}", g.housing);
-    assert!(inside(g.housing, g.screen));
-    // The bezel is even all round.
-    let bezel = g.screen.min.x - g.housing.min.x;
-    assert!((g.screen.min.y - g.housing.min.y - bezel).abs() < 1e-3);
-    assert!((g.housing.max.x - g.screen.max.x - bezel).abs() < 1e-3);
-    assert!((g.housing.max.y - g.screen.max.y - bezel).abs() < 1e-3);
-    // The real screen is 2.67:1; the glass here stays close to it (the cockpit gap is lower).
-    let aspect = g.screen.width() / g.screen.height();
-    assert!((2.6..=2.75).contains(&aspect), "aspect {aspect}");
     for side in [-1.0, 1.0] {
         for k in 0..=20 {
             let p = g.crescent_point(k as f32 / 20.0, 0.0, side);
-            assert!(g.screen.inset(8.0).contains(p), "crescent at {p:?} leaves the glass");
+            assert!(env.contains(p), "crescent at {p:?} leaves the envelope");
+        }
+        for t in [0.0, 1.0] {
+            let a = g.band_angle(t, side);
+            let p = g.tunnel + vec2(a.cos(), a.sin()) * (g.band_out + 4.0);
+            assert!(env.contains(p), "band end {p:?} leaves the envelope");
         }
     }
     let zones = [
-        circle_rect(g.g_widget, g.widget_r),
-        circle_rect(g.boost_widget, g.widget_r),
+        g.assembly_rect,
+        g.crescent_rect,
+        g.widget_rect(g.g_widget, g.lens_margin),
+        g.widget_rect(g.boost_widget, g.gauge_margin),
         g.logo,
-        g.transmission,
+        circle_rect(g.gear, g.gear_cap * 0.6),
+        circle_rect(g.stack_row(-1.0), g.stack_cap),
+        circle_rect(g.stack_row(1.0), g.stack_cap),
         g.shift_segment(0, -1.0),
         g.shift_segment(0, 1.0),
+        circle_rect(g.speed, g.speed_cap * 0.5),
     ];
     for z in zones {
-        assert!(inside(g.screen.inset(8.0), z), "{z:?} leaves the glass");
+        assert!(inside(env, z), "{z:?} leaves the envelope");
     }
-    // The widgets' titles and labels (30 px beyond the ring, cap 22) stay on the glass too.
+    // The widgets' titles above and their labels below stay inside too.
     for c in [g.g_widget, g.boost_widget] {
-        assert!(c.y - g.widget_r - 30.0 - g.label_cap > g.screen.min.y);
-        assert!(c.y + g.widget_r + 30.0 + g.label_cap < g.screen.max.y);
+        assert!(c.y - g.widget_r - g.title_dy - g.label_cap > env.min.y);
+        assert!(c.y + g.widget_r + 29.0 + g.unit_cap < env.max.y);
     }
-}
-
-#[test]
-fn the_crescents_scales_and_widgets_never_collide() {
-    let g = Geom::COCKPIT;
-    // The side scales' numerals (three digits at cap 22 are about 46 px wide) sit between the
-    // crescents and the ticks (18 px majors, inward), as on the real display.
-    assert!(g.scale_numeral_r - 24.0 > g.crescent_r + 6.0);
-    assert!(g.scale_numeral_r + 24.0 < g.scale_r - 18.0);
-    // Their ends stay on the glass.
-    for t in [0.0, 1.0] {
-        let p = g.scale_point(t, g.scale_r + 12.0, -1.0);
-        assert!(g.screen.inset(4.0).contains(p), "scale end {p:?}");
-    }
-    // Their numerals stay clear of the widgets.
+    // The plates cover their parts: the crescents, the bands and the road.
     for side in [-1.0, 1.0] {
-        let w = if side < 0.0 { g.g_widget } else { g.boost_widget };
-        for k in 0..=4 {
-            let p = g.scale_point(k as f32 / 4.0, g.scale_numeral_r, side);
-            let d = (p - w).length();
-            assert!(d > g.widget_r + 40.0, "numeral {k} at {p:?} is {d} px from a widget");
+        for k in 0..=20 {
+            assert!(g.crescent_rect.contains(g.crescent_point(k as f32 / 20.0, 0.0, side)));
         }
     }
-    // The widgets sit outside the scales.
-    assert!((g.g_widget - g.tunnel).length() - g.widget_r > g.scale_r + 40.0);
-    // The disc sits inside the innermost ring, which sits inside the crescents.
-    let (c, r) = g.ring(RINGS - 1);
-    assert!((c - g.disc).length() + g.disc_r <= r + 1e-3);
-    let (c0, r0) = g.ring(0);
-    assert!((c0 - g.tunnel).length() + r0 < g.crescent_r - g.crescent_w);
+    assert!(g.assembly_rect.max.y >= g.floor_bottom && g.assembly_rect.max.x >= g.band_out + 4.0);
 }
 
 #[test]
-fn the_shift_strip_runs_along_the_top_clear_of_the_speed_and_the_scales() {
+fn the_tunnel_bands_and_widgets_never_collide() {
+    let g = Geom::COCKPIT;
+    // The scale numerals (three digits at cap 20 are about 42 px wide) sit on the band, inside
+    // the ticks (14 px majors, inward from the rim), as on the real display.
+    assert!(g.scale_numeral_r - 22.0 > g.band_in);
+    assert!(g.scale_numeral_r + 22.0 < g.band_out - 14.0);
+    // The bands clear the crescents, and the widgets clear the bands.
+    assert!(g.band_in > g.crescent_r + 6.0);
+    for w in [g.g_widget, g.boost_widget] {
+        assert!((w - g.tunnel).length() - g.widget_r > g.band_out + 20.0, "{w:?}");
+    }
+    // The ring lines grow from just outside the light to just inside the crescents.
+    let (c0, r0) = g.ring(0);
+    assert!((c0 - g.disc).length() + g.disc_r < r0);
+    for k in 1..RINGS {
+        assert!(g.ring(k).1 > g.ring(k - 1).1);
+    }
+    let (c1, r1) = g.ring(RINGS - 1);
+    assert!((c1 - g.tunnel).length() < 1e-3);
+    assert!(r1 < g.crescent_r - g.crescent_w);
+    // The horizon cuts the light below its top and the road starts there.
+    assert!(g.horizon > g.disc.y - g.disc_r && g.horizon < g.disc.y + g.disc_r);
+    assert!(g.floor()[0].y == g.horizon && g.floor_bottom > g.rpm.y + g.rpm_cap);
+    // The rpm sits on the road under the horizon, the speed above the speed line.
+    assert!(g.rpm.y - g.rpm_cap * 0.5 > g.horizon + 40.0);
+    assert!(g.speed.y + g.speed_cap * 0.5 < g.line_y - 4.0);
+    // The selector stack's column clears the engaged gear.
+    assert!(g.stack.x + g.stack_cap < g.gear.x - g.gear_cap * 0.5);
+}
+
+#[test]
+fn the_shift_strip_runs_on_the_speed_line_inside_the_crescents() {
     let g = Geom::COCKPIT;
     let inner = g.shift_segment(SHIFT_PER_SIDE - 1, 1.0);
     let outer = g.shift_segment(0, 1.0);
     assert!((inner.min.x - g.shift_inner).abs() < 1e-3, "{inner:?}");
     assert!((outer.max.x - g.shift_outer).abs() < 1e-3, "{outer:?}");
-    // The strip runs along the glass's top edge, above the speed, the crescents' tips and the
-    // side scales' top ends, and leaves room over three digits of the speed (about 130 px).
-    let top = g.shift_y + g.shift_h * 0.5;
-    assert!(
-        top + 12.0 < g.speed.y - g.speed_cap * 0.5,
-        "strip {top}, speed {:?}",
-        g.speed
-    );
-    assert!(top + 12.0 < g.crescent_point(1.0, 0.0, -1.0).y);
-    assert!(top + 12.0 < g.scale_point(1.0, g.scale_r, -1.0).y);
-    assert!(g.shift_inner > 65.0 + 24.0);
-    assert!(g.shift_y - g.shift_h * 0.5 > g.screen.min.y + 4.0);
+    assert!((outer.center().y - g.line_y).abs() < 1e-3);
+    // It leaves room under three digits of the speed (about 120 px).
+    assert!(g.shift_inner > 60.0);
+    // The crescents' inner edge at the speed line's height is outside the strip.
+    let mut nearest = (f32::MAX, 0.0_f32);
+    for k in 0..=400 {
+        let p = g.crescent_point(k as f32 / 400.0, 1.0, 1.0);
+        let d = (p.y - g.line_y).abs();
+        if d < nearest.0 {
+            nearest = (d, p.x);
+        }
+    }
+    assert!(nearest.1 >= g.shift_outer - 2.0, "inner edge at x {}", nearest.1);
     // Segments are mirrored.
     for i in 0..SHIFT_PER_SIDE {
         let l = g.shift_segment(i, -1.0);
@@ -122,6 +132,8 @@ fn the_crescents_fill_bottom_to_top_and_taper_to_their_tips() {
     assert!(bottom.x < 0.0 && top.x < 0.0, "the left crescent is on the left");
     assert!(g.crescent_width(0.0) < 1e-3 && g.crescent_width(1.0) < 1e-3);
     assert!((g.crescent_width(0.5) - g.crescent_w).abs() < 1e-3);
+    // Flat in the middle: at a quarter it keeps most of its width.
+    assert!(g.crescent_width(0.25) > g.crescent_w * 0.85);
     // The right crescent mirrors the left one.
     for t in [0.0, 0.3, 0.7, 1.0] {
         let l = g.crescent_point(t, 0.5, -1.0);
@@ -130,8 +142,20 @@ fn the_crescents_fill_bottom_to_top_and_taper_to_their_tips() {
     }
     let mut pts = [Vec2::ZERO; CRESCENT_SAMPLES * 2];
     assert_eq!(crescent_polygon(&g, 0.4, 0.4, -1.0, &mut pts), 0);
+    assert_eq!(crescent_band(&g, 0.0, 0.5, 0.1, 1.0, &mut pts), CRESCENT_SAMPLES * 2);
     assert_eq!(crescent_polygon(&g, 0.0, 1.0, 1.0, &mut pts), CRESCENT_SAMPLES * 2);
     assert!(pts.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+}
+
+#[test]
+fn the_stack_shows_the_gears_either_side() {
+    assert_eq!(neighbours(Gear::Forward(4)), ("5", "3"));
+    assert_eq!(neighbours(Gear::Forward(1)), ("2", "N"));
+    assert_eq!(neighbours(Gear::Neutral), ("1", "R"));
+    assert_eq!(neighbours(Gear::Reverse), ("N", ""));
+    assert_eq!(neighbours(Gear::Forward(10)), ("", "9"));
+    // A raw byte past 10 never indexes out of the list.
+    assert_eq!(neighbours(Gear::Forward(200)), ("", "9"));
 }
 
 #[test]
@@ -179,8 +203,4 @@ fn static_parts_stay_under_the_static_light_cap() {
     };
     let luma = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
     assert!(luma <= 0.20 + 0.01, "static ink luma {luma}");
-    // The procedural tunnel rings dim with depth and never go dark or non-finite.
-    let levels = hardware::fallback_levels();
-    assert!(levels.windows(2).all(|w| w[1] < w[0]));
-    assert!(levels.iter().all(|l| l.is_finite() && *l > 0.0));
 }

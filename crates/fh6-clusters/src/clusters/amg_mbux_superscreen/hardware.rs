@@ -1,28 +1,41 @@
 //! The rendered plates: Blender renders from `assets/clusters/amg_mbux_superscreen/` (recipe
-//! `tools/asset-forge/src/recipes/amg_mbux_superscreen.rs`) and the procedural fallbacks drawn
-//! when a file is missing.
+//! `tools/asset-forge/src/recipes/amg_mbux_superscreen.rs`, board v3) and the procedural
+//! fallbacks drawn when a file is missing.
 //!
-//! - `housing_0.png`, `housing_1.png`: the display unit (piano-black bezel, the cover glass's
-//!   edge and the black screen), with the key light at rest and swung; cross-faded by lateral G.
-//!   They cover [`Geom::housing`] 1:1.
-//! - `tunnel.png`: the receding rings and the floor of the tunnel in luminance, tinted by the
+//! - `assembly_0.png`, `assembly_1.png`: the tunnel (thin ring lines, the light at the end cut at
+//!   the horizon, the road) and the two side-scale bands, with the key light at rest and swung;
+//!   cross-faded by lateral G. They cover [`Geom::assembly_rect`] 1:1.
+//! - `crescents.png`: both crescents' halftone as light in alpha (white), tinted by the
 //!   palette's primary at draw time, so a custom palette recolours it. It covers
-//!   [`Geom::tunnel_rect`] 1:1.
-use super::geom::{Geom, RINGS};
-use super::RING_LEVEL;
+//!   [`Geom::crescent_rect`] 1:1.
+//! - `lens_0.png`, `lens_1.png` and `gauge_0.png`, `gauge_1.png`: the G-Force lens (dark smoked
+//!   glass in a polished ring) and the boost gauge (a dark face in a chrome bezel), per light.
+use super::geom::{Geom, CRESCENT_SAMPLES, RINGS};
 use fh6_kit::cluster::Setup;
-use fh6_kit::{vec2, Gradient, ImageId, ImagePaint, Painter, Palette, Shape, Stroke};
+use fh6_kit::{deg, vec2, Cap, Color, Gradient, ImageId, ImagePaint, Painter, Palette, Rect, Shape, Vec2};
 
-/// Light azimuths of the housing renders: rest, then the light swung by lateral G.
-pub(super) const HOUSING_AZIMUTHS: usize = 2;
+/// Light azimuths of the lit renders: rest, then the light swung by lateral G.
+pub(super) const AZIMUTHS: usize = 2;
 /// The asset folder of this dash.
 const FOLDER: &str = "amg_mbux_superscreen";
+/// The procedural fallbacks' colours (sRGB 8-bit, from board v3).
+const BAND_BODY: [u8; 3] = [36, 35, 44];
+const BAND_RIM: [u8; 3] = [201, 208, 217];
+const BAND_LIP: [u8; 3] = [74, 80, 91];
+const RING_LINE: [u8; 3] = [92, 99, 110];
+const DISC_TOP: [u8; 3] = [60, 68, 80];
+const DISC_LOW: [u8; 3] = [214, 224, 234];
+const ROAD_TOP: [u8; 3] = [38, 42, 48];
+const ROAD_EDGE: [u8; 3] = [213, 220, 229];
+const HORIZON_LINE: [u8; 3] = [242, 248, 255];
 
 /// Every loaded plate (`None` when its file is missing).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(super) struct Plates {
-    housing: [Option<ImageId>; HOUSING_AZIMUTHS],
-    tunnel: Option<ImageId>,
+    assembly: [Option<ImageId>; AZIMUTHS],
+    crescents: Option<ImageId>,
+    lens: [Option<ImageId>; AZIMUTHS],
+    gauge: [Option<ImageId>; AZIMUTHS],
 }
 
 /// Loads one file of this dash's asset folder, when the assets folder is known and holds it.
@@ -41,123 +54,240 @@ fn load(setup: &mut Setup<'_>, name: &str) -> Option<ImageId> {
     }
 }
 
+fn rgb(c: [u8; 3]) -> Color {
+    Color::srgb8(c[0], c[1], c[2], 255)
+}
+
+/// Draws a lit plate, cross-faded to the swung light by `swing` (0..1).
+fn lit_plate(p: &mut Painter<'_>, pair: [Option<ImageId>; AZIMUTHS], rect: Rect, swing: f32) -> bool {
+    let Some(base) = pair[0] else {
+        return false;
+    };
+    p.fill(&Shape::rect(rect), ImagePaint::new(base, rect));
+    if let Some(swung) = pair[1] {
+        let w = swing.clamp(0.0, 1.0);
+        if w > 0.003 {
+            p.scoped(|p| {
+                p.set_opacity(w);
+                p.fill(&Shape::rect(rect), ImagePaint::new(swung, rect));
+            });
+        }
+    }
+    true
+}
+
 impl Plates {
     /// Loads every plate once.
     pub fn load(setup: &mut Setup<'_>) -> Self {
         Self {
-            housing: [load(setup, "housing_0.png"), load(setup, "housing_1.png")],
-            tunnel: load(setup, "tunnel.png"),
+            assembly: [load(setup, "assembly_0.png"), load(setup, "assembly_1.png")],
+            crescents: load(setup, "crescents.png"),
+            lens: [load(setup, "lens_0.png"), load(setup, "lens_1.png")],
+            gauge: [load(setup, "gauge_0.png"), load(setup, "gauge_1.png")],
         }
     }
 
-    /// The display unit: the rendered housing, cross-faded to the swung light by `swing`
-    /// (0..1), or the procedural one.
-    pub fn draw_housing(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, swing: f32) {
-        let rect = g.housing;
-        if let Some(base) = self.housing[0] {
-            p.fill(&Shape::rect(rect), ImagePaint::new(base, rect));
-            if let Some(swung) = self.housing[1] {
-                let w = swing.clamp(0.0, 1.0);
-                if w > 0.003 {
-                    p.scoped(|p| {
-                        p.set_opacity(w);
-                        p.fill(&Shape::rect(rect), ImagePaint::new(swung, rect));
-                    });
-                }
-            }
+    /// The tunnel, the road and the side-scale bands: the rendered pair, or the procedural one.
+    pub fn draw_assembly(&self, p: &mut Painter<'_>, g: &Geom, swing: f32) {
+        if !lit_plate(p, self.assembly, g.assembly_rect, swing) {
+            fallback_bands(p, g);
+            fallback_tunnel(p, g);
+        }
+    }
+
+    /// The crescents, always lit: the rendered halftone tinted by the primary, or a procedural
+    /// body with the same light (brighter at the outer edge).
+    pub fn draw_crescents(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        if let Some(image) = self.crescents {
+            let rect = g.crescent_rect;
+            p.fill(&Shape::rect(rect), ImagePaint::new(image, rect).tint(pal.primary));
             return;
         }
-        fallback_housing(p, g, pal);
-    }
-
-    /// The tunnel's receding rings and floor: the rendered plate tinted by the primary, or the
-    /// procedural one.
-    pub fn draw_tunnel(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        if let Some(image) = self.tunnel {
-            let rect = g.tunnel_rect();
-            p.fill(&Shape::rect(rect), ImagePaint::new(image, rect).tint(pal.primary));
-        } else {
-            fallback_rings(p, g, pal);
+        let inner = (g.crescent_r - g.crescent_w) / g.crescent_r;
+        let paint = Gradient::radial(g.tunnel, g.crescent_r)
+            .stop(inner, pal.primary.intensity(0.45))
+            .stop(1.0 - (1.0 - inner) * 0.2, pal.primary.intensity(0.82))
+            .stop(1.0, pal.primary);
+        for side in [-1.0, 1.0] {
+            let mut pts = [Vec2::ZERO; CRESCENT_SAMPLES * 2];
+            let n = crescent_polygon(g, 0.0, 1.0, side, &mut pts);
+            p.fill(&Shape::Polygon { points: &pts[..n] }, paint);
         }
-        draw_floor(p, g, pal);
+    }
+
+    /// The G-Force lens body: the rendered pair, or a dark red disc.
+    pub fn draw_lens(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, swing: f32) {
+        let rect = g.widget_rect(g.g_widget, g.lens_margin);
+        if !lit_plate(p, self.lens, rect, swing) {
+            p.fill(
+                &Shape::circle(g.g_widget, g.widget_r),
+                Gradient::radial(g.g_widget, g.widget_r)
+                    .stop(0.0, pal.primary.intensity(0.06))
+                    .stop(0.7, pal.primary.intensity(0.16))
+                    .stop(1.0, pal.primary.intensity(0.42)),
+            );
+        }
+    }
+
+    /// The boost gauge body: the rendered pair, or a dark face with a grey bezel.
+    pub fn draw_gauge(&self, p: &mut Painter<'_>, g: &Geom, swing: f32) {
+        let rect = g.widget_rect(g.boost_widget, g.gauge_margin);
+        if !lit_plate(p, self.gauge, rect, swing) {
+            let c = g.boost_widget;
+            p.fill(
+                &Shape::circle(c, g.widget_r),
+                Gradient::radial(c - vec2(0.0, g.widget_r * 0.2), g.widget_r * 1.2)
+                    .stop(0.0, Color::srgb8(25, 27, 32, 255))
+                    .stop(1.0, Color::srgb8(10, 11, 13, 255)),
+            );
+            p.fill(
+                &Shape::ring(c, g.widget_r, 2.5),
+                rgb(RING_LINE).lerp(rgb(BAND_RIM), 0.6),
+            );
+        }
     }
 }
 
-/// A procedural display unit: an opaque piano-black bezel lit from above, the black glass inside
-/// it and the cover glass's thin bright edge.
-fn fallback_housing(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-    let ink = pal.roles.ink;
-    let h = g.housing;
-    // Opaque, so the game's own dash never shows through the unit.
-    p.fill(&Shape::round_rect(h, g.housing_r), pal.roles.oled_black);
-    p.fill(
-        &Shape::round_rect(h, g.housing_r),
-        Gradient::linear(vec2(0.0, h.min.y), vec2(0.0, h.max.y))
-            .stop(0.0, ink.intensity(0.050))
-            .stop(0.12, ink.intensity(0.018))
-            .stop(1.0, ink.intensity(0.006)),
-    );
-    p.fill(&Shape::round_rect(g.screen, g.screen_r), pal.roles.oled_black);
-    // The cover glass's edge catches the light along the top.
-    p.stroke(
-        &Shape::round_rect(h.inset(1.0), g.housing_r - 1.0),
-        Gradient::linear(vec2(0.0, h.min.y), vec2(0.0, h.max.y))
-            .stop(0.0, ink.intensity(0.16))
-            .stop(0.5, ink.intensity(0.05))
-            .stop(1.0, ink.intensity(0.03)),
-        Stroke::rim_px(1.5),
-    );
-    p.stroke(
-        &Shape::round_rect(g.screen, g.screen_r),
-        ink.intensity(0.035),
-        Stroke::rim_px(1.0),
-    );
-}
-
-/// The procedural rings: [`RINGS`] receding rings dimming towards the disc.
-fn fallback_rings(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-    for k in 0..RINGS {
-        let (c, r) = g.ring(k);
-        let depth = k as f32 / (RINGS as f32 - 1.0).max(1.0);
-        let level = RING_LEVEL * (1.0 - 0.55 * depth);
-        let width = 3.0 - 1.5 * depth;
-        p.fill(&Shape::ring(c, r, width), pal.primary.intensity(level));
+/// The procedural side-scale bands: a dark plum-charcoal band, a silver rim on its outer edge
+/// and a dim lip on its inner edge.
+fn fallback_bands(p: &mut Painter<'_>, g: &Geom) {
+    let w = g.band_out - g.band_in;
+    let mid = (g.band_in + g.band_out) * 0.5;
+    for side in [-1.0, 1.0] {
+        let (start, sweep) = if side < 0.0 {
+            (g.scale_from, g.scale_to - g.scale_from)
+        } else {
+            (deg(180.0) - g.scale_from, -(g.scale_to - g.scale_from))
+        };
+        p.fill(&Shape::arc(g.tunnel, mid, w, start, sweep, Cap::Butt), rgb(BAND_BODY));
+        p.fill(
+            &Shape::arc(g.tunnel, g.band_out, 2.6, start, sweep, Cap::Butt),
+            rgb(BAND_RIM).intensity(0.9),
+        );
+        p.fill(
+            &Shape::arc(g.tunnel, g.band_in, 1.4, start, sweep, Cap::Butt),
+            rgb(BAND_LIP),
+        );
     }
 }
 
-/// The floor, over the rings (rendered or procedural): a dark wedge with its edges.
-fn draw_floor(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-    // The floor: a dark wedge that hides the rings behind it, lit faintly along its top edge,
-    // with red edges running down from the disc's side.
+/// The procedural tunnel: the ring lines (dim below the horizon), the light at the end cut at
+/// the horizon, the road with its edge and lane lines, the horizon line and the cross line.
+fn fallback_tunnel(p: &mut Painter<'_>, g: &Geom) {
+    let (_, outer) = g.ring(RINGS - 1);
+    let above = Rect::from_points(
+        vec2(-outer - 8.0, g.tunnel.y - outer - 40.0),
+        vec2(outer + 8.0, g.horizon),
+    );
+    let below = Rect::from_points(vec2(-outer - 8.0, g.horizon), vec2(outer + 8.0, g.floor_bottom));
+    for (clip, level) in [(above, 0.85), (below, 0.25)] {
+        p.scoped(|p| {
+            p.clip(clip, 0.0);
+            for k in 0..RINGS {
+                let (c, r) = g.ring(k);
+                let u = k as f32 / (RINGS as f32 - 1.0).max(1.0);
+                p.fill(
+                    &Shape::ring(c, r, 1.6 + 0.9 * u),
+                    rgb(RING_LINE).intensity(level * (1.0 - 0.35 * u)),
+                );
+            }
+        });
+    }
+    // The light at the end, brightest where it meets the road.
+    p.scoped(|p| {
+        p.clip(above, 0.0);
+        p.fill(
+            &Shape::circle(g.disc, g.disc_r),
+            Gradient::linear(vec2(0.0, g.disc.y - g.disc_r), vec2(0.0, g.horizon))
+                .stop(0.0, rgb(DISC_TOP))
+                .stop(0.6, rgb(DISC_TOP).lerp(rgb(DISC_LOW), 0.5))
+                .stop(1.0, rgb(DISC_LOW)),
+        );
+        p.fill(
+            &Shape::ring(g.disc, g.disc_r * 0.64, 2.0),
+            Color::srgb8(62, 70, 80, 255),
+        );
+    });
+    // The road.
     let f = g.floor();
-    p.fill(&Shape::Polygon { points: &f }, pal.roles.oled_black);
     p.fill(
         &Shape::Polygon { points: &f },
-        Gradient::linear(vec2(0.0, g.floor_top), vec2(0.0, g.floor_bottom))
-            .stop(0.0, pal.primary.intensity(0.07))
-            .stop(0.35, pal.primary.intensity(0.015))
-            .stop(1.0, pal.primary.intensity(0.0)),
+        Gradient::linear(vec2(0.0, g.horizon), vec2(0.0, g.floor_bottom))
+            .stop(0.0, rgb(ROAD_TOP))
+            .stop(0.25, Color::srgb8(18, 20, 24, 255))
+            .stop(1.0, Color::srgb8(5, 5, 6, 255)),
     );
-    let edge = pal.primary.intensity(RING_LEVEL * 1.6);
+    let edge = Gradient::linear(vec2(0.0, g.horizon), vec2(0.0, g.floor_bottom))
+        .stop(0.0, rgb(ROAD_EDGE))
+        .stop(1.0, rgb(ROAD_EDGE).intensity(0.2));
     p.fill(&Shape::line(f[0], f[3], 2.0), edge);
     p.fill(&Shape::line(f[1], f[2], 2.0), edge);
-    p.fill(&Shape::line(f[0], f[1], 2.0), edge.intensity(0.8));
+    for sx in [-1.0, 1.0] {
+        p.fill(
+            &Shape::line(
+                vec2(sx * g.floor_top_half * 0.45, g.horizon),
+                vec2(sx * g.floor_bottom_half * 0.45, g.floor_bottom),
+                1.2,
+            ),
+            Color::srgb8(143, 152, 163, 255).intensity(0.45),
+        );
+    }
+    p.fill(
+        &Shape::line(
+            vec2(-g.floor_top_half - 70.0, 0.0),
+            vec2(g.floor_top_half + 70.0, 0.0),
+            1.4,
+        ),
+        Color::srgb8(89, 96, 107, 255).intensity(0.7),
+    );
+    let half = outer - 12.0;
+    p.fill(
+        &Shape::rect(Rect::from_points(
+            vec2(-half, g.horizon - 1.25),
+            vec2(half, g.horizon + 1.25),
+        )),
+        Gradient::linear(vec2(-half, 0.0), vec2(half, 0.0))
+            .stop(0.0, Color::TRANSPARENT)
+            .stop(0.5, rgb(HORIZON_LINE))
+            .stop(1.0, Color::TRANSPARENT),
+    );
+}
+
+/// The outline of the left (`side` −1) or right crescent between fills `t0` and `t1`, at
+/// `w_scale` of its width from the outer edge, into `out`; returns the number of points (0 for an
+/// empty span).
+pub(super) fn crescent_band(
+    g: &Geom,
+    t0: f32,
+    t1: f32,
+    w_scale: f32,
+    side: f32,
+    out: &mut [Vec2; CRESCENT_SAMPLES * 2],
+) -> usize {
+    let (t0, t1) = (t0.clamp(0.0, 1.0), t1.clamp(0.0, 1.0));
+    if t1 - t0 < 1e-3 {
+        return 0;
+    }
+    let n = CRESCENT_SAMPLES;
+    for i in 0..n {
+        let t = t0 + (t1 - t0) * i as f32 / (n - 1) as f32;
+        out[i] = g.crescent_point(t, 0.0, side);
+        out[2 * n - 1 - i] = g.crescent_point(t, w_scale, side);
+    }
+    2 * n
+}
+
+/// The whole outline of a crescent between fills `t0` and `t1`.
+pub(super) fn crescent_polygon(g: &Geom, t0: f32, t1: f32, side: f32, out: &mut [Vec2; CRESCENT_SAMPLES * 2]) -> usize {
+    crescent_band(g, t0, t1, 1.0, side, out)
 }
 
 /// True when every plate loaded (tests and the handover's asset check).
 #[cfg(test)]
 #[allow(dead_code)]
 pub(super) fn all_loaded(plates: &Plates) -> bool {
-    plates.housing.iter().all(Option::is_some) && plates.tunnel.is_some()
-}
-
-/// The procedural fallbacks never draw transparent black or a non-finite light.
-#[cfg(test)]
-pub(super) fn fallback_levels() -> [f32; RINGS] {
-    let mut out = [0.0; RINGS];
-    for (k, level) in out.iter_mut().enumerate() {
-        let depth = k as f32 / (RINGS as f32 - 1.0).max(1.0);
-        *level = RING_LEVEL * (1.0 - 0.55 * depth);
-    }
-    out
+    plates.assembly.iter().all(Option::is_some)
+        && plates.crescents.is_some()
+        && plates.lens.iter().all(Option::is_some)
+        && plates.gauge.iter().all(Option::is_some)
 }
