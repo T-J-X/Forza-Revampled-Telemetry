@@ -91,6 +91,8 @@ The brief's "alpha 56 to 64, glassTint" tint is a flat alpha. [optics.md §11](.
 
 ### 6.2 Rear-axle slip, in place of the brief's tyre "combined slip"
 
+*Superseded the same day: the study (§6.7 F4) showed β_r restates the yaw rate, and the full decoder (§6.8) brought the real combined slip. Kept as the record of what was tried.*
+
 The brief asks for "rear tyre combined slip". The decoder (`crates/fh6-core/src/telemetry.rs`) has no combined-slip field, and FH6's `TireSlipAngle` is **normalised** ("0 means 100% grip and |angle| > 1.0 means loss of grip") [S23], is not in degrees, and is not verified against the golden packets (`docs/kit/README.md`). So the wedge's amber edge comes from body kinematics instead.
 
 The lateral velocity of a point a distance b behind the centre of mass, on a rigid body yawing at rate r, is v_x − r·b (rigid-body kinematics). The rear axle's slip angle is then
@@ -125,7 +127,7 @@ SPIN shows when \|β\| > 100°, or \|β\| > 45° below 10 km/h (B5). It voids th
 
 ### 6.6 What is verified
 
-Verified: rpm, speed, gear, pedals, acceleration, velocity (the kit's lessons, `docs/kit/README.md`). Steer, the hand brake and angular velocity are decoded raw fields; the dash uses them as inputs only (a tick, a label, a feed-forward), and the handover names them as not yet checked against the golden packets. No tyre slip, suspension or weather field is read.
+Verified: rpm, speed, gear, pedals, acceleration, velocity (the kit's lessons, `docs/kit/README.md`). Steer, the hand brake and angular velocity are decoded raw fields; the dash uses them as inputs only (a tick, a label, a feed-forward), and the handover names them as not yet checked against the golden packets. The fields the full decoder added (§6.8) are raw until the real-game check; the dash reads the rears' combined slip and slip ratio (the visor's smoke), the rear rumble-strip flags (a kerb tick) and the distance travelled (slide length), and no suspension, temperature or weather field.
 
 ### 6.7 Study: what a real drift does to these numbers
 
@@ -143,6 +145,24 @@ No source read gives a measured drift-entry or transition rate in deg/s [S24 to 
 | F4 | In the held slide, β_r − β stays at 4 to 6° all the time. It is r·b / V by construction (§6.2), so it restates the yaw rate and says nothing about grip. | **β_r is dropped as the amber edge's input** (kept here as considered). The amber edge becomes an **over-rotation warning**: lit while \|β\| is over 55° and still growing faster than 30°/s, the moment before a spin (SPIN comes at 100°). A first rule (over 30° and growing faster than 60°/s) lit falsely at the end of every entry and transition in the trace, where β still grows at up to 119°/s past 30°; held drifts in the sources sit at 30 to 45° [S24, S25, S27], so 55° is past any held angle. It needs only β̇, from verified velocity, and no sign of r. |
 | F5 | The sample slide (38°, 48 km/h, steady) scores 75.30: angle 0.73, speed 0.47, stability 0.80, swing-back at the cap. | Speeds in Forza drifting run well above this test's 48 km/h, so the 100 km/h speed reference stays; the direction check revisits the weights with the review states. |
 
+### 6.8 The full decoder (main 60c99c9, 2026-11-28)
+
+The decoder now reads all 88 FH6 fields. Their offsets and units still wait for the real-game check at the PC; until then each is a raw input and the handover names it. What they change for DriftGlass:
+
+| Field | FH6's definition | Use in DriftGlass |
+|---|---|---|
+| `tire_combined_slip_rl/rr` | normalised: 0 is full grip, \|slip\| > 1.0 is loss of grip [S23] | **Restores the brief's cue, in a form that means something.** In a held drift both rears are past 1.0 all the time (they must be, to slide), so a lit/unlit amber edge would just be on for the whole slide. Instead the rears' combined slip above 1.0 sets the **density of the visor's smoke**: the brief's "smoke = tint + frost noise" frost grows from nothing at 1.0 to its full 3.5% at 2.0, so the smoked visor fogs as the tyres smoke. A clean grip corner leaves it clear. |
+| `tire_slip_ratio_rl/rr` | normalised longitudinal slip, same scale [S23] | Wheelspin: the larger of the rears' slip ratio above 1.0 feeds the same smoke, so a burnout or a clutch kick fogs the visor before the car even rotates. |
+| `wheel_on_rumble_strip_*` | 1 on a rumble strip, 0 off | **The DOSS "LINE OFF" column, in part.** Count of rear wheels on a kerb, shown as a shy tick on the fan's rim while it holds. It is a kerb, not off-course, so the score is not docked for it. |
+| `surface_rumble_*` | the surface's force-feedback rumble per wheel | A candidate for "off course" (grass and gravel rumble harder than tarmac). Its scale is unknown until the real-game check, so it is noted and not used. |
+| `normalized_driving_line` | the game's driving-line value, i8 | A candidate for the course-line idea (§7). A drift line is not the racing line the game draws, so it is not scored; at most it tints the line ribbon. Decided on the board. |
+| `distance_traveled` | metres travelled | **Slide length**, VDrift's base score [S12]: the distance covered within a run, shown with `PEAK` after the slide. It does not enter the DOSS-style score, whose four terms stay as cited (B7). |
+| `tire_temp_rl/rr` | no unit stated (Forza titles have sent Fahrenheit) | Considered and left out: a drift heats the rears steadily, and a temperature readout would be one more number on a dash that is about angle. |
+| `lap_number`, `current_race_time`, `best_lap` | race data | Not shown. A free-roam drift has no laps; the chain and the best slide of the session stand in for a sector total (§7). |
+| `wheel_in_puddle_*` | 1 in a puddle, 0 out | Not used (no weather in Data Out; project memory "FH6 weather"). |
+
+The over-rotation warning of §6.7 F4 stays: it is the one cue that warns before a spin, and it needs no unverified field.
+
 ## 7. Parts the game can't drive, and what replaces them
 
 From the benchmark and the category, these parts need data the packet does not send (fill rule, CLUSTER_PROMPT "The bar"):
@@ -150,7 +170,7 @@ From the benchmark and the category, these parts need data the packet does not s
 | Real part | Why it is dropped | Replacement ideas (the board shows each; the best is picked there) |
 |---|---|---|
 | **Tsuiso proximity and comparative angle** (Formula Drift UDSM, D1 chase scoring) [S1, S7] | No other car is in the packet. | (a) **Ghost lead:** the last slide's β trace replays as a faint ghost wedge, and the live wedge is scored against it, so the driver chases their own best. (b) A "match" ring that closes as the live angle meets the ghost's angle at the same time into the slide. |
-| **Course line, clipping and touch zones**, and the off-course tyre count [S1, S5, S7] | No track geometry; the puddle and rumble flags are not decoded (project memory, FH6 weather note). | (a) **Line ribbon:** the car's own path from `position`, drawn as a short top-down ribbon whose width is β, so a smooth slide draws a smooth ribbon. (b) Yaw-rate curvature (`yaw_curvature`) as the arc the car is carving. |
+| **Course line, clipping and touch zones**, and the off-course tyre count [S1, S5, S7] | No track geometry. The full decoder (§6.8) adds rumble-strip flags (a kerb, not off-course) and a driving-line value (the game's racing line, not a drift line). | (a) **Line ribbon:** the car's own path from `position`, drawn as a short top-down ribbon whose width is β, so a smooth slide draws a smooth ribbon. (b) Yaw-rate curvature (`yaw_curvature`) as the arc the car is carving. (c) A kerb tick from the rear rumble-strip flags, the nearest real cue to DOSS's LINE OFF. |
 | **Sector gates and the cumulative score** (DriftBox Sectors mode) [S9] | No sector gates without a track. | (a) **Chain:** consecutive slides linked without straightening (β never under 4° for more than 1 s) add into a chain total, shown beside the slide score. (b) A best-of-session score. |
 | **Formula Drift's "Decel Lights"** (brake lights for the chase car) [S8] | They are rear lights for the car behind. | The brake input warms the visor's lower lip, so a trail-braked entry shows on the visor. |
 | **"Steady engine sound"** (D1 judges) [S1] | No audio. | rpm steadiness in the slide (the RMS of rpm about its running mean) feeds the meniscus of the light pipe: a held throttle gives a calm meniscus, a bouncing limiter a ragged one. |
@@ -158,7 +178,7 @@ From the benchmark and the category, these parts need data the packet does not s
 ## 8. Departures from the brief, and why
 
 - **Tint by absorption, not alpha 56 to 64.** The category note and optics.md §11 rule out a flat alpha (§3).
-- **Combined slip replaced by an over-rotation warning** (§6.2, §6.7 F4): the field is not in the decoder, FH6's slip angle is normalised and unverified, and the rear-axle slip β_r turned out to restate the yaw rate.
+- **Combined slip moves from an amber edge to the visor's smoke** (§6.8): with the full decoder the field exists, but both rears are past 1.0 for the whole of any drift, so an on/off edge would carry no news; its excess over 1.0 sets the frost density instead. The early-warning job goes to the over-rotation warning (§6.7 F4), since the rear-axle slip β_r turned out to restate the yaw rate.
 - **Score added.** The brief names the dash "a drift scoring tool" but gives it no score; the benchmark's score and its two-decimal D1GP format are added (B4, B6).
 - **Run rule.** The score's run follows the DriftBox (5°, 25 km/h); the wedge keeps the brief's 8° / 4° hysteresis and its 5 m/s floor, so the score starts a little before the wedge shows.
 - **SPIN** added from the benchmark (B5).
@@ -192,6 +212,9 @@ Every input the dash reads, what it drives, and how it is held. "Verified" follo
 | Peak scribe and `PEAK` | max \|β\| of the run | moves outward only during the run | appears with the run end | tick held 2 s; `PEAK nn°` shown 1.5 s after the slide ends (brief) | yes |
 | Counter-steer tick | `steer` | steer / 127, no wheel angle claimed | `ribbon` | none | raw |
 | G comet | `g_lat`, `g_long` (the kit smooths them over 60 ms) | direction and length on the fan's pivot | `gBall` | none | yes |
+| Visor smoke (frost density) | `tire_combined_slip_rl/rr`, `tire_slip_ratio_rl/rr` | frost from 0 at slip 1.0 to the brief's 3.5% at 2.0 (§6.8) | 150 ms fade | none | raw (decoder 60c99c9) |
+| Kerb tick | `wheel_on_rumble_strip_rl/rr` | rear wheels on a kerb | 100 ms fade | none | raw |
+| Slide length | `distance_traveled` | metres within the run, shown with `PEAK` | with the run's end | 1.5 s | raw |
 | Over-rotation edge | β, β̇ | lit while \|β\| is over 55° and growing faster than 30°/s (§6.7 F4) | 150 ms fade | 100 ms minimum on-time | yes (from velocity) |
 | HB label | `handbrake` | lit above 0.1 | 100 ms fade | none | raw |
 | Visor light and facet swap | `g_lat` | light azimuth from lateral G | `light` | none | yes |
