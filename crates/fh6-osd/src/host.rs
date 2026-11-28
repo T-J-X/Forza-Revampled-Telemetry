@@ -253,7 +253,8 @@ impl OsdHost {
 
     /// The soft black pools under the OSD for this frame. The host passes them to
     /// `Kit::set_pools` before it renders, and an empty slice once the OSD is closed. `layout`
-    /// is the live cluster's ([`OsdHost::live_layout`]); `live_pool` is false while the host
+    /// is the live cluster's ([`OsdHost::live_layout`]); `cfg` is the config being edited (the
+    /// driving position's pool follows its seat height); `live_pool` is false while the host
     /// draws the real dash blocker under the cluster instead ([`draw::live_backing`]).
     #[must_use]
     pub fn pools(&self, layout: &Layout, frame: Frame, cfg: &AppConfig, live_pool: bool) -> draw::Pools {

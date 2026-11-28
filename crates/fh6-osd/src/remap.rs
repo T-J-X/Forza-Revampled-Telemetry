@@ -12,7 +12,7 @@ pub const TIMEOUT: Duration = Duration::from_secs(30);
 /// D-pad bits (menu navigation; never part of the toggle).
 pub const MASK_DPAD: u16 = 0x000F;
 /// D-pad left: cancels the capture.
-pub const DPAD_LEFT: u16 = 0x0004;
+pub const DPAD_LEFT: u16 = crate::nav::LEFT;
 /// LB.
 pub const LB: u16 = 0x0100;
 /// RB.
@@ -41,8 +41,10 @@ pub enum RemapOutcome {
     Pending,
     /// Bound: the sanitised mask to save.
     Committed(u16),
-    /// Timed out, or D-pad left cancelled it.
+    /// D-pad left cancelled it.
     Cancelled,
+    /// Nothing bindable was held for [`COMMIT_HOLD`] within [`TIMEOUT`] of the last change.
+    TimedOut,
 }
 
 /// A running capture.
@@ -104,7 +106,7 @@ impl RemapCapture {
             return RemapOutcome::Committed(sanitize_toggle_mask(mask));
         }
         if now.saturating_sub(self.started) >= TIMEOUT {
-            return RemapOutcome::Cancelled;
+            return RemapOutcome::TimedOut;
         }
         RemapOutcome::Pending
     }
@@ -164,13 +166,13 @@ mod tests {
     }
 
     #[test]
-    fn lone_bumper_is_refused_and_timeout_cancels() {
+    fn lone_bumper_is_refused_and_the_capture_times_out() {
         let mut cap = RemapCapture::start(MS(0));
         cap.update(RB, MS(0));
         assert_eq!(cap.update(RB, MS(5000)), RemapOutcome::Pending);
         assert_eq!(cap.message, Some("Pair LB or RB with another button"));
         assert_eq!(cap.update(RB, MS(29_900)), RemapOutcome::Pending);
-        assert_eq!(cap.update(RB, MS(30_000)), RemapOutcome::Cancelled);
+        assert_eq!(cap.update(RB, MS(30_000)), RemapOutcome::TimedOut);
         let mut cap = RemapCapture::start(MS(0));
         cap.update(RB | 0x0020, MS(0));
         assert_eq!(cap.update(RB | 0x0020, MS(1000)), RemapOutcome::Committed(0x0220));

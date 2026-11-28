@@ -168,15 +168,16 @@ pub struct RowGeom {
     pub gap: f32,
 }
 
-/// A row's height; a focused row with a help line grows so the 26 px help clears the focus rim.
+/// A row's height; a focused row with a help line grows so the 26 px help, descenders
+/// included, stays 36 px inside the focus rim (under the level face, off the rounded edge).
 fn row_height(kind: RowKind, help_shown: bool) -> f32 {
     match (kind, help_shown) {
         (RowKind::Slider(_), false) => 164.0,
-        (RowKind::Slider(_), true) => 208.0,
+        (RowKind::Slider(_), true) => 220.0,
         (RowKind::Carousel, _) => 320.0,
         (RowKind::Info, false) => 124.0,
         (_, false) => 116.0,
-        (_, true) => 148.0,
+        (_, true) => 164.0,
     }
 }
 
@@ -193,11 +194,11 @@ struct RowPlace {
 fn row_place(kind: RowKind, help_shown: bool) -> RowPlace {
     let (label, track, help) = match (kind, help_shown) {
         (RowKind::Slider(_), false) => (51.0, 109.0, 0.0),
-        (RowKind::Slider(_), true) => (52.0, 110.0, 156.0),
+        (RowKind::Slider(_), true) => (58.0, 116.0, 162.0),
         (RowKind::Carousel, _) => (50.0, 200.0, 0.0),
         (RowKind::Info, false) => (62.0, 0.0, 0.0),
         (_, false) => (58.0, 0.0, 0.0),
-        (_, true) => (49.0, 0.0, 99.0),
+        (_, true) => (57.0, 0.0, 107.0),
     };
     RowPlace { label, track, help }
 }
@@ -228,6 +229,35 @@ pub fn geometry(rows: &RowList, fit: &dyn CockpitFit, edit: &EditState, focus: u
         y += h + gap;
     }
     (out, y)
+}
+
+/// Where the rows scroll to with row `fi` focused: the focused row near the middle, moved to
+/// the nearest place where a whole row (with its section heading) starts at the top of the
+/// viewport, so the list never opens on a row whose heading has scrolled away, and the end
+/// padded by [`EDGE_FADE`] so the last row is never faded while it is all in view.
+fn scroll_target(geo: &[RowGeom], fi: usize, total: f32) -> f32 {
+    let visible = ROWS_Y1 - ROWS_Y0;
+    let max_scroll = (total - visible + EDGE_FADE).max(0.0);
+    let Some(g) = geo.get(fi) else { return 0.0 };
+    let ideal = (g.top + g.h * 0.5 - visible * 0.5).clamp(0.0, max_scroll);
+    // The focused row, with its clear space, stays clear of both fades.
+    let lo = g.top + g.h + g.gap + EDGE_FADE - visible;
+    let hi = g.top - g.gap - if g.section { SECTION_GAP } else { 0.0 } - EDGE_FADE;
+    let fits = |s: f32| s >= lo - 0.5 && s <= hi + 0.5;
+    let mut best = ideal;
+    let mut best_d = f32::INFINITY;
+    let starts = geo
+        .iter()
+        .map(|r| r.top - r.gap - if r.section { SECTION_GAP } else { 0.0 } - EDGE_FADE);
+    for s in starts.chain([max_scroll]) {
+        let s = s.clamp(0.0, max_scroll);
+        let d = (s - ideal).abs();
+        if fits(s) && d < best_d {
+            best = s;
+            best_d = d;
+        }
+    }
+    best
 }
 
 /// Tab label centres and widths, and the cap they are set at.
@@ -266,9 +296,7 @@ pub fn targets(ctl: &OsdController, cfg: &AppConfig, fit: &dyn CockpitFit, fonts
     let fi = ctl.focus_index().min(rows.len().saturating_sub(1));
     let (geo, total) = geometry(&rows, fit, &ctl.edit, fi);
     let g = geo[fi];
-    let visible = ROWS_Y1 - ROWS_Y0;
-    let max_scroll = (total - visible + 24.0).max(0.0);
-    let scroll = (g.top + g.h * 0.5 - visible * 0.5).clamp(0.0, max_scroll);
+    let scroll = scroll_target(&geo[..rows.len()], fi, total);
     let (centres, widths, _) = tab_slots(fonts);
     let ti = ctl.tab().index();
     let half = widths[ti] * 0.5 + TAB_FILL_PAD;
@@ -334,10 +362,15 @@ impl Ink {
             .paint(self.muted())
             .align(Align::Left, VAlign::CapMiddle)
     }
+    /// The small label over the focus echo: the heading's size in label ink, because it sits
+    /// over the game's brightest part (the sky) rather than the column's dark pool.
+    fn echo_label(&self) -> TextStyle {
+        self.section().paint(self.label())
+    }
 }
 
 /// The quiet ink's share of full ink, and the label ink's.
-const QUIET_INK: f32 = 0.17;
+const QUIET_INK: f32 = 0.21;
 const LABEL_INK: f32 = 0.86;
 /// A dark mark on a lit accent (a switch's knob, the focused key's letter, a thumb's ring).
 fn on_accent() -> Color {
@@ -532,12 +565,12 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     match inp.ctl.mode() {
         Mode::Browse => focus_echo(p, inp, ink, cx),
         Mode::Keyboard => {
-            p.text(vec2(cx, 740.0), "Custom name", &centered(ink.section()));
+            p.text(vec2(cx, 740.0), "Custom name", &centered(ink.echo_label()));
             let name = inp.ctl.keyboard().text.as_str();
             echo_value(p, ink, vec2(cx, 860.0), name, "", ink.ink());
         }
         Mode::Remap => {
-            p.text(vec2(cx, 740.0), "New OSD button", &centered(ink.section()));
+            p.text(vec2(cx, 740.0), "New OSD button", &centered(ink.echo_label()));
             let mut l = Line::new();
             let cand = inp.ctl.remap().candidate();
             if cand == 0 {
@@ -570,7 +603,7 @@ fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
     p.text(
         vec2(cx, 740.0 - up),
         model::label(row, inp.fit),
-        &centered(ink.section()),
+        &centered(ink.echo_label()),
     );
     let mut value = Line::new();
     model::format_value(row, ctx, &mut value);
@@ -607,8 +640,9 @@ fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
 }
 
 /// The echo's value, its cap middle at `centre`: digits at 110 px, a unit made of letters
-/// ("mm", "px") at half size in secondary ink beside them (as a cluster sets "MPH"), and a name
-/// wider than [`ECHO_NAME_W`] at 84 px, so a long word never outweighs the live cluster.
+/// ("mm", "px") at half size in secondary ink beside them (as a cluster sets "MPH"), and
+/// anything wider than [`ECHO_NAME_W`] (a name, a button combination) at 84 px, so a long string
+/// never outweighs the live cluster.
 fn echo_value(p: &mut Painter<'_>, ink: &Ink, centre: Vec2, text: &str, unit: &str, paint: Color) {
     let unit = unit.trim_start();
     let (number, unit) = match text.strip_suffix(unit) {
@@ -619,7 +653,7 @@ fn echo_value(p: &mut Painter<'_>, ink: &Ink, centre: Vec2, text: &str, unit: &s
     let mut style = ink.style(ink.display, ECHO_CAP, paint, Align::Left);
     style.valign = VAlign::Baseline;
     let mut w = p.measure(number, &style).width;
-    if !number.chars().any(|c| c.is_ascii_digit()) && w > ECHO_NAME_W {
+    if w > ECHO_NAME_W {
         style.cap = ECHO_NAME_CAP;
         w = p.measure(number, &style).width;
     }
@@ -974,6 +1008,27 @@ fn edge_fade(top: f32, bottom: f32) -> f32 {
     from_top * from_bottom
 }
 
+/// How far a row's text sits inside its own top and bottom (4K units): the label's cap top and
+/// the help line's or the knob's lowest point all lie at least this far in.
+const ROW_INSET: f32 = 30.0;
+
+/// How much of a band of text (`lo` to `hi`, screen y) may show against the focus platter: all
+/// of it when it sits inside the platter at least 20 px from both rims, or outside it at least
+/// 44 px from the nearer rim (the reach of the rim's mirrored ghost), and none while a rim
+/// crosses it. Between those it fades, so the hide is continuous as the platter moves.
+fn rim_clear(lo: f32, hi: f32, platter: Rect) -> f32 {
+    let (top, bottom) = (platter.min.y, platter.max.y);
+    if lo >= top && hi <= bottom {
+        fh6_kit::math::smoothstep(4.0, 20.0, (lo - top).min(bottom - hi))
+    } else if hi <= top {
+        fh6_kit::math::smoothstep(8.0, 44.0, top - hi)
+    } else if lo >= bottom {
+        fh6_kit::math::smoothstep(8.0, 44.0, lo - bottom)
+    } else {
+        0.0
+    }
+}
+
 /// How far from the viewport's edges a row fades out (4K units).
 const EDGE_FADE: f32 = 40.0;
 /// The scroll bar: its x (64 px clear of the glass) and its share of secondary ink.
@@ -992,13 +1047,15 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let visible = ROWS_Y1 - ROWS_Y0;
 
     p.save();
+    // Wide enough for the scroll bar, 64 px right of the glass.
     p.clip(
-        Rect::from_points(vec2(PANEL.min.x, ROWS_Y0 - 12.0), vec2(PANEL.max.x, ROWS_Y1)),
+        Rect::from_points(vec2(PANEL.min.x, ROWS_Y0 - 12.0), vec2(SCROLL_X + 8.0, ROWS_Y1)),
         0.0,
     );
     p.set_opacity(inp.anim.tab_fade.progress());
 
-    inner_light(p, focus_rect(inp), PLATTER_R, ink, inp.anim.energy.value());
+    let platter = focus_rect(inp);
+    inner_light(p, platter, PLATTER_R, ink, inp.anim.energy.value());
 
     for (i, row) in list.as_slice().iter().enumerate() {
         let g = geo[i];
@@ -1006,18 +1063,21 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
         if top + g.h < ROWS_Y0 - SECTION_GAP - g.gap || top > ROWS_Y1 {
             continue;
         }
+        // While the platter travels, a row its rim passes over hides, so no text is ever seen
+        // squeezed in the rim; at rest every row clears it.
+        let k = edge_fade(top, top + g.h) * rim_clear(top + ROW_INSET, top + g.h - ROW_INSET, platter);
         if let Some(sec) = model::section(*row) {
-            // Above the clear space a focused row keeps, so it stays 64 px from the platter.
+            // Above the clear space a focused row keeps, so it stays 64 px from the platter. A
+            // heading shows only with its row, so a list never ends on a heading.
             let y = top - g.gap - 30.0;
-            let k = edge_fade(y - 18.0, y + 18.0);
-            if k > 0.01 {
+            let kh = edge_fade(y - 18.0, y + 18.0).min(k) * rim_clear(y - 16.0, y + 16.0, platter);
+            if kh > 0.01 {
                 p.save();
-                p.set_opacity(k);
+                p.set_opacity(kh);
                 p.text(vec2(TX, y), sec, &ink.section());
                 p.restore();
             }
         }
-        let k = edge_fade(top, top + g.h);
         if k > 0.01 {
             p.save();
             p.set_opacity(k);
@@ -1029,7 +1089,7 @@ fn rows(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     // The scroll bar, only when the list scrolls: quiet at rest, so it still says there is more,
     // and full for a moment after the list moves.
     let shown = SCROLL_REST + (1.0 - SCROLL_REST) * inp.anim.scrollbar.value().clamp(0.0, 1.0);
-    if total > visible && shown > 0.01 {
+    if total > visible {
         p.fill(
             &Shape::line(vec2(SCROLL_X, ROWS_Y0), vec2(SCROLL_X, ROWS_Y1), 3.0),
             ink.quiet().fade(shown),
@@ -1252,17 +1312,9 @@ fn carousel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cy: f32, counte
             t.cluster.draw(p, &layout);
             p.restore();
         }
-        if i == 2 && focused {
-            // Selection inside the focused row: a plain white rim (the platter is the focus).
-            p.stroke(
-                &Shape::round_rect(rect, 18.0),
-                ink.ink().with_alpha(0.78),
-                Stroke::inner(2.0),
-            );
-        } else {
-            // Unfocused, the selected thumbnail's size alone marks it: no second ring.
-            p.stroke(&Shape::round_rect(rect, 18.0), ink.hair(), Stroke::rim_px(1.0));
-        }
+        // The selected thumbnail's size marks it, focused or not: the platter is the focus, so
+        // no second ring.
+        p.stroke(&Shape::round_rect(rect, 18.0), ink.hair(), Stroke::rim_px(1.0));
     }
     let theme = model::theme_for_view(inp.cfg, inp.ctl.edit.view);
     let all = ClusterTheme::all();
@@ -1381,7 +1433,17 @@ fn remap_card(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     let prog = cap.progress(inp.now);
     // Aligned with the instructions above it, across the column.
     let bar = Rect::from_xywh(TX, ROWS_Y0 + 260.0, VX - TX, 14.0);
-    p.text(vec2(bar.min.x, bar.min.y - 30.0), "Hold", &ink.section());
+    // What is being held, beside the bar that times it (the echo shows it large).
+    let cand = cap.candidate();
+    if cand == 0 {
+        p.text(vec2(bar.min.x, bar.min.y - 30.0), "Hold", &ink.section());
+    } else {
+        let mut held = Line::new();
+        let _ = held.write_str("Holding ");
+        remap::mask_label(cand, &mut held);
+        let style = ink.style(ink.text, HELP_CAP, ink.ink(), Align::Left);
+        p.text(vec2(bar.min.x, bar.min.y - 32.0), held.as_str(), &style);
+    }
     p.fill(&Shape::round_rect(bar, 7.0), ink.quiet());
     if prog > 0.0 {
         // A plain fill: the hold reads by its length, with no bloom past the bar.
@@ -1538,6 +1600,60 @@ mod tests {
             (Frame::new((5120, 1440)).ox - 3840.0).abs() < 1.0,
             "32:9 shifts the panel right"
         );
+    }
+
+    #[test]
+    fn every_scroll_shows_the_focused_row_its_heading_and_the_last_row_unfaded() {
+        let cfg = AppConfig::default();
+        let ctl = OsdController::new();
+        let fit = crate::fit::ConfigOnlyFit;
+        let rows = model::rows(Tab::Fit, ctl.ctx(&cfg, &fit));
+        let n = rows.len();
+        let visible = ROWS_Y1 - ROWS_Y0;
+        for fi in 0..n {
+            let (geo, total) = geometry(&rows, &fit, &ctl.edit, fi);
+            let s = scroll_target(&geo[..n], fi, total);
+            let g = geo[fi];
+            let top = ROWS_Y0 + g.top - s;
+            assert!(
+                (edge_fade(top, top + g.h) - 1.0).abs() < 1e-3,
+                "row {fi} in full view at scroll {s}"
+            );
+            if g.section {
+                let y = top - g.gap - 30.0;
+                assert!(edge_fade(y - 18.0, y + 18.0) > 0.99, "row {fi}'s heading shows");
+            }
+            if fi + 1 == n {
+                let last = geo[n - 1];
+                let top = ROWS_Y0 + last.top - s;
+                assert!(
+                    edge_fade(top, top + last.h) > 0.99,
+                    "the last row is not faded at the end"
+                );
+                assert!(s <= total - visible + EDGE_FADE + 0.5);
+            }
+        }
+    }
+
+    #[test]
+    fn text_hides_only_while_a_platter_rim_crosses_it() {
+        let platter = Rect::from_points(vec2(0.0, 500.0), vec2(100.0, 664.0));
+        // The focused row's text, 30 px inside, and the neighbours' past the clear space.
+        assert!((rim_clear(530.0, 634.0, platter) - 1.0).abs() < 1e-6);
+        assert!((rim_clear(746.0, 850.0, platter) - 1.0).abs() < 1e-6);
+        assert!((rim_clear(300.0, 418.0, platter) - 1.0).abs() < 1e-6);
+        // Crossed by a rim, or just outside it where the rim's ghost reaches: hidden.
+        assert!(rim_clear(450.0, 560.0, platter) < 1e-6);
+        assert!(rim_clear(600.0, 700.0, platter) < 1e-6);
+        assert!(rim_clear(668.0, 760.0, platter) < 0.05);
+        // Continuous through the crossing.
+        let mut last = rim_clear(700.0, 800.0, platter);
+        for step in 1..=200 {
+            let lo = 700.0 - step as f32;
+            let k = rim_clear(lo, lo + 100.0, platter);
+            assert!((k - last).abs() < 0.2, "no jump at lo = {lo}: {last} to {k}");
+            last = k;
+        }
     }
 
     #[test]

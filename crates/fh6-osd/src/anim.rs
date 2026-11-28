@@ -47,6 +47,8 @@ pub struct OsdAnim {
     /// Seconds since the OSD opened (the text cursor's blink).
     pub t: f32,
     primed: bool,
+    /// Set by [`OsdAnim::tab_changed`]: the next update puts the platter and the scroll on target.
+    snap_focus: bool,
     lead: SpringSpec,
     trail: SpringSpec,
 }
@@ -120,6 +122,7 @@ impl OsdAnim {
             scrolled: 0.0,
             t: 0.0,
             primed: false,
+            snap_focus: false,
             lead: s.fast,
             trail: s.expressive,
         }
@@ -138,9 +141,14 @@ impl OsdAnim {
         self.primed = false;
     }
 
-    /// The tab changed: crossfade the rows.
+    /// The tab changed: crossfade the rows, and put the focus platter and the scroll straight
+    /// on the new tab's row on the next update, so the light never travels over a row of the
+    /// new tab that does not have focus. The tab's own fill still slides, and the scroll bar
+    /// shows for a moment, as on open.
     pub fn tab_changed(&mut self) {
         self.tab_fade.restart();
+        self.snap_focus = true;
+        self.scrolled = SCROLLBAR_HOLD;
     }
 
     /// A value changed: the focused piece lights up and stays lit while changes keep coming.
@@ -162,6 +170,12 @@ impl OsdAnim {
             self.scroll.reset(to.scroll);
             self.echo_lift.reset(to.echo_lift);
             self.primed = true;
+        }
+        if self.snap_focus {
+            self.focus_top.reset(to.focus_top);
+            self.focus_bot.reset(to.focus_bot);
+            self.scroll.reset(to.scroll);
+            self.snap_focus = false;
         }
         let pace = Pace {
             lead: self.lead,
@@ -314,5 +328,24 @@ mod tests {
             a.update(&to, 1.0 / 60.0);
         }
         assert!(a.scrollbar.value() > 0.5, "up while scrolling: {}", a.scrollbar.value());
+    }
+
+    #[test]
+    fn a_tab_change_puts_the_platter_on_the_new_row_at_once() {
+        let mut a = OsdAnim::new(&Tokens::default());
+        let mut to = targets(0.0);
+        a.settle(&to);
+        to.focus_top = 600.0;
+        to.focus_bot = 716.0;
+        to.scroll = 200.0;
+        a.tab_changed();
+        a.update(&to, 1.0 / 60.0);
+        assert!((a.focus_top.value() - 600.0).abs() < 1e-3 && (a.focus_bot.value() - 716.0).abs() < 1e-3);
+        assert!((a.scroll.value() - 200.0).abs() < 1e-3);
+        // A move within the tab still travels.
+        to.focus_top = 900.0;
+        to.focus_bot = 1016.0;
+        a.update(&to, 1.0 / 60.0);
+        assert!(a.focus_top.value() < 899.0, "travels: {}", a.focus_top.value());
     }
 }
