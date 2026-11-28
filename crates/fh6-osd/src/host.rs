@@ -10,6 +10,7 @@
 //!    then [`OsdHost::draw`].
 use crate::anim::OsdAnim;
 use crate::draw::{self, DrawInput, Frame, LiveStatus, Thumb};
+use crate::drive::{self, DriveImages};
 use crate::fit::CockpitFit;
 use crate::model::{self, Tab};
 use crate::nav::{Mode, NavInput, NavOutput, OsdController};
@@ -34,7 +35,10 @@ pub struct OsdHost {
     /// The studio the OSD's glass mirrors (the Liquid Glass cluster's, so both look like one
     /// material); `None` falls back to the kit's analytic studio.
     env: Option<ImageId>,
-    env_tried: bool,
+    /// The driving position's rendered layers; `None` draws its line drawing.
+    drive: Option<DriveImages>,
+    /// The studio and the driving position are loaded on the first `prepare`.
+    loaded: bool,
 }
 
 impl std::fmt::Debug for OsdHost {
@@ -59,7 +63,8 @@ impl OsdHost {
             order: [None; 5],
             last_tab: Tab::Cluster,
             env: None,
-            env_tried: false,
+            drive: None,
+            loaded: false,
         }
     }
 
@@ -151,10 +156,11 @@ impl OsdHost {
         assets: Option<&Path>,
         cfg: &AppConfig,
     ) {
-        if !self.env_tried {
-            self.env_tried = true;
+        if !self.loaded {
+            self.loaded = true;
             let mut setup = kit.setup(device, queue, assets);
             self.env = draw::load_environment(&mut setup);
+            self.drive = drive::load(&mut setup);
         }
         if !self.carousel_visible() {
             return;
@@ -250,6 +256,7 @@ impl OsdHost {
                 status,
                 thumbs: &thumbs,
                 env: self.env,
+                drive: self.drive,
             },
         );
     }

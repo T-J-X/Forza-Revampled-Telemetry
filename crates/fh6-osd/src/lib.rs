@@ -8,13 +8,15 @@
 //!
 //! - [`model`]: tabs, rows and how each one edits `AppConfig`.
 //! - [`nav`]: the input state machine (browse, keyboard, remap) with hold-to-repeat.
-//! - [`draw`] and [`host`]: kit drawing and the render-loop glue.
+//! - [`draw`] and [`host`]: kit drawing and the render-loop glue; [`drive`]: the rendered
+//!   driving position beside the camera rows.
 //! - [`pause`]: auto-pause (ESC on open mid-race) behind a [`pause::KeyboardInjector`].
 //! - [`saver`]: debounced background saves.
 //! - [`fit`]: the seam to the cockpit-fit backend (camera files, scrim rows).
 
 pub mod anim;
 pub mod draw;
+pub mod drive;
 pub mod dyno;
 pub mod fit;
 pub mod host;

@@ -93,7 +93,7 @@ const STATES: &[OsdState] = &[
     },
     OsdState {
         name: "06_fit_fov",
-        caption: "Fit & camera · cockpit FOV with the camera schematic",
+        caption: "Fit & camera · cockpit FOV: the echo lifts over the rendered driving position",
         setup: |h, c| {
             focus(h, c, Tab::Fit, RowId::FovCockpit);
             Duration::ZERO
@@ -144,6 +144,24 @@ const STATES: &[OsdState] = &[
             press(h, c, 0, VIEW | 0x0040, VIEW | 0x0040);
             press(h, c, 600, VIEW | 0x0040, 0);
             Duration::from_millis(600)
+        },
+    },
+    OsdState {
+        name: "12_fit_seat_height",
+        caption: "Fit & camera · seat height raised 20 mm: the seat lit from its rim, the eye off its default ring",
+        setup: |h, c| {
+            c.driver_seat_height_m = 0.020;
+            focus(h, c, Tab::Fit, RowId::SeatHeight);
+            Duration::ZERO
+        },
+    },
+    OsdState {
+        name: "13_fit_wheel_offset",
+        caption: "Fit & camera · wheel offset lowered to -70 mm: the wheel lit from its rim",
+        setup: |h, c| {
+            c.steering_wheel_offset_y_m = -0.070;
+            focus(h, c, Tab::Fit, RowId::WheelOffset);
+            Duration::ZERO
         },
     },
 ];

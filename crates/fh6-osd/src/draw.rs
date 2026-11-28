@@ -1,8 +1,10 @@
-//! Draws the OSD with the render kit: the dimmed backdrop, the live-zone header, focus echo
-//! and fit schematic, and the Liquid Glass control panel (tabs, rows, carousel thumbnails,
-//! keyboard and remap cards, hint bar). Authored in 4K units (3840×2160, scaled by
-//! `height / 2160`); the panel stays right-aligned on wider screens. Allocation-free.
+//! Draws the OSD with the render kit: the dimmed backdrop, the live-zone header, the focus echo
+//! (lifted over the rendered driving position on the camera rows, see [`crate::drive`]), and
+//! the Liquid Glass control panel (tabs, rows, carousel thumbnails, keyboard and remap cards,
+//! hint bar). Authored in 4K units (3840×2160, scaled by `height / 2160`); the panel stays
+//! right-aligned on wider screens. Allocation-free.
 use crate::anim::{AnimTargets, OsdAnim};
+use crate::drive::{self, DriveImages};
 use crate::fit::CockpitFit;
 use crate::keyboard::{self, Key};
 use crate::model::{self, EditState, Line, RowId, RowKind, RowList, Tab, MAX_ROWS};
@@ -12,9 +14,9 @@ use fh6_core::{AppConfig, ClusterTheme, ScrimFit};
 use fh6_kit::optics::absorption_coefficient;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    deg, vec2, Affine, Align, Cluster, Color, Environment, FontId, FontRole, Fonts, Glow, Gradient, ImageId,
-    LayerOptions, Layout, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Setup, Shadow, Shape, Stroke,
-    TextStyle, VAlign, Vec2, View,
+    vec2, Affine, Align, Cluster, Color, Environment, FontId, FontRole, Fonts, Glow, Gradient, ImageId, LayerOptions,
+    Layout, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Setup, Shadow, Shape, Stroke, TextStyle, VAlign,
+    Vec2, View,
 };
 use std::fmt::Write as _;
 use std::time::Duration;
@@ -50,6 +52,17 @@ const TAB_MIN_CAP: f32 = 26.0;
 const HINT_CAP: f32 = 26.0;
 /// Black pool behind the focus echo.
 const ECHO_SCRIM: f32 = 0.45;
+/// How far the focus echo rises on the camera rows (4K units), clearing the way for the
+/// driving position under it.
+const ECHO_LIFT: f32 = 300.0;
+/// The driving position's top edge (4K units); it is centred on the live zone.
+const DRIVE_TOP: f32 = 850.0;
+/// The black pool under the driving position (radii, 4K units): the renders are black
+/// upholstery and carbon, and read as a product shot on black.
+const DRIVE_POOL: Vec2 = vec2(620.0, 390.0);
+/// The seat height the game's camera files ship with (mm, `AppConfig::default`), where the
+/// default eye's ring sits.
+const DEFAULT_SEAT_MM: f32 = -45.0;
 /// Black pool behind the live cluster.
 const LIVE_SCRIM: f32 = 0.35;
 /// Cluster envelope width the thumbnails are fitted to (tokens cockpit envelope).
@@ -124,6 +137,9 @@ pub struct DrawInput<'a> {
     pub thumbs: &'a [Option<Thumb<'a>>; 5],
     /// The studio environment the glass mirrors (see [`load_environment`]).
     pub env: Option<ImageId>,
+    /// The driving position's rendered layers (see [`drive::load`]); `None` draws its line
+    /// drawing.
+    pub drive: Option<DriveImages>,
 }
 
 /// A row's place in the scrolling content (relative to its top).
@@ -210,6 +226,7 @@ pub fn targets(ctl: &OsdController, cfg: &AppConfig, fit: &dyn CockpitFit, fonts
     let ti = ctl.tab().index();
     let half = widths[ti] * 0.5 + TAB_FILL_PAD;
     let key = key_rect(ctl);
+    let camera = ctl.mode() == Mode::Browse && rows.get(fi).is_some_and(model::is_camera_row);
     AnimTargets {
         glide: frame.live_centre_x(),
         focus_top: g.top,
@@ -218,6 +235,7 @@ pub fn targets(ctl: &OsdController, cfg: &AppConfig, fit: &dyn CockpitFit, fonts
         tab_right: centres[ti] + half,
         key: [key.min.x, key.min.y, key.max.x, key.max.y],
         scroll,
+        echo_lift: if camera { 1.0 } else { 0.0 },
         calm: model::reduced_flash(cfg),
     }
 }
@@ -369,8 +387,15 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     );
 
     let cx = inp.frame.live_centre_x();
-    // A feathered black pool behind the echo, so 110 px type holds over a bright sky.
-    feathered_ellipse(p, vec2(cx, 880.0), vec2(700.0, 330.0), ECHO_SCRIM);
+    let lift = inp.anim.echo_lift.value();
+    // A feathered black pool behind the echo, so 110 px type holds over a bright sky. It rises
+    // with the echo, and a second one comes up under the driving position.
+    feathered_ellipse(p, vec2(cx, 880.0 - ECHO_LIFT * lift), vec2(700.0, 330.0), ECHO_SCRIM);
+    let shown = lift.clamp(0.0, 1.0);
+    if shown > 0.001 {
+        let centre = vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5);
+        feathered_ellipse(p, centre, DRIVE_POOL, ECHO_SCRIM * shown);
+    }
     match inp.ctl.mode() {
         Mode::Browse => focus_echo(p, inp, ink, cx),
         Mode::Keyboard => {
@@ -428,21 +453,31 @@ fn sentence_case(text: &str, out: &mut Line) {
 }
 
 fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
-    let Some(row) = inp.ctl.focused_row(inp.cfg, inp.fit) else {
+    let row = inp.ctl.focused_row(inp.cfg, inp.fit);
+    // The echo rises on the camera rows and the driving position fades in under it; both ride
+    // the same spring, so the view also fades out after the focus leaves those rows.
+    let lift = inp.anim.echo_lift.value();
+    driving_position(p, inp, ink, row, cx, lift.clamp(0.0, 1.0));
+    let Some(row) = row else {
         return;
     };
+    let up = ECHO_LIFT * lift;
     let ctx = inp.ctl.ctx(inp.cfg, inp.fit);
-    p.text(vec2(cx, 740.0), model::label(row, inp.fit), &centered(ink.section()));
+    p.text(
+        vec2(cx, 740.0 - up),
+        model::label(row, inp.fit),
+        &centered(ink.section()),
+    );
     let mut value = Line::new();
     model::format_value(row, ctx, &mut value);
     p.text(
-        vec2(cx, 860.0),
+        vec2(cx, 860.0 - up),
         value.as_str(),
         &ink.style(ink.display, 110.0, ink.ink(), Align::Center),
     );
     if let RowKind::Slider(spec) = model::kind(row, inp.fit) {
         let f = spec.fraction(model::slider_value(row, ctx));
-        let track = Rect::from_xywh(cx - 360.0, 966.0, 720.0, 8.0);
+        let track = Rect::from_xywh(cx - 360.0, 966.0 - up, 720.0, 8.0);
         p.fill(&Shape::round_rect(track, 4.0), ink.ghost());
         p.fill(
             &Shape::round_rect(Rect::from_xywh(track.min.x, track.min.y, 720.0 * f, 8.0), 4.0),
@@ -451,78 +486,47 @@ fn focus_echo(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, cx: f32) {
     }
     if let Some(help) = model::help(row, &inp.ctl.edit) {
         p.text(
-            vec2(cx, 1030.0),
+            vec2(cx, 1030.0 - up),
             help,
             &ink.style(ink.text, HINT_CAP, ink.muted(), Align::Center),
         );
-    }
-    if model::is_camera_row(row) {
-        camera_schematic(p, inp, ink, row, cx);
     }
     if row == RowId::ClusterHeight {
         default_height_line(p, inp, ink);
     }
 }
 
-/// A side view of the driving position: eye point (seat height), FOV wedge, wheel.
-fn camera_schematic(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: RowId, cx: f32) {
+/// The driving position under the lifted echo (see [`crate::drive`]) at opacity `shown`: the
+/// seat and the eye at the seat height, the wheel at its offset, and the cockpit FOV's fan. The
+/// part the focused row moves is the one in the accent; on the hood and chase FOV rows nothing
+/// in the view is theirs, so it stays in secondary ink as context.
+fn driving_position(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink, row: Option<RowId>, cx: f32, shown: f32) {
+    if shown <= 0.001 {
+        return;
+    }
     let cfg = inp.cfg;
-    let fov = match row {
-        RowId::FovHood => cfg.bonnet_fov,
-        RowId::FovChase => cfg.chase_near_fov,
-        _ => cfg.wheel_less_cockpit_fov,
+    let focus = match row {
+        Some(RowId::FovCockpit) => drive::Focus::Fov,
+        Some(RowId::SeatHeight) => drive::Focus::Seat,
+        Some(RowId::WheelOffset) => drive::Focus::Wheel,
+        _ => drive::Focus::None,
     };
-    // Everything stays inside this box, between the focus echo and the cluster.
-    let bx = Rect::from_xywh(cx - 420.0, 1080.0, 840.0, 280.0);
-    p.save();
-    p.clip(bx, 24.0);
-    p.fill(&Shape::round_rect(bx, 24.0), Color::BLACK.with_alpha(0.35));
-    let origin = vec2(bx.min.x + 90.0, bx.min.y + 130.0);
-    // 1.6 units per mm of seat travel: the whole −100..+50 mm range fits the box.
-    let seat_y = |mm: f32| origin.y - mm * 1.6;
-    let ground = bx.max.y - 26.0;
-    p.fill(
-        &Shape::line(vec2(bx.min.x + 24.0, ground), vec2(bx.max.x - 24.0, ground), 2.0),
-        ink.hair(),
-    );
-    let eye = vec2(origin.x, seat_y(cfg.driver_seat_height_m * 1000.0));
-    let half = deg(fov.clamp(20.0, 140.0) * 0.5);
-    let reach = 1400.0;
-    let wedge = [
-        eye,
-        eye + vec2(half.cos(), -half.sin()) * reach,
-        eye + vec2(half.cos(), half.sin()) * reach,
-    ];
-    p.fill(&Shape::Polygon { points: &wedge }, ink.acc.with_alpha(0.12));
-    p.fill(&Shape::line(wedge[0], wedge[1], 2.0), ink.acc.with_alpha(0.6));
-    p.fill(&Shape::line(wedge[0], wedge[2], 2.0), ink.acc.with_alpha(0.6));
-    // Default eye height (ghost ring) and the wheel rim.
-    p.stroke(
-        &Shape::circle(vec2(origin.x, seat_y(-45.0)), 12.0),
-        ink.muted(),
-        Stroke::new(2.0),
-    );
-    let wheel = vec2(
-        origin.x + 300.0,
-        origin.y + 40.0 - cfg.steering_wheel_offset_y_m * 1000.0 * 1.6,
-    );
-    p.fill(&Shape::ring(wheel, 56.0, 9.0), ink.muted());
-    p.fill(&Shape::circle(eye, 14.0), ink.acc);
-    p.glow(&Shape::circle(eye, 14.0), ink.acc, Glow::new(16.0, 0.5));
-    p.restore();
-    let mut line = Line::new();
-    let _ = write!(
-        line,
-        "Eye {:+.0} mm  ·  FOV {:.0}°  ·  Wheel {:+.0} mm",
-        cfg.driver_seat_height_m * 1000.0,
-        fov,
-        cfg.steering_wheel_offset_y_m * 1000.0
-    );
-    p.text(
-        vec2(cx, bx.max.y + 40.0),
-        line.as_str(),
-        &ink.style(ink.text, 24.0, ink.muted(), Align::Center),
-    );
+    let state = drive::DriveState {
+        seat_mm: cfg.driver_seat_height_m * 1000.0,
+        wheel_mm: cfg.steering_wheel_offset_y_m * 1000.0,
+        default_seat_mm: DEFAULT_SEAT_MM,
+        fov_deg: cfg.wheel_less_cockpit_fov,
+        focus,
+        energy: inp.anim.energy.value(),
+    };
+    let look = drive::Look {
+        accent: ink.acc,
+        muted: ink.muted(),
+        ghost: ink.ghost(),
+        text: ink.text,
+    };
+    let origin = vec2(cx - drive::VIEW.x * 0.5, DRIVE_TOP);
+    drive::draw(p, origin, inp.drive, &state, &look, shown);
 }
 
 /// A dashed line where the cluster sits at height offset 0, across the live zone.
@@ -1264,5 +1268,41 @@ mod tests {
             (Frame::new((5120, 1440)).ox - 3840.0).abs() < 1.0,
             "32:9 shifts the panel right"
         );
+    }
+
+    #[test]
+    fn the_echo_lifts_over_the_driving_position_on_the_camera_rows_only() {
+        let cfg = AppConfig::default();
+        assert!(
+            (DEFAULT_SEAT_MM - cfg.driver_seat_height_m * 1000.0).abs() < 1e-3,
+            "the default eye's ring follows AppConfig"
+        );
+        let fit = crate::fit::ConfigOnlyFit;
+        let fonts = Fonts::new().expect("embedded font loads");
+        let frame = Frame::new((3840, 2160));
+        let mut ctl = OsdController::new();
+        ctl.open(&cfg, View::Cockpit);
+        for (row, lifted) in [
+            (RowId::FovCockpit, true),
+            (RowId::FovHood, true),
+            (RowId::FovChase, true),
+            (RowId::SeatHeight, true),
+            (RowId::WheelOffset, true),
+            (RowId::ClusterHeight, false),
+        ] {
+            assert!(ctl.focus_row(Tab::Fit, row, &cfg, &fit), "{row:?} is on the Fit tab");
+            let lift = targets(&ctl, &cfg, &fit, &fonts, frame).echo_lift;
+            assert_eq!(lift, if lifted { 1.0 } else { 0.0 }, "{row:?}");
+        }
+        // The lifted echo's help line (cap middle, plus half a cap and a descender) stays clear
+        // of the view, and the view clears the live cluster's envelope at the default anchor.
+        let help_bottom = 1030.0 - ECHO_LIFT + HINT_CAP;
+        assert!(
+            help_bottom < DRIVE_TOP - 80.0,
+            "drive.rs keeps the fan's tip within 80 px of the top"
+        );
+        // The seat at its lowest (-100 mm) drops about 0.55 px per mm below the view.
+        let view_bottom = DRIVE_TOP + drive::VIEW.y + 100.0 * 0.55;
+        assert!(view_bottom < cfg.cockpit_anchor_y as f32 - 320.0);
     }
 }

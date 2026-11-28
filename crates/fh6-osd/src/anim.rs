@@ -1,6 +1,7 @@
 //! OSD motion: the open ramp, the live cluster's glide into the live zone, the glass pieces'
-//! liquid moves (each edge on its own spring), row scrolling, the tab crossfade and the focused
-//! piece's inner light while a value changes (tokens springs and durations).
+//! liquid moves (each edge on its own spring), row scrolling, the tab crossfade, the focus
+//! echo's lift over the driving position and the focused piece's inner light while a value
+//! changes (tokens springs and durations).
 use fh6_kit::{Spring, SpringSpec, Tokens, Tween};
 
 /// How long a value change keeps the inner light up before it decays (s). Hold-to-repeat
@@ -30,6 +31,9 @@ pub struct OsdAnim {
     pub scroll: Spring,
     /// Rows fade in after a tab change (150 ms).
     pub tab_fade: Tween,
+    /// The focus echo's lift on the camera rows: 0 at rest, 1 raised over the driving position,
+    /// which fades in with it.
+    pub echo_lift: Spring,
     /// The focused piece's extra inner light while a value changes (0 at rest, 1 lit).
     pub energy: Spring,
     /// Seconds the inner light stays up after the last value change.
@@ -58,6 +62,8 @@ pub struct AnimTargets {
     pub key: [f32; 4],
     /// Scroll offset.
     pub scroll: f32,
+    /// The focus echo's lift (1 on a camera row, else 0).
+    pub echo_lift: f32,
     /// Calm motion (`ReducedFlash`): no stretch and no energise light.
     pub calm: bool,
 }
@@ -101,6 +107,7 @@ impl OsdAnim {
             key: [edge(0.0); 4],
             scroll: Spring::new(s.default, 0.0),
             tab_fade: Tween::new(tokens.durations.crossfade.max(0.05)),
+            echo_lift: Spring::new(s.default, 0.0),
             energy: Spring::new(s.default, 0.0),
             energised: 0.0,
             t: 0.0,
@@ -131,8 +138,8 @@ impl OsdAnim {
         self.energised = ENERGISE_HOLD;
     }
 
-    /// Advances by `dt` toward `to`. The first frame after a reset snaps the glass pieces and
-    /// the scroll so they do not fly in from zero.
+    /// Advances by `dt` toward `to`. The first frame after a reset snaps the glass pieces, the
+    /// scroll and the echo's lift so they do not fly in from zero.
     pub fn update(&mut self, to: &AnimTargets, dt: f32) {
         if !self.primed {
             self.focus_top.reset(to.focus_top);
@@ -143,6 +150,7 @@ impl OsdAnim {
                 spring.reset(target);
             }
             self.scroll.reset(to.scroll);
+            self.echo_lift.reset(to.echo_lift);
             self.primed = true;
         }
         let pace = Pace {
@@ -171,6 +179,7 @@ impl OsdAnim {
         edges(left, right, (to.key[0], to.key[2]), pace, dt);
         edges(top, bottom, (to.key[1], to.key[3]), pace, dt);
         self.scroll.update(to.scroll, dt);
+        self.echo_lift.update(to.echo_lift, dt);
         let lit = self.energised > 0.0 && !to.calm;
         self.energised = (self.energised - dt).max(0.0);
         self.energy.update(if lit { 1.0 } else { 0.0 }, dt);
@@ -226,6 +235,26 @@ mod tests {
             assert!((h - 116.0).abs() < 0.5, "both edges move together: {h}");
         }
         assert!(a.energy.value() < 1e-3);
+    }
+
+    #[test]
+    fn the_echo_lift_snaps_on_open_and_springs_after() {
+        let mut a = OsdAnim::new(&Tokens::default());
+        a.reset(1920.0);
+        let mut to = targets(0.0);
+        to.echo_lift = 1.0;
+        // The OSD opened on a camera row: lifted from the first frame, not flying up.
+        a.update(&to, 1.0 / 60.0);
+        assert!((a.echo_lift.value() - 1.0).abs() < 1e-6);
+        // Leaving the camera rows: it comes down over a few frames and settles.
+        to.echo_lift = 0.0;
+        a.update(&to, 1.0 / 60.0);
+        let first = a.echo_lift.value();
+        assert!(first > 0.5 && first < 1.0, "moving, not snapped: {first}");
+        for _ in 0..60 {
+            a.update(&to, 1.0 / 60.0);
+        }
+        assert!(a.echo_lift.value().abs() < 0.01, "settled: {}", a.echo_lift.value());
     }
 
     #[test]
