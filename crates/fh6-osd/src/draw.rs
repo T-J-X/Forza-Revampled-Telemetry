@@ -15,7 +15,7 @@ use fh6_kit::optics::absorption_coefficient;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
     vec2, Affine, Align, Cluster, Color, Environment, FontId, FontRole, Fonts, Glow, Gradient, ImageId, LayerOptions,
-    Layout, OpticalGlass, Painter, Palette, Piece, Rect, Refraction, Setup, Shadow, Shape, Stroke, TextStyle, VAlign,
+    Layout, OpticalGlass, Painter, Palette, Piece, Pool, Rect, Refraction, Setup, Shape, Stroke, TextStyle, VAlign,
     Vec2, View,
 };
 use std::fmt::Write as _;
@@ -289,46 +289,106 @@ pub fn underlay(open: f32) -> f32 {
     DIM * open.clamp(0.0, 1.0)
 }
 
-/// A soft black ellipse (centre and radii in the current local units), `alpha` at the core.
-fn feathered_ellipse(p: &mut Painter<'_>, centre: Vec2, radii: Vec2, alpha: f32) {
-    p.save();
-    let world = p.current_transform();
-    p.set_transform(
-        Affine::scale_xy(radii.x, radii.y)
-            .then(&Affine::translate(centre))
-            .then(&world),
-    );
-    p.fill(
-        &Shape::circle(Vec2::ZERO, 1.0),
-        Gradient::radial(Vec2::ZERO, 1.0)
-            .stop(0.0, Color::BLACK.with_alpha(alpha))
-            .stop(0.55, Color::BLACK.with_alpha(alpha * 0.75))
-            .stop(1.0, Color::BLACK.with_alpha(0.0)),
-    );
-    p.restore();
+/// The soft black pools under the OSD, at most [`Pools::MAX`]: behind the live cluster, the
+/// focus echo, the driving position and the control column. They keep the menu dark over a
+/// bright game frame and are invisible on OLED black.
+///
+/// The host passes them to `Kit::set_pools` every frame, as it passes [`underlay`] to
+/// `Kit::set_underlay`. Painted as shapes they cost about 0.4 ms of GPU time in a 4K frame (a
+/// soft shape blends into two HDR targets for every pixel it covers); the kit writes them in a
+/// pass that blends nothing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pools {
+    list: [Pool; Pools::MAX],
+    len: usize,
 }
 
-/// A soft black pool behind the live cluster (in target pixels from `layout`), so the game's
-/// own lit gauges do not compete with it. Hosts draw it before the live cluster.
-pub fn live_scrim(p: &mut Painter<'_>, layout: &Layout, open: f32) {
-    p.save();
-    p.set_transform(Affine::IDENTITY);
-    let centre = layout.to_target(vec2(0.0, -10.0));
-    let k = layout.scale;
-    feathered_ellipse(p, centre, vec2(820.0 * k, 400.0 * k), LIVE_SCRIM * open.clamp(0.0, 1.0));
-    p.restore();
-}
+impl Pools {
+    /// Most pools one OSD frame has.
+    pub const MAX: usize = 4;
 
-/// What sits under the live cluster: the real dash blocker (Phase 8 dome and wash, in the
-/// layout's local units) while a blocker row has focus, so its shape and fit can be judged
-/// against the cluster; otherwise the soft pool that keeps the cluster legible.
-pub fn live_backing(p: &mut Painter<'_>, layout: &Layout, open: f32, blocker: Option<(&ScrimFit, Wash)>) {
-    match blocker {
-        Some((fit, wash)) => {
-            scrim::draw_scrim(p, fit);
-            scrim::draw_wash(p, fit, wash);
+    /// No pools: what a host sets while the OSD is closed.
+    pub const NONE: Pools = Pools {
+        list: [Pool::Ellipse {
+            center: Vec2::ZERO,
+            radii: Vec2::ZERO,
+            alpha: 0.0,
+        }; Pools::MAX],
+        len: 0,
+    };
+
+    /// The pools, in the order they lie over each other.
+    #[must_use]
+    pub fn as_slice(&self) -> &[Pool] {
+        self.list.get(..self.len).unwrap_or(&[])
+    }
+
+    fn push(&mut self, pool: Pool) {
+        if let Some(slot) = self.list.get_mut(self.len) {
+            *slot = pool;
+            self.len += 1;
         }
-        None => live_scrim(p, layout, open),
+    }
+}
+
+/// This frame's pools, in target pixels. `live_pool` is false while the real dash blocker
+/// stands under the live cluster ([`live_backing`]): the blocker is the backing then.
+#[must_use]
+pub fn pools(anim: &OsdAnim, frame: Frame, layout: &Layout, live_pool: bool) -> Pools {
+    let open = anim.open.progress().clamp(0.0, 1.0);
+    // The live-zone overlays and the panel fade in on this ease ([`ui`]), and their pools with
+    // them.
+    let eased = 1.0 - (1.0 - open) * (1.0 - open);
+    let k = frame.k;
+    let mut pools = Pools::NONE;
+    if live_pool {
+        // Behind the live cluster, so the game's own lit gauges do not compete with it.
+        let s = layout.scale;
+        pools.push(Pool::Ellipse {
+            center: layout.to_target(vec2(0.0, -10.0)),
+            radii: vec2(820.0 * s, 400.0 * s),
+            alpha: LIVE_SCRIM * open,
+        });
+    }
+    // Behind the echo, so 110 px type holds over a bright sky. It rises with the echo, and a
+    // second one comes up under the driving position.
+    let cx = frame.live_centre_x();
+    let lift = anim.echo_lift.value();
+    pools.push(Pool::Ellipse {
+        center: vec2(cx, 880.0 - ECHO_LIFT * lift) * k,
+        radii: vec2(700.0, 330.0) * k,
+        alpha: ECHO_SCRIM * eased,
+    });
+    let shown = lift.clamp(0.0, 1.0);
+    if shown > 0.001 {
+        pools.push(Pool::Ellipse {
+            center: vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5) * k,
+            radii: DRIVE_POOL * k,
+            alpha: ECHO_SCRIM * shown * eased,
+        });
+    }
+    // Behind the control column, which has no panel. It slides in with the column.
+    let slide = vec2(frame.ox + (1.0 - eased) * PANEL_SLIDE, 0.0);
+    pools.push(Pool::RoundRect {
+        rect: Rect::from_points(
+            (vec2(PANEL.min.x + 60.0, PANEL.min.y + 40.0) + slide) * k,
+            (vec2(PANEL.max.x - 60.0, PANEL.max.y - 40.0) + slide) * k,
+        ),
+        radius: PANEL_R * k,
+        sigma: POOL_SIGMA * k,
+        alpha: POOL_ALPHA * eased,
+    });
+    pools
+}
+
+/// What the host draws under the live cluster: the real dash blocker (Phase 8 dome and wash, in
+/// the layout's local units) while a blocker row has focus, so its shape and fit can be judged
+/// against the cluster. Otherwise nothing: the soft pool that keeps the cluster legible is one
+/// of [`pools`].
+pub fn live_backing(p: &mut Painter<'_>, blocker: Option<(&ScrimFit, Wash)>) {
+    if let Some((fit, wash)) = blocker {
+        scrim::draw_scrim(p, fit);
+        scrim::draw_wash(p, fit, wash);
     }
 }
 
@@ -341,7 +401,8 @@ pub fn live_layout(base: &Layout, anim: &OsdAnim, frame: Frame) -> Layout {
     }
 }
 
-/// Draws the live-zone overlays and the panel. Call after the live cluster.
+/// Draws the live-zone overlays and the panel. Call after the live cluster. The black pools
+/// under them are not drawn here: see [`pools`].
 pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
     let pal = *p.palette();
     let (acc, acc_text) = osd_accent(&pal);
@@ -358,7 +419,7 @@ pub fn ui(p: &mut Painter<'_>, inp: &DrawInput<'_>) {
     p.set_transform(Affine::scale(inp.frame.k));
     p.set_opacity(eased);
     live_zone(p, inp, &ink);
-    p.translate(vec2(inp.frame.ox + (1.0 - eased) * 64.0, 0.0));
+    p.translate(vec2(inp.frame.ox + (1.0 - eased) * PANEL_SLIDE, 0.0));
     panel(p, inp, &ink);
     p.restore();
 }
@@ -387,15 +448,6 @@ fn live_zone(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
     );
 
     let cx = inp.frame.live_centre_x();
-    let lift = inp.anim.echo_lift.value();
-    // A feathered black pool behind the echo, so 110 px type holds over a bright sky. It rises
-    // with the echo, and a second one comes up under the driving position.
-    feathered_ellipse(p, vec2(cx, 880.0 - ECHO_LIFT * lift), vec2(700.0, 330.0), ECHO_SCRIM);
-    let shown = lift.clamp(0.0, 1.0);
-    if shown > 0.001 {
-        let centre = vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5);
-        feathered_ellipse(p, centre, DRIVE_POOL, ECHO_SCRIM * shown);
-    }
     match inp.ctl.mode() {
         Mode::Browse => focus_echo(p, inp, ink, cx),
         Mode::Keyboard => {
@@ -574,6 +626,8 @@ const TAB_FILL_H: f32 = 68.0;
 /// Black pool behind the control column: core opacity and softness.
 const POOL_ALPHA: f32 = 0.78;
 const POOL_SIGMA: f32 = 90.0;
+/// How far right of its place the panel starts while the OSD opens (4K units).
+const PANEL_SLIDE: f32 = 64.0;
 /// Radiance white in `studio_env.png` (`assets/clusters/liquid_glass/ASSETS.md`), how far the
 /// studio leans to the car's primary colour, and the key light's share, all as the Liquid
 /// Glass cluster sets them, so the two read as one material.
@@ -696,22 +750,9 @@ fn focus_rect(inp: &DrawInput<'_>) -> Rect {
 }
 
 fn panel(p: &mut Painter<'_>, inp: &DrawInput<'_>, ink: &Ink) {
-    // No panel: a feathered black pool keeps the column dark over a bright frame, and on OLED
-    // black it is invisible. The rows are light on black; the glass is the navigation: the tab
-    // bar, the hint bar and the focus platter.
-    let col = Rect::from_points(
-        vec2(PANEL.min.x + 60.0, PANEL.min.y + 40.0),
-        vec2(PANEL.max.x - 60.0, PANEL.max.y - 40.0),
-    );
-    p.shadow(
-        &Shape::round_rect(col, PANEL_R),
-        Shadow {
-            offset: Vec2::ZERO,
-            sigma: POOL_SIGMA,
-            spread: 0.0,
-            color: Color::BLACK.with_alpha(POOL_ALPHA),
-        },
-    );
+    // No panel: a feathered black pool ([`pools`]) keeps the column dark over a bright frame,
+    // and on OLED black it is invisible. The rows are light on black; the glass is the
+    // navigation: the tab bar, the hint bar and the focus platter.
 
     // Header and tabs. While the keyboard or remapper has LB/RB, the tabs dim.
     // A notice ("Saved", "Restored") floats above the tab bar in its own glass pill.
@@ -1304,5 +1345,103 @@ mod tests {
         // The seat at its lowest (-100 mm) drops about 0.55 px per mm below the view.
         let view_bottom = DRIVE_TOP + drive::VIEW.y + 100.0 * 0.55;
         assert!(view_bottom < cfg.cockpit_anchor_y as f32 - 320.0);
+    }
+
+    /// The motion of an OSD that is fully open, with the echo lifted by `echo_lift` (0 or 1).
+    fn open_anim(echo_lift: f32) -> OsdAnim {
+        let mut anim = OsdAnim::new(&fh6_kit::Tokens::default());
+        anim.reset(1920.0);
+        anim.settle(&AnimTargets {
+            echo_lift,
+            ..AnimTargets::default()
+        });
+        anim
+    }
+
+    #[test]
+    fn the_pools_lie_under_the_cluster_the_echo_the_driving_position_and_the_column() {
+        let frame = Frame::new((3840, 2160));
+        let layout = Layout::centered(vec2(1150.0, 1835.0), 1.0, (3840, 2160));
+        let cx = frame.live_centre_x();
+        let alpha = |pools: &Pools, at: Vec2| Pool::combined_alpha(pools.as_slice(), at);
+
+        // A plain row: the cluster's pool, the echo's and the column's.
+        let rest = pools(&open_anim(0.0), frame, &layout, true);
+        assert_eq!(rest.as_slice().len(), 3);
+        assert!(
+            (alpha(&rest, vec2(1150.0, 1825.0)) - LIVE_SCRIM).abs() < 0.01,
+            "behind the cluster"
+        );
+        assert!(
+            (alpha(&rest, vec2(cx, 880.0)) - ECHO_SCRIM).abs() < 0.01,
+            "behind the echo"
+        );
+        // The column's pool is at its core down the middle of the rows. The labels start and the
+        // values end inside its feather, where more than half of it is left.
+        let (mid_x, mid_y) = ((TX + VX) * 0.5, (ROWS_Y0 + ROWS_Y1) * 0.5);
+        assert!(
+            (alpha(&rest, vec2(mid_x, mid_y)) - POOL_ALPHA).abs() < 0.01,
+            "behind the rows"
+        );
+        assert!(
+            alpha(&rest, vec2(TX, mid_y)) > POOL_ALPHA * 0.5,
+            "behind the labels' edge"
+        );
+        assert!(
+            alpha(&rest, vec2(VX, mid_y)) > POOL_ALPHA * 0.5,
+            "behind the values' edge"
+        );
+        assert!(
+            alpha(&rest, vec2(mid_x, HINT_Y)) > POOL_ALPHA * 0.85,
+            "behind the hint bar"
+        );
+        assert_eq!(alpha(&rest, vec2(160.0, 196.0)), 0.0, "the header has no pool");
+
+        // A camera row: the echo's pool rises with it and one comes up under the driving position.
+        let lifted = pools(&open_anim(1.0), frame, &layout, true);
+        assert_eq!(lifted.as_slice().len(), Pools::MAX);
+        assert!((alpha(&lifted, vec2(cx, 880.0 - ECHO_LIFT)) - ECHO_SCRIM).abs() < 0.01);
+        let view_centre = vec2(cx, DRIVE_TOP + drive::VIEW.y * 0.5);
+        assert!(
+            alpha(&lifted, view_centre) >= ECHO_SCRIM - 0.01,
+            "under the driving position"
+        );
+
+        // While the real dash blocker stands under the cluster, the cluster has no pool.
+        let blocked = pools(&open_anim(0.0), frame, &layout, false);
+        assert_eq!(blocked.as_slice().len(), 2);
+        assert!(alpha(&blocked, vec2(1150.0, 1825.0)) < 0.01);
+
+        // On the first frame of the open the pools show nothing yet, and `NONE` has none at all.
+        let mut opening = OsdAnim::new(&fh6_kit::Tokens::default());
+        opening.reset(1920.0);
+        let first = pools(&opening, frame, &layout, true);
+        assert!(first.as_slice().iter().all(|pool| !pool.is_visible()));
+        assert!(Pools::NONE.as_slice().is_empty());
+    }
+
+    #[test]
+    fn the_pools_follow_the_frame_like_the_panel_they_lie_under() {
+        let anim = open_anim(0.0);
+        let column = |frame: Frame| {
+            let layout = Layout::centered(vec2(0.0, 0.0), frame.k, frame.size);
+            match pools(&anim, frame, &layout, false).as_slice().last().copied() {
+                Some(Pool::RoundRect { rect, sigma, .. }) => (rect, sigma),
+                other => panic!("the column's pool is the last one: {other:?}"),
+            }
+        };
+        let (at_4k, sigma_4k) = column(Frame::new((3840, 2160)));
+        assert_eq!(at_4k.min, vec2(PANEL.min.x + 60.0, PANEL.min.y + 40.0));
+        assert_eq!(at_4k.max, vec2(PANEL.max.x - 60.0, PANEL.max.y - 40.0));
+        assert_eq!(sigma_4k, POOL_SIGMA);
+        // Half the size at 1080p, sigma included.
+        let (at_1080, sigma_1080) = column(Frame::new((1920, 1080)));
+        assert!((at_1080.min - at_4k.min * 0.5).length() < 1e-3);
+        assert!((at_1080.max - at_4k.max * 0.5).length() < 1e-3);
+        assert!((sigma_1080 - POOL_SIGMA * 0.5).abs() < 1e-4);
+        // On a 32:9 screen the panel sits right, and its pool with it.
+        let wide = Frame::new((5120, 1440));
+        let (at_wide, _) = column(wide);
+        assert!((at_wide.min.x - (PANEL.min.x + 60.0 + wide.ox) * wide.k).abs() < 1e-2);
     }
 }

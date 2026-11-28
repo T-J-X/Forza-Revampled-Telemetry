@@ -223,7 +223,17 @@ impl OsdHost {
         draw::live_layout(base, &self.anim, frame)
     }
 
-    /// Draws the OSD (after the backdrop and the live cluster).
+    /// The soft black pools under the OSD for this frame. The host passes them to
+    /// `Kit::set_pools` before it renders, and an empty slice once the OSD is closed. `layout`
+    /// is the live cluster's ([`OsdHost::live_layout`]); `live_pool` is false while the host
+    /// draws the real dash blocker under the cluster instead ([`draw::live_backing`]).
+    #[must_use]
+    pub fn pools(&self, layout: &Layout, frame: Frame, live_pool: bool) -> draw::Pools {
+        draw::pools(&self.anim, frame, layout, live_pool)
+    }
+
+    /// Draws the OSD (after the backdrop and the live cluster). Its black pools are not part
+    /// of this: see [`OsdHost::pools`].
     pub fn draw(
         &self,
         p: &mut Painter<'_>,

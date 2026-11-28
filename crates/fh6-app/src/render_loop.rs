@@ -778,20 +778,27 @@ impl Loop {
             Some(o) if draw => fh6_osd::draw::underlay(o.host.anim.open.progress()),
             _ => 0.0,
         });
+        // Under the live cluster while the OSD is open: the real dash blocker while a blocker
+        // row has focus (it follows the cluster), else a soft pool.
+        let blocker = match osd {
+            Some(o) if o.blocker => scrim.as_ref().map(|(fit, wash)| (fit, *wash)),
+            _ => None,
+        };
+        // The OSD's soft black pools go to the kit as well: it writes them without blending,
+        // where painting them cost about 0.4 ms of GPU time in a 4K frame.
+        let pools = match osd {
+            Some(o) if draw => o.host.pools(layout, o.frame, blocker.is_none()),
+            _ => fh6_osd::draw::Pools::NONE,
+        };
+        kit.set_pools(pools.as_slice());
         // No draw can dim bloom (see `dim_dash`), so a dimmed frame has none.
         kit.set_bloom(!is_dimmed(fade.care.dim));
         {
             let mut p = kit.begin_frame(layout);
             if draw {
-                if let Some(o) = osd {
-                    // The cluster glides to the OSD's live zone. Under it: the real dash blocker
-                    // while a blocker row has focus (it follows the cluster), else a soft pool.
-                    let blocker = if o.blocker {
-                        scrim.as_ref().map(|(fit, wash)| (fit, *wash))
-                    } else {
-                        None
-                    };
-                    fh6_osd::draw::live_backing(&mut p, layout, o.host.anim.open.progress(), blocker);
+                if osd.is_some() {
+                    // The cluster glides to the OSD's live zone, over the blocker or the pool.
+                    fh6_osd::draw::live_backing(&mut p, blocker);
                 } else if let Some((fit, wash)) = scrim {
                     // Game frame, scrim, wash, cluster (SCRIM_FIT §3).
                     scrim::draw_scrim(&mut p, &fit);

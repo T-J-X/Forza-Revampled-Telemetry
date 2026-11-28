@@ -1,6 +1,7 @@
 //! 4K kit renders of the OSD: every tab, focus and slider states, the keyboard and the
-//! remapper, plus GPU timings for `docs/perf/osd.md`, and the OSD's product page
-//! (`osd/index.html`, no script). The OSD is driven through the same `OsdHost` the overlay
+//! remapper, plus GPU timings for `docs/perf/osd.md`, the motion sequence
+//! (`osd/sequence/frame_NNN.png`, for `visual-review flash` and `motion`) and the OSD's product
+//! page (`osd/index.html`, no script). The OSD is driven through the same `OsdHost` the overlay
 //! uses, with the live dyno feeding the live cluster and the carousel.
 use crate::cluster::{inline_html, PAGE_CSS};
 use crate::{rel, Result, DT, H, THUMB_FACTOR, W};
@@ -9,9 +10,9 @@ use fh6_core::{AppConfig, CarDatabase, ClusterTheme, ColorMode, ScrimFit};
 use fh6_gpu::GpuContext;
 use fh6_kit::scrim::Wash;
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
-use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
+use fh6_kit::{Cluster, FontChoice, FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
 use fh6_osd::model::{self, RowId, Tab};
-use fh6_osd::nav::{NavInput, LB, RIGHT, VIEW};
+use fh6_osd::nav::{NavInput, DOWN, LB, RB, RIGHT, VIEW};
 use fh6_osd::{draw, ConfigOnlyFit, Frame, LiveDynoGenerator, LiveStatus, OsdHost};
 use std::fmt::Write as _;
 use std::path::Path;
@@ -38,6 +39,26 @@ struct OsdState {
 const DRIVE_CROP: [u32; 4] = [630, 400, 1120, 1060];
 /// The OSD's GPU budget for a whole frame at 4K (ms).
 const BUDGET_MS: f64 = 1.5;
+
+/// The motion sequence at 60 fps, as `(frame, buttons held from that frame on)`: the menu opens
+/// on the cockpit FOV row, right is held for a second (hold-to-repeat, the WCAG flash test's
+/// span), released, focus moves down a row, and RB changes the tab.
+const SEQUENCE: [(u32, u16); 7] = [(0, 0), (24, RIGHT), (84, 0), (108, DOWN), (112, 0), (144, RB), (148, 0)];
+/// Frames in the sequence (3 s).
+const SEQUENCE_FRAMES: u32 = 180;
+/// The sequence's frames are the 4K frame at half size (`visual-review flash --scale 2`).
+const SEQUENCE_FACTOR: u32 = 2;
+/// The product page's reel plays every `REEL_STEP`th frame as a thumbnail, at half speed.
+const REEL_STEP: u32 = 2;
+
+/// The buttons held at `frame` of the sequence.
+fn sequence_held(frame: u32) -> u16 {
+    SEQUENCE
+        .iter()
+        .rev()
+        .find(|(at, _)| *at <= frame)
+        .map_or(0, |(_, held)| *held)
+}
 
 fn focus(host: &mut OsdHost, cfg: &AppConfig, tab: Tab, row: RowId) {
     if !host.focus_row(tab, row, cfg) {
@@ -260,6 +281,92 @@ fn over_image(fg: &RgbaImage, bg: &RgbaImage) -> RgbaImage {
     }
 }
 
+/// The live cluster under the OSD and what drives it, as the overlay's render loop holds them.
+struct Live {
+    cluster: Box<dyn Cluster>,
+    palette: Palette,
+    logo: Logo,
+    fonts: FontChoice,
+    smoother: SignalSmoother,
+    dyno: LiveDynoGenerator,
+    view: View,
+    /// The cluster's name, for the live zone's header.
+    name: &'static str,
+    t: f32,
+}
+
+impl Live {
+    /// The cluster `cfg` selects for `view`, with its palette set on the kit.
+    fn new(
+        ctx: &GpuContext,
+        kit: &mut Kit,
+        tokens: &Tokens,
+        assets: &Path,
+        cars: &CarDatabase,
+        cfg: &AppConfig,
+        view: View,
+    ) -> Self {
+        let theme = model::theme_for_view(cfg, view);
+        let entry = registry::resolve(theme);
+        let cluster = {
+            let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
+            (entry.make)(&mut setup)
+        };
+        let palette = Palette::from_config(tokens, cfg, cars, 0, entry.family.key());
+        kit.set_palette(palette);
+        let mut dyno = LiveDynoGenerator::new();
+        dyno.phase = 2.6;
+        Self {
+            cluster,
+            palette,
+            logo: Logo {
+                image: None,
+                brand_name: String::new(),
+                custom_name: cfg.custom_driver_name.clone(),
+            },
+            fonts: kit.font_choice(None),
+            smoother: SignalSmoother::new(),
+            dyno,
+            view,
+            name: model::theme_label(theme),
+            t: 0.0,
+        }
+    }
+
+    /// One frame of the dyno and the live cluster's `update`, then `then` with the frame the
+    /// cluster got (the OSD's own `update` or `settle`).
+    fn tick(&mut self, tokens: &Tokens, cfg: &AppConfig, then: impl FnOnce(&FrameInput<'_>)) {
+        let data = self.dyno.tick(DT);
+        let signals = self.smoother.update(&data, cfg, tokens, DT);
+        let input = FrameInput {
+            telemetry: &data,
+            signals: &signals,
+            dt: DT,
+            t: self.t,
+            config: cfg,
+            palette: &self.palette,
+            tokens,
+            fonts: self.fonts,
+            logo: &self.logo,
+            view: self.view,
+            reduced_flash: cfg.reduced_flash,
+        };
+        self.cluster.update(&input);
+        then(&input);
+        self.t += DT;
+    }
+}
+
+/// The config every OSD render starts from.
+fn review_config() -> AppConfig {
+    AppConfig {
+        current_camera_index: 3,
+        cockpit_hud_style: ClusterTheme::LiquidGlass,
+        custom_driver_name: "TJX".into(),
+        ..AppConfig::default()
+    }
+}
+
 /// Renders every OSD state into `out/osd/` (with `only`, the states whose name contains it).
 #[allow(clippy::too_many_arguments)]
 pub fn render_all(
@@ -281,63 +388,27 @@ pub fn render_all(
     // state is timed at the clocks it runs at while the menu is open.
     let mut warm_up = FIRST_WARM_UP;
     for state in STATES.iter().filter(|s| only.is_none_or(|o| s.name.contains(o))) {
-        let mut cfg = AppConfig {
-            current_camera_index: 3,
-            cockpit_hud_style: ClusterTheme::LiquidGlass,
-            custom_driver_name: "TJX".into(),
-            ..AppConfig::default()
-        };
+        let mut cfg = review_config();
         let mut host = OsdHost::new(tokens, Box::new(ConfigOnlyFit));
         host.set_fonts(kit.fonts().families());
         host.open(&cfg, View::Cockpit, cfg.cockpit_anchor_x as f32);
         let now = (state.setup)(&mut host, &mut cfg);
         let view = host.edit_view();
         host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
-        let theme = model::theme_for_view(&cfg, view);
-        let entry = registry::resolve(theme);
-        let mut cluster = {
-            let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
-            (entry.make)(&mut setup)
-        };
-        let palette = Palette::from_config(tokens, &cfg, &cars, 0, entry.family.key());
-        kit.set_palette(palette);
-        let logo = Logo {
-            image: None,
-            brand_name: String::new(),
-            custom_name: cfg.custom_driver_name.clone(),
-        };
-        let fonts = kit.font_choice(None);
-        let mut smoother = SignalSmoother::new();
-        let mut dyno = LiveDynoGenerator::new();
-        dyno.phase = 2.6;
+        let mut live = Live::new(ctx, kit, tokens, assets, &cars, &cfg, view);
+        let palette = live.palette;
         let base = Layout::from_config(&cfg, tokens, view, (W, H));
-        let mut t = 0.0;
         for i in 0..45 {
-            let data = dyno.tick(DT);
-            let signals = smoother.update(&data, &cfg, tokens, DT);
-            let input = FrameInput {
-                telemetry: &data,
-                signals: &signals,
-                dt: DT,
-                t,
-                config: &cfg,
-                palette: &palette,
-                tokens,
-                fonts,
-                logo: &logo,
-                view,
-                reduced_flash: cfg.reduced_flash,
-            };
-            cluster.update(&input);
-            if i == 44 {
-                host.settle(&input, kit, frame, &cfg);
-            } else {
-                host.update(&input, kit, frame, &cfg);
-            }
-            t += DT;
+            live.tick(tokens, &cfg, |input| {
+                if i == 44 {
+                    host.settle(input, kit, frame, &cfg);
+                } else {
+                    host.update(input, kit, frame, &cfg);
+                }
+            });
         }
         let layout = host.live_layout(&base, frame);
-        let name = model::theme_label(theme);
+        let name = live.name;
         // As in the overlay: the real dash blocker under the live cluster while a blocker row
         // has focus (Hood and chase resolve to opacity 0, so the soft pool stays).
         let blocker = Some(ScrimFit::from_config(&cfg, view.fit_view()))
@@ -359,11 +430,12 @@ pub fn render_all(
             {
                 let mut p = kit.begin_frame(&layout);
                 let backing = blocker.as_ref().map(|(fit, wash)| (fit, *wash));
-                draw::live_backing(&mut p, &layout, host.anim.open.progress(), backing);
-                cluster.draw(&mut p, &layout);
+                draw::live_backing(&mut p, backing);
+                live.cluster.draw(&mut p, &layout);
                 host.draw(&mut p, &cfg, frame, now, name, LiveStatus::Dyno);
             }
             kit.set_underlay(draw::underlay(host.anim.open.progress()));
+            kit.set_pools(host.pools(&layout, frame, blocker.is_none()).as_slice());
             let mut encoder = ctx.device.create_command_encoder(&Default::default());
             let stats = kit.render(
                 &ctx.device,
@@ -443,7 +515,102 @@ pub fn render_all(
             draws,
         });
     }
+    clear_backing(kit);
     Ok(renders)
+}
+
+/// Takes the OSD's dim and pools off the kit, so what is rendered next (the scrim sheets, a
+/// cluster) does not get them.
+fn clear_backing(kit: &mut Kit) {
+    kit.set_underlay(0.0);
+    kit.set_pools(&[]);
+}
+
+/// Renders the motion sequence ([`SEQUENCE`]) over OLED black into `out/osd/sequence/`, every
+/// frame at half size, and returns the product page's reel: every [`REEL_STEP`]th frame as a
+/// thumbnail (paths relative to `out`). The OSD is stepped as the overlay's render loop steps
+/// it: input, `prepare`, the live cluster's `update`, the OSD's `update`, then the draw.
+pub fn render_sequence(
+    ctx: &GpuContext,
+    kit: &mut Kit,
+    tokens: &Tokens,
+    assets: &Path,
+    out: &Path,
+) -> Result<Vec<String>> {
+    let target = Offscreen::new(&ctx.device, W, H);
+    let frame = Frame::new((W, H));
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
+    let mut cfg = review_config();
+    let view = View::Cockpit;
+    let mut live = Live::new(ctx, kit, tokens, assets, &cars, &cfg, view);
+    // The dash is already running when the menu opens.
+    for _ in 0..45 {
+        live.tick(tokens, &cfg, |_| {});
+    }
+    let mut host = OsdHost::new(tokens, Box::new(ConfigOnlyFit));
+    host.set_fonts(kit.fonts().families());
+    host.open(&cfg, view, cfg.cockpit_anchor_x as f32);
+    focus(&mut host, &cfg, Tab::Fit, RowId::FovCockpit);
+    let base = Layout::from_config(&cfg, tokens, view, (W, H));
+    let dir = out.join("osd").join("sequence");
+    let thumbs = out.join("_thumbs/osd/sequence");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::create_dir_all(&thumbs)?;
+    let mut reel = Vec::new();
+    let mut before = 0;
+    for f in 0..SEQUENCE_FRAMES {
+        let held = sequence_held(f);
+        let now = Duration::from_secs_f32(f as f32 * DT);
+        let input = NavInput {
+            held,
+            pressed: held & !before,
+            released: before & !held,
+            now,
+            toggle_mask: cfg.osd_toggle_mask,
+            hold_ms: cfg.osd_hold_ms,
+        };
+        before = held;
+        host.step(&input, &mut cfg);
+        host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
+        live.tick(tokens, &cfg, |input| host.update(input, kit, frame, &cfg));
+        let layout = host.live_layout(&base, frame);
+        {
+            let mut p = kit.begin_frame(&layout);
+            live.cluster.draw(&mut p, &layout);
+            host.draw(&mut p, &cfg, frame, now, live.name, LiveStatus::Dyno);
+        }
+        kit.set_underlay(draw::underlay(host.anim.open.progress()));
+        kit.set_pools(host.pools(&layout, frame, true).as_slice());
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        kit.render(
+            &ctx.device,
+            &ctx.queue,
+            &mut encoder,
+            target.view(),
+            OFFSCREEN_FORMAT,
+            (W, H),
+            1.0,
+        );
+        target.copy_out(&mut encoder);
+        ctx.queue.submit(Some(encoder.finish()));
+        let shown = target.read(&ctx.device)?.over([0, 0, 0]);
+        let file = format!("frame_{f:03}.png");
+        shown.downsample(SEQUENCE_FACTOR).save_png(&dir.join(&file))?;
+        if f % REEL_STEP == 0 {
+            let thumb = thumbs.join(&file);
+            shown.downsample(THUMB_FACTOR).save_png(&thumb)?;
+            reel.push(rel(out, &thumb));
+        }
+    }
+    clear_backing(kit);
+    if ctx.has_failed() {
+        return Err("wgpu reported an error rendering the OSD sequence".into());
+    }
+    println!(
+        "OSD sequence: {SEQUENCE_FRAMES} frames at 60 fps written to {}",
+        dir.display()
+    );
+    Ok(reel)
 }
 
 /// A path relative to the export folder, as `osd/index.html` links it.
@@ -461,8 +628,9 @@ fn capitalised(s: &str) -> String {
 }
 
 /// Writes `osd/index.html`: the OSD's product page (no script). A hero with the OSD over the
-/// game, the driving position the camera rows show, every state as a card, and the GPU table.
-pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::Result<()> {
+/// game, the motion sequence as a looping reel (`reel`, from [`render_sequence`]), the driving
+/// position the camera rows show, every state as a card, and the GPU table.
+pub fn write_page(out: &Path, renders: &[OsdRender], reel: &[String], adapter: &str) -> std::io::Result<()> {
     let ms = |v: Option<f64>| v.map_or_else(|| "n/a".to_string(), |v| format!("{v:.3} ms"));
     let worst = renders.iter().filter_map(|r| r.gpu_ms).reduce(f64::max);
     let shown = |r: &OsdRender| match &r.over {
@@ -477,7 +645,10 @@ pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>Liquid Glass OSD · FH6 WheelDash</title><style>{PAGE_CSS}\
          .grid3{{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}}\
-         @media (max-width:1200px){{.grid3{{grid-template-columns:1fr}}}}</style></head><body>\
+         @media (max-width:1200px){{.grid3{{grid-template-columns:1fr}}}}\
+         .reel.osd img{{animation-name:osdreel;animation-duration:{reel_s}s;\
+         animation-delay:calc(var(--i)*{reel_s}s/{reel_n})}}\
+         @keyframes osdreel{{0%{{opacity:1}}{reel_pct:.4}%{{opacity:0}}100%{{opacity:0}}}}</style></head><body>\
          <header class=\"bar\"><span class=\"mark\">FH6 WHEELDASH</span>\
          <span class=\"crumb\">Settings menu</span><span class=\"pill\">Liquid Glass</span></header><main>\
          <section class=\"hero\"><div><p class=\"eyebrow\">Settings menu · controller first</p>\
@@ -492,7 +663,28 @@ pub fn write_page(out: &Path, renders: &[OsdRender], adapter: &str) -> std::io::
         n = renders.len(),
         full = hero.0,
         thumb = hero.1,
+        // Half speed: each reel frame stands for `REEL_STEP` frames of 1/60 s.
+        reel_s = reel.len() as f32 * REEL_STEP as f32 * DT * 2.0,
+        reel_n = reel.len().max(1),
+        reel_pct = 100.0 / reel.len().max(1) as f32,
     );
+    if !reel.is_empty() {
+        h.push_str(
+            "<section><h2>In motion</h2><p class=\"note\">At half speed: the menu opens on the cockpit FOV row, \
+             right is held for a second, focus moves down a row, and RB changes the tab. The glass forms by \
+             thickness, the platter stretches toward the next row and settles, and nothing flashes.</p>\
+             <div class=\"reel osd\">",
+        );
+        for (i, frame) in reel.iter().enumerate() {
+            let _ = write!(
+                h,
+                "<img style=\"--i:{i}\" src=\"{src}\" alt=\"{alt}\">",
+                src = from_page(frame),
+                alt = if i == 0 { "the OSD's motion sequence" } else { "" },
+            );
+        }
+        h.push_str("</div></section>");
+    }
     let drives: Vec<&OsdRender> = renders.iter().filter(|r| r.drive.is_some()).collect();
     if !drives.is_empty() {
         h.push_str(
@@ -570,6 +762,17 @@ mod tests {
         );
         assert_eq!(capitalised("éclat"), "Éclat");
         assert_eq!(capitalised(""), "");
+    }
+
+    #[test]
+    fn the_sequence_holds_right_for_a_full_second_and_ends_released() {
+        assert_eq!(sequence_held(0), 0);
+        let held = (0..SEQUENCE_FRAMES).filter(|f| sequence_held(*f) == RIGHT).count();
+        assert_eq!(held, 60, "WCAG's count test needs one second of the held state");
+        assert_eq!(sequence_held(110), DOWN);
+        assert_eq!(sequence_held(146), RB);
+        assert_eq!(sequence_held(SEQUENCE_FRAMES - 1), 0);
+        assert!(SEQUENCE.windows(2).all(|w| w[0].0 < w[1].0), "steps are in frame order");
     }
 
     #[test]
