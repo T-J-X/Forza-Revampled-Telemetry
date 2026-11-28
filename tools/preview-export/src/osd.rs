@@ -330,7 +330,7 @@ impl Live {
         ctx: &GpuContext,
         kit: &mut Kit,
         tokens: &Tokens,
-        assets: &Path,
+        assets: Option<&Path>,
         cars: &CarDatabase,
         logo: &Logo,
         cfg: &AppConfig,
@@ -339,7 +339,7 @@ impl Live {
         let theme = model::theme_for_view(cfg, view);
         let entry = registry::resolve(theme);
         let cluster = {
-            let mut setup = kit.setup(&ctx.device, &ctx.queue, Some(assets));
+            let mut setup = kit.setup(&ctx.device, &ctx.queue, assets);
             (entry.make)(&mut setup)
         };
         let palette = Palette::from_config(tokens, cfg, cars, 0, entry.family.key());
@@ -399,7 +399,7 @@ pub fn render_all(
     ctx: &GpuContext,
     kit: &mut Kit,
     tokens: &Tokens,
-    assets: &Path,
+    assets: Option<&Path>,
     cars: &CarDatabase,
     out: &Path,
     timing: bool,
@@ -421,7 +421,7 @@ pub fn render_all(
         host.open(&cfg, View::Cockpit, cfg.cockpit_anchor_x as f32);
         let now = (state.setup)(&mut host, &mut cfg);
         let view = host.edit_view();
-        host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
+        host.prepare(kit, &ctx.device, &ctx.queue, assets, &cfg);
         let mut live = Live::new(ctx, kit, tokens, assets, cars, logo, &cfg, view);
         let palette = live.palette;
         let base = Layout::from_config(&cfg, tokens, view, (W, H));
@@ -562,7 +562,7 @@ pub fn render_sequence(
     ctx: &GpuContext,
     kit: &mut Kit,
     tokens: &Tokens,
-    assets: &Path,
+    assets: Option<&Path>,
     cars: &CarDatabase,
     logo: &Logo,
     out: &Path,
@@ -600,7 +600,7 @@ pub fn render_sequence(
         };
         before = held;
         host.step(&input, &mut cfg);
-        host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
+        host.prepare(kit, &ctx.device, &ctx.queue, assets, &cfg);
         live.tick(tokens, &cfg, |input| host.update(input, kit, frame, &cfg));
         let layout = host.live_layout(&base, frame);
         {

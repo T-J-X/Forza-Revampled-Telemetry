@@ -19,7 +19,7 @@ Fix phase G of the Rust structural assessment of 2026-11-27, "Gates that mean so
 | Allocation counting (audit extra) | ✅ | `warm_frames_do_not_allocate` with `allocation-counter` 0.8.1 (dev-dependency), and `the_allocation_counter_sees_allocations` proving the counter is live |
 | The true MSRV (audit extra) | ✅ | `rust-version` and `clippy.toml` say 1.90; `cargo +1.90.0 check` passes for the Windows target and for asset-forge on the host (below). 1.87 never built: `ordered-float` 5.5.1 (through `wgpu-hal` 30.0.2) needs 1.90 |
 | `fh6-app/src/lib.rs:3` tells the truth about `unsafe` (audit extra) | ✅ | It now says `unsafe` lives in `fh6-win` and `fh6-input`, and the crate forbids it; `fh6-win`'s crate doc says the same |
-| `preview-export --no-assets` (audit extra) | ◐ | Not in this landing: fix F is rewriting the same `preview-export` files (`main.rs`, `cluster.rs`, `fit.rs`, `osd.rs`). The no-asset path itself is gated (`dashes_build_and_draw_without_assets`); the flag only adds review renders of it. It follows as a small commit once F is on main ("Known issues") |
+| `preview-export --no-assets` (audit extra) | ✅ | Landed after fix F, on 2026-11-28 ("After fix F" below): dashes and the OSD built with `assets: None`, no pack fonts, an empty car database, the custom name in the logo zone, output in `mockups/no-assets/`. The no-asset path itself is gated by `dashes_build_and_draw_without_assets` |
 | fmt, clippy `-D warnings`, `cargo test --workspace` with the goldens and parity pass | ✅ | "Verification output" |
 
 ## What was built
@@ -57,8 +57,25 @@ Fix phase G of the Rust structural assessment of 2026-11-27, "Gates that mean so
 **Docs**: `AGENTS.md` (toolchain line, the `parity-dump` row, the commands, directive 6, Agent 4's gates), `SKILLS.md` (MSRV; the dash gates need no GPU lock), `README.md` (MSRV), `program/phases/07-cluster-factory/CLUSTER_PROMPT.md` (a dash owns its matrix row and `DASH_SCENARIOS` entries; the verify step and checklist lines 4, 13 and 15 run the gates), `docs/PROGRESS.md` (G2, G3 and G5 done, known defect 21, the lint backlog, seven decision-log rows, the state of the code after G).
 
 ## Verification output
-### On the PC (rustc 1.100), commit `1f50de9` (before the rebase onto fix D)
-In an isolated clone under the checkout's `target\fix-g\` with its own target folder. The session reported these green: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p fh6-clusters --test dash_gates`, `cargo run -p parity-dump -- tests/golden/packets` (20/20 OK) and `cargo build -p fh6-kit --target wasm32-unknown-unknown`. The GPU half (`cargo test --workspace` under `gpu.lock`) queued behind fix F's run, and the session then stopped on the plan's usage limit (it resumes on 1 December). The GPU tests and image goldens were therefore run in the cloud on a software GPU instead (next section).
+### On the PC (rustc 1.100.0), commit `fd13cf5` (the tree that landed), 2026-11-28
+In an isolated clone under the checkout's `target\fix-g\` with its own target folder. The GPU tests held `gpu.lock` from 05:50:57 to 05:56:30 UTC (an earlier wait, at `1f50de9`, ran from 23:48 to 00:34 UTC while fix F and the Retro Cyber thread held the lock, and then the session paused on the usage limit). Each command's last line as the PC session reported it:
+```
+$ cargo fmt --all -- --check
+exit 0
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.90s     (no lints)
+$ cargo test -p fh6-clusters --test dash_gates
+test result: ok. 10 passed; 0 failed; 0 ignored; finished in 42.59s
+$ cargo test --workspace --no-fail-fast
+exit 0; 966 passed, 0 failed, 1 ignored (the fluid.rs doctest), across 39 test binaries and 9 doc-test runs
+golden_images: 49 passed in 129.24 s; dash_gates 10 passed; golden_telemetry 2 passed; parity_dump 7 passed
+$ cargo run -p parity-dump -- tests/golden/packets
+20/20 OK, 0 orphaned goldens
+$ cargo build -p fh6-kit --target wasm32-unknown-unknown
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.46s
+```
+
+An earlier PC pass at `1f50de9` (before the rebase onto fix D) had the same fmt, clippy, dash gates, parity and wasm results.
 
 ### Cloud checks (Linux container, rustc 1.100.1 and 1.90.0), final tree `9e03335` on main `8212145`
 ```
@@ -94,7 +111,7 @@ branch 9e03335 with main's lavapipe images:
   -> 84 passed, 0 failed (golden_images 49/49, the kit's GPU tests 18/18, the component tests 17/17)
 branch 9e03335:  FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images     -> 260 images, 0 differ from main's byte for byte
 ```
-So every golden frame the branch renders is byte-identical to main's on the same renderer. The run on the PC's card (the GPU half above) follows when the PC session resumes; its result is added here by a later commit.
+So every golden frame the branch renders is byte-identical to main's on the same renderer. The PC's card then ran the same tests on `fd13cf5` (above): all pass against the committed goldens.
 
 ### The gates catch what they claim
 - **A dash's own NaN** (mutation check): a NaN rotation planted in the shared scaffold's `draw` failed G5 for all 42 scaffold dashes (2,016 failure lines); the file was restored and `git diff` was empty.
@@ -114,10 +131,9 @@ No images. Nothing drawn changes: the decoder returns the same values for every 
 7. **Tests may unwrap through `clippy.toml`, and integration-test helpers allow it at the file root.** clippy's `allow-*-in-tests` covers `#[test]` functions and `#[cfg(test)]` modules, not the helper functions of an integration-test file.
 8. **`parity-dump` keeps both fixes for `preserve_order`.** `fh6-win`, and since fix D `fh6-core`, turn on `serde_json`'s `preserve_order`, so in a workspace build `parity-dump` wrote its keys in insertion order. G sent them through a `BTreeMap`; D, in parallel, made the comparison read values instead of text. After the rebase `parity-dump` does both: it compares values (D's) and writes new goldens with sorted keys (G's), with G's missing-golden, orphan and `create_new` checks and D's every-shipped-golden test.
 9. **The matrix is rebuilt from what the gate observes**, and the old hand-audited v1 snapshot is replaced. Each change from the old rows was read against the dash's code before it went in.
-10. **`--no-assets` waits for fix F** (exit criteria). G lands first so the dash threads get the gates now.
+10. **`--no-assets` waited for fix F** (exit criteria), so G landed first and the dash threads got the gates sooner. It follows the app's own no-asset path in `fh6-app/src/resources.rs`: the car database is empty too, so the OSD shows no brand palettes or car names.
 
 ## Known issues / debt
-- **`preview-export --no-assets`** follows fix F: dash and OSD setup with `assets: None` and no pack fonts, the reference backdrops still loaded. This thread does it once F is on main.
 - **`Meshes::upload` never reuses a mesh** (known defect 21, found by this phase's review): each rebuild of a dash that uploads meshes leaks them (Tesla ADAS uploads 5 per build; the OSD carousel and a style switch rebuild). The fingerprint numbers mesh handles by first use, so the gates are not affected.
 - **`Kit::render` is not in the allocation gate**: it needs a GPU. The host CPU phase measures the whole frame on the PC.
 - **G2 cannot see an input read only through a texture** the dash rewrites under the same handle (My calls 3).
@@ -147,7 +163,7 @@ How it was checked: a `rust-review` pass (with `rust-skills`) and an adversarial
 5. The empty tests are gone. **Yes.** Fix E deleted 4 with their code; the other 3 assert pixels and stay (exit criteria).
 6. Finding 16: one lint table and `forbid(unsafe_code)` in the safe crates. **Yes.** `[workspace.lints]` in `Cargo.toml`, `[lints] workspace = true` in all 18 members; six crate roots and two `fh6-win` modules forbid `unsafe`.
 7. Finding 18: NaN and Inf cleaned once in the decoder, `normalized_rpm` gone, G5 in place. **Yes.** `decode` tests at all 31 offsets; `git grep normalized_rpm` finds only history; G5 passes.
-8. The audit extras. **Yes, except `--no-assets`.** Allocation counting, MSRV 1.90 (checked with rustc 1.90.0) and the `fh6-app` doc line are done; `--no-assets` waits for fix F (exit criteria, "Known issues").
+8. The audit extras. **Yes.** Allocation counting, MSRV 1.90 (checked with rustc 1.90.0) and the `fh6-app` doc line landed with G; `--no-assets` followed fix F ("After fix F").
 9. G kept to its own files and rebased onto E and D before landing. **Yes.** The shared files it edits (the kit's scene, painter, maths and text; the matrix; the cluster prompt; rule files) are listed under "What was built"; D's `parity-dump` change was merged, not overwritten.
 
 **B. Hard rules**
@@ -162,7 +178,7 @@ How it was checked: a `rust-review` pass (with `rust-skills`) and an adversarial
 18. Commits are by TJX with no co-author trailer; no tracked file holds a real name, a `C:\Users\<name>` path or a personal email. **Yes.** `git log --format='%an <%ae> | %(trailers:only)'` over the branch; a search of the diff found none.
 19. Nothing was copied into the game folder or the mirror. **Yes.** [AGENTS 8]
 20. A new dependency has a decision-log line. **Yes.** `allocation-counter` 0.8.1, wgpu `noop` and `serde_json` as dev-dependencies of `fh6-clusters`. [AGENTS 6]
-21. fmt, clippy `-D warnings`, the workspace tests with the goldens and parity pass on the tree that lands. **Yes.** "Verification output": the PC run covered everything but the GPU tests; the GPU tests and image goldens ran on a software GPU, byte-identical to main's frames.
+21. fmt, clippy `-D warnings`, the workspace tests with the goldens and parity pass on the tree that lands. **Yes.** "Verification output": the PC ran everything on `fd13cf5` (966 passed, goldens included), and on a software GPU every golden frame was byte-identical to main's.
 
 **C. Rendering laws**
 22. Colour stays premultiplied linear end to end. **Yes.** No shader or blend state changed.
@@ -210,6 +226,19 @@ Adversarial review of the dash gates:
 10. Allocation gate gaps. Fixed: a perturbed second pass, `animating()` and `begin_frame` measured, every designed view. Not covered: `Kit::render` (needs a GPU) and branches the review sequence never reaches.
 11. Matrix parsing edge cases. Fixed: alignment separators, a header per table, code fences, the dash name and the Scenarios table checked. Escaped pipes are not handled; the matrix has none.
 12. Doc errors (five against four scenarios, `car_ordinal` through the palette only). Fixed.
+
+## After fix F: `preview-export --no-assets` (2026-11-28)
+Commit `823e3eb` on main `7970472`. `--no-assets` builds every dash and the OSD with `assets: None` (in the main loop, `cluster.rs`, `fit.rs` including the scrims, and `osd.rs`), loads no pack fonts, gives the OSD an empty `CarDatabase` and shows only the custom name in the logo zone, which is what `fh6-app` does when `assets/` is missing. The reference backdrops still load. Its output goes to `mockups/no-assets/` unless `--out` says otherwise; it works with `--cluster` and `--fit`.
+```
+$ cargo fmt --all -- --check --config newline_style=Unix                      exit 0
+$ cargo clippy -p preview-export --all-targets --target x86_64-pc-windows-msvc -- -D warnings      (no lints)
+$ cargo test -p preview-export                                                 9 passed (one new: the flag parses with --cluster and --fit)
+On the cloud's software GPU (lavapipe; the local Vulkan change of "Verification output", not committed):
+$ preview-export --release --no-assets                    Export complete: 192 kit renders (with the OSD states and the scrims), 11 min 41 s
+$ preview-export --release --no-assets --cluster PorscheAnalog                 Cluster review written, 35 s
+$ preview-export --release --no-assets --fit                                   Fit review written, 12 s
+```
+Each run printed `assets: none (--no-assets): no pack fonts, no images, no logos` and `logo: no car, the custom name "TJX"`. Side by side with the normal review set, Porsche Analog falls back to plain bezels, the system face and "TJX" where the Porsche wordmark sits, and every reading still draws.
 
 ## Sign-off
 TJX asked on 2026-11-27 (16:00 UTC) for threads to review their own work with the installed review skills and agents, and not to wait for a sign-off. This closing review stands in for it.

@@ -69,7 +69,8 @@ struct Ctx<'a> {
     kit: &'a mut Kit,
     tokens: &'a Tokens,
     target: &'a Offscreen,
-    assets: &'a Path,
+    /// The asset folder dashes are built with, or `None` (`--no-assets`).
+    assets: Option<&'a Path>,
     /// The logo zone of every cluster drawn.
     logo: &'a Logo,
 }
@@ -86,7 +87,7 @@ impl Ctx<'_> {
         let mut built = match cluster {
             Some(theme) => {
                 let entry = registry::resolve(theme);
-                let mut setup = self.kit.setup(&self.gpu.device, &self.gpu.queue, Some(self.assets));
+                let mut setup = self.kit.setup(&self.gpu.device, &self.gpu.queue, self.assets);
                 Some((entry.make)(&mut setup))
             }
             None => None,
@@ -159,9 +160,8 @@ fn config(pct: i32, height: f32, scale: f32) -> AppConfig {
 }
 
 /// Renders the kit scrim alone over black (the gallery's scrim cards).
-pub fn scrims(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, root: &Path, out: &Path) -> Result<()> {
+pub fn scrims(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, assets: Option<&Path>, out: &Path) -> Result<()> {
     let target = Offscreen::new(&gpu.device, W, H);
-    let assets = root.join("assets");
     // No cluster is drawn here, so no logo either.
     let no_logo = Logo::default();
     let mut ctx = Ctx {
@@ -169,7 +169,7 @@ pub fn scrims(gpu: &GpuContext, kit: &mut Kit, tokens: &Tokens, root: &Path, out
         kit,
         tokens,
         target: &target,
-        assets: &assets,
+        assets,
         logo: &no_logo,
     };
     for pct in OPACITIES {
@@ -222,6 +222,7 @@ pub fn run(
     kit: &mut Kit,
     tokens: &Tokens,
     root: &Path,
+    assets: Option<&Path>,
     out: &Path,
     frames: u32,
     logo: &Logo,
@@ -231,13 +232,12 @@ pub fn run(
     let dir = out.join("fit");
     fs::create_dir_all(&dir)?;
     let target = Offscreen::new(&gpu.device, W, H);
-    let assets = root.join("assets");
     let mut ctx = Ctx {
         gpu,
         kit,
         tokens,
         target: &target,
-        assets: &assets,
+        assets,
         logo,
     };
     let mut cards = String::new();
