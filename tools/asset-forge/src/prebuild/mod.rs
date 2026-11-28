@@ -184,19 +184,28 @@ pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
 /// Builds one dash's kit.
 pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Result<()> {
     let kit = kits::kit(snake).ok_or_else(|| tool_err("prebuild", format!("no kit for {snake}")))?;
-    // Each dash's masters go to its own Drive folder, whatever --masters said.
+    // Each dash's masters go to its own Drive folder, whatever --masters said. A full run stops
+    // before any GPU work when the Drive folder is not mounted; a preview never writes there,
+    // nor into the repo (its files stay in the scratch folder).
     let mut paths = paths.clone();
-    paths.masters = match crate::lane::masters_dir(snake) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            eprintln!("  masters not copied: {e}");
-            None
-        }
+    paths.masters = if preview {
+        None
+    } else {
+        Some(crate::lane::masters_dir(snake)?)
     };
     let masters = paths.masters.as_ref().map(|d| d.join("prebuild"));
+    let base = paths
+        .scratch
+        .join(if preview { "prebuild_preview" } else { "prebuild" });
+    let scratch = base.join(snake);
     let repo_rel = format!("assets/clusters/{snake}/prebuild");
-    let repo = paths.root.join(&repo_rel);
-    let scratch = paths.scratch.join("prebuild").join(snake);
+    let repo = if preview {
+        scratch.join("repo")
+    } else {
+        paths.root.join(&repo_rel)
+    };
+    // Textures are cached across dashes: a recipe shared by several kits runs SDXL once.
+    let shared_textures = base.join("_shared").join("textures");
     for d in [&repo, &scratch] {
         std::fs::create_dir_all(d).map_err(|e| io_err(d, e))?;
     }
@@ -211,7 +220,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
 
     for t in kit.textures.iter().filter(|_| !blender_only) {
         println!("  texture {}", t.recipe.name);
-        let path = texture::make_texture(&paths, &t.recipe, tex_size, &scratch.join("textures"))?;
+        let path = texture::make_texture(&paths, &t.recipe, tex_size, &shared_textures)?;
         let im = img::load(&path)?.to_channels(3);
         let master = sink(masters.as_deref(), "textures", &path)?;
         made.push((t.recipe.name, path.clone()));
@@ -237,11 +246,15 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
 
     for s in &kit.swatches {
         println!("  swatch {}", s.name);
-        let half = SWATCH_SPAN * 0.5;
-        let fr = Frame::rect(-half, -half, SWATCH_SPAN, SWATCH_SPAN).scaled(2.0 * scale);
+        // A regular pattern (twill, clous) gets a span of a whole, even number of repeats, so
+        // the tile repeats exactly and the seam blend never doubles the pattern.
+        let span = snapped_span(&s.mat);
+        let half = span * 0.5;
+        let fr = Frame::rect(-half, -half, span, span).scaled(MASTER as f32 / span * scale);
         let mut sc = Scene::new(&format!("prebuild_{snake}_{}", s.name), fr);
-        // Even light over the whole tile: the rig sized to four spans.
-        sc.rig = Rig::hero(SWATCH_SPAN * 4.0, -135.0);
+        // Near-even light: the hero rig sized to sixteen spans, so the key's falloff across the
+        // tile is about 2.5% (make_seamless takes care of the rest at the edges).
+        sc.rig = Rig::hero(span * 16.0, -135.0);
         sc.swing.clear();
         sc.samples = samples;
         sc.passes = Passes {
@@ -265,7 +278,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         if s.disc {
             sc.add(Part::face("disc", [0.0, 0.0], 0.0, half * 0.98, m));
         } else {
-            let side = SWATCH_SPAN * 1.2;
+            let side = span * 1.2;
             sc.add(Part::extrude(
                 "tile",
                 Outline::rrect(0.0, 0.0, side, side, 1.0, 4),
@@ -286,7 +299,16 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         for (suffix, p) in [("normal", &out.normal), ("rmh", &out.rmh)] {
             if let Some(p) = p {
                 let named = scratch.join("swatches").join(format!("{}_{suffix}.png", s.name));
-                std::fs::copy(p, &named).map_err(|e| io_err(&named, e))?;
+                if s.disc {
+                    std::fs::copy(p, &named).map_err(|e| io_err(&named, e))?;
+                } else {
+                    // The data passes tile like the beauty (linear data, no sRGB tag).
+                    let mut d = img::make_seamless(&img::load(p)?.to_channels(3), 0.04);
+                    if suffix == "normal" {
+                        renormalize_normal(&mut d);
+                    }
+                    img::save_png(&d, &named, true, false)?;
+                }
                 sink(masters.as_deref(), "swatches", &named)?;
             }
         }
@@ -303,7 +325,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
             dims: format!("{}x{}", beauty.w, beauty.h),
             fp: file_fp(&file)?,
             generator: format!(
-                "blender:hero prebuild swatch, Cycles {samples} samples, ortho top-down {SWATCH_SPAN} local px at 2 px/px, hero rig at 4x span key -135°, Standard view; material {}",
+                "blender:hero prebuild swatch, Cycles {samples} samples, ortho top-down {span} local px to {MASTER} px, hero rig at 16x span key -135°, Standard view; material {}",
                 serde_json::to_string(&s.mat.to_json()).unwrap_or_default()
             ),
             licence: BLENDER_LICENCE,
@@ -343,8 +365,14 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
                 master = m;
             }
             let big = img::load(&named)?;
+            // The runtime copy is exactly 1:1 with the frame (a preview resamples).
             let k = (SPRITE_SCALE * scale).round().max(1.0) as usize;
-            let small = img::box_down(&big, k);
+            let side = sp.size.round().max(1.0) as usize;
+            let small = if preview {
+                big.resize(side, side, false)
+            } else {
+                img::box_down(&big, k)
+            };
             let rel = format!("{repo_rel}/sprites/{}_{i}.png", sp.name);
             let abs = paths.root.join(&rel);
             if let Some(parent) = abs.parent() {
@@ -413,7 +441,11 @@ pub fn plan() -> String {
         let Some(k) = kits::kit(snake) else { continue };
         let _ = writeln!(md, "### #{} `{}` (`{snake}`)\n", k.build, k.key);
         for t in &k.textures {
-            let _ = writeln!(md, "- Texture `{}` (ComfyUI, seed {}): {}", t.recipe.name, t.recipe.seed, t.use_);
+            let _ = writeln!(
+                md,
+                "- Texture `{}` (ComfyUI, seed {}): {}",
+                t.recipe.name, t.recipe.seed, t.use_
+            );
         }
         for s in &k.swatches {
             let shape = if s.disc { "disc" } else { "tile" };
@@ -428,6 +460,39 @@ pub fn plan() -> String {
         md.push('\n');
     }
     md
+}
+
+/// The swatch span in local px: [`SWATCH_SPAN`] rounded to an even number of the material's
+/// repeats (a 2x2 twill repeats every four tows; guilloché every `pitch`), or as it is for
+/// materials without a regular pattern.
+fn snapped_span(m: &Mat) -> f32 {
+    let get = |k: &str| m.v.get(k).and_then(Value::as_f64).map(|v| v as f32);
+    let kind = m.v.get("kind").and_then(Value::as_str).unwrap_or_default();
+    let period = match kind {
+        "carbon" => get("tow").map(|t| t * 4.0),
+        _ => get("pitch").or_else(|| get("knurl")),
+    };
+    match period {
+        Some(p) if p > 0.5 => {
+            let n = (SWATCH_SPAN / p / 2.0).round().max(1.0) * 2.0;
+            n * p
+        }
+        _ => SWATCH_SPAN,
+    }
+}
+
+/// Re-normalises an 8/16-bit tangent normal map (0..1 encoded) after blending.
+fn renormalize_normal(d: &mut Img) {
+    let c = d.c;
+    for px in d.data.chunks_mut(c) {
+        let (x, y, z) = (px[0] * 2.0 - 1.0, px[1] * 2.0 - 1.0, px[2] * 2.0 - 1.0);
+        let l = (x * x + y * y + z * z).sqrt();
+        if l > 1e-6 {
+            px[0] = x / l * 0.5 + 0.5;
+            px[1] = y / l * 0.5 + 0.5;
+            px[2] = z / l * 0.5 + 0.5;
+        }
+    }
 }
 
 /// Copies `file` into `<masters>/prebuild/<sub>/` and returns its path relative to the Drive
@@ -513,4 +578,68 @@ fn readme(kit: &Kit, snake: &str, rows: &[Row]) -> String {
         }
     }
     md
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hero::mat::{self, metal};
+
+    #[test]
+    fn regular_patterns_get_an_even_number_of_whole_repeats() {
+        for m in [
+            mat::carbon(10.0),
+            mat::carbon(12.0),
+            mat::guilloche(metal::STEEL, "clous", 12.0),
+        ] {
+            let span = snapped_span(&m);
+            let kind = m.v.get("kind").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let p = if kind == "carbon" {
+                m.v.get("tow").and_then(Value::as_f64).unwrap_or(0.0) as f32 * 4.0
+            } else {
+                12.0
+            };
+            let n = span / p;
+            assert!((n - n.round()).abs() < 1e-4, "{kind}: {n} repeats");
+            assert_eq!(n.round() as i64 % 2, 0, "{kind}: odd repeat count {n}");
+            assert!(
+                (span - SWATCH_SPAN).abs() <= p,
+                "{kind}: span {span} strays from {SWATCH_SPAN}"
+            );
+        }
+        assert_eq!(snapped_span(&mat::brushed(metal::STEEL)), SWATCH_SPAN);
+    }
+
+    #[test]
+    fn blended_normals_are_unit_length_again() {
+        let mut d = Img::from_fn(2, 1, 3, |x, _| {
+            if x == 0 {
+                [0.75, 0.5, 0.75, 1.0]
+            } else {
+                [0.5, 0.5, 1.0, 1.0]
+            }
+        });
+        renormalize_normal(&mut d);
+        for x in 0..2 {
+            let v: Vec<f32> = (0..3).map(|c| d.get(x, 0, c) * 2.0 - 1.0).collect();
+            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            assert!((l - 1.0).abs() < 1e-5, "length {l}");
+        }
+    }
+
+    #[test]
+    fn every_kit_in_the_order_exists_and_names_are_unique() {
+        for snake in kits::ORDER {
+            let k = kits::kit(snake).unwrap_or_default();
+            assert!(!k.key.is_empty(), "{snake} has no kit");
+            let mut names: Vec<&str> = k.textures.iter().map(|t| t.recipe.name).collect();
+            names.extend(k.swatches.iter().map(|s| s.name));
+            names.extend(k.sprites.iter().map(|s| s.name));
+            let n = names.len();
+            names.sort_unstable();
+            names.dedup();
+            assert_eq!(names.len(), n, "{snake} repeats a file name");
+            assert!(n > 0, "{snake} has an empty kit");
+        }
+    }
 }
