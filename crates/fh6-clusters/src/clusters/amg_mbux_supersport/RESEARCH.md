@@ -65,6 +65,15 @@ From `sl55_r232_supersport_sportplus_red_idle_730rpm_01.jpg` (SL 55, [CarBuzz](h
 - Dotted halftone on every lit surface, and a horizon with a glow at the vanishing point.
 - The real screen sits in a visor with a bezel; our dash drops it (change 6).
 
+## Board v3 notes (TJS, 2026-11-28 09:52; to draw after LIBRARY DONE)
+
+TJS on board v2: "We don't need the top rev limiter but we're getting close look back at the Mercedes ripple and give some space depth the mph and number I front of the gear".
+
+1. **No upshift strip.** The 12-cell strip above the speed goes. The shift cue is the real one's: the fire jet entering the red gate, the gate glowing steady and the wall's front burning white. With no strip, nothing on this dash strobes at all (the house rule allows less flashing, never more); the limiter is a steady state. Logged as a deliberate change in the handover.
+2. **The real ripple, studied at 2x** (`gt63_c192_supersport_idle_01.jpg`, the left scale from 0 to 4). It is not a jagged zig-zag, as v2 drew it. It is a liquid plasma ribbon: a white-yellow core about as thick as a numeral stroke, with soft orange edges, whose thickness swells and pinches in smooth, uneven bulges (blob-like, a few per scale segment), slightly wavy in height by a pixel or two, brightest and thickest at the wall and tapering to a hairline at 0. The floor-edge flame under it is the same ribbon, fainter and calmer. The jet's dot volume lies mostly between the two ribbons (below the scale line), densest and brightest next to the line and the wall; above the line the dots are much fainter. The wall itself is a smooth, saturated orange arc with a soft glow, not a white stroke; it whitens only where the ribbon meets it.
+   - Elevated: the bulges travel outward from the mesh like pulses in a hose (speed from rpm, size from throttle), and a burst of bulges runs out on a sharp throttle stab.
+3. **Space and depth for the speed and the gear.** Both float in front of the tunnel as objects in their own layer: a soft dark shadow cast onto the tunnel behind them (offset down and toward the vanishing point), a faint blue rim light from the tunnel on their lower edges, and a parallax shift against the tunnel under lateral and longitudinal g (a few pixels; the tunnel moves, the figures hold), so they read as standing in the space between the driver and the mesh. The speed sits nearer (larger, bold) and the gear further in, at the mesh.
+
 ## Telling it apart from AmgMbuxSuperscreen
 
 Its sibling's v4 board (Penpot, 2026-11-28; `amg_mbux_superscreen/board_v4/states_v4.png` in the project files) is a red-on-black sky tunnel: two tall red halftone crescents, grey round rings that light back to front, a road floor, a round G-Force widget left and a round boost gauge right, grey scale bands with numerals. At thumbnail size Supersport must read differently. What the real Supersport gives us that the sibling lacks:
