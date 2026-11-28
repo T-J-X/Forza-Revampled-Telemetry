@@ -29,6 +29,7 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "bosch_ddu" => crate::recipes::bosch_ddu::build(ctx),
         "liquid_glass" => crate::recipes::liquid_glass::build(ctx),
         "porsche_analog" => crate::recipes::porsche_analog::build(ctx),
+        "osd" => crate::recipes::osd::build(ctx),
         // Registered by the code re-cut (2026-11-28) so a dash thread never edits this list;
         // each starts empty and its thread fills it.
         "vision_spatial_glass" => crate::recipes::vision_spatial_glass::build(ctx),
@@ -97,6 +98,7 @@ pub fn build(ctx: &mut Ctx, set: &str) -> Result<()> {
         "mclaren_slim_display" => crate::recipes::mclaren_slim_display::build(ctx),
         "hopf_fibration" => crate::recipes::hopf_fibration::build(ctx),
         "hyperbolic_tiles" => crate::recipes::hyperbolic_tiles::build(ctx),
+        "faraday_mandala" => crate::recipes::faraday_mandala::build(ctx),
         _ => Ok(()),
     }
 }

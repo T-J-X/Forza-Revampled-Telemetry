@@ -141,4 +141,5 @@ goldens! {
     mclaren_slim_display => MclarenSlimDisplay,
     hopf_fibration => HopfFibration,
     hyperbolic_tiles => HyperbolicTiles,
+    faraday_mandala => FaradayMandala,
 }

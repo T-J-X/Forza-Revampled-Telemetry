@@ -509,11 +509,13 @@ dependencies = [
 name = "fh6-osd"
 version = "0.1.0"
 dependencies = [
+ "allocation-counter",
  "fh6-clusters",
  "fh6-core",
  "fh6-kit",
  "serde_json",
  "tracing",
+ "wgpu",
 ]
 
 [[package]]
@@ -804,6 +806,10 @@ dependencies = [
  "thiserror",
  "windows",
 ]
+
+[[package]]
+name = "gpu-lock"
+version = "0.1.0"
 
 [[package]]
 name = "half"

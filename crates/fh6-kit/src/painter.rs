@@ -7,7 +7,9 @@ use crate::color::Color;
 use crate::images::Images;
 use crate::math::{finite_or, note_repair, vec2, Affine, Rect, Vec2};
 use crate::mesh::{MeshCmd, MeshDraw};
-use crate::paint::{BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread};
+use crate::paint::{
+    BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread, StandingWaves,
+};
 use crate::palette::Palette;
 use crate::scene::{
     pack_bloom, Bloom, DrawCmd, GpuClip, GpuPaint, Instance, LayerOptions, Scene, Segment, MAX_CLIPS, MAX_INSTANCES,
@@ -23,8 +25,13 @@ use crate::tokens::Tokens;
 /// Most nested `save` levels.
 const MAX_DEPTH: usize = 32;
 
+/// How far (target pixels) a glass quad trimmed to a clip reaches past the clip's rectangle.
+/// The clip's coverage, `clamp(0.5 - distance)`, is zero from half a pixel out, so one pixel
+/// keeps every pixel the untrimmed draw wrote, with room for rounding.
+const GLASS_CLIP_SLACK_PX: f32 = 1.0;
+
 /// Paint kinds (must match `shape.wgsl`).
-mod paint_kind {
+pub(crate) mod paint_kind {
     pub const SOLID: u32 = 0;
     pub const LINEAR: u32 = 1;
     pub const RADIAL: u32 = 2;
@@ -32,6 +39,8 @@ mod paint_kind {
     pub const IMAGE: u32 = 4;
     pub const GLASS: u32 = 5;
     pub const OPTIC: u32 = 6;
+    /// The standing waves of the optical-glass record before it (never drawn by itself).
+    pub const WAVES: u32 = 7;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -51,6 +60,8 @@ struct State {
     segment: SegmentKey,
     /// When false, `layer` ignores backdrop requests (glass draws tint, rim and sheen only).
     backdrops: bool,
+    /// Text whose cap height comes out smaller than this many target pixels is not drawn.
+    min_text_px: f32,
 }
 
 /// Records one frame of drawing. Created by [`crate::Kit::begin_frame`].
@@ -98,6 +109,7 @@ impl<'f> Painter<'f> {
                     backdrop_px: None,
                 },
                 backdrops: true,
+                min_text_px: 0.0,
             },
             stack: [None; MAX_DEPTH],
             depth: 0,
@@ -230,6 +242,14 @@ impl<'f> Painter<'f> {
     /// and thumbnails drawn inside another surface turn it off).
     pub fn set_backdrops(&mut self, on: bool) {
         self.state.backdrops = on;
+    }
+
+    /// Leaves out text whose cap height would come out under `px` target pixels, until the
+    /// matching restore. A cluster drawn as a small thumbnail sets its labels and footers at a
+    /// few pixels, where they read as grey bars; its gear, speed and shapes still draw. `text`
+    /// still returns the bounds the text would have had, so layouts built on them hold.
+    pub fn set_min_text_px(&mut self, px: f32) {
+        self.state.min_text_px = finite_or(px, 0.0).max(0.0);
     }
 
     /// Sets the blend mode until the matching restore.
@@ -370,7 +390,7 @@ impl<'f> Painter<'f> {
             return;
         }
         let viewport = self.state.xf.apply_rect(&draw.viewport);
-        self.scene.bounds = self.scene.bounds.union(&viewport);
+        self.mark_drawn(&viewport);
         self.scene.meshes.push(MeshCmd {
             draw: *draw,
             viewport,
@@ -393,6 +413,9 @@ impl<'f> Painter<'f> {
             return Rect::from_points(pos, pos);
         };
         let origin = run.origin(pos);
+        if style.cap * self.state.xf.scale_factor() < self.state.min_text_px {
+            return run.bounds(origin);
+        }
         let paint = style.paint;
         let mut xf_saved = None;
         if style.slant.abs() > 1e-4 {
@@ -550,9 +573,22 @@ impl<'f> Painter<'f> {
             draws: at..at,
             blur_px: self.state.segment.blur_px,
             backdrop_px: self.state.segment.backdrop_px,
+            bounds: Rect::EMPTY,
         });
         self.segment_open = true;
         true
+    }
+
+    /// Adds what a draw over `world` (target pixels) reaches to the bounds of the frame and of
+    /// the open segment: the draw itself and, in a blurred layer, the three sigma its light
+    /// spreads to. The renderer blurs and composites a layer only inside these bounds
+    /// (`blur_region`), so every kind of draw must come through here.
+    fn mark_drawn(&mut self, world: &Rect) {
+        let drawn = world.expand(self.state.segment.blur_px * 3.0);
+        self.scene.bounds = self.scene.bounds.union(&drawn);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&drawn);
+        }
     }
 
     fn push(&mut self, enc: Encoded, bbox: Rect, paint: &Paint, coverage_mode: u32, style: [f32; 4]) {
@@ -581,14 +617,22 @@ impl<'f> Painter<'f> {
         let image = paint.image();
 
         // Anti-aliasing margin: 1.5 device pixels.
-        let mut bbox = bbox.expand(1.5 / px_scale);
+        let frame = bbox.expand(1.5 / px_scale);
+        let mut bbox = frame;
         // Trim the quad to the clip when the transform is axis-aligned: pixels outside the clip
-        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep) costs only
-        // the clipped area.
-        // Glass derives its optics from the full bounds, so it is never trimmed.
-        if let (Some(clip), false) = (self.state.clip_rect, is_glass) {
+        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep, a lens
+        // drawn band by band) costs only the clipped area.
+        if let Some(clip) = self.state.clip_rect {
             let [a, b, c, d, tx, ty] = xf.m;
             if b == 0.0 && c == 0.0 && a > 1e-6 && d > 1e-6 {
+                // The clip's anti-aliased edge covers pixel centres up to half a pixel outside
+                // its rectangle. Glass keeps those pixels, so its trimmed draw writes exactly what
+                // the untrimmed one did; other shapes keep the trim they always had.
+                let clip = if is_glass {
+                    clip.expand(GLASS_CLIP_SLACK_PX)
+                } else {
+                    clip
+                };
                 let local = Rect::from_points(
                     vec2((clip.min.x - tx) / a, (clip.min.y - ty) / d),
                     vec2((clip.max.x - tx) / a, (clip.max.y - ty) / d),
@@ -599,9 +643,13 @@ impl<'f> Painter<'f> {
                 }
             }
         }
-        let world = xf.apply_rect(&bbox);
-        let blur_margin = self.state.segment.blur_px * 3.0;
-        self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
+        // Glass derives its optics (centre, rim gradient, sheen, caustic, the fallback outline)
+        // from the shape's own bounds, never from the trimmed quad. A glass paint has no solid
+        // colour, so the instance colour carries those bounds (`shape.wgsl` `glass_frame`).
+        let color = if is_glass { frame.to_array() } else { color.to_array() };
+        // Glass keeps its whole shape in the work rectangle: its refraction and frost sample
+        // the backdrop beyond the trimmed quad, and must find the same cleared margin there.
+        self.mark_drawn(&xf.apply_rect(if is_glass { &frame } else { &bbox }));
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };
         if bloom != 0 {
             self.scene.bloom_used = true;
@@ -615,7 +663,7 @@ impl<'f> Painter<'f> {
             p1: enc.p1,
             p2: enc.p2,
             style,
-            color: color.to_array(),
+            color,
             ids: [
                 enc.kind | (coverage_mode << 8) | (enc.flags << 16),
                 paint_index,
@@ -659,15 +707,69 @@ impl<'f> Painter<'f> {
                 return Some((idx, Color::WHITE));
             }
         }
-        if self.scene.paints.len() >= MAX_PAINTS {
+        // Optical glass with standing waves takes a second record right after its own.
+        let waves = match paint {
+            Paint::OpticalGlass(gl) => standing_record(&gl.standing),
+            _ => None,
+        };
+        let slots = 1 + usize::from(waves.is_some());
+        if self.scene.paints.len() + slots > MAX_PAINTS {
             return None;
         }
-        let gpu = gpu_paint(paint, self.images);
+        let mut gpu = gpu_paint(paint, self.images);
+        if waves.is_some() {
+            gpu.head[1] |= optic_flag::STANDING;
+        }
         self.scene.paints.push(gpu);
         let idx = (self.scene.paints.len() - 1) as u32;
+        if let Some(w) = waves {
+            self.scene.paints.push(w);
+        }
         self.last_paint = Some((*paint, idx));
         Some((idx, Color::WHITE))
     }
+}
+
+/// Flags in `head[1]` of an optical-glass record (`shape.wgsl` `optic_glass`).
+pub(crate) mod optic_flag {
+    /// The piece is a metal: `g0.xyz` is `n` and `g2.xyz` is `k` per channel.
+    pub const CONDUCTOR: u32 = 1;
+    /// The next record holds standing waves ([`super::standing_record`]).
+    pub const STANDING: u32 = 2;
+}
+
+/// Largest wavenumber the shader takes (radians per local unit; a wavelength of 0.1 px), and
+/// largest amplitude, so the waves' second derivatives `k² A` stay finite in `f32`.
+const MAX_WAVENUMBER: f32 = 64.0;
+/// See [`MAX_WAVENUMBER`].
+const MAX_WAVE_AMPLITUDE: f32 = 1.0e4;
+
+/// The record that follows an optical-glass record whose surface has standing waves, or `None`
+/// when it has none that move: `head` = [`paint_kind::WAVES`], the wave count; `g0` = centre,
+/// wavenumber, still radius; `g1.x` = still width; `colors[i]` = unit direction, amplitude and
+/// phase of wave `i`. The wavenumber and amplitudes are clamped to [`MAX_WAVENUMBER`] and
+/// [`MAX_WAVE_AMPLITUDE`].
+fn standing_record(s: &StandingWaves) -> Option<GpuPaint> {
+    if !s.is_active() {
+        return None;
+    }
+    let k = finite_or(s.wavenumber, 0.0).clamp(-MAX_WAVENUMBER, MAX_WAVENUMBER);
+    let mut g: GpuPaint = bytemuck::Zeroable::zeroed();
+    let waves = s.waves();
+    g.head = [paint_kind::WAVES, waves.len() as u32, 0, 0];
+    g.g0 = [
+        finite_or(s.center.x, 0.0),
+        finite_or(s.center.y, 0.0),
+        k,
+        finite_or(s.still_radius, 0.0).max(0.0),
+    ];
+    g.g1 = [finite_or(s.still_width, 0.0).max(0.0), 0.0, 0.0, 0.0];
+    for (slot, w) in g.colors.iter_mut().zip(waves) {
+        let e = Vec2::new(finite_or(w.direction.x, 0.0), finite_or(w.direction.y, 0.0)).normalize_or_zero();
+        let a = finite_or(w.amplitude, 0.0).clamp(-MAX_WAVE_AMPLITUDE, MAX_WAVE_AMPLITUDE);
+        *slot = [e.x, e.y, a, finite_or(w.phase, 0.0)];
+    }
+    Some(g)
 }
 
 /// Converts a paint to its GPU record.
@@ -803,6 +905,23 @@ fn gpu_paint(paint: &Paint, images: &Images) -> GpuPaint {
                 unit(wave.center.y, 0.0),
                 unit(wave.radius, 0.0),
             ];
+            // A metal transmits nothing, so its complex index takes the index and absorption
+            // lanes: n in g0.xyz (it may be below 1), k in g2.xyz.
+            if let Some(m) = gl.conductor {
+                g.head[1] |= optic_flag::CONDUCTOR;
+                g.g0 = [
+                    unit(m.n[0], 1.0).clamp(1e-3, 16.0),
+                    unit(m.n[1], 1.0).clamp(1e-3, 16.0),
+                    unit(m.n[2], 1.0).clamp(1e-3, 16.0),
+                    0.0,
+                ];
+                g.g2 = [
+                    unit(m.k[0], 0.0).clamp(0.0, 32.0),
+                    unit(m.k[1], 0.0).clamp(0.0, 32.0),
+                    unit(m.k[2], 0.0).clamp(0.0, 32.0),
+                    g.g2[3],
+                ];
+            }
         }
     }
     g

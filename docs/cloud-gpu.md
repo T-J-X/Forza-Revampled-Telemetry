@@ -5,10 +5,11 @@ A rented 24 GB card that runs the same ComfyUI and the same Blender as this PC. 
 ## In one minute
 
 ```
-# take a cloud lock file first: gpu-cloud.lock, or gpu-cloud-2.lock when it is taken (SKILLS.md, section 5), then:
-cargo run --release -p asset-forge -- --lane cloud build --set <snake_name>
-cargo run --release -p asset-forge -- --lane cloud --masters <snake_name> build --set <snake_name>
-cargo run --release -p asset-forge -- cloud down      # when your batch is done; then release the lock
+# queue for a cloud lock with gpu-lock (SKILLS.md, section 5): it holds gpu-cloud.lock or gpu-cloud-2.lock
+# while the job runs. gpu-lock.exe is "$USERPROFILE/Documents/Dash_Tools/bin/gpu-lock.exe"; start it in the background.
+gpu-lock.exe run --lane cloud --thread "<thread name>" --job "<set>" -- cargo run --release -p asset-forge -- --lane cloud build --set <snake_name>
+gpu-lock.exe run --lane cloud --thread "<thread name>" --job "<set>" -- cargo run --release -p asset-forge -- --lane cloud --masters <snake_name> build --set <snake_name>
+cargo run --release -p asset-forge -- cloud down      # when your batch is done (it needs no lock)
 ```
 
 - `--lane cloud` sends the run's ComfyUI and Blender work to the pod. Everything else stays on this PC, and the results land in the same folders as a local run. A recipe needs no change.
@@ -42,7 +43,7 @@ Five things keep the cost down, and none of them depends on a thread remembering
    - The volume keeps costing $28 a month, also after the lane closes, until it is deleted.
    - If a line of the spend log is damaged, the budget cannot be counted, and no pod starts until the line is fixed or removed.
    - Only TJX raises the budget. A thread never edits `budget_usd`.
-   - TJX will not raise it (2026-11-28: "when we run out we will work here instead only"). Once it is spent, the lane stays closed and every job runs on the local lane: take `gpu.lock` and run the same command without `--lane cloud`.
+   - TJX will not raise it (2026-11-28: "when we run out we will work here instead only"). Once it is spent, the lane stays closed and every job runs on the local lane: queue for `gpu.lock` with `gpu-lock run` and run the same command without `--lane cloud`.
 2. **No pod over the price cap.** `max_usd_per_hour` in `lane.json` is $0.90. `cloud setup` lists only GPU types at or under it, and a pod that comes back dearer is deleted at once and booked. A pod whose answer gives no price is booked at the cap.
 3. **Idle shut-off.** A watchdog inside the pod deletes it after `idle_minutes` (10) without use. "Use" is a command from this PC, a beat from an open asset-forge run, a running Blender, or a busy GPU. The run sends a beat every 15 seconds, and the pod stops counting them a minute after the last one. So a PC that sleeps, crashes or loses its network frees the pod about 11 minutes later. The watchdog is part of the pod's start command, so it works with this PC off.
 4. **Lifetime cap.** The same watchdog deletes the pod at `max_hours` (4), whatever it is doing, or earlier when the budget is nearly used up. A second loop that needs nothing but the clock enforces this too, in case the first one hangs. Nothing in the watchdog waits without a time limit. asset-forge replaces a pod that is within 30 minutes of the cap before it starts a job on it.
@@ -63,7 +64,7 @@ All five hold only for pods that asset-forge starts. The Runpod plugin on TJX's 
 | `asset-forge cloud key` | Asks for a new Runpod API key (paste it and press Enter) and saves it once Runpod has accepted it. The key never goes on the command line, where the shell's history and `cargo run` would keep it. |
 | `asset-forge [--lane cloud] selftest` | Three fixed jobs with timings, on either lane: an SDXL texture with the 4x upscale, base and refiner with the canny ControlNet, and a 3840x2160 glass render. |
 
-`up`, `setup`, `doctor` and every `--lane cloud` job need a cloud lock file (`gpu-cloud.lock` or `gpu-cloud-2.lock`). `down`, `status`, `spend` and `key` do not.
+`up`, `setup`, `doctor` and every `--lane cloud` job need a cloud lock file (`gpu-cloud.lock` or `gpu-cloud-2.lock`): run them through `gpu-lock run --lane cloud` (SKILLS.md, section 5). `down`, `status`, `spend` and `key` do not.
 
 ## Measured on 2026-11-27
 
@@ -155,8 +156,8 @@ TJX's own choices on 2026-11-27: the volume was created at 30 GB, grown to 100 G
 
 | What you see | What it means | What to do |
 |---|---|---|
-| `the cloud lane is not locked` | The lock file is missing. | Take `gpu-cloud.lock` (SKILLS.md, section 5). |
-| `the cloud lane is closed: ... of the ... budget is spent` | The budget is used up. | Run this job and every later one on the local lane (take `gpu.lock`, drop `--lane cloud`), and say in your thread that the lane is closed. TJX keeps the budget as it is (2026-11-28). |
+| `the cloud lane is not locked` | No cloud lock file is held. | Run the job through `gpu-lock run --lane cloud` (SKILLS.md, section 5). |
+| `the cloud lane is closed: ... of the ... budget is spent` | The budget is used up. | Run this job and every later one on the local lane (queue for `gpu.lock` with `gpu-lock run`, and drop `--lane cloud`), and say in your thread that the lane is closed. TJX keeps the budget as it is (2026-11-28). |
 | `too little of the budget is left to start a pod` | The rest of the budget pays for less than 10 minutes. | The same. |
 | `no pod could be started in EU-RO-1` | None of the GPU types has room right now. | Run the job on the local lane, or try again later. |
 | `the Runpod balance is too low` | The credit ran out and auto-pay did not refill it. | Tell TJX. |

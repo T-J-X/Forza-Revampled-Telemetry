@@ -13,7 +13,7 @@
 //!
 //! | Zone | Part | Centre | Size | Holds |
 //! |---|---|---|---|---|
-//! | T | rev counter | (0, −40) | bezel R 248, dial R 214, raised scale ring R 150–214, hub cap R 20 | ranks 1 and 3: the shift ring (11 lenses at R 231 in the bezel, from 205° over 130°, so only the approach to the shift point and the red zone carry lenses), the scale (240°, ticks to R 204, numerals tucked 5 px inside the bars, cap 32), the needle (tail 26, tip 200), the logo zone on the hub's vertical (160 × 20, 100 below the hub when that clears the window; else 120 × 18, 104 below; else 160 × 20, 84 above) and "1/min × 1000" under it |
+//! | T | rev counter | (0, −40) | bezel R 248, dial R 214, raised scale ring R 150–214, hub cap R 20 | ranks 1 and 3: the shift ring (11 lenses at R 231 in the bezel, from 205° over 130°, so only the approach to the shift point and the red zone carry lenses), the scale (240°, ticks to R 204, numerals tucked 5 px inside the bars, cap 32), the needle (tail 26, tip 200), the logo zone on the hub's vertical (160 × 20, 100 below the hub when that clears the window; else 120 × 18, 104 below; else 160 × 20, 84 above; a logo narrower than the Porsche wordmark keeps the wordmark's area and stands up to 40 tall on its line) and "1/min × 1000" under it |
 //! | T·W | gear window | the middle of the scale's dead zone, 116 from the hub, reaching across the numeral-free part of the scale ring | porthole R 70, rim R 76 | rank 1: the gear (cap 96, "10" at 0.76 of it, magnified about 5 % by the low sapphire cyclops) and, from the shift point, the "+" upshift cue beside it in the same window, as on the Carrera |
 //! | L | left tube | (−396, −8), 36 px behind the rev counter's bezel | bezel R 184, dial R 160, scale ring R 112–160 | rank 2 by default: speed (pointer R 126–156, numerals cap 17 tucked inside the bars, digits cap 66) |
 //! | R | right tube | (396, −8) | as L | rank 4 by default: G (felt force), throttle and brake; the driver greeting while parked |
@@ -57,9 +57,9 @@ use core::f32::consts::{FRAC_PI_2, PI, TAU};
 use fh6_core::AppConfig;
 use fh6_kit::cluster::Setup;
 use fh6_kit::{
-    vec2, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId, LayerOptions,
-    Layout, Logo, OpticalGlass, Painter, Palette, Piece, Rect, Shadow, Shape, Signals, Smoothed, SpeedUnit, Spring,
-    SpringSpec, Stroke, TextStyle, Tokens, Tween, VAlign, Vec2, View,
+    vec2, Align, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId, ImagePaint,
+    LayerOptions, Layout, Logo, OpticalGlass, Painter, Palette, Piece, Rect, Shadow, Shape, Signals, Smoothed,
+    SpeedUnit, Spring, SpringSpec, Stroke, TextStyle, Tokens, Tween, VAlign, Vec2, View,
 };
 use hardware::{Kind, Sprites};
 use readout::{LimiterHold, Readout};
@@ -176,6 +176,8 @@ struct Geom {
     logo_size: Vec2,
     logo_below_narrow: f32,
     logo_narrow: Vec2,
+    /// The tallest a logo narrower than the wordmark is drawn: the hub cap's width.
+    logo_emblem_max: f32,
     legend_drop: f32,
     /// Tube centres: far left, left, right, far right.
     tubes: [Vec2; 4],
@@ -227,6 +229,7 @@ const GEOM: Geom = Geom {
     logo_size: vec2(160.0, 20.0),
     logo_below_narrow: 104.0,
     logo_narrow: vec2(120.0, 18.0),
+    logo_emblem_max: 40.0,
     legend_drop: 24.0,
     tubes: [
         vec2(-612.0, 16.0),
@@ -301,10 +304,39 @@ impl Geom {
     fn legend_box(&self, zone: Rect) -> Rect {
         Rect::from_center_size(zone.center() + vec2(0.0, self.legend_drop), LEGEND_SIZE)
     }
+
+    /// Where a logo image of `size` (its file's pixels) is drawn in the logo `zone`. A logo at
+    /// least as wide as the Porsche wordmark fits the zone as before ([`fh6_kit::logo::fit`]).
+    /// A narrower one keeps the box area the wordmark has there, and stands at most the hub
+    /// cap's width tall: in the full zone Toyota's dial is about 37 px tall instead of the
+    /// slot's 15 (where its lettering did not read), and a square emblem 40. It stands on the
+    /// wordmark's line, centred on the hub's vertical, so its gap to the legend is the
+    /// wordmark's, and the zone, the legend and the window's clearance never depend on the
+    /// car's logo.
+    fn logo_art(&self, zone: Rect, size: (u32, u32)) -> Rect {
+        let fitted = fh6_kit::logo::fit(zone, size);
+        let aspect = size.0.max(1) as f32 / size.1.max(1) as f32;
+        if aspect >= MAKER_ASPECT || fitted.height() <= 0.0 {
+            return fitted;
+        }
+        // Narrower than the wordmark, the fitted logo fills the zone's inner height, which is
+        // the wordmark's height there.
+        let line = fitted.height();
+        let height = (line * (MAKER_ASPECT / aspect).sqrt())
+            .min(self.logo_emblem_max)
+            .max(line);
+        let half = height * aspect * 0.5;
+        let x = fitted.center().x;
+        Rect::from_points(vec2(x - half, fitted.max.y - height), vec2(x + half, fitted.max.y))
+    }
 }
 
 /// The most room "1/min × 1000" takes at the tokens' nano cap (px).
 const LEGEND_SIZE: Vec2 = vec2(110.0, 14.0);
+
+/// The Porsche wordmark's shape (`assets/logos/porsche_dial.png`, 1024 × 128): a logo narrower
+/// than this is drawn with the wordmark's area ([`Geom::logo_art`]).
+const MAKER_ASPECT: f32 = 8.0;
 
 /// The shortest distance from `p` to the rectangle `r` (0 inside it).
 fn distance_to_rect(p: Vec2, r: Rect) -> f32 {
@@ -423,16 +455,18 @@ enum ZoneArt<I> {
 
 /// What the logo zone shows: `image` (the car's logo, [`Logo::image`]), else `maker` (the
 /// maker's wordmark when the car is one of theirs), else the names in `logo`. While the car's
-/// dial is loading a maker car shows the maker's wordmark at once (the same file as the car's
-/// dial, drawn the same way, so the change to the dial cannot be seen) and any other car shows
-/// nothing, so a name never shows first and a dial a moment later. The images are any handle,
-/// so tests need no kit.
+/// dial is loading ([`Logo::loading`]) the zone shows nothing of the car's own, its image
+/// included, as the kit's `logo::draw` does: a maker car shows the maker's wordmark at once (the
+/// same file as the car's dial, drawn the same way, so the change to the dial cannot be seen)
+/// and any other car shows nothing, so a name never shows first and a dial a moment later. The
+/// images are any handle, so tests need no kit.
 fn zone_art<I>(image: Option<I>, maker: Option<I>, logo: &Logo) -> ZoneArt<I> {
     let off = image.is_none() && logo.brand_name.trim().is_empty() && logo.custom_name.trim().is_empty();
     if off {
         return ZoneArt::Nothing;
     }
-    match image.or(maker) {
+    let car = if logo.loading { None } else { image };
+    match car.or(maker) {
         Some(image) => ZoneArt::Image(image),
         None if logo.loading => ZoneArt::Nothing,
         None => ZoneArt::Names,
@@ -1021,33 +1055,27 @@ impl PorscheAnalog {
     }
 
     /// The logo zone (the host's logo image, else this dash's maker wordmark on the maker's own
-    /// cars, else the brand or custom name; nothing when the logo is turned off, and no name
-    /// while the car's dial is loading, [`zone_art`]) and
-    /// "1/min × 1000" under it. Its side of the hub follows the car's scale, not the turning
-    /// one, so it never jumps in the middle of a turn.
+    /// cars, else the brand or custom name; nothing when the logo is turned off, and nothing of
+    /// the car's own while its dial is loading, [`zone_art`]) and "1/min × 1000" under it. An
+    /// emblem stands taller than the wordmark slot ([`Geom::logo_art`]). Its side of the hub
+    /// follows the car's scale, not the turning one, so it never jumps in the middle of a turn.
     fn draw_logo(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
         let zone = g.logo_zone(&self.scale);
         let maker = if self.maker_car { self.maker } else { None };
         match zone_art(self.logo.image, maker, &self.logo) {
             ZoneArt::Nothing => {}
             ZoneArt::Image(image) => {
-                // An image, printed on the dial: engraved (a dark copy 1 px below-right first).
-                let ink = pal.roles.ink.with_alpha(215.0 / 255.0);
-                let shadow = fh6_kit::logo::LogoStyle {
-                    tint: pal.roles.oled_black.with_alpha(0.8),
-                    ..fh6_kit::logo::LogoStyle::new(self.faces.wide)
-                };
-                let only = Logo {
-                    image: Some(image),
-                    ..Logo::default()
-                };
-                let off = Rect::from_points(zone.min + vec2(1.0, 1.0), zone.max + vec2(1.0, 1.0));
-                fh6_kit::logo::draw(p, off, &only, &shadow);
-                let style = fh6_kit::logo::LogoStyle {
-                    tint: ink,
-                    ..fh6_kit::logo::LogoStyle::new(self.faces.wide)
-                };
-                fh6_kit::logo::draw(p, zone, &only, &style);
+                // Laid out by the picture's size, not the texture's: a dial uploaded from 512 px
+                // down keeps its shape (an image the store does not know draws nothing).
+                if let Some(size) = p.images().source_size(image) {
+                    // Printed on the dial: engraved (a dark copy 1 px below-right first).
+                    let art = g.logo_art(zone, size);
+                    let off = Rect::from_points(art.min + vec2(1.0, 1.0), art.max + vec2(1.0, 1.0));
+                    let shadow = pal.roles.oled_black.with_alpha(0.8);
+                    p.fill(&Shape::rect(off), ImagePaint::new(image, off).tint(shadow));
+                    let ink = pal.roles.ink.with_alpha(215.0 / 255.0);
+                    p.fill(&Shape::rect(art), ImagePaint::new(image, art).tint(ink));
+                }
             }
             ZoneArt::Names => logo_zone(p, zone, &self.logo, self.faces.wide, LogoVariant::Dial, pal),
         }

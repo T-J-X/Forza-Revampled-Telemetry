@@ -59,6 +59,7 @@ const SETS: &[&str] = &[
     "bosch_ddu",
     "liquid_glass",
     "porsche_analog",
+    "osd",
     "vision_spatial_glass",
     "amg_mbux_superscreen",
     "drift_glass",
@@ -125,6 +126,7 @@ const SETS: &[&str] = &[
     "mclaren_slim_display",
     "hopf_fibration",
     "hyperbolic_tiles",
+    "faraday_mandala",
 ];
 
 fn main() -> ExitCode {
@@ -372,7 +374,7 @@ mod tests {
             assert!(SETS.contains(&name.as_str()), "{name} has no asset-forge set");
             seen += 1;
         }
-        assert_eq!(seen, 72);
+        assert_eq!(seen, 73);
         // `sets::build` ignores an unknown name, so a set without its arm would build nothing.
         let arms = include_str!("sets/mod.rs");
         for set in SETS {

@@ -38,6 +38,7 @@ mod painter;
 pub mod palette;
 pub mod particles;
 pub mod perspective;
+mod pool;
 mod renderer;
 mod scene;
 pub mod scrim;
@@ -59,11 +60,12 @@ pub use kit::{Kit, KitError};
 pub use math::{deg, vec2, Affine, Rect, Vec2};
 pub use paint::{
     BlendMode, Environment, Glass, Gradient, GradientKind, ImageId, ImagePaint, ImageWrap, OpticalGlass, Paint,
-    Refraction, Ripple, Spread, Stop, LIGHT_REST_AZIMUTH,
+    PlaneWave, Refraction, Ripple, Spread, StandingWaves, Stop, LIGHT_REST_AZIMUTH, MAX_STANDING_WAVES,
 };
 pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};
-pub use renderer::FrameStats;
+pub use pool::{Pool, MAX_POOLS};
+pub use renderer::{FrameStats, GpuPassKind, GpuPassTime};
 pub use scene::{Backdrop, Bloom, LayerOptions, Scene};
 pub use shape::{
     Axis, Cap, Dome, Glow, Outline, Piece, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit,

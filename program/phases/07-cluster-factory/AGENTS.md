@@ -10,3 +10,5 @@
 | **Agent 0 · Research Scout** | Step 1 of every dash: the real display from real sources, written to `RESEARCH.md`. |
 
 TJX is hands-off (AGENTS.md rule 12): the thread's self-review with the review skills and agents stands in for TJX's direction check and sign-off, and TJX's own words win whenever TJX answers. The family director leads the design and its direction check, and QA owns the evidence for the closing review.
+
+**The six-lead review panel (TJS, 2026-11-28).** At every dash's closing review, before the merge, each of the six leads above is one reviewer: a fresh agent with that lead's mandate, all six at once, and then one agent that checks their findings against the evidence (`CLUSTER_PROMPT.md` step 10 and line 40; the briefs are in `fh6-visual-review`'s `references/panel.md`). Each gives findings and yes/no answers once, never a score or a verdict.

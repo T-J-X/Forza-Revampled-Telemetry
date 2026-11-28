@@ -1,22 +1,27 @@
 //! Offscreen benchmark of the render kit at 3840x2160.
 //!
 //! Scenarios: the two showcase clusters (bloom on and off), glass with and without a
-//! refraction source, the fluid solver on, and an empty frame. For each it reports, over N
+//! refraction source, a liquid-metal disc flat and with six standing waves, the fluid solver on,
+//! and an empty frame. For each it reports, over N
 //! frames after warm-up:
 //! - CPU `update` + `draw` (recording into the arena);
 //! - CPU `Kit::render` (packing, the single upload, pass recording);
 //! - GPU time from timestamp queries around the whole frame.
 //!
 //! `--frames N` (default 600), `--out FILE` writes the Markdown report
-//! (e.g. `docs/perf/render-kit.md`).
+//! (e.g. `docs/perf/render-kit.md`). `--glass-spikes` runs the glass layer's frame-by-frame bench
+//! instead (`spikes.rs`; `--csv FILE` also writes every frame).
+
+mod spikes;
 
 use fh6_core::{AppConfig, ClusterTheme, FH6TelemetryData};
 use fh6_gpu::GpuContext;
 use fh6_kit::fluid::{Fluid, FluidConfig};
+use fh6_kit::optics::{Conductor, Profile};
 use fh6_kit::testing::{Offscreen, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    vec2, Cluster, Color, Family, FrameInput, Glass, ImagePaint, Kit, LayerOptions, Layout, Logo, Palette, Rect,
-    Refraction, Shape, SignalSmoother, Tokens, View,
+    vec2, Cluster, Color, Family, FrameInput, Glass, ImagePaint, Kit, LayerOptions, Layout, Logo, OpticalGlass,
+    Palette, Rect, Refraction, Shape, SignalSmoother, StandingWaves, Tokens, View,
 };
 use std::error::Error;
 use std::fmt::Write as _;
@@ -73,6 +78,10 @@ enum Extra {
     GlassWorld,
     /// A glass plate with no refraction source (own layers only).
     GlassOwn,
+    /// A liquid-metal disc 760 px across (mercury, a shallow meniscus), its surface still.
+    MetalFlat,
+    /// The same disc with six standing waves whose wavenumber and phase change every frame.
+    MetalWaves,
     /// The fluid solver stepping each frame, its dye drawn in a plate.
     Fluid,
     /// The OEM scrim (100%) and lip wash under the cluster.
@@ -107,13 +116,23 @@ fn telemetry(frame: usize) -> FH6TelemetryData {
 fn main() -> Result<()> {
     let mut frames = 600usize;
     let mut out: Option<PathBuf> = None;
+    let mut csv: Option<PathBuf> = None;
+    let mut glass_spikes = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--frames" => frames = args.next().ok_or("--frames needs a value")?.parse()?,
             "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a value")?)),
+            "--csv" => csv = Some(PathBuf::from(args.next().ok_or("--csv needs a value")?)),
+            "--glass-spikes" => glass_spikes = true,
             other => return Err(format!("unknown argument {other:?}").into()),
         }
+    }
+    if glass_spikes {
+        return spikes::run(frames, out.as_deref(), csv.as_deref());
+    }
+    if csv.is_some() {
+        return Err("--csv goes with --glass-spikes".into());
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_default();
@@ -199,6 +218,18 @@ fn main() -> Result<()> {
             theme: None,
             bloom: true,
             extra: Extra::GlassWorld,
+        },
+        Scenario {
+            name: "Liquid-metal disc 760 px, still",
+            theme: None,
+            bloom: true,
+            extra: Extra::MetalFlat,
+        },
+        Scenario {
+            name: "Liquid-metal disc 760 px, 6 standing waves",
+            theme: None,
+            bloom: true,
+            extra: Extra::MetalWaves,
         },
         Scenario {
             name: "Porsche Analog scaffold + fluid (256x128, 20 Jacobi)",
@@ -310,6 +341,28 @@ fn main() -> Result<()> {
                                     ..tokens.glass(palette.glass_tint)
                                 },
                             );
+                        });
+                    }
+                    Extra::MetalFlat | Extra::MetalWaves => {
+                        let mut metal = OpticalGlass::metal(Conductor::mercury()).with_profile(Profile {
+                            thickness: 14.0,
+                            bevel: 60.0,
+                            base: 0.0,
+                            exponent: 2.0,
+                        });
+                        if sc.extra == Extra::MetalWaves {
+                            // A wavenumber that sweeps with the revs, as a Faraday dash drives it.
+                            let a = f as f32 * 0.02;
+                            let k = core::f32::consts::TAU / (38.0 + 12.0 * a.sin());
+                            let mut waves =
+                                StandingWaves::symmetric(vec2(0.0, 0.0), k, 6, 2.0, 0.1 * a).still(40.0, 30.0);
+                            for (i, w) in waves.waves_mut().iter_mut().enumerate() {
+                                w.phase = a * (1.0 + 0.3 * i as f32);
+                            }
+                            metal.standing = waves;
+                        }
+                        p.layer(LayerOptions::glass(0.0), |p| {
+                            p.fill(&Shape::circle(vec2(0.0, 0.0), 380.0), metal);
                         });
                     }
                     Extra::Fluid => {

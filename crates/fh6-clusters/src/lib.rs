@@ -11,6 +11,7 @@
 pub mod catalog;
 pub mod clusters;
 pub mod common;
+pub mod housing;
 pub mod kit;
 pub mod registry;
 pub mod review;
