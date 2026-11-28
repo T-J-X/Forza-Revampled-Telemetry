@@ -64,24 +64,36 @@ pub enum LogoVariant {
 /// Draws the logo zone in `zone` (≤ 220 × 44 for a wordmark, ≤ 96 px for a crest): the car's
 /// logo, else the brand name, else the custom name in the `wide` face.
 pub fn logo_zone(p: &mut Painter<'_>, zone: Rect, logo: &Logo, wide: FontId, variant: LogoVariant, palette: &Palette) {
+    let (shadow, style) = logo_styles(wide, variant, palette);
+    if let Some(shadow) = shadow {
+        // Engraved: a 1 px dark copy below-right first.
+        let off = Rect::from_points(zone.min + Vec2::new(1.0, 1.0), zone.max + Vec2::new(1.0, 1.0));
+        logo::draw(p, off, logo, &shadow);
+    }
+    logo::draw(p, zone, logo, &style);
+}
+
+/// The logo zone's engraved shadow (the dial variant only) and its logo style. A logo image
+/// takes the same ink as the wordmark, so the car's logo and its name look alike.
+fn logo_styles(wide: FontId, variant: LogoVariant, palette: &Palette) -> (Option<LogoStyle>, LogoStyle) {
     let ink = match variant {
         LogoVariant::Full => palette.roles.ink_label,
         LogoVariant::Dial => palette.roles.ink.with_alpha(215.0 / 255.0),
     };
-    if variant == LogoVariant::Dial {
-        // Engraved: a 1 px dark copy below-right first.
-        let shadow = LogoStyle {
-            text: palette.roles.oled_black.with_alpha(0.8).into(),
+    let shadow = (variant == LogoVariant::Dial).then(|| {
+        let dark = palette.roles.oled_black.with_alpha(0.8);
+        LogoStyle {
+            tint: dark,
+            text: dark.into(),
             ..LogoStyle::new(wide)
-        };
-        let off = Rect::from_points(zone.min + Vec2::new(1.0, 1.0), zone.max + Vec2::new(1.0, 1.0));
-        logo::draw(p, off, logo, &shadow);
-    }
+        }
+    });
     let style = LogoStyle {
+        tint: ink,
         text: ink.into(),
         ..LogoStyle::new(wide)
     };
-    logo::draw(p, zone, logo, &style);
+    (shadow, style)
 }
 
 /// Draws a label/value pair right-aligned at `right` (value) with the label to its left, e.g.
@@ -122,6 +134,28 @@ mod tests {
         let pal = Palette::family(&t, "raceDash");
         assert_eq!(shy(true, pal.roles.caution, &pal), pal.roles.caution);
         assert!(shy(false, pal.roles.caution, &pal).a < pal.roles.ink_label.a);
+    }
+
+    #[test]
+    fn a_logo_image_takes_the_wordmark_ink() {
+        let t = Tokens::default();
+        let pal = Palette::family(&t, "raceDash");
+        let (shadow, style) = logo_styles(FontId::FALLBACK, LogoVariant::Dial, &pal);
+        let ink = pal.roles.ink.with_alpha(215.0 / 255.0);
+        assert_eq!(
+            style.tint, ink,
+            "the dial variant is mono white at alpha 215, image or name"
+        );
+        assert_eq!(style.text, ink.into());
+        let shadow = shadow.expect("the dial variant is engraved");
+        assert_eq!(
+            shadow.tint,
+            pal.roles.oled_black.with_alpha(0.8),
+            "a dark copy, never a white one"
+        );
+        let (none, full) = logo_styles(FontId::FALLBACK, LogoVariant::Full, &pal);
+        assert!(none.is_none());
+        assert_eq!(full.tint, pal.roles.ink_label);
     }
 
     #[test]

@@ -12,10 +12,11 @@ use fh6_core::{
 use fh6_gpu::{FrameOutcome, GpuContext, GpuError, OverlaySurface};
 use fh6_input::InputShared;
 use fh6_kit::color::srgb_to_linear;
+use fh6_kit::logo::CarLogo;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
     vec2, Affine, Align, BlendMode, Cluster, Color, Family, FontId, FrameInput, FrameStats as KitFrameStats, Kit,
-    Layout, Logo, Painter, Palette, Rect, Shape, SignalSmoother, StackStr, TextStyle, VAlign, View,
+    Layout, Painter, Palette, Rect, Shape, SignalSmoother, StackStr, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
@@ -443,7 +444,10 @@ struct Loop {
     /// config), the car ordinal and the family.
     palette_cache: Option<(Arc<AppConfig>, i32, Family)>,
     palette: Palette,
-    logo: Logo,
+    /// The car's logo: its brand's dial, decoded on the `fh6-logos` worker thread and uploaded a
+    /// step per drawn frame (11 to 19 steps). The zone is empty until it is in, or until a read
+    /// that hangs has taken `NAME_AFTER_FRAMES`, when the brand's name shows meanwhile.
+    logo: CarLogo,
     last_update: Instant,
     refraction: Option<RefractionSource>,
     refraction_retry: Instant,
@@ -585,15 +589,24 @@ impl Loop {
         self.refraction = None;
         self.kits = self.kits.wrapping_add(1).max(1);
         self.gpu = Some(Gpu { ctx, surface, kit });
+        // The new kit has none of the dials: each loads again the next time its brand shows, and
+        // `ensure_palette` shows the car again on the next frame (the new kit needs its palette
+        // and font override too).
+        self.logo.new_kit();
+        self.palette_cache = None;
         self.lost_since = None;
     }
 
-    /// Drops the device and swapchain so the window has no composition target left (it then
-    /// shows nothing), and schedules a recreation.
+    /// Drops the device, the swapchain and everything made on that device, so the window has no
+    /// composition target left (it then shows nothing), and schedules a recreation.
     fn lose_gpu(&mut self, why: &str) {
         tracing::warn!(why, "dropping the GPU device; it is recreated in 1 s");
         self.active = None;
         self.refraction = None;
+        // A dial that is half uploaded holds a texture of this device. A texture keeps its device
+        // alive, and Direct3D 12 gives an adapter no new device while a removed one still
+        // exists: the recreation would then find the adapter gone and settle on another one.
+        self.logo.new_kit();
         self.gpu = None;
         self.lost_since = Some(Instant::now());
     }
@@ -654,22 +667,16 @@ impl Loop {
         }
         let tokens = &self.resources.tokens;
         self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family.key());
-        let brand = self
-            .resources
-            .cars
-            .car_palette(car_ordinal)
-            .map(|b| b.display_name.clone())
-            .unwrap_or_default();
-        // `ShowLogo: false` empties the logo zone (no image, wordmark or name).
-        self.logo = if cfg.show_logo {
-            Logo {
-                image: None,
-                brand_name: brand,
-                custom_name: cfg.custom_driver_name.clone(),
-            }
-        } else {
-            Logo::default()
-        };
+        // `ShowLogo: false` empties the logo zone (no image, wordmark or name) and loads nothing.
+        // A brand seen for the first time leaves the zone empty until its dial is in
+        // (`poll_logos`), so the name does not show first and the dial a moment later; only a
+        // read that hangs for `NAME_AFTER_FRAMES` shows the name meanwhile. The dial loads
+        // whichever dash is active, so it is ready when the driver switches to one that draws
+        // it or opens the OSD carousel, which draws other dashes with this frame's logo.
+        let brand = cfg
+            .show_logo
+            .then(|| self.resources.logos.car_brand(&self.resources.cars, car_ordinal));
+        self.logo.show(brand, &cfg.custom_driver_name);
         if let Some(kit) = self.gpu.as_mut().and_then(|g| g.kit.as_mut()) {
             kit.set_palette(self.palette);
             self.font_override = cfg
@@ -696,6 +703,18 @@ impl Loop {
         host.set_fonts(kit.fonts().families());
         host.load_assets(kit, &gpu.ctx.device, &gpu.ctx.queue, self.resources.assets.as_deref());
         true
+    }
+
+    /// This frame's share of uploading the brand dials the worker has decoded (only while one is
+    /// on its way, so most frames skip this with one comparison). The car's logo shows when its
+    /// dial is in.
+    fn poll_logos(&mut self) {
+        if !self.logo.busy() {
+            return;
+        }
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(kit) = gpu.kit.as_mut() else { return };
+        self.logo.poll(kit.images_mut(), &gpu.ctx.device, &gpu.ctx.queue);
     }
 
     /// Creates the OSD carousel's thumbnail clusters when the selection moved.
@@ -952,6 +971,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         epoch: Instant::now(),
         kit_seen: 0,
     };
+    let logo = CarLogo::start(&resources.logos);
     let mut lp = Loop {
         gpu: None,
         resources,
@@ -990,7 +1010,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         smoother: SignalSmoother::new(),
         palette_cache: None,
         palette,
-        logo: Logo::default(),
+        logo,
         last_update: Instant::now(),
         refraction: None,
         refraction_retry: Instant::now(),
@@ -1194,6 +1214,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         let layout = orbited(layout, care.offset_px);
         lp.ensure_cluster(&cfg, view);
         lp.ensure_palette(&cfg, data.car_ordinal);
+        lp.poll_logos();
         lp.update_refraction(&cfg, &layout, &game_process);
         let update_dt = (build_start - lp.last_update).as_secs_f32().min(MAX_DT);
         lp.last_update = build_start;
@@ -1214,7 +1235,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
                 palette: &lp.palette,
                 tokens: &lp.resources.tokens,
                 fonts,
-                logo: &lp.logo,
+                logo: lp.logo.logo(),
                 view,
                 reduced_flash: cfg.reduced_flash,
             };

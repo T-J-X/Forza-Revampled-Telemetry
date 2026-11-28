@@ -22,6 +22,10 @@
 //! (4 states per view at 4K, crops, in-cockpit composites, the 60-frame sequence; `cluster.rs`).
 //!
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
+//! `--car ORDINAL` picks the car whose brand logo every logo zone shows, loaded from
+//! `assets/logos/` in one call (`LogoIndex::load_dial`; the app loads the same dial on a worker
+//! thread) (default 3667, the 2021 Porsche 911 GT3; 0 for no car,
+//! which shows the custom name).
 mod cluster;
 mod fit;
 mod gallery;
@@ -29,8 +33,9 @@ mod osd;
 mod states;
 
 use fh6_clusters::registry::REGISTRY;
-use fh6_core::AppConfig;
+use fh6_core::{AppConfig, CarDatabase};
 use fh6_gpu::GpuContext;
+use fh6_kit::logo::{BrandId, LogoIndex};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
 use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
 use gallery::{Badges, Render};
@@ -45,6 +50,11 @@ const W: u32 = 3840;
 const H: u32 = 2160;
 const THUMB_FACTOR: u32 = 4;
 const DT: f32 = 1.0 / 60.0;
+/// The car whose logo the previews show unless `--car` says otherwise: the 2021 Porsche 911 GT3.
+const DEFAULT_CAR: i32 = 3667;
+/// The driver's custom name in every preview config: what a dash's greeting says, and what the
+/// logo zone falls back to.
+pub(crate) const DRIVER_NAME: &str = "TJX";
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -58,9 +68,11 @@ struct Args {
     osd: bool,
     osd_state: Option<String>,
     no_timing: bool,
+    car: i32,
 }
 
-fn parse_args() -> Result<Args> {
+/// Reads the arguments after the program's name.
+fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args> {
     let mut args = Args {
         fit: false,
         frames: 30,
@@ -70,8 +82,8 @@ fn parse_args() -> Result<Args> {
         osd: false,
         osd_state: None,
         no_timing: false,
+        car: DEFAULT_CAR,
     };
-    let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
             "--fit" => args.fit = true,
@@ -85,9 +97,13 @@ fn parse_args() -> Result<Args> {
                 args.osd = true;
                 args.osd_state = Some(it.next().ok_or("--osd-state needs a name")?);
             }
+            "--car" => {
+                let value = it.next().ok_or("--car needs an ordinal")?;
+                args.car = value.parse().map_err(|e| format!("--car {value:?}: {e}"))?;
+            }
             "-h" | "--help" => {
                 println!(
-                    "preview-export [--fit] [--osd] [--osd-state NAME] [--no-timing] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG]"
+                    "preview-export [--fit] [--osd] [--osd-state NAME] [--no-timing] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] [--car ORDINAL]"
                 );
                 std::process::exit(0);
             }
@@ -126,7 +142,7 @@ fn run() -> Result<()> {
         .with_max_level(tracing::Level::WARN)
         .with_writer(std::io::stderr)
         .try_init();
-    let args = parse_args()?;
+    let args = parse_args(std::env::args().skip(1))?;
     let root = workspace_root();
     let out = args.out.clone().unwrap_or_else(|| root.join("mockups"));
     fs::create_dir_all(&out)?;
@@ -151,19 +167,23 @@ fn run() -> Result<()> {
     }
     let cfg = AppConfig {
         current_camera_index: 3,
-        custom_driver_name: "TJX".to_string(),
+        custom_driver_name: DRIVER_NAME.to_string(),
         ..Default::default()
     };
-    let logo = Logo {
-        image: None,
-        brand_name: String::new(),
-        custom_name: cfg.custom_driver_name.clone(),
+    // The whole run draws the OSD states, which need the car database; `--cluster` and `--fit`
+    // use it only to name the car's brand.
+    let whole_run = args.cluster.is_none() && !args.fit;
+    let cars = if whole_run || args.car != 0 {
+        load_cars(&assets, whole_run)?
+    } else {
+        None
     };
+    let logo = car_logo(&ctx, &mut kit, &assets, cars.as_ref(), args.car);
     if let Some(name) = args.cluster.as_deref() {
-        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing);
+        return cluster::run(&ctx, &mut kit, &tokens, &root, &out, name, args.frames, timing, &logo);
     }
     if args.fit {
-        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames)?;
+        fit::run(&ctx, &mut kit, &tokens, &root, &out, args.frames, &logo)?;
         println!("Fit review written to {}", out.join("fit").display());
         return Ok(());
     }
@@ -176,7 +196,19 @@ fn run() -> Result<()> {
     };
     if args.osd {
         let only = args.osd_state.as_deref();
-        let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), only)?;
+        let cars = cars.as_ref().ok_or("the car database was not read")?;
+        let osd_renders = osd::render_all(
+            &ctx,
+            &mut kit,
+            &tokens,
+            &assets,
+            cars,
+            &out,
+            timing,
+            backdrop.as_ref(),
+            &logo,
+            only,
+        )?;
         if let (Some(name), true) = (only, osd_renders.is_empty()) {
             return Err(format!("--osd-state {name:?} matches no OSD state").into());
         }
@@ -184,7 +216,7 @@ fn run() -> Result<()> {
         // The product page lists every state and plays the motion sequence, so a run of some
         // states leaves both alone.
         if only.is_none() {
-            let reel = osd::render_sequence(&ctx, &mut kit, &tokens, &assets, &out)?;
+            let reel = osd::render_sequence(&ctx, &mut kit, &tokens, &assets, cars, &logo, &out)?;
             osd::write_page(&out, &osd_renders, &reel, ctx.adapter_summary().to_string().as_str())?;
         }
         println!(
@@ -296,15 +328,157 @@ fn run() -> Result<()> {
         }
     }
 
-    let osd_renders = osd::render_all(&ctx, &mut kit, &tokens, &assets, &out, timing, backdrop.as_ref(), None)?;
+    let cars = cars.as_ref().ok_or("the car database was not read")?;
+    let osd_renders = osd::render_all(
+        &ctx,
+        &mut kit,
+        &tokens,
+        &assets,
+        cars,
+        &out,
+        timing,
+        backdrop.as_ref(),
+        &logo,
+        None,
+    )?;
     fit::scrims(&ctx, &mut kit, &tokens, &root, &out)?;
     let adapter = ctx.adapter_summary().to_string();
     gallery::write_index(&out, &renders, &osd_renders, &adapter)?;
-    let reel = osd::render_sequence(&ctx, &mut kit, &tokens, &assets, &out)?;
+    let reel = osd::render_sequence(&ctx, &mut kit, &tokens, &assets, cars, &logo, &out)?;
     osd::write_page(&out, &osd_renders, &reel, &adapter)?;
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())
+}
+
+/// The car database (`assets/car_brands/car_brands.json`), read once for the run. When the run
+/// `needs` it (the whole run does, for the OSD states), a file that cannot be read ends the run
+/// here, before any render. Otherwise the run carries on without it (`None`, with a note on
+/// stderr), and the logo zone shows the custom name.
+fn load_cars(assets: &Path, needs: bool) -> Result<Option<CarDatabase>> {
+    match CarDatabase::load(assets.join("car_brands/car_brands.json")) {
+        Ok(cars) => Ok(Some(cars)),
+        Err(e) if needs => Err(e.into()),
+        Err(e) => {
+            eprintln!("cars: {}; the logo zone shows the custom name", with_cause(&e));
+            Ok(None)
+        }
+    }
+}
+
+/// `e` and what caused it, on one line.
+fn with_cause(e: &dyn Error) -> String {
+    e.source()
+        .map_or_else(|| e.to_string(), |cause| format!("{e}: {cause}"))
+}
+
+/// What `--car` asks the logo zone to show, before any image is loaded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CarChoice {
+    /// The car, as the "logo:" line names it: `car 3667 (2021 Porsche 911 GT3)`.
+    car: String,
+    /// The brand whose dial to load, when the car has one.
+    dial: Option<BrandId>,
+    /// The name the wordmark falls back to (empty: the custom name shows).
+    brand_name: String,
+    /// Why there is no dial to load, when there is none, as it follows the car in the "logo:"
+    /// line.
+    why_not: &'static str,
+}
+
+/// Picks `car`'s brand as the app does ([`LogoIndex::car_brand`]). `cars` and `index` are `None`
+/// when their file could not be read.
+fn choose(cars: Option<&CarDatabase>, index: Option<&LogoIndex>, car: i32) -> CarChoice {
+    let Some(cars) = cars else {
+        return CarChoice {
+            car: format!("car {car}"),
+            dial: None,
+            brand_name: String::new(),
+            why_not: ": car_brands.json was not read",
+        };
+    };
+    let Some(model) = cars.car(car).map(|c| c.model_name.as_str()) else {
+        return CarChoice {
+            car: format!("car {car}"),
+            dial: None,
+            brand_name: String::new(),
+            why_not: " is not in car_brands.json",
+        };
+    };
+    // Without the index a car still has its brand palette's name.
+    let no_index = LogoIndex::default();
+    let brand = index.unwrap_or(&no_index).car_brand(cars, car);
+    CarChoice {
+        car: format!("car {car} ({model})"),
+        dial: brand.logo,
+        brand_name: brand.name,
+        why_not: if index.is_some() {
+            " has no brand logo"
+        } else {
+            ": logos.json was not read"
+        },
+    }
+}
+
+/// The "logo:" line for a car that shows a name instead of a logo: why ([`CarChoice::why_not`]),
+/// and the wordmark the zone draws for `names` ([`fh6_kit::logo::wordmark`]: the brand's name,
+/// else the custom name).
+fn no_logo_line(car: &str, why: &str, names: &Logo) -> String {
+    let mut buf = [0u8; 64];
+    let shown = fh6_kit::logo::wordmark(names, &mut buf);
+    format!("logo: {car}{why}; the wordmark shows {shown:?}")
+}
+
+/// The logo zone for `car`, as the app fills it: the brand's dial image (loaded into `kit` once,
+/// before any cluster is built), the brand name it falls back to, and the custom name. Every
+/// case prints one "logo:" line on stdout. A logo index that cannot be read, or a dial that
+/// cannot be loaded, leaves the names, with the reason on stderr; so does a car database that
+/// could not be read (`cars` is `None`, and [`load_cars`] has said why).
+fn car_logo(ctx: &GpuContext, kit: &mut Kit, assets: &Path, cars: Option<&CarDatabase>, car: i32) -> Logo {
+    let custom_name = DRIVER_NAME.to_string();
+    if car == 0 {
+        println!("logo: no car, the custom name {custom_name:?}");
+        return Logo {
+            custom_name,
+            ..Logo::default()
+        };
+    }
+    let index = match LogoIndex::load(assets) {
+        Ok(index) => Some(index),
+        Err(e) => {
+            eprintln!("logos: {e}; the logo zone shows names");
+            None
+        }
+    };
+    let choice = choose(cars, index.as_ref(), car);
+    let loaded = index.as_ref().zip(choice.dial).map(|(index, id)| {
+        let path = index.dial_path(id).unwrap_or_default();
+        (
+            index.load_dial(kit.images_mut(), &ctx.device, &ctx.queue, id),
+            rel(assets, &path),
+        )
+    });
+    let (image, why_not) = match loaded {
+        Some((Ok(image), path)) => {
+            println!("logo: {}, {path}", choice.car);
+            (Some(image), None)
+        }
+        Some((Err(e), _)) => {
+            eprintln!("logo of {}: {e}", choice.car);
+            (None, Some(": its dial did not load"))
+        }
+        None => (None, Some(choice.why_not)),
+    };
+    let logo = Logo {
+        image,
+        brand_name: choice.brand_name,
+        custom_name,
+        loading: false,
+    };
+    if let Some(why) = why_not {
+        println!("{}", no_logo_line(&choice.car, why, &logo));
+    }
+    logo
 }
 
 fn rel(root: &Path, p: &Path) -> String {
@@ -346,4 +520,120 @@ fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> 
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Result<Args> {
+        parse_args(list.iter().map(|a| (*a).to_string()))
+    }
+
+    #[test]
+    fn car_takes_an_ordinal_and_names_a_bad_one() {
+        assert_eq!(args(&[]).expect("no arguments").car, DEFAULT_CAR);
+        assert_eq!(args(&["--car", "0"]).expect("--car 0").car, 0);
+        assert_eq!(args(&["--fit", "--car", "3595"]).expect("--car 3595").car, 3595);
+        let bad = args(&["--car", "abc"]).expect_err("not a number").to_string();
+        assert!(bad.starts_with("--car \"abc\": "), "{bad}");
+        let none = args(&["--cluster", "PorscheAnalog", "--car"]).expect_err("no value");
+        assert_eq!(none.to_string(), "--car needs an ordinal");
+    }
+
+    /// The shipped car database and logo index, and the assets folder.
+    fn shipped() -> (CarDatabase, LogoIndex, PathBuf) {
+        let assets = workspace_root().join("assets");
+        let cars = CarDatabase::load(assets.join("car_brands/car_brands.json")).expect("car_brands.json");
+        let index = LogoIndex::load(&assets).expect("logos.json");
+        (cars, index, assets)
+    }
+
+    #[test]
+    fn a_car_with_a_brand_logo_gets_its_brands_dial() {
+        let (cars, index, assets) = shipped();
+        for (car, label, key, name, file) in [
+            (
+                3667,
+                "car 3667 (2021 Porsche 911 GT3)",
+                "PORSCHE",
+                "Porsche",
+                "logos/porsche_dial.png",
+            ),
+            (
+                4122,
+                "car 4122 (2025 BMW M4 CS)",
+                "BMW_M",
+                "BMW M Motorsport",
+                "logos/bmw_m_dial.png",
+            ),
+        ] {
+            let choice = choose(Some(&cars), Some(&index), car);
+            assert_eq!((choice.car.as_str(), choice.brand_name.as_str()), (label, name));
+            let dial = choice.dial.expect("the brand has a dial");
+            assert_eq!(index.key(dial), Some(key));
+            assert_eq!(rel(&assets, &index.dial_path(dial).expect("its file")), file);
+        }
+    }
+
+    /// The "logo:" line of a choice that loads no dial.
+    fn line(choice: &CarChoice, why: &str) -> String {
+        let names = Logo {
+            image: None,
+            brand_name: choice.brand_name.clone(),
+            custom_name: DRIVER_NAME.to_string(),
+            loading: false,
+        };
+        no_logo_line(&choice.car, why, &names)
+    }
+
+    #[test]
+    fn a_car_without_a_logo_says_why_and_which_name_shows() {
+        let (cars, index, _) = shipped();
+        // A traffic car is in the database under the generic brand: the custom name shows.
+        let truck = choose(Some(&cars), Some(&index), 2713);
+        assert_eq!(truck.dial, None);
+        assert_eq!(
+            line(&truck, truck.why_not),
+            "logo: car 2713 (2014 Box Truck (Traffic)) has no brand logo; the wordmark shows \"TJX\""
+        );
+        let unknown = choose(Some(&cars), Some(&index), 999_999);
+        assert_eq!(unknown.dial, None);
+        assert_eq!(
+            line(&unknown, unknown.why_not),
+            "logo: car 999999 is not in car_brands.json; the wordmark shows \"TJX\""
+        );
+        // A database that was not read knows no car, whatever the index says.
+        let no_cars = choose(None, Some(&index), DEFAULT_CAR);
+        assert_eq!(no_cars.dial, None);
+        assert_eq!(
+            line(&no_cars, no_cars.why_not),
+            "logo: car 3667: car_brands.json was not read; the wordmark shows \"TJX\""
+        );
+        // Without the index the car keeps its brand palette's name.
+        let no_index = choose(Some(&cars), None, DEFAULT_CAR);
+        assert_eq!(no_index.dial, None);
+        assert_eq!(
+            line(&no_index, no_index.why_not),
+            "logo: car 3667 (2021 Porsche 911 GT3): logos.json was not read; the wordmark shows \"PORSCHE\""
+        );
+        // A dial that fails to load leaves the brand's name, cut as the wordmark cuts it.
+        let m4 = choose(Some(&cars), Some(&index), 4122);
+        assert_eq!(
+            line(&m4, ": its dial did not load"),
+            "logo: car 4122 (2025 BMW M4 CS): its dial did not load; the wordmark shows \"BMW M\""
+        );
+    }
+
+    #[test]
+    fn a_car_database_error_is_printed_with_its_cause() {
+        let missing = workspace_root().join("assets/car_brands/no_such_file.json");
+        let error = CarDatabase::load(&missing).expect_err("no such file");
+        let text = with_cause(&error);
+        assert!(text.starts_with("reading "), "{text}");
+        assert!(
+            text.contains("no_such_file.json: "),
+            "the cause follows the path: {text}"
+        );
+    }
 }

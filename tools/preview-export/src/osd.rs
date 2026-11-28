@@ -330,6 +330,7 @@ impl Live {
         tokens: &Tokens,
         assets: &Path,
         cars: &CarDatabase,
+        logo: &Logo,
         cfg: &AppConfig,
         view: View,
     ) -> Self {
@@ -346,11 +347,7 @@ impl Live {
         Self {
             cluster,
             palette,
-            logo: Logo {
-                image: None,
-                brand_name: String::new(),
-                custom_name: cfg.custom_driver_name.clone(),
-            },
+            logo: logo.clone(),
             fonts: kit.font_choice(None),
             smoother: SignalSmoother::new(),
             dyno,
@@ -389,7 +386,7 @@ fn review_config() -> AppConfig {
     AppConfig {
         current_camera_index: 3,
         cockpit_hud_style: ClusterTheme::LiquidGlass,
-        custom_driver_name: "TJX".into(),
+        custom_driver_name: crate::DRIVER_NAME.into(),
         ..AppConfig::default()
     }
 }
@@ -401,14 +398,15 @@ pub fn render_all(
     kit: &mut Kit,
     tokens: &Tokens,
     assets: &Path,
+    cars: &CarDatabase,
     out: &Path,
     timing: bool,
     backdrop: Option<&RgbaImage>,
+    logo: &Logo,
     only: Option<&str>,
 ) -> Result<Vec<OsdRender>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
     let backdrop = backdrop.map(fit_backdrop);
     let mut renders = Vec::new();
     // The first timed state also brings the GPU up from idle (about a second of frames), so every
@@ -422,7 +420,7 @@ pub fn render_all(
         let now = (state.setup)(&mut host, &mut cfg);
         let view = host.edit_view();
         host.prepare(kit, &ctx.device, &ctx.queue, Some(assets), &cfg);
-        let mut live = Live::new(ctx, kit, tokens, assets, &cars, &cfg, view);
+        let mut live = Live::new(ctx, kit, tokens, assets, cars, logo, &cfg, view);
         let palette = live.palette;
         let base = Layout::from_config(&cfg, tokens, view, (W, H));
         for i in 0..45 {
@@ -557,19 +555,21 @@ fn clear_backing(kit: &mut Kit) {
 /// frame at half size, and returns the product page's reel: every [`REEL_STEP`]th frame as a
 /// thumbnail (paths relative to `out`). The OSD is stepped as the overlay's render loop steps
 /// it: input, `prepare`, the live cluster's `update`, the OSD's `update`, then the draw.
+#[allow(clippy::too_many_arguments)]
 pub fn render_sequence(
     ctx: &GpuContext,
     kit: &mut Kit,
     tokens: &Tokens,
     assets: &Path,
+    cars: &CarDatabase,
+    logo: &Logo,
     out: &Path,
 ) -> Result<Vec<String>> {
     let target = Offscreen::new(&ctx.device, W, H);
     let frame = Frame::new((W, H));
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"))?;
     let mut cfg = review_config();
     let view = View::Cockpit;
-    let mut live = Live::new(ctx, kit, tokens, assets, &cars, &cfg, view);
+    let mut live = Live::new(ctx, kit, tokens, assets, cars, logo, &cfg, view);
     // The dash is already running when the menu opens.
     for _ in 0..45 {
         live.tick(tokens, &cfg, |_| {});
