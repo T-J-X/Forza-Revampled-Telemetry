@@ -14,7 +14,7 @@ The catalog's AMG rules ask every AMG `RESEARCH.md` to open with these (`program
 4. **Palette roles, not literal colours.** The dash uses the shared `amgMbux` family palette (`paletteModes.familyDefaults.amgMbux`, set by `AmgMbuxSuperscreen`), red structure allowed past the 5% red budget where the real display is red (TJS, 2026-11-28 06:24, "Red, like the real display"). The yellow manual `M` is drawn in a palette role, not a literal yellow.
 5. **A swappable font.** Mercedes's cluster typeface is not freely licensed and no source names it. The dash uses the family the other AMG dashes share (Barlow Semi Condensed, OFL), and the user's display font replaces the numerals.
 6. **No housing slab.** The real 12.3-inch screen sits in a cowl or visor (SL: "integrated into a three-dimensional visor", NVIDIA; "recessed and surrounded by a shroud", DriveLife). The dash draws no screen rectangle or bezel: the display's parts float on OLED black, "what MBUX is but better" (TJS, 2026-11-28 07:07, all MBUX dashes).
-7. **What the telemetry cannot fill is left out.** Temperatures, set-up, consumption, trip, audio and navigation have no telemetry. The centre pages kept are the ones the packet can drive: gear, G-force, engine data (power, torque, boost).
+7. **What the telemetry cannot drive is dropped, and its space gets a bold idea of our own.** Temperatures, set-up, consumption, trip, audio, navigation and the status rows have no telemetry, so they go. The centre pages kept are the ones the packet can drive: gear, G-force, engine data (power, torque, boost). The freed space is filled with a telemetry-driven idea drawn on the Penpot board (TJS, 2026-11-28 08:18: "You just drop them and fill with something else like imagine subtle clouds and horizon tunnel background and the tunnel from the back to front being the rev limiter"; `CLUSTER_PROMPT.md`, "The bar", 09940b2). Candidate ideas, for the board to decide, are under "Ideas for the board" below.
 
 ## What this dash recreates
 
@@ -55,6 +55,16 @@ Verified fields per `CATALOG.md` ("Flash and telemetry"): rpm (current, idle, ma
 | G-force page | acceleration | verified |
 | Engine data page | power, derived torque, boost | verified (boost) |
 | Temperatures, set-up, trip, consumption, audio, navigation | none | left out (change 7) |
+
+## Ideas for the board
+
+Leads for step 2, each driven by verified telemetry. None is a design yet; the board chooses and draws.
+
+- **The horizon is the rev limiter.** The first-generation bars "reach far into the background to an artificial horizon". That horizon can carry the engine: a tunnel of rings running from the horizon to the front as rpm rises, the front ring reaching the viewer at the shift point (TJS's own image, 08:18).
+- **Subtle clouds on the horizon**, lit by load (throttle × rpm), so the sky behind the wings is calm at a cruise and bright through a pull.
+- **The dyno in the wings** (catalog brief): torque rises, peaks and falls while power keeps climbing, each leaving a hold tick at its maximum. Both are real curves from `power` and `rpm`.
+- **G-force as the horizon's tilt and pitch**: lateral acceleration rolls the horizon line, longitudinal moves it, so the G page lives in the whole scene and not only in a small widget.
+- **Gear change as a pass through the tunnel**: on an upshift the rings rush past and the new gear arrives from the horizon.
 
 ## Gaps (not guessed; to close from the frame grabs)
 
