@@ -1,9 +1,11 @@
 # Aperture Nine (`ApertureNine`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 34 (ApertureNine — build #31 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 34) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Modern Digital 2027 (Design Council 3B), spec [docs/design/families/modern-digital.md](../../../../../docs/design/families/modern-digital.md), hero frames [docs/design/heroes/modern-digital/](../../../../../docs/design/heroes/modern-digital/)
-- **Kind:** new · **View:** cockpit · **Build order:** 31
+
+**Category note.** In the Liquid Glass category the iris is seen through glass: lens elements of the kit's clear optical glass sit in front of the blades and refract them, and the blades stay black metal. Its family stays Modern Digital 2027. The iris geometry is in [Real geometry and maths](../../../../../program/phases/07-cluster-factory/CATALOG.md#real-geometry-and-maths).
 
 A nine-blade camera iris at X 1920 is the tach. Its black-anodised titanium SDF blades are filled oledBlack and read only through 1 px machined edges and a brushed anisotropic lobe (≤18% luminance) that follow the G-driven light. Rpm rotates the blades: the aperture closes from r 200 at idle to r 128 at the car's shift rpm, and blade 1's tip points to the current rpm on a fixed 300° ring numbered in Barlow Semi Condensed 600 (cap 34). Rank 1: Saira Condensed 800 gear, cap 200, always clear inside the aperture, under 15 outside-in pills (24 px) crowning the ring. Rank 2: Saira Condensed 600 speed, cap 112, at +420. Rank 4: a camera light-meter ladder for longitudinal G directly beneath the speed.
 

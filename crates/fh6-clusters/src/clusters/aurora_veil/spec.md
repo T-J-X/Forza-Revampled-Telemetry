@@ -1,9 +1,11 @@
 # Aurora Veil (`AuroraVeil`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 45 (AuroraVeil — build #41 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 45) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** new · **View:** cockpit · **Build order:** 41
+
+**Category note.** Placed here by the category review of 2026-11-28: a living curtain computed from the physics of an aurora. Under the colour law its rays may take the colours of the real emission lines. The heading tape of this brief needs yaw, which is not verified: until it is, the tape is left out. Its family stays Sci-Fi.
 
 A polar-night sky over the binnacle. A 1 px field arc (1300 px span, 100 px sagitta) crosses the crown. From it, 64 vertical rays rise as the rank-3 tach: an aurora curtain whose ray heights grow with rpm from both ends inward, up to 160 px. Each ray is a primary-to-transparent gradient at alpha 64 or less, so the sky stays black. Rank 1: Saira 600 gear (cap 200) under the arc's apex, with a straight 34 px 16-pod strip just beneath the arc. Rank 2: Saira 300 speed (cap 96) beside the gear. Rank 4: an unglowing heading tape from Yaw under speed and gear, with ticks every 15 deg. Labels are Chakra Petch.
 

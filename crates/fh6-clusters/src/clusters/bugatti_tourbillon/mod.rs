@@ -1,7 +1,8 @@
-//! Bugatti Tourbillon (`ClusterTheme::BugattiTourbillon`), catalog row 9: Classic Analog, cockpit, build #14.
+//! Bugatti Tourbillon (`ClusterTheme::BugattiTourbillon`), catalog row 9.
+//! Hypercar category, Classic Analog family, cockpit.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

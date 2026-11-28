@@ -1,9 +1,11 @@
 # F-35 Helmet HMD (`F35HelmetHmd`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 18 (F35HelmetHmd — build #19 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 18) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 19
+
+**Category note.** The real helmet and head-up display conventions lead; the Sci-Fi category adds no film styling.
 
 Collimated helmet symbology in one hue, the text-safe palette primary (a red brand primary hands over to accent so red is never structural; 'phosphor' #3CFF7A is a custom preset). Strokes are 2 px with 1 px SDF AA on black, and nothing is filled except glyph cores. Z1: a 760 px lock line of twelve 52×6 px dashes at y −300, filling outside-in. Gear top-centre (Saira Condensed 700, cap 170) inside four 1 px corner brackets. Left: a scrolling speed tape with a notched readout box (B612 Mono, cap 96) at x −380; right: an rpm tape with 250 rpm ticks, hatched redline and shift caret. Z4 below: a frameless 560×240 attitude window with faded edges, a roll-rotated pitch ladder (×4) with solid positive and dashed negative rungs, a fixed boresight and a winged flight-path marker. A 6 px phosphor halo on ranks 1–3 only.
 
