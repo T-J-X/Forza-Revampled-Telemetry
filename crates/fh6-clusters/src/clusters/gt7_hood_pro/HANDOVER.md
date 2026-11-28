@@ -1,6 +1,6 @@
 # HANDOVER: Dash · Gt7HoodPro (catalog row 3)
 
-**Thread / branch:** "Rebuild Gt7HoodPro dash", `claude/project-thread-h7qahw`, draft pull request #10  **Date:** 2026-11-28  **Result:** ◐ at work (this file is filled in as each step is done)
+**Thread / branch:** "Rebuild Gt7HoodPro dash", `claude/project-thread-h7qahw`, draft pull request #10  **Date:** 2026-11-28  **Result:** ready for merge (closing review done; the Penpot PNG re-export of the moved tile and speed follows in the next Penpot slot)
 
 This replaces the handover of the 2026-11-23 build (the gull-wing ribbons; that file is in the git history). The dash is rebuilt from the ground up as Gran Turismo 7's Bonnet View meter. Findings and yes/no answers only; there are no scores in this file.
 
@@ -376,6 +376,8 @@ cargo clippy -q -p fh6-clusters -p asset-forge --all-targets        no finding i
 rustfmt --edition 2021 --check (module and recipe)                 exit 0
 FH6_UPDATE_GOLDEN=1 cargo test -p fh6-clusters --test golden_images gt7_hood_pro, then twice without it (lavapipe)   ok, ok
 ```
+After merging `origin/main` (`c03f6ae`, CATALOG.md kept as main has it): `cargo check -p fh6-clusters -p asset-forge` exit 0; `cargo test -p fh6-clusters --lib` 273 passed; asset-forge gt7_hood_pro 6 passed; `dash_gates` 10 passed (53.40 s); `cargo test -p fh6-osd` 64 passed; the Gt7HoodPro golden on lavapipe passed.
+
 On the PC at `b3f3039` (rustc 1.100): lib tests, asset-forge tests, dash gates, `cargo clippy -p fh6-clusters -p asset-forge --all-targets -- -D warnings` and fmt pass.
 
 ## Performance
@@ -384,7 +386,21 @@ On the PC at `b3f3039` (rustc 1.100): lib tests, asset-forge tests, dash gates, 
 
 **Live bench** (60 s, `mock-udp --scenario bmw_m4_cs` at 60 Hz):
 
-BENCH_RESULTS
+Both runs at `dae1263` on the PC (RTX 3070 Ti, DX12, swapchain 1920x1080 Mailbox, frame latency 1, DWM 300 Hz), 60 s after a 2 s warm-up, one `gpu-lock` take for both; no error or warning in either app or `mock-udp` log, both exited 0, no frame idle-dimmed.
+
+| Series (p50 / p99 / max ms) | Gt7HoodPro (`--cluster Gt7HoodPro`) | Scaffold baseline (`--cluster ValkyrieLmp1`, still ☐) |
+|---|---|---|
+| Frames presented | 8286 (138.1 fps) | 8435 (140.6 fps) |
+| New packets shown | 3497 (58.3 per s) | 3499 (58.3 per s) |
+| Draw calls per frame | 17.3 | 11.0 |
+| Packet receive to present returned | 0.610 / 1.317 / 1.958 | 0.620 / 1.380 / 1.805 |
+| CPU per frame | 0.601 / 0.778 / 4.377 | 0.604 / 0.772 / 1.415 |
+| of which draw | 0.036 / 0.079 / 0.157 | 0.029 / 0.066 / 0.161 |
+| of which kit render | 0.028 / 0.049 / 0.218 | 0.026 / 0.046 / 0.132 |
+| Packet receive to next vblank | 2.210 / 4.246 / 4.583 | 2.315 / 4.228 / 4.604 |
+| New packets presented before the first vblank | 80.9% | 80.1% |
+
+The dash's own CPU share: 0.601 − 0.604 = −0.003 ms p50, within run-to-run noise, so effectively 0 against the 0.3 ms limit; its draw step is 0.007 ms p50 over the scaffold. The app total meets 1 ms at p99 (0.778 ms). The one 4.377 ms CPU maximum is a single present call of 3.736 ms (present p99 0.279 ms), a compositor or driver stall rather than dash work. Reports: `mockups/Gt7HoodPro/live_bench.md` and `live_bench_scaffold.md` on the PC (gitignored).
 
 ## Closing review
 
@@ -395,7 +411,7 @@ BENCH_RESULTS
 | 3 | yes | none outside tests (rust-review, closing round); no `unsafe` |
 | 4 | yes | the search finds `format!` and `tracing::warn!` only in `hardware.rs` `Sprites::load` (called from `new`), `Box::new` only in `make`, and `vec!`, `format!` and `collect` only in `geom.rs` tests; `warm_frames_do_not_allocate` passes in `dash_gates` |
 | 5 | yes | 0.190 to 0.257 ms per state, sequence p99 0.251 ms ("Performance") |
-| 6 | BENCH_LINE6 | "Performance" |
+| 6 | yes | −0.003 ms p50 (0.601 with the dash, 0.604 on the scaffold), both p99 under 0.78 ms; "Performance" |
 | 7 | yes | rpm, speed and gear go through the kit's `HeroGear` and `TabularSpeed` and the token springs only; the rev run follows rpm on the same frame. One hold: `backlash` keeps the head LED still while the engine bounces on the limiter (the run is full either way), which delays nothing outside that bounce |
 | 8 | yes | the dash has no path of its own that draws; showing and hiding stay the app's |
 | 9 | yes | no non-Rust source added; bpy lives as Rust strings in the recipe |
@@ -426,13 +442,13 @@ BENCH_RESULTS
 | 34 | yes | every PC GPU job held `gpu.lock` (by lock file before 07:05Z, through `gpu-lock.exe` after); ComfyUI and Blender ran on the cloud pod with `cloud down` after each batch; the cloud goldens ran on lavapipe in the container, off both lanes. Spend in "Cloud spend" |
 | 35 | yes | the direction check was posted with the first build's render; its self-review and TJX's words are above, and each change TJX asked for is done |
 | 36 | yes | `mockups/Gt7HoodPro/index.html` from `preview-export` (the PC's copy carries the card's GPU times; the cloud copy shows the software renderer's) |
-| 37 | BENCH_LINE37 | "Performance"; the sequence holds its digits (V9) and settles without a jump (V21, V24) |
+| 37 | yes | 60 s with `mock-udp` streaming, no error: 8286 frames, receive to present 0.610 / 1.317 ms, CPU per frame 0.601 / 0.778 ms; "Performance"; the sequence holds its digits (V9) and settles without a jump (V21, V24) |
 | 38 | yes | findings and yes/no answers only |
 | 39 | yes | V1 to V26 above, with V5 and V13 the reviewer's one-run noes that cannot be fixed afterwards, and V19 NOT ASSESSED (no clear glass) |
 
 ## Cloud spend
 
-CLOUD_SPEND
+`asset-forge cloud spend` on the PC (07:25Z): this thread's sessions come to $0.47 (its own pod sessions $0.069, a pod session shared with the TeslaAdas thread $0.129, the second materials pass $0.059, the third pass with the moved tile $0.215). The lane stood at $2.90 of the $50 budget, far from the $40 warning; the volume's storage ($0.48) is shown and not counted. `cloud down` ran after each batch, and both cloud locks were released.
 
 ## Exit criteria
 - [x] The introduction was posted, and the thread is not archived.
@@ -441,7 +457,7 @@ CLOUD_SPEND
 - [x] A bespoke ComfyUI asset (forged carbon) and bespoke Blender assets (plate, tile) are in `assets/clusters/gt7_hood_pro/`, used, each with an ASSETS.md row; the before and after pair is above; the 4K masters are in the Drive folder.
 - [x] The module is complete, with no TODOs, and the goldens pass.
 - [x] 4K renders, the 60-frame sequence and the product page are in `mockups/Gt7HoodPro/`.
-- [ ] The live bench report is in this handover; the GPU time under 0.5 ms is recorded.
+- [x] The live bench report is in this handover; the GPU time under 0.5 ms is recorded.
 - [x] The direction check was posted and self-reviewed to a go, with TJX's words quoted.
 - [x] Every closing line is yes, or reported as one that could not be fixed afterwards (30; V5 and V13).
 - [x] V1 to V26 are answered above.
