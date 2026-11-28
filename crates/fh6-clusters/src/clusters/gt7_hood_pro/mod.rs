@@ -122,7 +122,10 @@ const PEDAL_LIGHT: f32 = 0.7;
 /// The boost fill's share of the ink (under the lit run's, rank 4 below rank 3).
 const BOOST_LIGHT: f32 = 0.7;
 /// The trip digits' share of the ink (GT7's odometer is light grey, under the speed).
-const TRIP_LIGHT: f32 = 0.72;
+const TRIP_LIGHT: f32 = 0.77;
+/// The trip digits' synthetic weight: at 22 px cap the regular strokes fell to 3.6:1 in the
+/// 960 x 540 blur gate once the window went dark, under the 4.5:1 a readout needs.
+const TRIP_WEIGHT: f32 = 0.45;
 /// Tyre load per g of felt force on each axis, round the rest load of a half.
 const LOAD_PER_G: f32 = 0.35;
 /// A tyre lens's light at no load and at full load (below the speed's full ink: rank 4), and
@@ -776,11 +779,12 @@ impl Gt7HoodPro {
         let unit_w = finite(p.measure(unit, &unit_style).width);
 
         let ink = pal.roles.ink.intensity(TRIP_LIGHT);
-        let style = TextStyle::new(self.faces.speed, g.trip_cap)
+        let mut style = TextStyle::new(self.faces.speed, g.trip_cap)
             .paint(ink)
             .tabular()
             .tracking(self.tracking(p, g.trip_cap))
             .align(Align::Right, VAlign::CapMiddle);
+        style.weight = TRIP_WEIGHT;
         let cell = p.fonts().tabular_cell(&style);
         let bias = tabular_bias(p, &style);
         let tenth_right = right - unit_w - TRIP_GAP;
