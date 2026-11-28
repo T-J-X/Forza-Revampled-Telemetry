@@ -567,8 +567,11 @@ impl Images {
     }
 }
 
-/// The most texel bytes one step of a spread-out upload copies (a 512 px wide band of 64 rows):
-/// what bounds the time one frame spends on it. See [`crate::logo::DialLoader`].
+/// The most texel bytes one step of a spread-out upload copies (a 512 px wide band of 64 rows).
+/// It bounds the copy in one step, and with it the number of steps: 11 to 19 for the pack's brand
+/// dials. On the PC's DX12 card the steps of a 13-slice dial averaged 0.1 ms and the slowest
+/// took 0.14 ms, although six of those slices are under 2 KiB: the call's fixed cost counts for
+/// more than the bytes it copies. See [`crate::logo::DialLoader`].
 pub const UPLOAD_STEP_BYTES: usize = 128 << 10;
 
 /// A texture being filled from a [`MipChain`] one slice per step ([`Images::upload_step`]). It is

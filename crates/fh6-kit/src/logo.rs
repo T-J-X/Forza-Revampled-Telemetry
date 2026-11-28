@@ -4,7 +4,7 @@
 //! [`LogoIndex`] reads `assets/logos/logos.json` once at start-up and says which brand a car
 //! shows ([`LogoIndex::car_brand`]). A host keeps a [`CarLogo`] and tells it when the car
 //! changes (never per frame). Its [`DialLoader`] decodes that brand's dial on a worker thread
-//! ([`LogoIndex::decode_dial`] needs no device), uploads it over the next few frames, and the
+//! ([`LogoIndex::decode_dial`] needs no device), uploads it over the frames that follow, and the
 //! [`Logo`] the clusters draw then carries it in [`Logo::image`]. Tools decode and upload at once
 //! with [`LogoIndex::load_dial`]. Only the levels from [`DIAL_TEXTURE_SIDE`] down are uploaded,
 //! so a brand costs at most 1.33 MiB of video memory and all 91 dials together 47 MiB.
@@ -447,7 +447,7 @@ struct Decoded {
     ms: f64,
 }
 
-/// A decoded dial on its way into the image store, a few slices per frame.
+/// A decoded dial on its way into the image store, a step or more per frame.
 #[derive(Debug)]
 struct Uploading {
     brand: BrandId,
@@ -521,7 +521,8 @@ impl Worker {
 
 /// How long one [`DialLoader::poll`] keeps uploading before it leaves the rest to the next
 /// frame, in milliseconds. A poll always takes one step, so a frame spends at most this plus one
-/// step on a dial (the app's whole frame has 1 ms).
+/// step on a dial (the app's whole frame has 1 ms). On the PC's DX12 card a step costs about
+/// 0.1 ms (0.14 ms at worst), which is more than this, so there a frame takes exactly one step.
 pub const STEP_BUDGET_MS: f64 = 0.05;
 
 /// Each brand's dial in one kit, loaded the first time a car of that brand appears and kept for
@@ -530,7 +531,8 @@ pub const STEP_BUDGET_MS: f64 = 0.05;
 /// 1.33 MiB, and spreads that over the frames that follow: each [`DialLoader::poll`] creates the
 /// texture or copies slices of at most [`images::UPLOAD_STEP_BYTES`] until [`STEP_BUDGET_MS`]
 /// has gone, one dial at a time. So a car change never stalls a frame: the logo zone stays empty
-/// while the dial decodes and uploads (about 0.1 s), then shows it. A brand whose dial cannot be
+/// while the dial decodes (10 to 20 ms on the PC) and uploads (11 to 19 steps for the pack's
+/// dials; at the PC's one step a frame, about 0.1 s), then shows it. A brand whose dial cannot be
 /// loaded shows its name, and is never read again on that kit.
 ///
 /// Where threads cannot start (`wasm32`), every brand shows its name.
@@ -770,8 +772,9 @@ fn set_slot(slots: &mut Vec<(BrandId, Slot)>, brand: BrandId, slot: Slot) {
 }
 
 /// How many drawn frames a car waits for its dial before it shows its brand's name in the
-/// meantime: about 5 s at 120 Hz. A dial takes about 0.1 s, so this is for a read that hangs
-/// (a file that is only in cloud storage). The dial still replaces the name when it arrives.
+/// meantime: 10 s at 60 frames a second, 5 s at 120. A dial takes 0.1 to 0.3 s, so this is for
+/// a read that hangs (a file that is only in cloud storage). The dial still replaces the name
+/// when it arrives.
 pub const NAME_AFTER_FRAMES: u32 = 600;
 
 /// The current car's logo, kept by a host across frames: the [`Logo`] its clusters draw. It owns
@@ -814,11 +817,12 @@ impl CarLogo {
     /// Chooses what the car shows: its brand's dial ([`LogoIndex::car_brand`]), or the names
     /// when it has none. `None` is a logo zone that is switched off: nothing shows and nothing
     /// loads. Call it when the car or a setting changes, and after [`CarLogo::new_kit`]; never
-    /// per frame.
+    /// per frame. A car of the brand that is already awaited keeps the frames it has waited, so
+    /// a setting changed while a read hangs neither restarts the wait nor takes the name away.
     pub fn show(&mut self, brand: Option<CarBrand>, custom_name: &str) {
-        self.waiting = None;
-        self.waited = 0;
+        let awaited = self.waiting.take().and(self.dials.waiting);
         let Some(brand) = brand else {
+            self.waited = 0;
             self.dials.waiting = None;
             self.shown = Logo::default();
             return;
@@ -828,15 +832,24 @@ impl CarLogo {
             brand_name: brand.name,
             custom_name: custom_name.to_string(),
         };
-        self.shown = match self.dials.dial(brand.logo) {
+        let dial = self.dials.dial(brand.logo);
+        if dial != Dial::Loading || awaited != brand.logo {
+            self.waited = 0;
+        }
+        self.shown = match dial {
             Dial::Ready(image) => Logo {
                 image: Some(image),
                 ..named
             },
             Dial::Missing => named,
             Dial::Loading => {
+                let meanwhile = if self.waited >= NAME_AFTER_FRAMES {
+                    named.clone()
+                } else {
+                    Logo::default()
+                };
                 self.waiting = Some(named);
-                Logo::default()
+                meanwhile
             }
         };
     }
@@ -1573,6 +1586,19 @@ mod tests {
         }
     }
 
+    /// A loader whose worker does not answer by itself: the test holds its ends, the brands the
+    /// loader asks for and the sender of the decodes.
+    fn held_loader(ix: &LogoIndex) -> (DialLoader, Receiver<BrandId>, Sender<Decoded>) {
+        let (jobs, inbox) = mpsc::channel();
+        let (outbox, done) = mpsc::channel::<Decoded>();
+        let worker = Worker {
+            jobs: Some(jobs),
+            done,
+            in_flight: 0,
+        };
+        (DialLoader::with_worker(ix, worker), inbox, outbox)
+    }
+
     #[test]
     fn a_car_shows_nothing_while_its_dial_loads_then_the_dial() {
         let (ix, cars) = (repo_index(), repo_cars());
@@ -1686,15 +1712,8 @@ mod tests {
     #[test]
     fn a_dial_that_does_not_arrive_shows_the_name_meanwhile_and_the_dial_if_it_comes() {
         let (ix, cars) = (repo_index(), repo_cars());
-        // A worker that does not answer: the test holds its ends.
-        let (jobs, inbox) = mpsc::channel();
-        let (outbox, done) = mpsc::channel::<Decoded>();
-        let worker = Worker {
-            jobs: Some(jobs),
-            done,
-            in_flight: 0,
-        };
-        let mut logo = CarLogo::with_loader(DialLoader::with_worker(&ix, worker));
+        let (loader, inbox, outbox) = held_loader(&ix);
+        let mut logo = CarLogo::with_loader(loader);
         logo.show(Some(ix.car_brand(&cars, 3667)), "TJX");
         for _ in 1..NAME_AFTER_FRAMES {
             frame(&mut logo, image_of);
@@ -1722,6 +1741,41 @@ mod tests {
             }
         );
         assert!(!logo.busy());
+    }
+
+    #[test]
+    fn showing_the_same_car_again_keeps_the_frames_it_has_waited() {
+        let (ix, cars) = (repo_index(), repo_cars());
+        let (loader, _inbox, _outbox) = held_loader(&ix);
+        let mut logo = CarLogo::with_loader(loader);
+        let gt3 = ix.car_brand(&cars, 3667);
+        logo.show(Some(gt3.clone()), "TJX");
+        for _ in 1..NAME_AFTER_FRAMES {
+            frame(&mut logo, image_of);
+        }
+        // A setting changes a frame before the name is due: the host shows the same car again.
+        logo.show(Some(gt3.clone()), "TJX");
+        assert_eq!(*logo.logo(), Logo::default(), "still empty");
+        frame(&mut logo, image_of);
+        assert_eq!(*logo.logo(), named("Porsche", "TJX"), "the wait did not start again");
+        // With the name up, another change (here the custom name) keeps it up.
+        logo.show(Some(gt3.clone()), "ACE");
+        assert_eq!(
+            *logo.logo(),
+            named("Porsche", "ACE"),
+            "the name stays while the read hangs"
+        );
+        // A car of another brand starts its own wait, and so does the first car after it.
+        logo.show(Some(ix.car_brand(&cars, 3595)), "ACE");
+        assert_eq!(*logo.logo(), Logo::default());
+        logo.show(Some(gt3), "ACE");
+        assert_eq!(*logo.logo(), Logo::default(), "a car change starts the wait again");
+        for _ in 1..NAME_AFTER_FRAMES {
+            frame(&mut logo, image_of);
+        }
+        assert_eq!(*logo.logo(), Logo::default());
+        frame(&mut logo, image_of);
+        assert_eq!(*logo.logo(), named("Porsche", "ACE"));
     }
 
     #[test]

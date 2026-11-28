@@ -68,7 +68,7 @@ Token flow: `data/design_tokens.json` (the source of truth) → `fh6-kit::tokens
 4. **Hybrid rendering.**
    - Use the textured look (Blender or ComfyUI assets from `assets/`) when the asset is present, and keep a procedural kit fallback.
    - A missing asset never panics.
-   - Assets load once at startup, never per frame. The one exception is a car's brand logo: its dial loads once per brand, when that brand's first car shows. It is decoded on a worker thread, and the render thread uploads it a few slices per frame (`fh6_kit::logo::CarLogo`), so no frame pays for the whole dial.
+   - Assets load once at startup, never per frame. The one exception is a car's brand logo: its dial loads once per brand, when that brand's first car shows. It is decoded on a worker thread, and the render thread uploads it in steps over the frames that follow (`fh6_kit::logo::CarLogo`; one step a frame on the PC, at most 0.14 ms), so no frame pays for the whole dial.
 5. **Fonts.**
    - MSDF text from `fh6-kit`. The default is a motorsport OFL font from `assets/fonts/`, and users can add fonts in `fonts/` next to the exe.
    - Speed and RPM use tabular figures (a fixed advance), so numbers never shift sideways.
