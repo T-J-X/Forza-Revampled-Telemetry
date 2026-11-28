@@ -97,20 +97,36 @@ def mat_metal(d):
     fin = d.get('finish', 'polished')
     grain = max(d.get('grain', 1.0), 0.05)
     aniso = d.get('aniso', 0.0)
+    # Grain: (across, along) coordinates per finish. Hairlines no finer than 2 px across, so
+    # they survive the render scale and the denoiser, plus wider streak bands (8x) that carry
+    # the visible brushing; both stretched far along the grain.
+    fine = max(grain, 2.0)
     if fin == 'linear':
-        h = noise(nt, vec3(nt, M(nt, 'MULTIPLY', x, 0.004), y, 0.0), 1.0 / grain, 8.0)
+        a, b = y, x
         tang = vec3(nt, 1.0, 0.0, 0.0)
     elif fin == 'sunray':
-        # Grain runs along the radius: streak coordinate = angle × reference radius.
-        s = M(nt, 'MULTIPLY', th, 200.0)
-        h = noise(nt, vec3(nt, s, M(nt, 'MULTIPLY', r, 0.004), 0.0), 1.0 / grain, 8.0)
+        # Grain runs along the radius: across = angle × reference radius.
+        a, b = M(nt, 'MULTIPLY', th, 200.0), r
         tang = vec3(nt, x, y, 0.0)
     elif fin == 'spun':
-        h = noise(nt, vec3(nt, r, M(nt, 'MULTIPLY', th, 0.6), 0.0), 1.0 / grain, 8.0)
+        a, b = r, M(nt, 'MULTIPLY', th, 200.0)
         tang = vec3(nt, M(nt, 'MULTIPLY', y, -1.0), x, 0.0)
     else:
-        h = noise(nt, vec3(nt, x, y, z), 1.0 / grain, 6.0)
+        a = b = None
         tang = None
+    if a is not None:
+        h1 = noise(nt, vec3(nt, M(nt, 'DIVIDE', a, fine), M(nt, 'DIVIDE', b, fine * 160.0), 0.0), 1.0, 2.0)
+        h2 = noise(nt, vec3(nt, M(nt, 'DIVIDE', a, fine * 8.0), M(nt, 'DIVIDE', b, fine * 400.0), 3.7), 1.0, 2.0)
+        h = M(nt, 'MULTIPLY_ADD', h1, 0.55, M(nt, 'MULTIPLY', h2, 0.45))
+        # Streaks show as a little albedo and roughness variation, as on real brushed stock.
+        base = d.get('color', (0.9, 0.9, 0.9))
+        mx = node(nt, 'ShaderNodeMix', data_type='RGBA', blend_type='MIX')
+        lk(nt, h, mx.inputs[0])
+        mx.inputs[6].default_value = (base[0] * 0.82, base[1] * 0.82, base[2] * 0.82, 1.0)
+        mx.inputs[7].default_value = (min(base[0] * 1.12, 1.0), min(base[1] * 1.12, 1.0), min(base[2] * 1.12, 1.0), 1.0)
+        lk(nt, mx.outputs[2], bs.inputs['Base Color'])
+    else:
+        h = noise(nt, vec3(nt, x, y, z), 1.0 / grain, 6.0)
     if tang is not None and aniso > 0:
         setin(bs, 'Anisotropic', aniso)
         nm = node(nt, 'ShaderNodeVectorMath', operation='NORMALIZE')
@@ -119,9 +135,10 @@ def mat_metal(d):
     if fin == 'polished':
         finish_rough(nt, bs, rough, 0.02, vec3(nt, x, y, z), 0.02)
     else:
-        lk(nt, M(nt, 'MULTIPLY_ADD', M(nt, 'SUBTRACT', h, 0.5), 0.12, rough), bs.inputs['Roughness'])
+        var = 0.12 if fin == 'bead' else 0.2
+        lk(nt, M(nt, 'MAXIMUM', M(nt, 'MULTIPLY_ADD', M(nt, 'SUBTRACT', h, 0.5), var, rough), 0.02), bs.inputs['Roughness'])
     hgt = h
-    strength = 0.0 if fin == 'polished' else (0.25 if fin == 'bead' else 0.12)
+    strength = 0.0 if fin == 'polished' else (0.25 if fin == 'bead' else 0.4)
     kn = d.get('knurl', 0.0)
     if kn > 0:
         s = M(nt, 'MULTIPLY', th, M(nt, 'DIVIDE', r, kn))
@@ -132,7 +149,7 @@ def mat_metal(d):
             hgt = M(nt, 'MINIMUM', tri(nt, M(nt, 'ADD', s, rr)), tri(nt, M(nt, 'SUBTRACT', s, rr)))
         bump(nt, bs, hgt, 1.0, kn * 0.35)
     elif strength > 0:
-        bump(nt, bs, hgt, strength, grain * 0.5)
+        bump(nt, bs, hgt, strength, (grain if fin == 'bead' else fine) * 0.5)
     if d.get('coat', 0.0) > 0:
         setin(bs, 'Coat Weight', d['coat'])
         setin(bs, 'Coat Roughness', d.get('coat_rough', 0.05))
@@ -149,7 +166,12 @@ def mat_guilloche(d):
     p = max(d.get('pitch', 8.0), 0.5)
     pat = d.get('pattern', 'clous')
     if pat == 'rose':
-        w = M(nt, 'ADD', M(nt, 'DIVIDE', r, p / 6.2831853), M(nt, 'MULTIPLY', M(nt, 'SINE', M(nt, 'MULTIPLY', th, 12.0)), 2.5))
+        # Rosette: rings of pitch p whose radius swings by `amp` px with 12 lobes. The swing
+        # grows with the radius (full at 12 pitches out), so near the centre, where 12 lobes
+        # would crowd under a pixel, the rings stay round instead of pinching into streaks.
+        amp = M(nt, 'MULTIPLY', M(nt, 'MINIMUM', M(nt, 'DIVIDE', r, p * 12.0), 1.0), p * 0.35)
+        lobes = M(nt, 'MULTIPLY', M(nt, 'SINE', M(nt, 'MULTIPLY', th, 12.0)), amp)
+        w = M(nt, 'DIVIDE', M(nt, 'ADD', r, lobes), p / 6.2831853)
         h = M(nt, 'MULTIPLY_ADD', M(nt, 'SINE', w), 0.5, 0.5)
     elif pat == 'wave':
         w = M(nt, 'ADD', M(nt, 'DIVIDE', y, p / 6.2831853), M(nt, 'MULTIPLY', M(nt, 'SINE', M(nt, 'DIVIDE', x, p)), 1.8))
@@ -210,15 +232,56 @@ def mat_glass(d):
         setin(bs, 'Thin Film IOR', d.get('film_ior', 1.38))
     return m
 
+def glow_strength(nt, d, peak):
+    # Emission strength with a hot centre: full across the face, 2.2x in the middle, falling
+    # off over the cap's own radius (d['radius'] px), like a die behind a diffuser.
+    x, y, z, r, th = coords(nt)
+    rad = max(d.get('radius', 10.0), 1.0)
+    q = M(nt, 'DIVIDE', r, rad * 0.55)
+    hot = M(nt, 'EXPONENT', M(nt, 'MULTIPLY', M(nt, 'MULTIPLY', q, q), -1.0))
+    return M(nt, 'MULTIPLY', M(nt, 'MULTIPLY_ADD', hot, 1.2, 1.0), peak)
+
 def mat_led(d):
+    # An LED cap as a sprite: an opaque diffuser under a clear lens coat. (A transmissive lens
+    # renders transparent with film_transparent_glass, so only its Fresnel rim showed.)
     m, nt, bs = principled(d['name'])
     c = d.get('color', (1, 0, 0))
-    setin(bs, 'Base Color', [0.35 + 0.65 * v for v in c])
-    setin(bs, 'Roughness', d.get('rough', 0.04))
-    setin(bs, 'IOR', d.get('ior', 1.49))
-    setin(bs, 'Transmission Weight', 0.85)
-    setin(bs, 'Emission Color', d.get('emit', c))
-    setin(bs, 'Emission Strength', d.get('emit_strength', 0.0))
+    glow = d.get('emit_strength', 0.0)
+    if glow > 0:
+        # A dark die under the diffuser, so the emission alone sets the brightness and the hot
+        # centre reads over the rim instead of clipping flat (batch 3).
+        setin(bs, 'Base Color', [0.06 + 0.1 * v for v in c])
+        setin(bs, 'Emission Color', d.get('emit', c))
+        lk(nt, glow_strength(nt, d, glow), bs.inputs['Emission Strength'])
+    else:
+        # Unlit: a smoked coloured lens over a dark die.
+        setin(bs, 'Base Color', [0.035 + 0.16 * v for v in c])
+    setin(bs, 'Roughness', 0.45)
+    setin(bs, 'Subsurface Weight', 0.25)
+    setin(bs, 'Subsurface Radius', (0.02, 0.02, 0.02))
+    setin(bs, 'Coat Weight', 1.0)
+    setin(bs, 'Coat Roughness', d.get('rough', 0.04))
+    setin(bs, 'Coat IOR', d.get('ior', 1.49))
+    return m
+
+def mat_jewel(d):
+    # A synthetic jewel (ruby, sapphire, crystal) as a sprite: an opaque saturated body with
+    # a mirror-polished surface, so its facets flash the lights and its colour shows on black.
+    m, nt, bs = principled(d['name'])
+    c = d.get('color', (0.6, 0.02, 0.03))
+    setin(bs, 'Base Color', c)
+    setin(bs, 'Metallic', 0.0)
+    setin(bs, 'Roughness', 0.02)
+    setin(bs, 'IOR', d.get('ior', 1.76))
+    setin(bs, 'Subsurface Weight', 0.5)
+    setin(bs, 'Subsurface Radius', (0.03, 0.03, 0.03))
+    setin(bs, 'Coat Weight', 1.0)
+    setin(bs, 'Coat Roughness', 0.0)
+    setin(bs, 'Coat IOR', d.get('ior', 1.76))
+    glow = d.get('emit_strength', 0.0)
+    if glow > 0:
+        setin(bs, 'Emission Color', d.get('emit', c))
+        lk(nt, glow_strength(nt, d, glow), bs.inputs['Emission Strength'])
     return m
 
 def mat_leather(d):
@@ -293,7 +356,7 @@ def mat_emission(d):
 
 BUILDERS = {
     'metal': mat_metal, 'guilloche': mat_guilloche, 'carbon': mat_carbon,
-    'dielectric': mat_dielectric, 'glass': mat_glass, 'led': mat_led,
+    'dielectric': mat_dielectric, 'glass': mat_glass, 'led': mat_led, 'jewel': mat_jewel,
     'leather': mat_leather, 'alcantara': mat_alcantara, 'emission': mat_emission,
 }
 
@@ -405,7 +468,10 @@ def rig(sc, r):
         except Exception:
             pass
         LIGHTS.append(ob)
-    studio_world(sc, r.get('hdri', 0.0), 'studio.exr', r.get('hdri_rot', 0.0), visible=False)
+    # A material may ask for a brighter studio world ('world'): a matcap sphere has to mirror an
+    # environment, or a polished ball renders black between the lights.
+    boost = max([float(d.get('world', 0.0)) for d in P['materials']] + [0.0])
+    studio_world(sc, max(r.get('hdri', 0.0), boost), 'studio.exr', r.get('hdri_rot', 0.0), visible=False)
     sc.view_settings.exposure = r.get('exposure', 0.0)
 
 def swap_rmh(objs, hmin, hmax):

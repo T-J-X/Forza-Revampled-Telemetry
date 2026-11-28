@@ -1,0 +1,24 @@
+{
+  "build": 33,
+  "dash": "LorenzButterfly",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/lorenz_butterfly/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "2573e1417c78816d,951a6f5e7fdfabf5,4bbf323f1cacd80e",
+      "generator": "computed: prebuild::surf PowderCoat, seed 330001: soft orange peel: two-octave fbm of 40 px cells, 600 px tone drift; no flecks",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "lorenz_butterfly/prebuild/computed/pad_rim_powder_coat_master.png",
+      "name": "pad_rim_powder_coat",
+      "runtime": [],
+      "use": "labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "lorenz_butterfly"
+}

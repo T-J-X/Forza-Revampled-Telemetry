@@ -34,6 +34,7 @@ mod lane;
 mod ledger;
 mod net;
 mod paths;
+mod prebuild;
 mod procedural;
 mod recipes;
 mod selftest;
@@ -235,6 +236,7 @@ fn dispatch(paths: &paths::Paths, args: &[String]) -> Result<()> {
             println!("ledger and contact sheet updated");
             Ok(())
         }
+        Some("prebuild") => prebuild::cli(&paths, &args[1..]),
         Some("hero-demo") => hero::demo::run(&paths, args.iter().any(|a| a == "--preview")),
         Some("hero-detail") => {
             let (Some(beauty), Some(out)) = (args.get(1), args.get(2)) else {
@@ -284,7 +286,7 @@ fn dispatch(paths: &paths::Paths, args: &[String]) -> Result<()> {
             sheet::write(&paths, &ledger)
         }
         _ => Err(ForgeError::Usage(
-            "asset-forge [--lane local|cloud] [--masters <snake_name>] doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|<cluster set>] [--force] [--only <job>] | sheet | selftest | hero-demo [--preview] | hero-versus <board.png> <after.png> [out.png] | cloud setup|up|down|status|spend|doctor".into(),
+            "asset-forge [--lane local|cloud] [--masters <snake_name>] doctor | build [--set glass|fluid|scifi|classic|adas|logos|fonts|comfy|<cluster set>] [--force] [--only <job>] | sheet | selftest | prebuild --list|<snake_name>...|--all [--preview] | hero-demo [--preview] | hero-versus <board.png> <after.png> [out.png] | cloud setup|up|down|status|spend|doctor".into(),
         )),
     }
 }

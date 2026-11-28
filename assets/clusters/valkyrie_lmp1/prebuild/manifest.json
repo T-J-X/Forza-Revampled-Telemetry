@@ -1,0 +1,41 @@
+{
+  "build": 9,
+  "dash": "ValkyrieLmp1",
+  "deferred": [
+    "the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/valkyrie_lmp1/prebuild",
+  "items": [
+    {
+      "dims": "200x200 at 1:1 (400x400 master)",
+      "fingerprint_fnv64": "4a979435f67d7bf4,92558517559ccc9e,9daf602cef2aaa27",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 200 local px at 2 px/px, hero rig, box-filtered to 1:1; parts well, knurl, cap",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "valkyrie_lmp1/prebuild/sprites/encoder_ring_knurled_184_0.png",
+      "name": "encoder_ring_knurled_184",
+      "runtime": [
+        "assets/clusters/valkyrie_lmp1/prebuild/sprites/encoder_ring_knurled_184_0.png",
+        "assets/clusters/valkyrie_lmp1/prebuild/sprites/encoder_ring_knurled_184_1.png",
+        "assets/clusters/valkyrie_lmp1/prebuild/sprites/encoder_ring_knurled_184_2.png"
+      ],
+      "use": "the two shoulder encoders at (±604, 4) in 4K px (0.7 scale in the hood view): one sprite, mirrored; a 3 px diamond knurl on the ring's face"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "94f62edd70c719e4,dcb46bbdf3bd1975",
+      "generator": "computed: prebuild::surf ForgedMarble, seed 90002: forged carbon: about 9000 chopped tow flakes (150 to 300 px long, 18 to 40 px wide, ends cut square) laid in random order and direction, bent along a slow periodic flow (the marble swirl), each with fine 6 px fibre striations along its length and its own tone 0.010 to 0.050; flat under resin (no relief); _direction = fibre direction for anisotropic sheen",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "valkyrie_lmp1/prebuild/computed/forged_carbon_marble_master.png",
+      "name": "forged_carbon_marble",
+      "runtime": [],
+      "use": "the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Forged carbon is computed (chopped tow flakes laid along a flow field, exact tile; the SDXL marble failed review); the knurl is Blender, on the ring itself.",
+  "preview": false,
+  "schema": 1,
+  "snake": "valkyrie_lmp1"
+}

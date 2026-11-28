@@ -1,0 +1,27 @@
+{
+  "build": 56,
+  "dash": "RevueltoCorsa",
+  "deferred": [
+    "the hex-mesh grille: the hero library has no hexagon perforation yet",
+    "the 300 px hexagon pod: the library has no hexagon outline yet, and the anodise tint is not in the brief"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/revuelto_corsa/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "0036e1b8afa61168,05fc5505b84a77ad",
+      "generator": "computed: prebuild::surf ForgedChips, seed 560001: forged carbon: about 1100 broad chopped flakes (380 to 700 px long, 110 to 200 px wide) laid in random order and direction, each with fine 6 px fibre striations along its length and its own tone 0.010 to 0.050; flat under resin; _direction map",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "revuelto_corsa/prebuild/computed/forged_composite_large_chips_master.png",
+      "name": "forged_composite_large_chips",
+      "runtime": [],
+      "use": "the hexagon pod body"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "revuelto_corsa"
+}

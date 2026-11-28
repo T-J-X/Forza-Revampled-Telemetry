@@ -1,0 +1,50 @@
+{
+  "build": 8,
+  "dash": "AmgMbuxSuperscreen",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/amg_mbux_superscreen/prebuild",
+  "items": [
+    {
+      "dims": "192x256 runtime (384x512 master)",
+      "fingerprint_fnv64": "996724569685ebdc",
+      "generator": "computed: prebuild::fx::rain_streaks, seed 80001: widths 1 to 3 px, lengths 64 to 256 px, Gaussian across, brightest at the head with a 25% fade-in and soft tail, 2x2 supersampled",
+      "kind": "rain-streak sprites: 12 drops in a row of 16x256 cells at 1:1 (runtime, sRGB 8-bit, white RGB, alpha = streak), master at 2x",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_mbux_superscreen/prebuild/computed/rain_streaks_master.png",
+      "name": "rain_streaks",
+      "runtime": [
+        "assets/clusters/amg_mbux_superscreen/prebuild/computed/rain_streaks.png"
+      ],
+      "use": "v5 rain: 12 motion-blurred streaks (1 to 3 px wide, 64 to 256 px long), alpha on black; tint and scroll them in the kit"
+    },
+    {
+      "dims": "128x128 runtime (256x256 master)",
+      "fingerprint_fnv64": "84f8d1c8dacbcd4b",
+      "generator": "computed: prebuild::fx::water_beads, seed 80002: flattened dome, water Fresnel (n 1.333) dark rim, specular of an upper-left key (power 90), caustic crescent opposite, 4x4 supersampled",
+      "kind": "water-bead sheet: 16 beads of 8 to 24 px in a 4x4 sheet of 32 px cells at 1:1 (runtime, sRGB 8-bit, straight alpha), master at 2x",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_mbux_superscreen/prebuild/computed/water_beads_master.png",
+      "name": "water_beads",
+      "runtime": [
+        "assets/clusters/amg_mbux_superscreen/prebuild/computed/water_beads.png"
+      ],
+      "use": "v5 rain: 16 water beads of 8 to 24 px with a refraction rim and highlight, straight alpha"
+    },
+    {
+      "dims": "2048x2048 master",
+      "fingerprint_fnv64": "480be791e4bd4e41,49e0fb4ebf881c39,82e601fa8af8f7bf,27cc8b6f6df9c167",
+      "generator": "computed: prebuild::surf WetAsphalt, seed 80003: aggregate: Worley stones of 16 px, tones 0.040 to 0.060 (dark, low contrast); height = 35% stones + 65% shallow 260 px ripples",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_mbux_superscreen/prebuild/computed/wet_asphalt_2048_master.png",
+      "name": "wet_asphalt_2048",
+      "runtime": [],
+      "use": "v5 rain: seamless 2048 wet asphalt, dark and low contrast; albedo, height, normal and roughness (water in the troughs is glossy)"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Requested by the thread for v5 rain (28 Nov, 09:20). Computed, so clean and exactly seamless; no SDXL.",
+  "preview": false,
+  "schema": 1,
+  "snake": "amg_mbux_superscreen"
+}

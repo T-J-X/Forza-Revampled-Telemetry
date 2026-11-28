@@ -1,0 +1,37 @@
+{
+  "build": 16,
+  "dash": "AmgOneF1",
+  "deferred": [
+    "the housing, the rim arc and the F1 shift-light caps: need the Penpot layout and the cap pitch"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/amg_one_f1/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "925f4cbbc7f1b398",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2016 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_rim\",\"rough\":0.3199999928474426,\"tow\":12.0}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_one_f1/prebuild/swatches/carbon_twill_rim.png",
+      "name": "carbon_twill_rim",
+      "runtime": [],
+      "use": "surface of the 780 px carbon rim arc (2x2 twill, 12 px tows)"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "7e1221724df4274c,0f9ed3ef31ad3945,7f21e753dc59d7df",
+      "generator": "computed: prebuild::surf Antiglare, seed 160001: Worley soft bumps of 22 px cells over a 256 px low swell; luminance 0.5 +- 0.04",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "amg_one_f1/prebuild/computed/antiglare_matte_grain_master.png",
+      "name": "antiglare_matte_grain",
+      "runtime": [],
+      "use": "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "Twill carbon is Blender, never SDXL.",
+  "preview": false,
+  "schema": 1,
+  "snake": "amg_one_f1"
+}

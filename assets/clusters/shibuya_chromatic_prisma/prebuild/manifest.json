@@ -1,0 +1,24 @@
+{
+  "build": 26,
+  "dash": "ShibuyaChromaticPrisma",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/shibuya_chromatic_prisma/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "2eb823b63de8ef30,fa0f7a15c0f94141,f77af32222c0f44c,019bcfa4b761fc0e",
+      "generator": "computed: prebuild::surf WetAsphalt, seed 260001: aggregate: Worley stones of 16 px, tones 0.040 to 0.060 (dark, low contrast); height = 35% stones + 65% shallow 260 px ripples",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "shibuya_chromatic_prisma/prebuild/computed/wet_asphalt_ripple_master.png",
+      "name": "wet_asphalt_ripple",
+      "runtime": [],
+      "use": "greyscale height for the mirror-ripple normal map"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "The prism dispersion is the dash's optics; this is only the wet street grain.",
+  "preview": false,
+  "schema": 1,
+  "snake": "shibuya_chromatic_prisma"
+}

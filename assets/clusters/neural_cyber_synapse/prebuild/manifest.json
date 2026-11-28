@@ -1,0 +1,24 @@
+{
+  "build": 37,
+  "dash": "NeuralCyberSynapse",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/neural_cyber_synapse/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "c11407cffcf8870a,bb59b6f113173ab6,17d85b31064c17f6",
+      "generator": "computed: prebuild::surf Membrane, seed 370001: faint fibres (60 px noise stretched 4:1, warped) with soft granules of 34 px; grey 0.38 to 0.6",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "neural_cyber_synapse/prebuild/computed/soma_membrane_grain_master.png",
+      "name": "soma_membrane_grain",
+      "runtime": [],
+      "use": "optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "neural_cyber_synapse"
+}

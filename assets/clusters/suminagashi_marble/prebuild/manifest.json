@@ -1,0 +1,48 @@
+{
+  "build": 42,
+  "dash": "SuminagashiMarble",
+  "deferred": [
+    "the gear stone (200 px) and the side stones (260x130): pebble geometry is modelled with the layout"
+  ],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/suminagashi_marble/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "3eb953b391a47454,649cb2fbdc21dfc4,d3553019970ec171",
+      "generator": "computed: prebuild::surf Urushi, seed 420001: deep black with a warm undertone: 1200 px depth +-15%, brush drag stretched 10:1 at +-3%",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "suminagashi_marble/prebuild/computed/urushi_lacquer_master.png",
+      "name": "urushi_lacquer",
+      "runtime": [],
+      "use": "the tray rim's lacquer"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "a9e9aab9fc56bd47,964fb1b786df7e33,81ebfe61dc0fa6c3",
+      "generator": "computed: prebuild::surf StillWater, seed 420002: nine sine waves with whole wave numbers (exact tile), plus 90 px capillary fbm at 15%",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "suminagashi_marble/prebuild/computed/still_water_sheen_master.png",
+      "name": "still_water_sheen",
+      "runtime": [],
+      "use": "greyscale height for the water's faint sheen normal; the marbling is the dash's area-preserving maps"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "a46efe61dfa52f3a,b8acab7b0829c772,adf1f3a339537b1b",
+      "generator": "computed: prebuild::surf Washi, seed 420003: cloudy formation (300 px fbm, +-3%) with 2400 long kozo fibres (300 to 900 px, 1.5 to 3 px wide, translucent +7%)",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "suminagashi_marble/prebuild/computed/washi_paper_fibre_master.png",
+      "name": "washi_paper_fibre",
+      "runtime": [],
+      "use": "labelled fibre texture under the labels"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "suminagashi_marble"
+}

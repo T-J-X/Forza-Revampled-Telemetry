@@ -1,0 +1,39 @@
+{
+  "build": 72,
+  "dash": "HyperbolicTiles",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/hyperbolic_tiles/prebuild",
+  "items": [
+    {
+      "dims": "416x416 at 1:1 (832x832 master)",
+      "fingerprint_fnv64": "6db6ebfe23203415,cefcfae122e46739,b42ee055a480d14e",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 416 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_0.png",
+      "name": "disc_rim_ring_400",
+      "runtime": [
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_0.png",
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_1.png",
+        "assets/clusters/hyperbolic_tiles/prebuild/sprites/disc_rim_ring_400_2.png"
+      ],
+      "use": "the 400 px thin machined rim (8 px width proposed); one render, mirrored for both discs"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "1ccb5f3b0e1d752d,929d8d36c66927d6,6dcf9e04507cc249",
+      "generator": "computed: prebuild::surf EtchedGlass, seed 720001: uniform frosted grain: Worley soft bumps of 14 px cells, luminance 0.5 +- 0.03",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "hyperbolic_tiles/prebuild/computed/etched_glass_grain_master.png",
+      "name": "etched_glass_grain",
+      "runtime": [],
+      "use": "labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "hyperbolic_tiles"
+}

@@ -1,0 +1,24 @@
+{
+  "build": 70,
+  "dash": "StarSailOrigami",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/star_sail_origami/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "acfdb18ef07cce9e",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"aniso\":0.85,\"color\":[0.9129999876022339,0.921999990940094,0.9240000247955322],\"finish\":\"linear\",\"grain\":0.8,\"kind\":\"metal\",\"name\":\"brushed_film_hairline\",\"rough\":0.30000001192092896}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "star_sail_origami/prebuild/swatches/brushed_film_hairline.png",
+      "name": "brushed_film_hairline",
+      "runtime": [],
+      "use": "optional facet sheen (use its normal); the fold is the dash's Miura-ori maths"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "star_sail_origami"
+}

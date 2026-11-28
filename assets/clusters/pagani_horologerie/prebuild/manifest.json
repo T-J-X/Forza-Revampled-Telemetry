@@ -1,0 +1,61 @@
+{
+  "build": 34,
+  "dash": "PaganiHorologerie",
+  "deferred": [],
+  "drive_folder": "FH6 WheelDash v2 - 4K Masters/pagani_horologerie/prebuild",
+  "items": [
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "f48c99d7bdf5b45f",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2040 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.671999990940094,0.6370000243186951,0.5849999785423279],\"depth\":1.0,\"kind\":\"guilloche\",\"name\":\"clous_de_paris_p12\",\"pattern\":\"clous\",\"pitch\":12.0,\"rough\":0.20000000298023224}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "pagani_horologerie/prebuild/swatches/clous_de_paris_p12.png",
+      "name": "clous_de_paris_p12",
+      "runtime": [],
+      "use": "the dial faces, raked by the G light (14 alpha at most)"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "891a54618e16f888",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2064 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.671999990940094,0.6370000243186951,0.5849999785423279],\"depth\":1.0,\"kind\":\"guilloche\",\"name\":\"rose_guilloche_p24\",\"pattern\":\"rose\",\"pitch\":24.0,\"rough\":0.20000000298023224}",
+      "kind": "swatch disc (Blender, 16-bit sRGB, straight alpha) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "pagani_horologerie/prebuild/swatches/rose_guilloche_p24.png",
+      "name": "rose_guilloche_p24",
+      "runtime": [],
+      "use": "the secondary guilloché zone (the brief's barleycorn, as the library's rose pattern)"
+    },
+    {
+      "dims": "4096x4096",
+      "fingerprint_fnv64": "8af4a86cea4a5d9d",
+      "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"coat\":1.0,\"coat_rough\":0.18,\"color\":[0.007000000216066837,0.007000000216066837,0.00800000037997961],\"finish\":\"bead\",\"grain\":1.0,\"kind\":\"metal\",\"metallic\":0.5,\"name\":\"black_anodised_alu\",\"rough\":0.3199999928474426}",
+      "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
+      "licence": "MIT (asset-forge)",
+      "master": "pagani_horologerie/prebuild/swatches/black_anodised_alu.png",
+      "name": "black_anodised_alu",
+      "runtime": [],
+      "use": "the tonneau case chamfer"
+    },
+    {
+      "dims": "1012x1012 at 1:1 (2024x2024 master)",
+      "fingerprint_fnv64": "c13304cbe0bdad00,05609cd459c4d722,62e93627b28d2802",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 1012 local px at 2 px/px, hero rig, box-filtered to 1:1; parts cap",
+      "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
+      "licence": "MIT (asset-forge)",
+      "master": "pagani_horologerie/prebuild/sprites/polished_steel_matcap_0.png",
+      "name": "polished_steel_matcap",
+      "runtime": [
+        "assets/clusters/pagani_horologerie/prebuild/sprites/polished_steel_matcap_0.png",
+        "assets/clusters/pagani_horologerie/prebuild/sprites/polished_steel_matcap_1.png",
+        "assets/clusters/pagani_horologerie/prebuild/sprites/polished_steel_matcap_2.png"
+      ],
+      "use": "a 1000 px polished steel hemisphere under a bright studio world: the matcap for the hands and screws"
+    }
+  ],
+  "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",
+  "notes": "",
+  "preview": false,
+  "schema": 1,
+  "snake": "pagani_horologerie"
+}
