@@ -1,7 +1,7 @@
 //! AMG MBUX Superscreen (`ClusterTheme::AmgMbuxSuperscreen`), catalog row 4: the driver display
 //! of the E-Class generation that carries the MBUX Superscreen (W214, 2023 on, and the
 //! Mercedes-AMG E 53), in its Sport (press: "Sporty") style. Supercar category, Modern Digital
-//! 2027 family, cockpit. Research: `RESEARCH.md`. Board: Penpot page `07 · AmgMbuxSuperscreen`.
+//! 2027 family, cockpit. Research: `RESEARCH.md`. Board: none yet (the rebuild follows it).
 //!
 //! The real display is one free-standing 12.3-inch screen (2.67:1), so this dash is that screen:
 //! a black glass panel in a thin piano-black bezel (the Blender housing), and on it the Sport

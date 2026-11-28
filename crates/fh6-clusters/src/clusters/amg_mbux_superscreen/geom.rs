@@ -2,7 +2,7 @@
 //!
 //! The dash is one physical screen, the W214 driver display (12.3 inches, 2.67:1), so its zones
 //! sit inside the screen's black glass and the screen sits inside the cockpit envelope
-//! (−720, −320, 1440 × 560). Every value here mirrors the Penpot board `07 · AmgMbuxSuperscreen`.
+//! (−720, −320, 1440 × 560). First build, made before its Penpot board; the rebuild follows the board.
 use fh6_kit::{deg, vec2, Rect, Vec2};
 
 /// Crescent outline samples per edge (the outer arc and the tapered inner edge).
