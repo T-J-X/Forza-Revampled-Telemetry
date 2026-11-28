@@ -15,7 +15,7 @@
 //! | Sky | horizon and floor glow | horizon through the vanishing point (0, −45) | – | ambient: tilts with felt G |
 //! | Rev tunnel | 16 rounded-rect rings | centred on (0, −45); nearest 700 × 270 half size, radius 90 | – | rank 3: rpm, back to front |
 //! | Wings | tapered capsules, toed in 14° | x ±296..±700, half height 95 inside, 120 outside | 18 / 30 / 8 | rank 4–5: the rpm numerals, labels and the logo zone |
-//! | Front pane | rounded rect | x −280..280, y −246..150, radius 72 | 28 / 24 / 14 | rank 1: the gear (cap 200); rank 2: the speed (cap 88) |
+//! | Front pane | rounded rect | x −280..280, y −246..150, radius 72 | 28 / 24 / 14 | rank 1: the gear (cap 176), centred on the vanishing point, so the tunnel runs into it; rank 2: the speed (cap 74) |
 //! | Puck | disc | (0, 170), r 54 | dome 27 / whole / 8 | rank 4: felt G bead, brake caution arcs, slip halo |
 //! | Blade | pill | x −520..520, y −312..−268 | dome 22 / whole / 4 | rank 1: 15 shift pods, outside-in |
 //!
@@ -80,6 +80,25 @@ const HEAD_WHITE: f32 = 0.3;
 const HEAD_WIDEN: f32 = 2.0;
 /// Light of a wing numeral the rpm has passed, as a share of its ring's colour leaned to white.
 const NUMERAL_LIT: f32 = 0.9;
+/// Board v3's tubes of light: the halo under each lit ring (light share and extra width), the
+/// hot core on the near half, the depth fog's share at the far end.
+const RING_HALO_LEVEL: f32 = 0.18;
+const RING_HALO_WIDEN: f32 = 14.0;
+const RING_CORE_LEVEL: f32 = 0.55;
+const FOG_FAR: f32 = 0.55;
+/// The gear-change warp: one ring of light from the vanishing point to the driver over
+/// `WARP_S`, at `WARP_LEVEL`, widening by `WARP_WIDEN` px as it nears.
+const WARP_S: f32 = 0.22;
+const WARP_LEVEL: f32 = 0.9;
+const WARP_WIDEN: f32 = 6.0;
+/// How far the kit's bloom spreads past a lit stroke (measured with `visual-review stretch` on the
+/// redline frame: light of 4 of 255 still 150 px out). Rings nearer the envelope than this are drawn
+/// without bloom, so no light reaches past the envelope plus 40 px.
+const BLOOM_REACH: f32 = 160.0;
+/// The gear's wide glow in the tunnel's colour (board v3), as a share of that colour, and its
+/// radius as a share of the gear's cap.
+const GEAR_GLOW: f32 = 0.1;
+const GEAR_GLOW_R: f32 = 0.95;
 /// The nearest lit rings lean to this pale sky blue (board: primary at the back, #C7E9FF at the
 /// front).
 const NEAR_TINT: u32 = 0xC7_E9_FF;
@@ -132,6 +151,35 @@ const STROBE_LEAD: f32 = 1e-4;
 const STROBE_FLOOR: f32 = 0.2;
 /// Brightness of the floor glow, the horizon and the clouds: ambient, far under the static cap.
 const SKY_LEVEL: f32 = 0.05;
+/// The stratus streaks over the horizon: x, height above the horizon (negative is up), half
+/// length and brightness. They are flattened by `CLOUD_FLAT` and wrap `CLOUD_WRAP` px past the
+/// envelope's ends, drifting `CLOUD_DRIFT` px per second per m/s of speed.
+const CLOUDS: [(f32, f32, f32, f32); 6] = [
+    (-520.0, -120.0, 300.0, 1.0),
+    (-80.0, -160.0, 360.0, 0.8),
+    (420.0, -110.0, 280.0, 1.0),
+    (-300.0, -205.0, 260.0, 0.6),
+    (250.0, -230.0, 320.0, 0.55),
+    (640.0, -175.0, 240.0, 0.7),
+];
+const CLOUD_FLAT: f32 = 0.09;
+const CLOUD_WRAP: f32 = 260.0;
+const CLOUD_DRIFT: f32 = 0.4;
+/// Speed streaks: light dashes that run along the tunnel's four corner rails towards the driver.
+/// `STREAKS` per rail, each `STREAK_LEN` of the rail long; they cover the rail once in
+/// `1 / (speed_ms * STREAK_RATE)` seconds (about 1.3 s at 40 m/s), so the tunnel flows with
+/// the car's speed and stands still when it does.
+const STREAKS: usize = 5;
+const STREAK_LEN: f32 = 0.07;
+const STREAK_RATE: f32 = 0.019;
+const STREAK_LEVEL: f32 = 0.55;
+/// Light of the faint rails the streaks run on.
+const RAIL_IDLE: f32 = 0.035;
+/// Speed under which the streaks stop (m/s).
+const STREAK_MIN_SPEED: f32 = 0.5;
+/// How much throttle lifts the floor glow, and how far the brake warms it to the warning red.
+const FLOOR_THROTTLE: f32 = 0.9;
+const FLOOR_BRAKE: f32 = 0.6;
 /// Vertical squash of the floor glow: the floor seen at a grazing angle.
 const FLOOR_SQUASH: f32 = 0.38;
 
@@ -182,10 +230,10 @@ const COCKPIT: Geom = Geom {
     },
     pane_radius: 72.0,
     core_inset: 22.0,
-    gear_baseline: -8.0,
-    gear_cap: 200.0,
-    speed_baseline: 110.0,
-    speed_cap: 88.0,
+    gear_baseline: 108.0,
+    gear_cap: 236.0,
+    speed_baseline: -144.0,
+    speed_cap: 64.0,
     puck: vec2(0.0, 170.0),
     puck_r: 54.0,
     blade: Rect {
@@ -220,8 +268,20 @@ impl Geom {
 
     /// Stroke width of ring `i`.
     fn ring_stroke(i: usize) -> f32 {
-        let k = i as f32 / (RINGS - 1) as f32;
+        Self::ring_stroke_at(i as f32)
+    }
+
+    /// Stroke width at ring position `u` (fractional between rings).
+    fn ring_stroke_at(u: f32) -> f32 {
+        let k = (u / (RINGS - 1) as f32).clamp(0.0, 1.0);
         RING_STROKE.0 + (RING_STROKE.1 - RING_STROKE.0) * k
+    }
+
+    /// The corner of the nearest ring the rails aim at: the middle of its corner arc, which every
+    /// ring's corner shares the direction of, since they all scale about the vanishing point.
+    fn rail_corner(&self) -> Vec2 {
+        let inset = self.ring_radius * (1.0 - core::f32::consts::FRAC_1_SQRT_2);
+        self.ring_half - Vec2::splat(inset)
     }
 
     /// The black core under the pane's clear middle.
@@ -236,6 +296,20 @@ impl Geom {
         let outer = Rect::from_center_size(self.vanish, (half + Vec2::splat(w)) * 2.0);
         let core = self.core();
         outer.min.x >= core.min.x && outer.max.x <= core.max.x && outer.min.y >= core.min.y && outer.max.y <= core.max.y
+    }
+
+    /// True when ring position `u` can sit in a bloom layer: the bloom's reach round its outer
+    /// edge, at the furthest backdrop shear, stays inside the envelope plus 40 px.
+    fn ring_blooms(&self, u: f32) -> bool {
+        let (half, _) = self.ring(u);
+        let reach = Self::ring_stroke_at(u) * 0.5 + BLOOM_REACH;
+        let slack = BACK_SHEAR.abs() * G_LIMIT;
+        let outer = Rect::from_center_size(self.vanish, (half + Vec2::splat(reach)) * 2.0);
+        let room = self.envelope.expand(40.0);
+        outer.min.x - slack >= room.min.x
+            && outer.max.x + slack <= room.max.x
+            && outer.min.y >= room.min.y
+            && outer.max.y <= room.max.y
     }
 
     /// The pod centres on the blade, left to right.
@@ -419,6 +493,13 @@ pub struct VisionSpatialGlass {
     /// Wing toe from the derived yaw rate (−1..=1).
     toe: Smoothed<f32>,
     halo: Smoothed<f32>,
+    /// Phase of the speed streaks along the rails (0..1).
+    flow: f32,
+    /// How far the clouds have drifted (px, wrapped).
+    cloud_px: f32,
+    /// Throttle and brake on the floor glow, smoothed so a stab never pops it.
+    floor_throttle: Smoothed<f32>,
+    floor_brake: Smoothed<f32>,
     /// Tunnel fill: rpm from idle (0) to the limiter (1).
     rev: Spring,
     rev_target: f32,
@@ -428,6 +509,8 @@ pub struct VisionSpatialGlass {
     strip: Strip,
     cue: LimiterCue,
     hop: Tween,
+    /// The gear-change warp down the tunnel.
+    warp: Tween,
     recede: Tween,
     show: Tween,
     fresh: bool,
@@ -474,6 +557,10 @@ impl VisionSpatialGlass {
             bead_target: [0.0; 2],
             toe: Smoothed::new(0.0, 0.25),
             halo: Smoothed::new(0.0, 0.12),
+            flow: 0.0,
+            cloud_px: 0.0,
+            floor_throttle: Smoothed::new(0.0, 0.15),
+            floor_brake: Smoothed::new(0.0, 0.08),
             rev: Spring::new(t.springs.ribbon, 0.0),
             rev_target: 0.0,
             rev_rpm: 0.0,
@@ -482,6 +569,7 @@ impl VisionSpatialGlass {
             strip: Strip::new(),
             cue: LimiterCue::new(),
             hop: Tween::new(HOP_S),
+            warp: Tween::new(WARP_S),
             recede: Tween::new(RECEDE_S),
             show,
             fresh: true,
@@ -599,9 +687,11 @@ impl Cluster for VisionSpatialGlass {
         self.gear.update(sig.gear, self.cue.held(), dt);
         if self.gear.since_change() == 0.0 && self.gear.was_upshift() && !self.calm {
             self.hop.restart();
+            self.warp.restart();
             self.recede.restart();
         }
         self.hop.update(dt);
+        self.warp.update(dt);
         self.recede.update(dt);
         self.show.update(dt);
         self.speed.update(sig.speed);
@@ -621,6 +711,18 @@ impl Cluster for VisionSpatialGlass {
             0.0
         };
         self.halo.update(slip * slip * (3.0 - 2.0 * slip), dt);
+        let unit = |x: f32| if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 };
+        self.floor_throttle.update(unit(sig.throttle), dt);
+        self.floor_brake.update(unit(sig.brake), dt);
+        let speed = if sig.speed_ms.is_finite() {
+            sig.speed_ms.max(0.0)
+        } else {
+            0.0
+        };
+        if speed >= STREAK_MIN_SPEED {
+            self.flow = (self.flow + speed * STREAK_RATE * dt).rem_euclid(1.0);
+            self.cloud_px = (self.cloud_px + speed * CLOUD_DRIFT * dt).rem_euclid(1.0e4);
+        }
 
         // One light on every rim: lateral G swings it, acceleration leans it.
         let op = &input.tokens.optics;
@@ -654,6 +756,7 @@ impl Cluster for VisionSpatialGlass {
         let heat = self.cue.level();
         self.draw_sky(p, g, &pal);
         self.draw_tunnel(p, g, &pal, heat);
+        self.draw_streaks(p, g, &pal);
         self.draw_cores(p, g, &pal);
         self.draw_pane_lights(p, g, &pal, heat);
         self.draw_puck(p, g, &pal);
@@ -665,7 +768,9 @@ impl Cluster for VisionSpatialGlass {
 
     fn animating(&self) -> bool {
         self.show.running()
+            || self.sig.speed_ms >= STREAK_MIN_SPEED
             || self.hop.running()
+            || self.warp.running()
             || self.recede.running()
             || self.strip.animating()
             || self.gear.animating()
@@ -687,8 +792,14 @@ impl VisionSpatialGlass {
         let v = g.vanish + vec2(self.shear_px(None), 0.0);
         let tilt = deg(self.shear.value() * G_LIMIT * HORIZON_TILT);
         let env = g.envelope;
-        let floor = pal.primary;
+        // Throttle lifts the floor glow; the brake warms it towards the warning red.
+        let floor = pal
+            .primary
+            .lerp(roles.warning, FLOOR_BRAKE * self.floor_brake.value())
+            .intensity(0.6 + FLOOR_THROTTLE * self.floor_throttle.value());
         p.scoped(|p| {
+            // The sky never leaves the envelope, whatever the tilt or the drift.
+            p.clip(env, 0.0);
             p.transform(&Affine::rotate_about(tilt, v));
             // The floor glow: brightest at the horizon under the vanishing point, fading out
             // sideways and down (a radial gradient squashed to the floor's perspective).
@@ -710,24 +821,30 @@ impl VisionSpatialGlass {
                         .stop(1.0, floor.with_alpha(0.0)),
                 );
             });
-            let cloud = roles.ink.lerp(pal.primary, 0.35);
-            for (c, r, k) in [
-                (vec2(-460.0, -170.0), 210.0, 1.0),
-                (vec2(380.0, -200.0), 240.0, 0.8),
-                (vec2(40.0, -250.0), 180.0, 0.6),
-            ] {
-                let at = v + c - g.vanish;
+            // Dusk stratus: long thin streaks of cloud above the horizon, drifting slowly with the
+            // car's speed (far away, so a fraction of a pixel per metre).
+            let cloud = roles.ink.lerp(pal.primary, 0.45);
+            for (i, &(x, y, half, k)) in CLOUDS.iter().enumerate() {
+                let span = env.width() + 2.0 * CLOUD_WRAP;
+                let drift = (x - self.cloud_px * (0.6 + 0.2 * i as f32) - env.min.x + CLOUD_WRAP).rem_euclid(span);
+                let cx = env.min.x - CLOUD_WRAP + drift;
+                // Fade out towards the envelope's ends, so a streak never pops as it wraps.
+                let edge = ((env.max.x - cx.abs()) / CLOUD_WRAP).clamp(0.0, 1.0);
+                if edge <= 0.0 {
+                    continue;
+                }
+                let at = vec2(cx, v.y + y);
                 p.scoped(|p| {
                     p.transform(
                         &Affine::translate(-at)
-                            .then(&Affine::scale_xy(1.0, 0.32))
+                            .then(&Affine::scale_xy(1.0, CLOUD_FLAT))
                             .then(&Affine::translate(at)),
                     );
                     p.fill(
-                        &Shape::circle(at, r),
-                        Gradient::radial(at, r)
-                            .stop(0.0, cloud.intensity(SKY_LEVEL * k))
-                            .stop(0.5, cloud.intensity(SKY_LEVEL * 0.45 * k))
+                        &Shape::circle(at, half),
+                        Gradient::radial(at, half)
+                            .stop(0.0, cloud.intensity(SKY_LEVEL * k * edge))
+                            .stop(0.45, cloud.intensity(SKY_LEVEL * 0.4 * k * edge))
                             .stop(1.0, cloud.with_alpha(0.0)),
                     );
                 });
@@ -765,25 +882,105 @@ impl VisionSpatialGlass {
             } else {
                 pal.primary.lerp(near, depth)
             };
-            *slot = Some(hue.lerp(pal.shift, heat).intensity(TUNNEL_LEVEL * on));
+            *slot = Some(hue.lerp(pal.shift, heat).intensity(TUNNEL_LEVEL * on * fog(i)));
         }
         for (i, _) in lit.iter().enumerate().filter(|(_, c)| c.is_none()) {
             if !g.ring_hidden(i) {
-                ring(p, g, v, i, roles.ink.with_alpha(idle_ring(i)), 0.0);
+                ring(p, g, v, i as f32, roles.ink.with_alpha(idle_ring(i)), 0.0);
             }
         }
         let head = lit.iter().rposition(Option::is_some);
-        p.layer(LayerOptions::bloom(), |p| {
+        // Tubes of light (board v3): a soft wide halo under each lit ring, then the ring, then a
+        // thin hot core on the nearer half of the tunnel.
+        for (i, color) in lit.iter().enumerate() {
+            if let Some(c) = color {
+                ring(
+                    p,
+                    g,
+                    v,
+                    i as f32,
+                    c.intensity(RING_HALO_LEVEL).fade(0.6),
+                    RING_HALO_WIDEN,
+                );
+            }
+        }
+        // Each lit ring, then the warp: in the bloom layer where its glow stays inside the
+        // envelope, plain where it does not.
+        let warp = self.warp.running().then(|| {
+            let k = self.warp.progress();
+            let u = k * k * (RINGS - 1) as f32;
+            let color = roles.ink.lerp(pal.primary, 0.25).intensity(WARP_LEVEL * (1.0 - k));
+            (u, color, WARP_WIDEN * k)
+        });
+        let strokes = |p: &mut Painter<'_>, bloomed: bool| {
             for (i, color) in lit.iter().enumerate() {
                 // Lit rings behind the pane are drawn too: they glow through its core.
-                if let Some(c) = color {
-                    if Some(i) == head {
-                        let on = (fill - i as f32).clamp(0.0, 1.0);
-                        let full = c.intensity(HEAD_LEVEL / (TUNNEL_LEVEL * on).max(1e-3));
-                        ring(p, g, v, i, full.lerp(roles.ink, HEAD_WHITE).fade(on), HEAD_WIDEN);
-                    } else {
-                        ring(p, g, v, i, *c, 0.0);
-                    }
+                let Some(c) = color else { continue };
+                let u = i as f32;
+                if g.ring_blooms(u) != bloomed {
+                    continue;
+                }
+                if Some(i) == head {
+                    let on = (fill - u).clamp(0.0, 1.0);
+                    let full = c.intensity(HEAD_LEVEL / (TUNNEL_LEVEL * on * fog(i)).max(1e-3));
+                    ring(p, g, v, u, full.lerp(roles.ink, HEAD_WHITE).fade(on), HEAD_WIDEN);
+                } else {
+                    ring(p, g, v, u, *c, 0.0);
+                }
+            }
+            // The gear change: a ring of white light rushes from the vanishing point to the
+            // driver, the whole tunnel in one stroke.
+            if let Some((u, color, widen)) = warp {
+                if g.ring_blooms(u) == bloomed {
+                    ring(p, g, v, u, color, widen);
+                }
+            }
+        };
+        p.layer(LayerOptions::bloom(), |p| strokes(p, true));
+        strokes(p, false);
+        // Thin hot cores on the nearer half, without bloom.
+        for (i, _) in lit.iter().enumerate().filter(|(_, c)| c.is_some()) {
+            let depth = i as f32 / (RINGS - 1) as f32;
+            if depth > 0.5 {
+                let core = roles.ink.intensity(RING_CORE_LEVEL * (depth - 0.5) * 2.0);
+                ring(p, g, v, i as f32, core, 1.2 - Geom::ring_stroke(i));
+            }
+        }
+    }
+
+    /// The tunnel's four corner rails, from the vanishing point to the nearest ring's corners, with
+    /// light streaks running along them towards the driver at the car's speed. Each streak brightens
+    /// and lengthens as it nears, as a light passing a camera does.
+    fn draw_streaks(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let roles = pal.roles;
+        let v = g.vanish + vec2(self.shear_px(None), 0.0);
+        let near = Color::rgb_u32(NEAR_TINT);
+        let corner = g.rail_corner();
+        let at = |u: f32, sx: f32, sy: f32| {
+            v + vec2(corner.x * sx, corner.y * sy) * Geom::ring_scale(u * (RINGS - 1) as f32)
+        };
+        let quads = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)];
+        for (sx, sy) in quads {
+            p.fill(
+                &Shape::line(at(0.0, sx, sy), at(1.0, sx, sy), 1.5),
+                roles.ink.with_alpha(RAIL_IDLE),
+            );
+        }
+        if self.sig.speed_ms < STREAK_MIN_SPEED || !self.sig.speed_ms.is_finite() {
+            return;
+        }
+        p.layer(LayerOptions::bloom(), |p| {
+            for k in 0..STREAKS {
+                let u = (self.flow + k as f32 / STREAKS as f32).rem_euclid(1.0);
+                let tail = (u - STREAK_LEN).max(0.0);
+                // Fade in from the vanishing point and out at the near end, so no streak pops.
+                let level = STREAK_LEVEL * (u / 0.25).min(1.0) * ((1.0 - u) / 0.12).min(1.0);
+                if level <= 0.005 || u - tail < 1e-3 {
+                    continue;
+                }
+                let color = pal.primary.lerp(near, u).intensity(level);
+                for (sx, sy) in quads {
+                    p.fill(&Shape::line(at(tail, sx, sy), at(u, sx, sy), 1.5 + 2.5 * u), color);
                 }
             }
         });
@@ -813,6 +1010,23 @@ impl VisionSpatialGlass {
     fn draw_pane_lights(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette, heat: f32) {
         let dx = self.shear_px(Some(1));
         let gear_at = vec2(dx, g.gear_baseline - g.gear_cap * 0.5);
+        // The gear sits in the tunnel's light (board v3): a wide faint glow in the colour of the
+        // lit tunnel, under the white numeral.
+        let fill = self.rev.value().clamp(0.0, 1.0);
+        if fill > 0.01 {
+            let near = Color::rgb_u32(NEAR_TINT);
+            let tint = pal.primary.lerp(near, fill).lerp(pal.shift, heat);
+            let r = g.gear_cap * GEAR_GLOW_R;
+            p.scoped(|p| {
+                p.set_blend(BlendMode::Add);
+                p.fill(
+                    &Shape::circle(gear_at, r),
+                    Gradient::radial(gear_at, r)
+                        .stop(0.0, tint.intensity(GEAR_GLOW * fill.sqrt()))
+                        .stop(1.0, tint.with_alpha(0.0)),
+                );
+            });
+        }
         self.gear.draw(p, gear_at, self.faces.gear, g.gear_cap, pal);
         if heat > 0.01 {
             p.layer(LayerOptions::bloom(), |p| {
@@ -917,14 +1131,12 @@ impl VisionSpatialGlass {
             let r = Rect::from_center_size(c + vec2(dx, 0.0), lit);
             p.fill(&Shape::round_rect(r, r.height() * 0.5), pal.roles.ink.with_alpha(0.05));
         }
-        p.layer(LayerOptions::bloom(), |p| {
-            for (i, c) in g.pod_centers().iter().enumerate() {
-                if let Some(color) = self.strip.light(i, pal) {
-                    let r = Rect::from_center_size(*c + vec2(dx, 0.0), lit);
-                    p.fill(&Shape::round_rect(r, r.height() * 0.5), color);
-                }
+        for (i, c) in g.pod_centers().iter().enumerate() {
+            if let Some(color) = self.strip.light(i, pal) {
+                let r = Rect::from_center_size(*c + vec2(dx, 0.0), lit);
+                p.fill(&Shape::round_rect(r, r.height() * 0.5), color);
             }
-        });
+        }
     }
 
     /// All the glass, in one layer, back to front: the wings, the pane, the puck and the blade.
@@ -1053,47 +1265,59 @@ impl VisionSpatialGlass {
         for w in &wings {
             sliver(p, w, edge);
         }
+        // The rims sit at the envelope's edge, where a bloom would spread light past it, so their
+        // heat and glints get a drawn halo instead: a wide faint stroke under the bright one.
         if heat > 0.01 {
-            p.layer(LayerOptions::bloom(), |p| {
-                for w in &wings {
-                    sliver(p, w, pal.shift.intensity(heat));
+            for w in &wings {
+                if let Outline::Capsule { b, radius_b, .. } = w.outline {
+                    let start = if b.x < 0.0 { PI - 0.6 } else { -0.6 };
+                    let halo = pal.shift.intensity(heat * 0.35).fade(0.5);
+                    p.fill(&Shape::arc(b, radius_b - 8.0, 12.0, start, 1.2, Cap::Round), halo);
                 }
-            });
+                sliver(p, w, pal.shift.intensity(heat));
+            }
         }
         let glints = [self.glint(0), self.glint(1), self.glint(2)];
         if glints.iter().all(|&k| k <= 0.0) {
             return;
         }
         let glint = roles.ink.intensity(1.0);
-        p.layer(LayerOptions::bloom(), |p| {
+        // Each glint twice: a wide faint pass inward (the halo), then the bright 3 px line.
+        for (width, level, inset) in [(10.0, 0.25, 6.0), (3.0, 1.0, 2.0)] {
             if glints[0] > 0.0 {
                 for w in &wings {
                     if let Outline::Capsule { b, radius_b, .. } = w.outline {
                         let start = if b.x < 0.0 { PI - 1.0 } else { -1.0 };
                         p.fill(
-                            &Shape::arc(b, radius_b - 2.0, 3.0, start, 2.0, Cap::Round),
-                            glint.fade(glints[0]),
+                            &Shape::arc(b, radius_b - inset, width, start, 2.0, Cap::Round),
+                            glint.fade(glints[0] * level),
                         );
                     }
                 }
             }
             if glints[1] > 0.0 {
                 p.stroke(
-                    &Shape::round_rect(self.pane(g).inset(2.0), g.pane_radius - 2.0),
-                    glint.fade(glints[1]),
-                    Stroke::new(3.0),
+                    &Shape::round_rect(self.pane(g).inset(inset), g.pane_radius - inset),
+                    glint.fade(glints[1] * level),
+                    Stroke::new(width),
                 );
             }
             if glints[2] > 0.0 {
-                let blade = g.blade.translate(vec2(self.shear_px(Some(3)), 0.0)).inset(2.0);
+                let blade = g.blade.translate(vec2(self.shear_px(Some(3)), 0.0)).inset(inset);
                 p.stroke(
                     &Shape::round_rect(blade, blade.height() * 0.5),
-                    glint.fade(glints[2]),
-                    Stroke::new(3.0),
+                    glint.fade(glints[2] * level),
+                    Stroke::new(width),
                 );
             }
-        });
+        }
     }
+}
+
+/// Depth fog on lit ring `i` (board v3): far rings fainter, near rings brighter.
+fn fog(i: usize) -> f32 {
+    let depth = i as f32 / (RINGS - 1) as f32;
+    FOG_FAR + (1.0 - FOG_FAR) * depth
 }
 
 /// Coverage of unlit ring `i`: brightest at the vanishing point, fading towards the driver.
@@ -1108,11 +1332,11 @@ fn caution_steps(brake: f32) -> usize {
     [0.1, 0.4, 0.7].iter().filter(|&&t| brake >= t).count()
 }
 
-/// Strokes ring `i` round `v` (`widen` px wider than its own stroke) as four straight sides and
+/// Strokes the ring at position `u` round `v` (`widen` px wider than its own stroke) as four straight sides and
 /// four corner arcs, so each draw covers only its own band and not the whole ring's box.
-fn ring(p: &mut Painter<'_>, g: &Geom, v: Vec2, i: usize, color: Color, widen: f32) {
-    let (half, r) = g.ring(i as f32);
-    let w = Geom::ring_stroke(i) + widen;
+fn ring(p: &mut Painter<'_>, g: &Geom, v: Vec2, u: f32, color: Color, widen: f32) {
+    let (half, r) = g.ring(u);
+    let w = (Geom::ring_stroke_at(u) + widen).max(0.5);
     let (hx, hy) = (half.x, half.y);
     let r = r.min(hx).min(hy);
     for (a, b) in [
@@ -1220,7 +1444,8 @@ mod tests {
         let gear_top = G.gear_baseline - G.gear_cap;
         assert!(gear_top >= clear.min.y && G.gear_baseline <= clear.max.y);
         let speed_top = G.speed_baseline - G.speed_cap;
-        assert!(speed_top > G.gear_baseline && G.speed_baseline <= clear.max.y);
+        // Board v4: the speed reads on top, under the shift lights, the hero gear below it.
+        assert!(speed_top >= clear.min.y && G.speed_baseline < gear_top);
     }
 
     #[test]
