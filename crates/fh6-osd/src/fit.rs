@@ -29,8 +29,8 @@ impl CameraApply {
         match self {
             Self::NextLaunch => "Applies on next launch (camera file)",
             Self::Applied => "Saved to the camera file",
-            Self::Unavailable => "Camera file not found: saved in config only",
-            Self::PatchOff => "Camera patch is off: saved in config only",
+            Self::Unavailable => "Camera file not found: the game keeps its own camera",
+            Self::PatchOff => "Camera patch is off: the game keeps its own camera",
         }
     }
 }
@@ -138,7 +138,7 @@ fn set_void(c: &mut AppConfig, v: f32) {
 /// ranges.
 pub static SCRIM_ROWS: &[FitRow] = &[
     FitRow {
-        label: "Dash blocker",
+        label: "Blocker strength",
         unit: "%",
         min: 0.0,
         max: 100.0,

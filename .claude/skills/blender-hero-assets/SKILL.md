@@ -13,10 +13,10 @@ rendered plate.
 Code lives in `tools/asset-forge/src/hero/` (Rust; bpy is a Rust string constant in
 `hero/bpy.rs`). Never write `.py` files into the repo. Run Blender through `asset-forge` with
 the **Bash** tool, never PowerShell. One 8 GB RTX 3070 Ti is shared with every thread: one GPU
-job at a time, holding `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job (root
+job at a time, holding `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job through `gpu-lock` (root
 `SKILLS.md`, section 5), and `Scene::render` already retries once on failure. Renders go to the
 rented 24 GB pod by default (TJX, 2026-11-27: cloud first): put `--lane cloud` before the
-asset-forge command and hold `gpu-cloud.lock` or `gpu-cloud-2.lock` (same section;
+asset-forge command and queue with `gpu-lock run --lane cloud`, which holds `gpu-cloud.lock` or `gpu-cloud-2.lock` (same section;
 `docs/cloud-gpu.md`). The 8 GB rules here apply when a render has to run on this PC.
 
 Where it sits (TJX, 2026-11-27): the order for every dash is R&D on the web → Penpot → ComfyUI →
