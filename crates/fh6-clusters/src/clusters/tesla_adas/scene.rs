@@ -129,6 +129,8 @@ const WRAP_NEAR: f32 = -14.0;
 const WRAP_FAR: f32 = 78.0;
 const LEAD_NEAR: f32 = EGO_Z + 14.0;
 const LEAD_FAR: f32 = 58.0;
+/// The lead car's sprite is multiplied by this (linear light).
+const LEAD_SHADE: f32 = 0.55;
 /// Traffic flows at its full relative speed once the ego does this (m/s).
 const TRAFFIC_FULL_SPEED: f32 = 12.0;
 /// The traffic seed (catalog: ambient traffic is seeded, so two runs draw the same road).
@@ -996,7 +998,12 @@ impl Scene {
             (col, row),
             rel < 0.0,
             rect,
-            Color::WHITE.fade(alpha),
+            // Tesla draws the car ahead in a darker grey than the rest of the traffic.
+            if u.lane == 0 {
+                Color::linear(LEAD_SHADE, LEAD_SHADE, LEAD_SHADE, 1.0).fade(alpha)
+            } else {
+                Color::WHITE.fade(alpha)
+            },
         );
     }
 
