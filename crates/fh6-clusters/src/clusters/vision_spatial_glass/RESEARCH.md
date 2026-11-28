@@ -189,6 +189,27 @@ Not read: pitch, roll, `yaw_rate` and per-tyre slip (unverified, section 6); `Wh
 | Limiter held in calm mode | Strip lit steady, no strobe, no glints, no warp | Correct | — |
 | Speed above 999 | Shared `TabularSpeed` clamps | — | — |
 
+### 10.6 Depth cues: is the tunnel's ring spacing "real"?
+
+**The geometry.** Rings equally spaced in depth project at scale 1/z. With the nearest ring at 1 and the farthest at `RING_FAR` 0.18 (z from 1 to 5.6), true perspective puts the ring scales at 0.18, 0.19, 0.20, 0.22, 0.23, 0.25, 0.27, 0.29, 0.32, 0.35, 0.40, 0.45, 0.52, 0.62, 0.77, 1.00. Our curve (`RING_FAR + (1 − RING_FAR)·k^1.6`) gives 0.18, 0.19, 0.21, 0.24, 0.28, 0.32, 0.37, 0.42, 0.48, 0.54, 0.61, 0.68, 0.75, 0.83, 0.91, 1.00 (chart: `build2/ring_spacing.png` in the project files).
+
+**What that means.** The pane's half width is 0.40 of the nearest ring, so in true perspective 11 of the 16 rings (everything below about 70% of the rev range) would sit behind the pane, and the last two rings would take a third of the whole width. The tunnel would read as "dark, dark, dark, BANG" instead of a rev scale. Our curve spaces the rings so each 1/15 of the rev range is a visible step, and leaves the depth to the other cues.
+
+**The other cues, checked** (the pictorial cues in the CUNY and Hanover perception texts):
+
+| Cue | In the dash |
+|---|---|
+| Relative size and linear perspective | Rings shrink to one vanishing point; the rails draw the converging lines |
+| Texture gradient ("finer in the distance") | Ring stroke 6 px near to 2 px far |
+| Atmospheric perspective ("hazy, bluish" far away) | Depth fog: far rings at 55% (`FOG_FAR`), near rings tinted toward `NEAR_TINT` ice white |
+| Occlusion | The pane and wings sit in front of the tunnel and bend it |
+| Motion parallax | The tunnel and sky shear −6 px per g, the glass layers +6 to +18: opposite directions, so the gap between them reads as depth |
+| Motion in depth | The warp ring and the streaks accelerate as they near (k² and the ring curve), as a passing light does |
+
+**From the 3D cluster studies** (Broy et al., AutomotiveUI 2014 and 2015, stereoscopic clusters): putting content in front raised perceived urgency, colour mattered more than depth for urgency, depth made the display read as "clearly structured", and task time and errors did not change. Jitter from shear was a complaint. **Our reading:** the limiter as the ring *nearest* the driver, in the shift colour, is the urgent-in-front pattern, with colour doing most of the work; the parallax must stay smooth (it rides a spring on smoothed G, and V24's motion check covers jitter at the closing review).
+
+**Plan.** Keep the curve. If the depth reads weak at the closing review, the cheap lever is a steeper curve only for the outer three rings (closer to 1/z at the near end, where it costs no rev resolution), not a different law.
+
 ## 8. Sources
 
 Apple:
@@ -206,5 +227,11 @@ Cars:
 - Human Interface Guidelines, Windows: https://developer.apple.com/design/human-interface-guidelines/windows
 - WWDC24 session 10152, "Create custom hover effects in visionOS": https://developer.apple.com/videos/play/wwdc2024/10152/
 - Create with Swift, "Ensuring interface legibility and contrast in visionOS": https://www.createwithswift.com/ensuring-interface-legibility-and-contrast-in-visionos
+
+Depth and 3D clusters:
+- Broy et al., AutomotiveUI 2015 (stereoscopic cluster, real-world study): https://www.medien.ifi.lmu.de/pubdb/publications/pub/broy2015autoui/broy2015autoui.pdf
+- Broy et al., AutomotiveUI 2014 (stereoscopic cluster, driving simulator): https://www.medien.ifi.lmu.de/pubdb/publications/pub/broy20143D/broy20143D.pdf
+- CUNY Sensation and Perception, chapter 7, Depth perception: https://pressbooks.cuny.edu/sensationandperception/?p=389
+- Hanover College ISLE, Monocular depth cues: https://isle.hanover.edu/Ch07DepthSize/Ch07MonocDepth.html
 
 No frame grabs were measured in this pass, so no pixel value in the design comes from Apple or car-maker footage.
