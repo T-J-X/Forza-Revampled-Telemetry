@@ -84,7 +84,19 @@ packet to present p50 0.656 ms, p99 1.377 ms (1460 packets); 139.7 fps presented
 ```
 The parity failure was the tool, not the decoder: `parity-dump` compared the golden's text with its own, and once `fh6-core` turned on `serde_json`'s `preserve_order` its keys came out in insertion order while the goldens are alphabetical (`golden_telemetry`, which compares values, passed). It now compares values (after writing its own through text, so an f32's shortest form compares as written), writes a new golden with sorted keys, and has a test that checks all 20 goldens. The goldens are unchanged.
 
-PARITY_RERUN_PLACEHOLDER
+Run 4, commit `2c79a72` (only `tools/parity-dump/src/main.rs` and the docs changed since run 3, so only its gates ran again):
+```
+$ cargo fmt --all -- --check
+exit 0
+$ cargo clippy -p parity-dump --all-targets -- -D warnings
+Finished, no warnings
+$ cargo test -p parity-dump
+3 passed; 0 failed; 0 ignored
+$ cargo run -p parity-dump -- tests/golden/packets
+20/20 OK
+$ git status --short
+(empty: no golden was written)
+```
 
 Run 2, commit `559216c` (before the rebase), which re-rendered the golden:
 ```
