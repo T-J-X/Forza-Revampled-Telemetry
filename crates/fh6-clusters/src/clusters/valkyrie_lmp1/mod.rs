@@ -16,14 +16,15 @@
 //! virtual light (lateral G swings it 25°). Without the files it draws a flat procedural face.
 //!
 //! Glance ranks:
-//! 1. The gear (`race` Saira Condensed 800, cap 176) at the dial's centre, and the ten shift
+//! 1. The gear (`race` Saira Condensed 800, cap 168) at the dial's centre, and the ten shift
 //!    lights: 76 × 30 lenses, filling outside-in (the two shoulder singles first, then the eight's
 //!    pairs onto the centre) in `primary`, all ten in `shift` at the shift point, and at the
 //!    limiter only the strip strobes (10 Hz, `ShiftLights`).
 //! 2. Tabular speed (cap 104, ghost 8s at 2%) left of the dial, its unit under it.
 //! 3. The rev counter: a 240° arc of r 190 from 0 to the scale top (the car's limiter rounded up
 //!    to the next thousand: 12 on an 11,100 rpm car), lit in `primary`, numbered every thousand.
-//!    The band from the shift point to the scale top is `warning` at 55%; on the limiter it takes
+//!    Outside the arc a band runs `caution` from rev stage 2 to the shift point and `warning` from
+//!    there to the scale top, both at 55%; on the limiter the red band takes
 //!    a steady `shift` and the lit arc turns ink, so only the strip flashes.
 //! 4. The rev tunnel inside the dial; the friction circle under the speed; power (in
 //!    `signals.power_unit`) and the engineer trace (throttle in `go`, brake in `warning`,
@@ -54,7 +55,7 @@
 //! | Z3 | rev counter | centre (0, 14), r 190, width 16, from 150° over 240° clockwise; red band r 206 |
 //! | Z3 | numerals | r 134, cap 26 |
 //! | Z3 | rev tunnel | 7 rings round the dial centre, r 34..116 (power law 1.5) |
-//! | Z1 | gear | cap middle (0, 16), cap 176 |
+//! | Z1 | gear | cap middle (0, 12), cap 168 |
 //! | Z2 | speed | cap middle (−337, 12), cap 104; unit cap top at y 74 |
 //! | Z4 | friction circle | centre (−337, 150), r 34 = 1.5 g |
 //! | Z4 | power | right edge x 404, cap middle −64, cap 56 |
@@ -97,6 +98,8 @@ const GHOST_8: f32 = 0.03;
 const UNLIT_LENS: f32 = 22.0 / 255.0;
 /// The lit pods' share of the tokens' bloom intensity (an LED behind a lens).
 const POD_BLOOM: f32 = 0.4;
+/// The gear's share of the tokens' bloom intensity.
+const GEAR_BLOOM: f32 = 0.5;
 /// Labels (RPM x1000, POWER, PEDALS) as seen on screen.
 const LABEL_ALPHA: f32 = 0.47;
 /// Units (KM/H, KW) as seen on screen.
@@ -114,7 +117,7 @@ const TRACE_CHUNK: usize = 8;
 /// Power smoothing (s) and the readout's hysteresis (display units).
 const POWER_TAU: f32 = 0.10;
 /// See [`POWER_TAU`].
-const POWER_STEP: f32 = 2.0;
+const POWER_STEP: f32 = 5.0;
 /// The power share counts only once the car has made this much power (W).
 const PEAK_MIN_W: f32 = 1000.0;
 /// Watts per mechanical horsepower.
@@ -218,13 +221,13 @@ mod g {
     /// See [`NUMERAL_R`].
     pub const NUMERAL_CAP: f32 = 26.0;
     /// The RPM x1000 label (cap middle).
-    pub const RPM_LABEL: Vec2 = vec2(0.0, 126.0);
+    pub const RPM_LABEL: Vec2 = vec2(0.0, 124.0);
     /// Small labels.
     pub const LABEL_CAP: f32 = 16.0;
     /// The gear (cap middle).
-    pub const GEAR: Vec2 = vec2(0.0, 16.0);
+    pub const GEAR: Vec2 = vec2(0.0, 12.0);
     /// See [`GEAR`].
-    pub const GEAR_CAP: f32 = 176.0;
+    pub const GEAR_CAP: f32 = 168.0;
     /// The speed (cap middle) and its unit (cap top).
     pub const SPEED: Vec2 = vec2(-337.0, 12.0);
     /// See [`SPEED`].
@@ -585,13 +588,14 @@ impl Cluster for ValkyrieLmp1 {
             self.power_peak_w = 0.0;
         }
         let watts = input.telemetry.power_watts;
-        let w = self
-            .power_w
-            .update(if watts.is_finite() { watts.max(0.0) } else { 0.0 }, dt);
+        let raw = if watts.is_finite() { watts.max(0.0) } else { 0.0 };
+        let w = self.power_w.update(raw, dt);
         self.power_peak_w = self.power_peak_w.max(w);
+        // The readout takes the packet value through the hysteresis (no smoothing lag, so it
+        // stands still on the limiter); the share arc takes the smoothed value.
         let shown = match sig.power_unit {
-            PowerUnit::Hp => w / W_PER_HP,
-            PowerUnit::Kw => w / 1000.0,
+            PowerUnit::Hp => raw / W_PER_HP,
+            PowerUnit::Kw => raw / 1000.0,
         };
         self.power_value = self.power_shown.update(shown).clamp(0, 9999);
 
@@ -853,9 +857,24 @@ impl ValkyrieLmp1 {
             &Shape::arc(g::DIAL_C, g::DIAL_R, g::DIAL_W, start, sweep, Cap::Butt),
             Color::srgb8(14, 20, 26, 255),
         );
-        // The band from the shift point to the scale top.
+        // The caution band from rev stage 2 to the shift point, then the red band to the scale
+        // top, so the approach to the limiter reads on the dial (direction check).
         let shift_rpm = if sig.shift_rpm > 1.0 { sig.shift_rpm } else { span };
         let f0 = frac(shift_rpm).clamp(0.0, 1.0);
+        let fc = frac(shift_rpm * pal.stages[1]).clamp(0.0, f0);
+        if f0 - fc > 1e-3 && !limiter {
+            p.fill(
+                &Shape::arc(
+                    g::DIAL_C,
+                    g::RED_R,
+                    g::RED_W,
+                    dial_angle(fc),
+                    sweep * (f0 - fc),
+                    Cap::Butt,
+                ),
+                roles.caution.with_alpha(on_screen(RED_BAND_ALPHA)),
+            );
+        }
         if f0 < 1.0 {
             let band = if limiter {
                 pal.shift
@@ -908,7 +927,16 @@ impl ValkyrieLmp1 {
     /// Gear, speed and power.
     fn draw_readouts(&self, p: &mut Painter<'_>, pal: &Palette) {
         let roles = pal.roles;
-        p.layer(LayerOptions::bloom(), |p| {
+        // The gear blooms at a reduced share so its halo stays off the RPM label and the lamps
+        // (direction check: the full bloom washed over them).
+        let bloom = LayerOptions {
+            bloom: Some(Bloom {
+                threshold: p.tokens().glow.bloom_threshold,
+                intensity: p.tokens().glow.bloom_intensity * GEAR_BLOOM,
+            }),
+            ..LayerOptions::default()
+        };
+        p.layer(bloom, |p| {
             self.gear.draw(p, g::GEAR, self.faces.gear, g::GEAR_CAP, pal);
         });
         self.speed.draw(
@@ -1096,6 +1124,8 @@ mod tests {
         );
         // The gear is centred on the dial (F8) and clear of the lowest numerals.
         assert!((g::GEAR.x - g::DIAL_C.x).abs() <= 10.0);
+        // The gear (with its 2% round overshoot) clears the RPM label by at least 16 px.
+        assert!(g::RPM_LABEL.y - g::LABEL_CAP * 0.5 - (g::GEAR.y + g::GEAR_CAP * 0.51) >= 16.0);
         let low = Vec2::polar(g::DIAL_C, g::NUMERAL_R, dial_angle(0.0));
         assert!(
             low.x.abs() - g::NUMERAL_CAP > g::GEAR_CAP * 0.33,
