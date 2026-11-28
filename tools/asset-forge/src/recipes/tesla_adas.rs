@@ -2,7 +2,8 @@
 //!
 //! - **The car** (Blender, Cycles). No model is imported: [`CAR_LIB`] lofts a generic electric
 //!   fastback from a table of stations (one row per cross-section, rear to nose), subdivides it,
-//!   cuts the wheel arches and adds wheels, a light bar, running lights and mirrors. The same
+//!   cuts the wheel arches and adds wheels, a light bar, running lights and mirrors, with its
+//!   panel gaps (boot lid, bonnet, doors, bumper line) cut into the paint as shut lines. The same
 //!   table, scaled, gives the two fastback traffic bodies; the third is a kei box from a table of
 //!   its own. Every car wears a Japanese number plate (white, or yellow on the kei).
 //! - **The ego atlas**: the car through the dash's own chase camera ([`CAM_H`], [`CAM_D`],
@@ -94,14 +95,18 @@ RINGS = 12
 
 # Per-kind changes: overall scales, a roof stretch and a ducktail kick on the sedan table, or a
 # table of its own with its own glass, axles, mirror station and tail.
+# Shut lines (u, metres from the tail): the panel gaps across the top (boot lid, bonnet) and
+# down the sides (the doors' edges), and the bumper line across the tail.
+SEAMS_SEDAN = {'top': (0.80, 3.90), 'side': (1.28, 2.45, 3.52), 'bumper': 0.205}
+SEAMS_KEI = {'top': (2.98,), 'side': (0.46, 1.52, 2.58), 'bumper': 0.215}
 FASTBACK = {'table': SEDAN, 'glass': (GLASS_REAR, GLASS_ROOF, GLASS_FRONT), 'side': GLASS_SIDE, 'axles': AXLES,
-            'mirror_u': 3.50, 'duck': 0.0, 'box': False, 'plate': (0.92, 0.92, 0.90)}
+            'mirror_u': 3.50, 'duck': 0.0, 'box': False, 'plate': (0.92, 0.92, 0.90), 'seams': SEAMS_SEDAN}
 KINDS = {
     'ego':   dict(FASTBACK, len=1.00, wid=1.00, hgt=1.00, cabin=0.00, tail=0.00, wheel_r=0.355, duck=0.060),
     'sedan': dict(FASTBACK, len=0.98, wid=0.97, hgt=1.02, cabin=0.02, tail=0.00, wheel_r=0.345),
     'sport': dict(FASTBACK, len=0.94, wid=1.03, hgt=0.89, cabin=-0.03, tail=-0.02, wheel_r=0.350, duck=0.095),
     'kei':   {'table': KEI, 'glass': ((2.43, 2.92),), 'side': (0.34, 2.62), 'axles': (0.43, 2.95), 'mirror_u': 2.62,
-              'duck': 0.0, 'box': True, 'plate': (0.95, 0.74, 0.03),
+              'duck': 0.0, 'box': True, 'plate': (0.95, 0.74, 0.03), 'seams': SEAMS_KEI,
               'len': 1.00, 'wid': 1.00, 'hgt': 1.00, 'cabin': 0.00, 'tail': 0.00, 'wheel_r': 0.280},
 }
 
@@ -298,11 +303,80 @@ def strip_on(body, name, y_from, x_half, z, height, mat, toward=1.0, segs=40, of
     return ob
 
 
+SEAM_HALF = 0.0050     # half the gap's width (m): about a pixel at the dash's scale
+SEAM_SOFT = 0.0030     # its soft shoulder (m)
+
+
+def _m(nt, op, a, b=None):
+    """A math node on `a` (a socket or a number) and `b`."""
+    n = nt.nodes.new('ShaderNodeMath')
+    n.operation = op
+    for i, v in enumerate((a, b)):
+        if v is None:
+            continue
+        if isinstance(v, (int, float)):
+            n.inputs[i].default_value = v
+        else:
+            nt.links.new(v, n.inputs[i])
+    return n.outputs[0]
+
+
+def _band(nt, coord, centre, half, soft):
+    """1 on the line `coord == centre`, falling to 0 over `soft` past `half`."""
+    d = _m(nt, 'ABSOLUTE', _m(nt, 'SUBTRACT', coord, centre))
+    return _m(nt, 'SUBTRACT', 1.0, _m(nt, 'MINIMUM', 1.0, _m(nt, 'DIVIDE', _m(nt, 'MAXIMUM', _m(nt, 'SUBTRACT', d, half), 0.0), soft)))
+
+
+def _between(nt, coord, lo, hi):
+    return _m(nt, 'MULTIPLY', _m(nt, 'GREATER_THAN', coord, lo), _m(nt, 'LESS_THAN', coord, hi))
+
+
+def shut_lines(body, kind, rows, L, paint):
+    """Gives the body a copy of the paint with its panel gaps cut in: the gap is dark and has no
+    clear coat, so it reads as a shut line, not a painted stripe."""
+    k = KINDS[kind]
+    seams = k['seams']
+    m = paint.copy()
+    m.name = 'paint_' + kind
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    xyz = nt.nodes.new('ShaderNodeSeparateXYZ')
+    nt.links.new(tc.outputs['Object'], xyz.inputs[0])
+    y, z = xyz.outputs['Y'], xyz.outputs['Z']
+    belt = max(r[2] for r in rows)
+    bot = min(r[5] for r in rows)
+    y_of = lambda u: L * 0.5 - u * k['len']
+    line = None
+    def add(v):
+        nonlocal line
+        line = v if line is None else _m(nt, 'MAXIMUM', line, v)
+    for u in seams['top']:
+        add(_m(nt, 'MULTIPLY', _band(nt, y, y_of(u), SEAM_HALF, SEAM_SOFT), _m(nt, 'GREATER_THAN', z, belt - 0.03)))
+    for u in seams['side']:
+        add(_m(nt, 'MULTIPLY', _band(nt, y, y_of(u), SEAM_HALF, SEAM_SOFT), _between(nt, z, bot + 0.07, belt - 0.015)))
+    # The bumper line across the tail, on the tail's last 0.30 m only.
+    tail = rows[0]
+    zb = tail[5] + seams['bumper']
+    add(_m(nt, 'MULTIPLY', _band(nt, z, zb, SEAM_HALF, SEAM_SOFT), _m(nt, 'GREATER_THAN', y, L * 0.5 - 0.30)))
+    base = b.inputs['Base Color'].default_value
+    mix = nt.nodes.new('ShaderNodeMix')
+    mix.data_type = 'RGBA'
+    mix.inputs['A'].default_value = base
+    mix.inputs['B'].default_value = (0.006, 0.006, 0.007, 1.0)
+    nt.links.new(_m(nt, 'MULTIPLY', line, 0.92), mix.inputs['Factor'])
+    nt.links.new(mix.outputs['Result'], b.inputs['Base Color'])
+    nt.links.new(_m(nt, 'SUBTRACT', 1.0, line), b.inputs['Coat Weight'])
+    nt.links.new(_m(nt, 'ADD', b.inputs['Roughness'].default_value, _m(nt, 'MULTIPLY', line, 0.5)), b.inputs['Roughness'])
+    body.data.materials[0] = m
+
+
 def build_car(kind, mats):
     """Builds one car and returns its root empty. `mats` holds paint, glass, trim, tyre, rim,
     tail, head and well."""
     k = KINDS[kind]
     body, rows, L = build_body(kind, mats)
+    shut_lines(body, kind, rows, L, mats['paint'])
     root = bpy.data.objects.new('car_' + kind, None)
     link(root)
     body.parent = root
@@ -612,7 +686,7 @@ const NIGHT_SEED: u64 = 6006;
 /// The shipped plate: the long side lies along the road.
 const NIGHT_SIZE: [usize; 2] = [4096, 1706];
 /// The card's emission strength in the car shots.
-const NIGHT_GAIN: f32 = 6.0;
+const NIGHT_GAIN: f32 = 2.5;
 
 /// Builds the set.
 pub fn build(ctx: &mut Ctx) -> Result<()> {
