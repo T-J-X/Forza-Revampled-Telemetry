@@ -91,7 +91,7 @@ TJX, 2026-11-28: "the fluid ones i want real geomatry and maths going on", and t
 At the direction check and at the closing review, a `visual-review sheet` puts the dash's `02_mid_cruise` render beside every finished dash of its category (for an AMG dash, also beside every finished AMG dash). Two more yes or no lines are answered: the render shows what its category's line in the table says a render must show, and at thumbnail size the dash cannot be mistaken for a sibling.
 
 ## Build order
-One thread per dash, at most 4 at once (TJX, 2026-11-27; they share the GPU lanes, root `SKILLS.md` section 5). The seven pattern-setters lead, so every family's language is proven before its siblings. After build #10 every category but Abstract has a dash. From build #11 the order goes round the categories so that none lags: Supercar, Retro, Motorsport, Psychedelic, Abstract, Hypercar, Liquid Glass, Apple Vision, Sci-Fi. Abstract starts at build #15.
+One thread per dash, at most 6 at once (TJX, 2026-11-28, raised from 4; they share the GPU lanes, root `SKILLS.md` section 5). The seven pattern-setters lead, so every family's language is proven before its siblings. After build #10 every category but Abstract has a dash. From build #11 the order goes round the categories so that none lags: Supercar, Retro, Motorsport, Psychedelic, Abstract, Hypercar, Liquid Glass, Apple Vision, Sci-Fi. Abstract starts at build #15.
 
 - **One table.** It replaces the older "Build order" and "Index" tables, which had drifted apart on five dashes. A status lives here and nowhere else, and only the dash chain writes it.
 - **Starting a thread.** The next dash to start is decided by [the auto-chain](#the-auto-chain), never read off this table by a person or a thread. A thread is started with its key: *"You are the dash thread for `<Name>` (build #`<n>`, catalog row `<r>`)"*.
@@ -174,18 +174,18 @@ One thread per dash, at most 4 at once (TJX, 2026-11-27; they share the GPU lane
 | 72 | 72 | `HyperbolicTiles` | Abstract | concept | Fluid / Generative | cockpit | ☐ |
 
 ## The auto-chain
-TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 4 dashes are built at once (TJX, 2026-11-27), and a free slot is never left idle.
+TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, start the next in the chain". Up to 6 dashes are built at once (TJX, 2026-11-28, raised from 4), and a free slot is never left idle.
 
 ### Who does what
 - **The dash chain decides which dash starts next, and nobody else does.** It is a scheduled task named `Dash chain` that runs every hour in the chain thread (the project thread "Plan dash categories and auto-chain"). A `MERGED` message sent to that thread runs it at once, so a slot is refilled within minutes of a merge and the hourly run only catches what was missed.
-- **The coordinator creates threads.** It creates a dash thread only when the chain asks for one by name (`CHAIN START <Name>`) or when TJX asks in TJX's own words, for that one dash, and only after it has checked that no thread exists for that dash in any state and that fewer than 4 dashes are being built. It answers the chain with the new thread's id, or with the reason it started none. It titles the thread `Build <Name> dash` and starts it with the line in `CLUSTER_PROMPT.md`. No slot letters and no claims.
+- **The coordinator creates threads.** It creates a dash thread only when the chain asks for one by name (`CHAIN START <Name>`) or when TJX asks in TJX's own words, for that one dash, and only after it has checked that no thread exists for that dash in any state and that fewer than 6 dashes are being built. It answers the chain with the new thread's id, or with the reason it started none. It titles the thread `Build <Name> dash` and starts it with the line in `CLUSTER_PROMPT.md`. No slot letters and no claims.
 - **A dash thread builds its one dash.** It never names or starts the next dash, and it never edits this file.
 
 ### Words with one meaning
 - **Key:** the dash's theme name, for example `AmgMbuxSupersport`. A dash is its key. Build numbers and catalog rows are for people, so every chain message carries the key.
 - **Done:** on a freshly fetched `origin/main`, the folder `crates/fh6-clusters/src/clusters/<snake_name>/` holds both `RESEARCH.md` and `HANDOVER.md`, and its `mod.rs` does not contain `Scaffold::new`. That is "finished, reviewed and accepted by GitHub" in files: the dash, its research and its closing review are merged. Nothing else means done: not the Status cell, not a thread's state, not a merged pull request by itself.
 - **Bound:** the ledger holds the line `<Name> = <thread id>`. A thread belongs to a dash only through that line. A title is a hint, never proof.
-- **Holds a slot:** a dash that is not done and is bound or has an open start request. There are 4 slots.
+- **Holds a slot:** a dash that is not done and is bound or has an open start request. There are 6 slots.
 - **Startable:** not done, not bound, no open request, not set aside, and its module is on `origin/main` (its `mod.rs` exists and its key is in `catalog.rs`). A dash whose module is missing waits (⧖), whatever the table shows.
 - **Next:** the first startable dash in the Build # order of the table on `origin/main`.
 
@@ -198,7 +198,7 @@ TJX, 2026-11-28: "when one is fully finished, reviewed, accepted by github, star
 3. **Settle the requests.** For each open request: if the coordinator has answered with a thread id, bind it and close the request. If it answered that it started none, close the request and log the reason. A request with no answer is sent once more after 2 hours. After 4 hours without an answer the run writes one line to TJX in the chain thread, once.
 4. **Find strays and doubles.** A thread whose title holds a dash's exact key and that is not in the ledger is read: if its introduction opens with `DASH <Name>`, it is bound and holds a slot (TJX or the coordinator started it by hand). If two live threads claim one key, start nothing for that key and tell the coordinator once.
 5. **Count.** Slots in use = bound dashes that are not done + open requests.
-6. **Start.** While fewer than 4 slots are in use and a startable dash exists: take the next one, write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
+6. **Start.** While fewer than 6 slots are in use and a startable dash exists: take the next one, write the request into the ledger first, then send the coordinator `CHAIN START <Name> (build #<n>) · <UTC time>` with TJX's message that asked for the chain attached. One open request per key.
 7. **Mark.** Work out the Status cell each dash should show: ✅ done; ◐ bound and not done; ⧖ module missing; ☐ otherwise. If the table on `origin/main` differs, change only those cells in one commit (as `TJX <TJX@Ngage.com>`, no trailer) and get it onto `main`: a plain push, or a pull request merged at once where the push is refused. If neither works, drop the commit; the next run does it. No rule reads the Status cell. It is there for people.
 8. **Watch.** A bound thread that is failed or stopped, or has posted nothing for 2 hours, gets one message: `CHAIN CHECK <Name>`. If nothing has changed 2 hours later, the run asks the coordinator to restart the thread or to set the dash aside. A dash that posted `READY FOR MERGE` and is still not done 2 hours later: remind the coordinator, then every 4 hours, three times at most, then one line to TJX.
 9. **Save.** Write the ledger and bring the chain thread's checklist up to date. If nothing needs TJX, end without a message.
