@@ -5,19 +5,8 @@
   "drive_folder": "FH6 WheelDash v2 - 4K Masters/kaleidoscope_mirror/prebuild",
   "items": [
     {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "1c6f08d1dfff9c4f",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=510001 prompt=\"macro photograph of clear antique glass with tiny seed bubbles and faint wavy striae, monochrome grey on black, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"cracks, chips, colour, edges, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.4985",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "kaleidoscope_mirror/prebuild/textures/chip_glass_inclusions.png",
-      "name": "chip_glass_inclusions",
-      "runtime": [],
-      "use": "labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group"
-    },
-    {
       "dims": "396x396 at 1:1 (792x792 master)",
-      "fingerprint_fnv64": "eab06f29c178cde6,12b65bfbabc362ad,c66111d74092ac97",
+      "fingerprint_fnv64": "14ed73af13a10684,181da5207eb22cff,e293b5636ec2120e",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 396 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -29,6 +18,17 @@
         "assets/clusters/kaleidoscope_mirror/prebuild/sprites/eyepiece_ring_380_2.png"
       ],
       "use": "the knurled black-chrome eyepiece ring round the 380 px figure (10 px width and 4 px knurl pitch proposed)"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "4a2e6c11cc27359c,6a8b7a74621dfa70,816bd16da6e17355",
+      "generator": "computed: prebuild::surf SeedGlass, seed 510001: seed bubbles: in 40% of 110 px cells a ring of radius 7 to 20 px with a bright rim; faint wavy striae (stretched fbm, 4%)",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "kaleidoscope_mirror/prebuild/computed/chip_glass_inclusions_master.png",
+      "name": "chip_glass_inclusions",
+      "runtime": [],
+      "use": "labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

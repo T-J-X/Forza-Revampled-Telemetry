@@ -9,7 +9,7 @@
   "items": [
     {
       "dims": "2048x2048 runtime (4096x4096 master)",
-      "fingerprint_fnv64": "71b8454b5dffed4b",
+      "fingerprint_fnv64": "54fcc493760f74af",
       "generator": "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer",
       "kind": "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
@@ -87,7 +87,7 @@
     },
     {
       "dims": "512x128 runtime (512x128 master)",
-      "fingerprint_fnv64": "84d51814d73db31e",
+      "fingerprint_fnv64": "3ecd984850667ddb",
       "generator": "computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = 1.47, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); liquid Hg, Inagaki, Arakawa & Williams, Phys. Rev. B 23, 5246 (1981), via refractiveindex.info (CC0)",
       "kind": "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
@@ -100,7 +100,7 @@
     },
     {
       "dims": "512x128 runtime (512x128 master)",
-      "fingerprint_fnv64": "2d6c3c84580a714a",
+      "fingerprint_fnv64": "8546828fb31f4643",
       "generator": "computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = 1.47, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); Cr, Johnson & Christy, Phys. Rev. B 9, 5056 (1974), via refractiveindex.info (CC0)",
       "kind": "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",

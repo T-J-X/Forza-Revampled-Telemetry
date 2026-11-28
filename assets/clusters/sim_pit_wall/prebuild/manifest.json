@@ -6,18 +6,7 @@
   "items": [
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "6ee9e589b8ced2f1",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=160001 prompt=\"macro photograph of the anti-glare matte coating of a switched-off black display screen, fine random etched micro-grain, uniform soft frosted surface, dark charcoal grey, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"pixel grid, subpixels, moire, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 4.0635",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "sim_pit_wall/prebuild/textures/antiglare_matte_grain.png",
-      "name": "antiglare_matte_grain",
-      "runtime": [],
-      "use": "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"
-    },
-    {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "4a87e39a80efb95a",
+      "fingerprint_fnv64": "9dbbea68111dbba4",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2080 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_carrier\",\"rough\":0.3199999928474426,\"tow\":10.0}",
       "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -28,7 +17,7 @@
     },
     {
       "dims": "40x40 at 1:1 (80x80 master)",
-      "fingerprint_fnv64": "3ddb717f57dfb383,2d7722364e7b634d,c0c2d1c9ec18331f",
+      "fingerprint_fnv64": "e4a374a168ed0cef,7a69f0d34d2a11b4,224b08cb17c7e1ed",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 40 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -43,7 +32,7 @@
     },
     {
       "dims": "40x40 at 1:1 (80x80 master)",
-      "fingerprint_fnv64": "fb14c9f64b866c99",
+      "fingerprint_fnv64": "bef2ea351a3fe8fb",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 40 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -53,6 +42,17 @@
         "assets/clusters/sim_pit_wall/prebuild/sprites/shift_led_32_on_0.png"
       ],
       "use": "14 LEDs on 760x32: 32 px caps (the same design as SimInputTrace's)"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "7e1221724df4274c,0f9ed3ef31ad3945,7f21e753dc59d7df",
+      "generator": "computed: prebuild::surf Antiglare, seed 160001: Worley soft bumps of 22 px cells over a 256 px low swell; luminance 0.5 +- 0.04",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "sim_pit_wall/prebuild/computed/antiglare_matte_grain_master.png",
+      "name": "antiglare_matte_grain",
+      "runtime": [],
+      "use": "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

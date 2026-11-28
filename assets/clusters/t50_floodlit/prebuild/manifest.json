@@ -6,18 +6,7 @@
   "items": [
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "d89aad65a49c669a",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=430001 prompt=\"macro photograph of black full-grain nappa leather, fine natural pebble grain, soft satin sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"stitching, perforation, plastic, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3891",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "t50_floodlit/prebuild/textures/leather_binnacle_black.png",
-      "name": "leather_binnacle_black",
-      "runtime": [],
-      "use": "the binnacle surround (leather(...).set(\"texture\")) for edges and reflections"
-    },
-    {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "50598fc6b780edc8",
+      "fingerprint_fnv64": "1704089c3ac80afb",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"aniso\":0.9,\"color\":[0.9129999876022339,0.921999990940094,0.9240000247955322],\"finish\":\"spun\",\"grain\":0.8,\"kind\":\"metal\",\"name\":\"spun_aluminium_chapter\",\"rough\":0.25999999046325684}",
       "kind": "swatch disc (Blender, 16-bit sRGB, straight alpha) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -28,7 +17,7 @@
     },
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "8b91f5f9e81ed254",
+      "fingerprint_fnv64": "dccef03ff986459f",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2080 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_pane_frame\",\"rough\":0.3199999928474426,\"tow\":10.0}",
       "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -39,7 +28,7 @@
     },
     {
       "dims": "496x496 at 1:1 (992x992 master)",
-      "fingerprint_fnv64": "419e9a00a3ea4253,e30b7ba1e359d261,5d310236fbc2e232",
+      "fingerprint_fnv64": "460a7bb196ef024f,5b896182396da52f,0a9adf89a56a5220",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 496 local px at 2 px/px, hero rig, box-filtered to 1:1; parts well, ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -54,7 +43,7 @@
     },
     {
       "dims": "212x212 at 1:1 (424x424 master)",
-      "fingerprint_fnv64": "242676c8f6813177,bfc87eb6b4698157,55293f1c66334992",
+      "fingerprint_fnv64": "5fd0feca4c2adfb3,aa1279696e2b6f80,99259af0d2e13953",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 212 local px at 2 px/px, hero rig, box-filtered to 1:1; parts cap",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -65,7 +54,18 @@
         "assets/clusters/t50_floodlit/prebuild/sprites/centre_cap_200_1.png",
         "assets/clusters/t50_floodlit/prebuild/sprites/centre_cap_200_2.png"
       ],
-      "use": "the 200 px machined cap over the hub"
+      "use": "the 200 px spun-turned cap over the hub"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "a42ae0eac24ec9f6,d04696dc292be7e7,0d410298fd6a78b0",
+      "generator": "computed: prebuild::surf Leather, seed 430001: Worley pebble grain, 30 px cells, crevices at F2-F1 < 0.18, domed pebbles, tone +-4% per pebble, near black",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "t50_floodlit/prebuild/computed/leather_binnacle_black_master.png",
+      "name": "leather_binnacle_black",
+      "runtime": [],
+      "use": "the binnacle surround (leather(...).set(\"texture\")) for edges and reflections"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

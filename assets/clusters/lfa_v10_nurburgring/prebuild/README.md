@@ -1,6 +1,6 @@
 # LfaV10Nurburgring pre-built assets
 
-Made before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild lfa_v10_nurburgring` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `FH6 WheelDash v2 - 4K Masters/lfa_v10_nurburgring/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.
+Made before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild lfa_v10_nurburgring` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `FH6 WheelDash v2 - 4K Masters/lfa_v10_nurburgring/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`, and computed maps (environment, matcaps, look-up tables) at their runtime size in `computed/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.
 
 
 

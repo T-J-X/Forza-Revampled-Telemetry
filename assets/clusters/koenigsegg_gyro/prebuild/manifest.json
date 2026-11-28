@@ -6,7 +6,7 @@
   "items": [
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "6140b0757e4a1641",
+      "fingerprint_fnv64": "b652438c563de719",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2016 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_12\",\"rough\":0.3199999928474426,\"tow\":12.0}",
       "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -17,7 +17,7 @@
     },
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "8b0ab28e4897500e",
+      "fingerprint_fnv64": "9fcefcb7a27679c8",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2048 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"aniso\":0.85,\"color\":[0.5419999957084656,0.4970000088214874,0.4490000009536743],\"finish\":\"linear\",\"grain\":0.8,\"kind\":\"metal\",\"name\":\"brushed_titanium\",\"rough\":0.30000001192092896}",
       "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -28,7 +28,7 @@
     },
     {
       "dims": "556x556 at 1:1 (1112x1112 master)",
-      "fingerprint_fnv64": "bb0ee2c941ed3a48,d4c4daafecfe6858,597b7a3adbce552e",
+      "fingerprint_fnv64": "19ab3468510e9464,b375add60957b230,9082f941990659fe",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 556 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",

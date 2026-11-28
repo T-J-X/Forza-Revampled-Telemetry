@@ -5,12 +5,12 @@
   "drive_folder": "FH6 WheelDash v2 - 4K Masters/eva_bio_sync/prebuild",
   "items": [
     {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "06cf448c4d3d2195",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=640001 prompt=\"macro photograph of translucent cell nucleus material under a microscope, soft granular chromatin texture, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"cell outlines, hexagons, stain colours, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.5620",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "eva_bio_sync/prebuild/textures/cell_nucleus_grain.png",
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "9cf3756390686fd3,9994a9b88654bca0,cc081bd73494888f",
+      "generator": "computed: prebuild::surf Chromatin, seed 640001: soft granules (26 px Worley, varied) over 400 px fbm; grey 0.35 to 0.6, no outlines",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "eva_bio_sync/prebuild/computed/cell_nucleus_grain_master.png",
       "name": "cell_nucleus_grain",
       "runtime": [],
       "use": "optional modulation of the lit-cell gradient"

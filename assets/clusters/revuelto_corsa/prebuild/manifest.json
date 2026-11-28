@@ -8,12 +8,12 @@
   "drive_folder": "FH6 WheelDash v2 - 4K Masters/revuelto_corsa/prebuild",
   "items": [
     {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "2fb0d18d4647fb0c",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=560001 prompt=\"macro photograph of forged carbon composite with large flat chopped carbon flakes, broad overlapping chips under glossy resin, black and graphite grey with soft fibre sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"woven, twill, grid, checker pattern, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.5517",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "revuelto_corsa/prebuild/textures/forged_composite_large_chips.png",
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "0036e1b8afa61168,05fc5505b84a77ad",
+      "generator": "computed: prebuild::surf ForgedChips, seed 560001: forged carbon: about 1100 broad chopped flakes (380 to 700 px long, 110 to 200 px wide) laid in random order and direction, each with fine 6 px fibre striations along its length and its own tone 0.010 to 0.050; flat under resin; _direction map",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "revuelto_corsa/prebuild/computed/forged_composite_large_chips_master.png",
       "name": "forged_composite_large_chips",
       "runtime": [],
       "use": "the hexagon pod body"

@@ -6,7 +6,7 @@
   "items": [
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "c7e3827668e1c58a",
+      "fingerprint_fnv64": "5262aedd938f2930",
       "generator": "blender:hero prebuild swatch, Cycles 256 samples, ortho top-down 2080 local px to 4096 px, hero rig at 16x span key -135°, Standard view; material {\"color\":[0.017999999225139618,0.017999999225139618,0.019999999552965164],\"kind\":\"carbon\",\"name\":\"carbon_twill_surround\",\"rough\":0.3199999928474426,\"tow\":10.0}",
       "kind": "swatch tile (Blender, seamless, 16-bit sRGB) + _normal + _rmh",
       "licence": "MIT (asset-forge)",
@@ -17,7 +17,7 @@
     },
     {
       "dims": "476x476 at 1:1 (952x952 master)",
-      "fingerprint_fnv64": "eba386bccf6e7892,050fa12061b33b61,e3ff7ef198d4776c",
+      "fingerprint_fnv64": "647fca1fe6140e5a,6698ab5c1ee050df,d1f0b57803a349a0",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 476 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",

@@ -5,19 +5,8 @@
   "drive_folder": "FH6 WheelDash v2 - 4K Masters/golden_angle/prebuild",
   "items": [
     {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "adb6373d521c7007",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=600001 prompt=\"macro photograph of tiny sparkling inclusions inside clear crystal, sparse bright glints and fine internal facets on black, monochrome, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"gemstones, shapes, colour, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3759",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "golden_angle/prebuild/textures/bead_inner_sparkle.png",
-      "name": "bead_inner_sparkle",
-      "runtime": [],
-      "use": "labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model"
-    },
-    {
       "dims": "38x38 at 1:1 (76x76 master)",
-      "fingerprint_fnv64": "ec781906595121c0,912f4a7f24b77352,4ece03f5933f2ce0",
+      "fingerprint_fnv64": "bdc46155cb988c0b,fad03c20c0966d10,cb1821e1e2be13ee",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 38 local px at 2 px/px, hero rig, box-filtered to 1:1; parts cap",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -29,6 +18,17 @@
         "assets/clusters/golden_angle/prebuild/sprites/seed_bead_26_2.png"
       ],
       "use": "the 26 px domed crystal bead; one sprite serves every seed"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "c57df4ff1754e9d1",
+      "generator": "computed: prebuild::surf Sparkle, seed 600001: sparse glints: a soft Gaussian flake in 35% of 42 px Worley cells, brightness r^3, 3 to 5 px wide",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "golden_angle/prebuild/computed/bead_inner_sparkle_master.png",
+      "name": "bead_inner_sparkle",
+      "runtime": [],
+      "use": "labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

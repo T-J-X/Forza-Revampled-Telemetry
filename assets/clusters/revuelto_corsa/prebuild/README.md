@@ -1,12 +1,12 @@
 # RevueltoCorsa pre-built assets
 
-Made before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild revuelto_corsa` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `FH6 WheelDash v2 - 4K Masters/revuelto_corsa/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.
+Made before the dash thread by `cargo run --release -p asset-forge -- --lane cloud prebuild revuelto_corsa` (kit in `tools/asset-forge/src/prebuild/kits.rs`). These are layout-independent: the 4K masters are in the Drive folder `FH6 WheelDash v2 - 4K Masters/revuelto_corsa/prebuild/`, and `manifest.json` lists every file. Sprites are also here at 1:1 in `sprites/`, and computed maps (environment, matcaps, look-up tables) at their runtime size in `computed/`. Textures and swatches have no runtime copy yet: the dash's own recipe downsizes the master it picks to the size its Penpot layout needs.
 
 
 
 | Name | Kind | Size | Master (Drive) | Use | Generator |
 |---|---|---|---|---|---|
-| `forged_composite_large_chips` | texture (ComfyUI, seamless, sRGB) | 4096x4096 | revuelto_corsa/prebuild/textures/forged_composite_large_chips.png | the hexagon pod body | comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=560001 prompt="macro photograph of forged carbon composite with large flat chopped carbon flakes, broad overlapping chips under glossy resin, black and graphite grey with soft fibre sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan" extra negative="woven, twill, grid, checker pattern, text, objects, lighting falloff, perspective, seams, blur, cartoon", tile seam score 1.5517 |
+| `forged_composite_large_chips` | surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes | 4096x4096 master | revuelto_corsa/prebuild/computed/forged_composite_large_chips_master.png | the hexagon pod body | computed: prebuild::surf ForgedChips, seed 560001: forged carbon: about 1100 broad chopped flakes (380 to 700 px long, 110 to 200 px wide) laid in random order and direction, each with fine 6 px fibre striations along its length and its own tone 0.010 to 0.050; flat under resin; _direction map |
 
 ## Left to the dash thread (needs the Penpot layout)
 

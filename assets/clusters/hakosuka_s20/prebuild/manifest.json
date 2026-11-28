@@ -6,17 +6,6 @@
   "items": [
     {
       "dims": "4096x4096",
-      "fingerprint_fnv64": "492df4bda9a6c353",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=480001 prompt=\"macro photograph of matte black wrinkle-finish crackle paint, fine irregular crinkle relief, near black, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"gloss, rust, scratches, chips, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3928",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "hakosuka_s20/prebuild/textures/crackle_black_paint.png",
-      "name": "crackle_black_paint",
-      "runtime": [],
-      "use": "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"
-    },
-    {
-      "dims": "4096x4096",
       "fingerprint_fnv64": "ac97bc91132344ff",
       "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=480002 prompt=\"macro photograph of worn varnished dark wood from a vintage steering wheel rim, fine straight grain, soft wear, flat top-down view, even diffuse light, seamless tileable texture\" extra negative=\"knots, cracks, stitching, text, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3133",
       "kind": "texture (ComfyUI, seamless, sRGB)",
@@ -28,7 +17,7 @@
     },
     {
       "dims": "436x436 at 1:1 (872x872 master)",
-      "fingerprint_fnv64": "37b4066d89f683ad,f49cddf4b6a1cfce,a89d477ca12aa4b4",
+      "fingerprint_fnv64": "08148a6c31508b3c,fbf9880ee07879f7,abb0fc218b43f31a",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 436 local px at 2 px/px, hero rig, box-filtered to 1:1; parts well, ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -43,7 +32,7 @@
     },
     {
       "dims": "166x166 at 1:1 (332x332 master)",
-      "fingerprint_fnv64": "6b1f29010af9dc42,a4acf04f60168ab3,18ef69ead8cf10ad",
+      "fingerprint_fnv64": "95b280d738ef091e,210472f26958c424,7ce274ee2412cc3f",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 166 local px at 2 px/px, hero rig, box-filtered to 1:1; parts ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -58,8 +47,8 @@
     },
     {
       "dims": "36x36 at 1:1 (72x72 master)",
-      "fingerprint_fnv64": "3960852777f09515,f2585bf55cb553c1,f2b386a95256253f",
-      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 36 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
+      "fingerprint_fnv64": "123eba61d87b3cda,8a82ceca6f30cddd,14e27074733d8217",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 36 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, jewel",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
       "master": "hakosuka_s20/prebuild/sprites/jewel_lamp_28_off_0.png",
@@ -73,8 +62,8 @@
     },
     {
       "dims": "36x36 at 1:1 (72x72 master)",
-      "fingerprint_fnv64": "d1ae844a5597deed",
-      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 36 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, cap",
+      "fingerprint_fnv64": "fbb6f1816c506dc7",
+      "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 36 local px at 2 px/px, hero rig, box-filtered to 1:1; parts collar, jewel",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
       "master": "hakosuka_s20/prebuild/sprites/jewel_lamp_28_on_0.png",
@@ -83,6 +72,17 @@
         "assets/clusters/hakosuka_s20/prebuild/sprites/jewel_lamp_28_on_0.png"
       ],
       "use": "the 10 lamps on 740x28: 28 px jewel lenses"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "a4948aaab58a087a,af462cc2dc709b51,bb66ca931b4a83e1",
+      "generator": "computed: prebuild::surf Crackle, seed 480001: crackle: plates of 90 px Worley cells split by thin cracks (F2-F1 < 0.035), a fainter 30 px secondary network; flat black plates, shallow grooves",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "hakosuka_s20/prebuild/computed/crackle_black_paint_master.png",
+      "name": "crackle_black_paint",
+      "runtime": [],
+      "use": "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

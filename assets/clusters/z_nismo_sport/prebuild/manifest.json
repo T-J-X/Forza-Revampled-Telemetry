@@ -5,30 +5,8 @@
   "drive_folder": "FH6 WheelDash v2 - 4K Masters/z_nismo_sport/prebuild",
   "items": [
     {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "492df4bda9a6c353",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=480001 prompt=\"macro photograph of matte black wrinkle-finish crackle paint, fine irregular crinkle relief, near black, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"gloss, rust, scratches, chips, objects, lighting falloff, perspective, seams, blur, cartoon\", tile seam score 1.3928",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "z_nismo_sport/prebuild/textures/crackle_black_paint.png",
-      "name": "crackle_black_paint",
-      "runtime": [],
-      "use": "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"
-    },
-    {
-      "dims": "4096x4096",
-      "fingerprint_fnv64": "531cac36f3d6a3d9",
-      "generator": "comfyui hero::texture::make_texture (SDXL base 1.0 + refiner, 1024², half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed=570002 prompt=\"macro photograph of black automotive leatherette dash cover, fine embossed grain, soft matte sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan\" extra negative=\"stitching, seams, perforation, text, objects, lighting falloff, perspective, blur, cartoon\", tile seam score 2.0880",
-      "kind": "texture (ComfyUI, seamless, sRGB)",
-      "licence": "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)",
-      "master": "z_nismo_sport/prebuild/textures/dash_top_leatherette.png",
-      "name": "dash_top_leatherette",
-      "runtime": [],
-      "use": "the dash top the pods stand on (stitching is geometry)"
-    },
-    {
       "dims": "186x186 at 1:1 (372x372 master)",
-      "fingerprint_fnv64": "11fa633d4f9b55c9,442ee1728473b16b,11d221114271916e",
+      "fingerprint_fnv64": "05f4d717b2cc30d2,da400822fc5f8c74,6e0f86625074ce1c",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 186 local px at 2 px/px, hero rig, box-filtered to 1:1; parts well, ring",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -43,7 +21,7 @@
     },
     {
       "dims": "180x180 at 1:1 (360x360 master)",
-      "fingerprint_fnv64": "0d68ed87286c9ff3,6a0aa078647b49b9,7e5fc2792c214ee7",
+      "fingerprint_fnv64": "0caf340e8e3cc12b,787237481bb42c67,3700709a114412d0",
       "generator": "blender:hero prebuild sprite, Cycles 256 samples, ortho square 180 local px at 2 px/px, hero rig, box-filtered to 1:1; parts crystal",
       "kind": "sprite (Blender, sRGB, straight alpha; _0 rest key -135°, _1/_2 swing -160°/-110°)",
       "licence": "MIT (asset-forge)",
@@ -55,6 +33,28 @@
         "assets/clusters/z_nismo_sport/prebuild/sprites/pod_crystal_170_2.png"
       ],
       "use": "the 170 px pod crystal (reflections only, drawn over the needle)"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "a4948aaab58a087a,af462cc2dc709b51,bb66ca931b4a83e1",
+      "generator": "computed: prebuild::surf Crackle, seed 480001: crackle: plates of 90 px Worley cells split by thin cracks (F2-F1 < 0.035), a fainter 30 px secondary network; flat black plates, shallow grooves",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "z_nismo_sport/prebuild/computed/crackle_black_paint_master.png",
+      "name": "crackle_black_paint",
+      "runtime": [],
+      "use": "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"
+    },
+    {
+      "dims": "4096x4096 master",
+      "fingerprint_fnv64": "2927a498aed3b000,d120d9f7fd4580d6,1f31f30774de92f1",
+      "generator": "computed: prebuild::surf Leatherette, seed 570002: Worley embossed grain, 20 px cells (more regular), near black",
+      "kind": "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+      "licence": "MIT (asset-forge)",
+      "master": "z_nismo_sport/prebuild/computed/dash_top_leatherette_master.png",
+      "name": "dash_top_leatherette",
+      "runtime": [],
+      "use": "the dash top the pods stand on (stitching is geometry)"
     }
   ],
   "made_by": "asset-forge prebuild (tools/asset-forge/src/prebuild/)",

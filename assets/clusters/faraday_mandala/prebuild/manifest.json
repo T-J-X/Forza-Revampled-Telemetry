@@ -9,7 +9,7 @@
   "items": [
     {
       "dims": "2048x2048 runtime (4096x4096 master)",
-      "fingerprint_fnv64": "71b8454b5dffed4b",
+      "fingerprint_fnv64": "54fcc493760f74af",
       "generator": "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer",
       "kind": "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
       "licence": "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
