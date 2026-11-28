@@ -31,8 +31,10 @@
 //!   comes from the layout, so the dash's own recipe downsizes the master it picks.
 //!
 //! The shared ledger (`assets/ASSETS.md` and friends) is never touched.
+pub mod fx;
 pub mod kits;
 pub mod liquid;
+pub mod surf;
 
 use crate::error::{io_err, tool_err, ForgeError, Result};
 use crate::hero::frame::Frame;
@@ -58,6 +60,10 @@ const SPRITE_SCALE: f32 = 2.0;
 const SAMPLES: u32 = 256;
 /// Licence of SDXL outputs.
 const SDXL_LICENCE: &str = "CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge)";
+/// Licence of the computed liquid-metal maps.
+const LIQUID_LICENCE: &str = "MIT (asset-forge); optical constants CC0 (refractiveindex.info)";
+/// Licence of other computed maps.
+const CODE_LICENCE: &str = "MIT (asset-forge)";
 /// Licence of Blender renders.
 const BLENDER_LICENCE: &str = "MIT (asset-forge)";
 
@@ -111,6 +117,26 @@ pub enum Calc {
     Fresnel(liquid::Metal),
     /// A lossless film of this index on the metal: thickness x cos θ.
     Film(f32, liquid::Metal),
+    /// A computed surface texture (colour, height, normal) with its seed.
+    Surface(surf::Surf, u32),
+    /// A seamless fire-jet band (luminance) and its flow map, with its seed.
+    FireBand(u32),
+    /// The looping flame-front flipbook, with its seed.
+    FlameFront(u32),
+    /// A seamless horizon haze band, with its seed.
+    Haze(u32),
+    /// A perforated panel (albedo, normal, roughness).
+    Perforated(fx::Perf),
+    /// Rain-streak sprites, with their seed.
+    RainStreaks(u32),
+    /// A water-bead sheet, with its seed.
+    WaterBeads(u32),
+    /// The burning fuse-line strip, with its seed.
+    FuseLine(u32),
+    /// Spark sprites, with their seed.
+    Sparks(u32),
+    /// A surface at this master size instead of 4096 (colour, height, normal, rough).
+    SurfaceAt(surf::Surf, u32, usize),
 }
 
 /// A computed asset.
@@ -158,11 +184,12 @@ struct Row {
     use_: String,
 }
 
-/// `prebuild --plan | --list | <snake>... | --all [--preview] [--blender-only]` (`--blender-only` skips the
+/// `prebuild --plan | --list | <snake>... | --all [--preview] [--blender-only | --computed-only]` (`--computed-only`, with `--preview`, makes only the CPU maps; `--blender-only` skips the
 /// ComfyUI textures, for a CPU check of the Blender scenes without a ComfyUI server).
 pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
     let preview = args.iter().any(|a| a == "--preview");
     let blender_only = args.iter().any(|a| a == "--blender-only");
+    let computed_only = args.iter().any(|a| a == "--computed-only");
     let names: Vec<&str> = args
         .iter()
         .map(String::as_str)
@@ -206,13 +233,13 @@ pub fn cli(paths: &Paths, args: &[String]) -> Result<()> {
     }
     for snake in list {
         println!("[prebuild {snake}]");
-        run(paths, snake, preview, blender_only)?;
+        run(paths, snake, preview, blender_only, computed_only)?;
     }
     Ok(())
 }
 
 /// Builds one dash's kit.
-pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Result<()> {
+pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool, computed_only: bool) -> Result<()> {
     let kit = kits::kit(snake).ok_or_else(|| tool_err("prebuild", format!("no kit for {snake}")))?;
     // Each dash's masters go to its own Drive folder, whatever --masters said. A full run stops
     // before any GPU work when the Drive folder is not mounted; a preview never writes there,
@@ -248,7 +275,13 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
     let mut thumbs: Vec<Img> = Vec::new();
     let mut made: Vec<(&str, PathBuf)> = Vec::new();
 
-    for t in kit.textures.iter().filter(|_| !blender_only) {
+    if computed_only {
+        // A CPU check of the computed maps alone: never written to the repo or the masters.
+        if !preview {
+            return Err(ForgeError::Usage("--computed-only needs --preview".into()));
+        }
+    }
+    for t in kit.textures.iter().filter(|_| !blender_only && !computed_only) {
         println!("  texture {}", t.recipe.name);
         let path = texture::make_texture(&paths, &t.recipe, tex_size, &shared_textures)?;
         let im = img::load(&path)?.to_channels(3);
@@ -274,7 +307,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         });
     }
 
-    for s in &kit.swatches {
+    for s in kit.swatches.iter().filter(|_| !computed_only) {
         println!("  swatch {}", s.name);
         // A regular pattern (twill, clous) gets a span of a whole, even number of repeats, so
         // the tile repeats exactly and the seam blend never doubles the pattern.
@@ -363,7 +396,7 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
         });
     }
 
-    for sp in &kit.sprites {
+    for sp in kit.sprites.iter().filter(|_| !computed_only) {
         println!("  sprite {}", sp.name);
         let fr = Frame::square(0.0, 0.0, sp.size).scaled(SPRITE_SCALE * scale);
         let mut sc = Scene::new(&format!("prebuild_{snake}_{}", sp.name), fr);
@@ -470,8 +503,20 @@ pub fn run(paths: &Paths, snake: &str, preview: bool, blender_only: bool) -> Res
     Ok(())
 }
 
-/// Makes one computed asset: the master (16-bit linear) to the scratch and the Drive masters, the
-/// runtime copy into the repo. Returns its manifest row and a thumbnail.
+/// One file of a computed asset.
+struct Out {
+    /// File-name suffix ("" for the main file).
+    suffix: &'static str,
+    /// The master.
+    master: Img,
+    /// The master is sRGB-tagged colour (else linear data).
+    master_srgb: bool,
+    /// A runtime copy for the repo (image, sRGB 8-bit or else 16-bit linear), if any.
+    runtime: Option<(Img, bool)>,
+}
+
+/// Makes one computed asset: its masters (16-bit) to the scratch and the Drive masters, runtime
+/// copies into the repo where it has them. Returns its manifest row and a thumbnail.
 fn computed(
     c: &Computed,
     preview: bool,
@@ -483,62 +528,206 @@ fn computed(
     use liquid::Metal;
     let div = if preview { 4 } else { 1 };
     let src = |m: Metal| m.source();
-    // (master, runtime, runtime is sRGB 8-bit, kind, generator)
-    let (master, runtime, srgb8, kind, generator): (Img, Img, bool, &str, String) = match c.calc {
+    let one = |master: Img, runtime: Option<(Img, bool)>| {
+        vec![Out {
+            suffix: "",
+            master,
+            master_srgb: false,
+            runtime,
+        }]
+    };
+    let lin = |m: &Img| Some((m.clone(), false));
+    let (outs, kind, generator, licence): (Vec<Out>, &str, String, &str) = match c.calc {
         Calc::StudioEnv => {
             let m = liquid::studio_env(MASTER / div);
             let r = liquid::encode_srgb(&m.resize(2048 / div, 2048 / div, false));
-            (m, r, true, "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
-             "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer".into())
+            (one(m, Some((r, true))), "environment, octahedral (z at the viewer in the centre, the kit's `oct_uv`); runtime sRGB 8-bit, master 16-bit linear; white = radiance 16",
+             "computed: prebuild::liquid::studio (analytic emitters, 2x2 supersampled): key strip az -175..-95 el 36..44 radiance 10; softbox arc az -180..-30 el 18..30 radiance 5.4 fading over its last 25 deg; cool stripe az 15..75 el 3..9 (0.8, 2.0, 3.4); horizon ring el 0..5 radiance 0.5; behind the screen sky 0.06..0.18 over floor 0.012 with a 1 deg horizon; black within 45 deg of the viewer".into(), LIQUID_LICENCE)
         }
         Calc::EnvBand => {
             let m = liquid::env_band(256);
-            (m.clone(), m, false, "env band LUT 256x1, 16-bit linear (white = radiance 16): x = angle -180..180 deg round the vertical great circle through the key (az -135), 0 at the key-side horizon, 0.75 at the viewer",
-             "computed: prebuild::liquid::env_band, 8x supersampled slice of the studio".into())
+            let r = lin(&m);
+            (one(m, r), "env band LUT 256x1, 16-bit linear (white = radiance 16): x = angle -180..180 deg round the vertical great circle through the key (az -135), 0 at the key-side horizon, 0.75 at the viewer",
+             "computed: prebuild::liquid::env_band, 8x supersampled slice of the studio".into(), LIQUID_LICENCE)
         }
         Calc::Matcap(metal) => {
             let m = liquid::matcap(metal, MASTER / div);
             let r = liquid::encode_srgb(&m.resize(1024 / div, 1024 / div, false));
-            (m, r, true, "matcap (view-space normal u, v = -1..1, y down), straight alpha = disc coverage; runtime sRGB 8-bit RGBA, master 16-bit linear; white = radiance 16",
-             format!("computed: prebuild::liquid::matcap, perfectly smooth sphere, mirror direction into the studio x exact spectral Fresnel ({}), 4x4 supersampled", src(metal)))
+            (one(m, Some((r, true))), "matcap (view-space normal u, v = -1..1, y down), straight alpha = disc coverage; runtime sRGB 8-bit RGBA, master 16-bit linear; white = radiance 16",
+             format!("computed: prebuild::liquid::matcap, perfectly smooth sphere, mirror direction into the studio x exact spectral Fresnel ({}), 4x4 supersampled", src(metal)), LIQUID_LICENCE)
         }
         Calc::Fresnel(metal) => {
             let m = liquid::fresnel_lut(metal);
-            (m.clone(), m, false, "Fresnel LUT 256x1, 16-bit linear sRGB reflectance, x = cos theta 0..1",
-             format!("computed: prebuild::liquid::conductor_reflectance, exact unpolarised, integrated 380..780 nm with the CIE 1931 fit (Wyman 2013), flat spectrum = white; {}", src(metal)))
+            let r = lin(&m);
+            (one(m, r), "Fresnel LUT 256x1, 16-bit linear sRGB reflectance, x = cos theta 0..1",
+             format!("computed: prebuild::liquid::conductor_reflectance, exact unpolarised, integrated 380..780 nm with the CIE 1931 fit (Wyman 2013), flat spectrum = white; {}", src(metal)), LIQUID_LICENCE)
         }
         Calc::Film(n, metal) => {
             let m = liquid::film_lut(n, metal, 512 / div, 128 / div);
-            (m.clone(), m, false, "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
-             format!("computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = {n}, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); {}", src(metal)))
+            let r = lin(&m);
+            (one(m, r), "thin-film LUT, 16-bit linear sRGB reflectance: x = film thickness 0..1200 nm (column 0 = bare metal), y = cos theta 1 (top) .. 0",
+             format!("computed: prebuild::liquid::film_reflectance, Airy sum of optics.md 9 with a complex-index substrate, film n = {n}, s and p averaged, integrated 380..780 nm (CIE 1931 fit, flat = white); {}", src(metal)), LIQUID_LICENCE)
+        }
+        Calc::Surface(sf, seed) | Calc::SurfaceAt(sf, seed, _) => {
+            let size = if let Calc::SurfaceAt(_, _, n) = c.calc {
+                n
+            } else {
+                MASTER
+            };
+            let o = surf::surface(sf, size / div, seed);
+            let mut outs = vec![Out {
+                suffix: "",
+                master: o.color,
+                master_srgb: true,
+                runtime: None,
+            }];
+            if let Some(h) = o.height {
+                let nrm = img::normal_from_height(&h, 0, o.normal_strength / div as f32, true);
+                outs.push(Out {
+                    suffix: "_height",
+                    master: h,
+                    master_srgb: false,
+                    runtime: None,
+                });
+                outs.push(Out {
+                    suffix: "_normal",
+                    master: nrm,
+                    master_srgb: false,
+                    runtime: None,
+                });
+            }
+            if let Some(d) = o.direction {
+                outs.push(Out {
+                    suffix: "_direction",
+                    master: d,
+                    master_srgb: false,
+                    runtime: None,
+                });
+            }
+            if let Some(r) = o.rough {
+                outs.push(Out {
+                    suffix: "_rough",
+                    master: r,
+                    master_srgb: false,
+                    runtime: None,
+                });
+            }
+            (outs, "surface texture (computed, seamless): colour 16-bit sRGB, plus _height (16-bit linear), _normal (tangent, green up) and _direction where the material has them; masters only, the dash downsizes",
+             format!("computed: prebuild::surf {sf:?}, seed {seed}: {}", o.model), CODE_LICENCE)
+        }
+        Calc::FireBand(seed) => {
+            let (w, h) = (MASTER / div, MASTER / 4 / div);
+            let band = fx::fire_band(w, h, seed);
+            let flow = fx::fire_flow(w, h, seed);
+            let (rb, rf) = (band.resize(w / 2, h / 2, true), flow.resize(w / 2, h / 2, true));
+            (vec![
+                Out { suffix: "", master: band, master_srgb: false, runtime: Some((rb, false)) },
+                Out { suffix: "_flow", master: flow, master_srgb: false, runtime: Some((rf, false)) },
+            ], "fire-jet band 4096x1024, seamless along x, luminance (linear, the dash colours it) + _flow (RG direction 0.5-centred, B speed); runtime copies at half size, 16-bit",
+             format!("computed: prebuild::fx::fire_band / fire_flow, seed {seed}: soft core (Gaussian 7% of the height) and body (17%) bent by a slow periodic warp, wisps from domain-warped periodic fbm (4 octaves, finest 64 px), 2x2 supersampled; flow = +x plus 0.12 x the curl of a slow field"), CODE_LICENCE)
+        }
+        Calc::FlameFront(seed) => {
+            let (w, h) = (512 / div, 2048 / div);
+            let frames: Vec<Img> = (0..fx::FRONT_FRAMES).map(|i| fx::flame_front(w, h, i, seed)).collect();
+            let atlas = img::atlas(&frames, 8);
+            let small: Vec<Img> = frames.iter().map(|f| img::box_down(f, 2)).collect();
+            let ratlas = img::atlas(&small, 8);
+            (vec![Out { suffix: "", master: atlas, master_srgb: false, runtime: Some((ratlas, false)) }],
+             "flame-front flipbook: 16 frames in an 8x2 atlas, luminance in RGB + alpha coverage, loops exactly; master 512x2048 per frame (2x), runtime 256x1024 per frame",
+             format!("computed: prebuild::fx::flame_front, seed {seed}: a front at 27..55% across the band pushed by domain-warped periodic fbm tongues; time is a periodic lattice axis and the rise is one whole period per loop, so frame 16 = frame 0"), CODE_LICENCE)
+        }
+        Calc::Haze(seed) => {
+            let (w, h) = (MASTER / div, MASTER / 4 / div);
+            let m = fx::haze_band(w, h, seed);
+            let r = m.resize(w / 2, h / 2, true);
+            (one(m, Some((r, false))), "horizon haze band 4096x1024, seamless along x, luminance (linear), fades out at top and bottom; runtime at half size, 16-bit",
+             format!("computed: prebuild::fx::haze_band, seed {seed}: fog Gaussian at 62% height modulated by warped periodic fbm (6 cells), faint clouds above (threshold 0.5..0.85), soft 12% edge fade"), CODE_LICENCE)
+        }
+        Calc::RainStreaks(seed) => {
+            let m = fx::rain_streaks(2.0 / div as f32, seed);
+            let r = img::box_down(&m, 2);
+            (one(m, Some((r, true))), "rain-streak sprites: 12 drops in a row of 16x256 cells at 1:1 (runtime, sRGB 8-bit, white RGB, alpha = streak), master at 2x",
+             format!("computed: prebuild::fx::rain_streaks, seed {seed}: widths 1 to 3 px, lengths 64 to 256 px, Gaussian across, brightest at the head with a 25% fade-in and soft tail, 2x2 supersampled"), CODE_LICENCE)
+        }
+        Calc::WaterBeads(seed) => {
+            let m = fx::water_beads(2.0 / div as f32, seed);
+            let r = img::box_down(&m, 2);
+            (one(m, Some((r, true))), "water-bead sheet: 16 beads of 8 to 24 px in a 4x4 sheet of 32 px cells at 1:1 (runtime, sRGB 8-bit, straight alpha), master at 2x",
+             format!("computed: prebuild::fx::water_beads, seed {seed}: flattened dome, water Fresnel (n 1.333) dark rim, specular of an upper-left key (power 90), caustic crescent opposite, 4x4 supersampled"), CODE_LICENCE)
+        }
+        Calc::FuseLine(seed) => {
+            let m = fx::fuse_line(2048 / div, 128 / div, seed);
+            let r = lin(&m);
+            (one(m, r), "fuse-line strip 2048x128, seamless along x, luminance in RGB + alpha (16-bit linear); runtime = master",
+             format!("computed: prebuild::fx::fuse_line, seed {seed}: core line jittered by periodic fbm (64 cells, up to 5% of the height), Gaussian core 1.6..2.8 px and glow 9..17 px, flicker and ember knots from periodic fbm, 2x2 supersampled"), CODE_LICENCE)
+        }
+        Calc::Sparks(seed) => {
+            let m = fx::sparks(128 / div, seed);
+            let r = img::box_down(&m, 2);
+            (one(m, Some((r, true))), "spark sprites: 16 in an 8x2 sheet of 64 px cells at 1:1 (runtime, sRGB 8-bit, white RGB, alpha = spark), master at 2x",
+             format!("computed: prebuild::fx::sparks, seed {seed}: 1 to 4 ballistic streaks per sprite from near the bottom centre, Gaussian trails tapering to the tail, hot head"), CODE_LICENCE)
+        }
+        Calc::Perforated(p) => {
+            let (a, nrm, r) = fx::perforated(&p, MASTER / div);
+            (vec![
+                Out { suffix: "", master: a, master_srgb: true, runtime: None },
+                Out { suffix: "_normal", master: nrm, master_srgb: false, runtime: None },
+                Out { suffix: "_rough", master: r, master_srgb: false, runtime: None },
+            ], "perforated panel tile (computed, exact, seamless): albedo 16-bit sRGB, _normal (tangent, green up), _rough; masters only",
+             format!("computed: prebuild::fx::perforated: square grid, pitch {} px, holes {} px with a {} px 45-degree chamfer, albedo {:?}, face roughness {}, 4x4 supersampled", p.pitch, p.hole, p.chamfer, p.albedo, p.rough), CODE_LICENCE)
         }
     };
     let dir = scratch.join("computed");
     std::fs::create_dir_all(&dir).map_err(|e| io_err(&dir, e))?;
-    let mfile = dir.join(format!("{}_master.png", c.name));
-    img::save_png(&master, &mfile, true, false)?;
-    let msink = sink(masters, "computed", &mfile)?;
-    let rel = format!("{repo_rel}/computed/{}.png", c.name);
-    let abs = repo.join("computed").join(format!("{}.png", c.name));
-    if let Some(parent) = abs.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
+    let mut msink = None;
+    let mut runtime = Vec::new();
+    let mut fps = Vec::new();
+    for o in &outs {
+        let mfile = dir.join(format!("{}{}_master.png", c.name, o.suffix));
+        // Colour is computed in linear light; an sRGB-tagged master stores it encoded.
+        if o.master_srgb {
+            img::save_png(&liquid::encode_srgb(&o.master), &mfile, true, true)?;
+        } else {
+            img::save_png(&o.master, &mfile, true, false)?;
+        }
+        let sunk = sink(masters, "computed", &mfile)?;
+        if o.suffix.is_empty() {
+            msink = sunk;
+        }
+        if let Some((r, srgb8)) = &o.runtime {
+            let rel = format!("{repo_rel}/computed/{}{}.png", c.name, o.suffix);
+            let abs = repo.join("computed").join(format!("{}{}.png", c.name, o.suffix));
+            if let Some(parent) = abs.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
+            }
+            if *srgb8 {
+                img::save_png(r, &abs, false, true)?;
+            } else {
+                img::save_png(r, &abs, true, false)?;
+            }
+            fps.push(file_fp(&abs)?);
+            runtime.push(rel);
+        } else {
+            fps.push(file_fp(&mfile)?);
+        }
     }
-    if srgb8 {
-        img::save_png(&runtime, &abs, false, true)?;
-    } else {
-        img::save_png(&runtime, &abs, true, false)?;
-    }
-    // Thumbnail: sRGB-encoded so the sheet shows what the eye sees; LUTs stretched to square.
-    let th = liquid::encode_srgb(&master.to_channels(4).resize(512, 512, false));
+    let main = &outs[0];
+    // Thumbnail: what the eye sees (sRGB), on black; linear data is encoded, sRGB colour is not.
+    // Every master is computed in linear values, so the thumbnail is encoded for the eye.
+    let th = liquid::encode_srgb(&main.master.to_channels(4).resize(512, 512, false));
+    let dims = match &main.runtime {
+        Some((r, _)) => format!("{}x{} runtime ({}x{} master)", r.w, r.h, main.master.w, main.master.h),
+        None => format!("{}x{} master", main.master.w, main.master.h),
+    };
     let row = Row {
         name: c.name.into(),
         kind,
         master: msink,
-        runtime: vec![rel],
-        dims: format!("{}x{} runtime ({}x{} master)", runtime.w, runtime.h, master.w, master.h),
-        fp: file_fp(&abs)?,
+        runtime,
+        dims,
+        fp: fps.join(","),
         generator,
-        licence: "MIT (asset-forge); optical constants CC0 (refractiveindex.info)",
+        licence,
         use_: c.use_.into(),
     };
     Ok((row, thumb(&th)))

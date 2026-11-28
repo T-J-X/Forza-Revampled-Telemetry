@@ -16,6 +16,7 @@
 //! TreadSeismograph, AbyssalShearBloom, HopfFibration, FibreOpticCorona, CarplayIsland,
 //! VernierLoupe (procedural only, or waiting for step-1 frame grabs on the AMG dashes).
 use super::liquid::Metal;
+use super::surf::Surf;
 use super::{Calc, Computed, Kit, Sprite, Swatch, Tex};
 use crate::hero::geom::BezelSpec;
 use crate::hero::mat::{self, metal, Mat};
@@ -25,6 +26,8 @@ use crate::hero::texture::Recipe;
 /// Dashes with a kit, in build order.
 pub const ORDER: &[&str] = &[
     "kinetic_liquid_metal",
+    "amg_mbux_superscreen",
+    "amg_mbux_supersport",
     "valkyrie_lmp1",
     "skyline_r34_mfd",
     "amg_one_f1",
@@ -195,27 +198,47 @@ fn cap(name: &'static str, d: f32, h: f32, mats: [Mat; 2], use_: &'static str) -
     }
 }
 
-const ANTIGLARE: Tex = tex(
-    "antiglare_matte_grain",
-    "macro photograph of the anti-glare matte coating of a switched-off black display screen, fine random etched micro-grain, uniform soft frosted surface, dark charcoal grey, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-    "pixel grid, subpixels, moire, objects, lighting falloff, perspective, seams, blur, cartoon",
-    160_001,
-    "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural",
-);
-
-const CRACKLE: Tex = tex(
-    "crackle_black_paint",
-    "macro photograph of matte black wrinkle-finish crackle paint, fine irregular crinkle relief, near black, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-    "gloss, rust, scratches, chips, objects, lighting falloff, perspective, seams, blur, cartoon",
-    480_001,
-    "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)",
-);
-
 /// The kit of one dash.
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn kit(snake: &str) -> Option<Kit> {
     let k = match snake {
+        "amg_mbux_superscreen" => Kit {
+            key: "AmgMbuxSuperscreen",
+            build: 8,
+            computed: vec![
+                calc("rain_streaks", Calc::RainStreaks(80_001), "v5 rain: 12 motion-blurred streaks (1 to 3 px wide, 64 to 256 px long), alpha on black; tint and scroll them in the kit"),
+                calc("water_beads", Calc::WaterBeads(80_002), "v5 rain: 16 water beads of 8 to 24 px with a refraction rim and highlight, straight alpha"),
+                calc("wet_asphalt_2048", Calc::SurfaceAt(Surf::WetAsphalt, 80_003, 2048), "v5 rain: seamless 2048 wet asphalt, dark and low contrast; albedo, height, normal and roughness (water in the troughs is glossy)"),
+            ],
+            notes: "Requested by the thread for v5 rain (28 Nov, 09:20). Computed, so clean and exactly seamless; no SDXL.",
+            ..Kit::default()
+        },
+        "amg_mbux_supersport" => Kit {
+            key: "AmgMbuxSupersport",
+            build: 11,
+            computed: vec![
+                calc("fire_jet_band", Calc::FireBand(110_001), "the orange fire jets out of the halftone mesh along the two rev scales: a seamless 4096x1024 luminance band (colour it with the palette) and its _flow map so it can scroll and flicker"),
+                calc("flame_front_loop", Calc::FlameFront(110_002), "the burning leading edge of each wall: 16-frame loop, 256x1024 per frame at runtime (2x master), luminance + alpha"),
+                calc("fuse_line", Calc::FuseLine(110_005), "the burning rev line: a seamless 2048x128 crackling ember strip with a jagged bright core, luminance + alpha (TJX 09:22: the fire spark on the line)"),
+                calc("fuse_sparks", Calc::Sparks(110_006), "16 small sparks spitting off the burning line, 64x64 at 1:1 (2x master), luminance + alpha"),
+                calc("horizon_haze", Calc::Haze(110_003), "fog at the tunnel's end and faint clouds over the horizon: a seamless 4096x1024 luminance band"),
+                calc(
+                    "blue_perforated_panel",
+                    Calc::Perforated(super::fx::Perf {
+                        pitch: 32.0,
+                        hole: 12.0,
+                        chamfer: 3.0,
+                        albedo: [0.006, 0.016, 0.060],
+                        rough: 0.16,
+                    }),
+                    "tunnel ribs and floor if rendered in depth: glossy dark-blue anodised panel with a perfectly regular 32 px micro-perforation (albedo, normal, roughness)",
+                ),
+            ],
+            deferred: vec!["the halftone dots, ribs and scales: procedural in the dash's code"],
+            notes: "Requested by the thread (28 Nov, 09:13; TJX: \"We want very clean textures and animations\"). All computed from periodic noise and exact geometry: no grain, no speckle, no AI artefacts, exact tiles and an exact loop.",
+            ..Kit::default()
+        },
         "kinetic_liquid_metal" => Kit {
             key: "KineticLiquidMetal",
             build: 7,
@@ -260,13 +283,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "valkyrie_lmp1" => Kit {
             key: "ValkyrieLmp1",
             build: 9,
-            textures: vec![tex(
-                "forged_carbon_marble",
-                "macro photograph of a flat polished forged carbon fibre composite panel, smooth glossy clear resin surface, thin flattened black and dark grey carbon fibre strands in a swirling marbled pattern, satin sheen on the fibres, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                "woven, twill, checker pattern, grid, rocks, stones, coal, crumpled, rough relief, cracks, beige, brown, white specks, objects, lighting falloff, perspective, seams, blur, cartoon",
-                90_002,
-                "the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance",
-            )],
+            computed: vec![
+                calc("forged_carbon_marble", Calc::Surface(Surf::ForgedMarble, 90_002), "the yoke's forged-carbon marble (brief: albedo + normal, seamless): base colour, and a normal from its luminance"),
+            ],
             deferred: vec![
                 "the 1440x420 forged-carbon yoke with angled shoulders: shape needs the Penpot board",
                 "the knurled anodised encoder rings: the knurl only reads on a lathe ring, and the brief gives no ring diameter (render them as bezel sprites with a knurled outer chamfer once the layout sets the size)",
@@ -277,13 +296,10 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "skyline_r34_mfd" => Kit {
             key: "SkylineR34Mfd",
             build: 12,
-            textures: vec![tex(
-                "lcd_backlight_mura",
-                "macro photograph of a dim late-1990s liquid crystal display panel, soft cloudy backlight mura and faint uneven brightness, very fine diffuser grain, dark grey-green, flat top-down view, even diffuse light, seamless tileable texture",
-                "text, pixel grid, numerals, segments, objects, lighting falloff, perspective, seams, blur, cartoon",
-                120_001,
-                "modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural",
-            )],
+            computed: vec![
+                calc("lcd_backlight_mura", Calc::Surface(Surf::LcdMura, 120_001), "modulation layer for the gear and speed LCD windows and the MFD tiles; the pixel grid stays procedural"),
+                calc("diagonal_wear_streaks", Calc::Surface(Surf::WearStreaks, 120_002), "optional: faint wear over the MFD glass, fine streaks top left to bottom right at very low contrast (thread request, 28 Nov)"),
+            ],
             sprites: vec![ring(
                 "tach_ring_440",
                 440.0,
@@ -304,7 +320,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "amg_one_f1" => Kit {
             key: "AmgOneF1",
             build: 16,
-            textures: vec![ANTIGLARE],
+            computed: vec![
+                calc("antiglare_matte_grain", Calc::Surface(Surf::Antiglare, 160_001), "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"),
+            ],
             swatches: vec![tile("carbon_twill_rim", mat::carbon(12.0), "surface of the 780 px carbon rim arc (2x2 twill, 12 px tows)")],
             deferred: vec!["the housing, the rim arc and the F1 shift-light caps: need the Penpot layout and the cap pitch"],
             notes: "Twill carbon is Blender, never SDXL.",
@@ -313,13 +331,15 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "chrono_event_horizon" => Kit {
             key: "ChronoEventHorizon",
             build: 19,
-            textures: vec![tex(
+            textures: vec![
+                tex(
                 "accretion_shear_filaments",
                 "macro photograph of fine sheared luminous smoke filaments all streaming in one horizontal direction, turbulent wisps of varied brightness on black, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture",
                 "vortex, spiral, galaxy, stars, text, objects, lighting falloff, perspective, seams, blur, cartoon",
                 190_001,
                 "greyscale shear texture wrapped polar onto the 1100x190 disk and tinted by the dash; the lensing itself is the dash's deflection table, never this texture",
-            )],
+            ),
+            ],
             notes: "Only the disk's material grain; the black-hole optics are the dash's maths.",
             ..Kit::default()
         },
@@ -338,28 +358,24 @@ pub fn kit(snake: &str) -> Option<Kit> {
                 key: "Gt3RsApogee",
                 build: 20,
                 textures: vec![
-                    tex(
+                tex(
                         "mli_foil_crinkle_height",
                         "macro photograph of crumpled thin insulation foil, dense random crinkles and soft folds, uniform mid grey, relief only, flat top-down view, even diffuse light, seamless tileable texture",
                         "gold colour, metallic reflections, text, objects, lighting falloff, perspective, seams, blur, cartoon",
                         200_001,
                         "height only: the dash's gold-foil dial backing shades it with metal GOLD (SDXL never draws the metal)",
                     ),
-                    tex(
-                        "heat_shield_tile_coating",
-                        "macro photograph of a continuous black glassy ceramic coating, fine pitting and subtle mottled matte-to-satin variation across one uninterrupted surface, charcoal black, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                        "tiles, squares, panels, gaps, grid, grout lines, borders, edges, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                        200_004,
-                        "surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)",
-                    ),
-                    tex(
+                tex(
                         "star_field_tile",
                         "photograph of a faint star field in deep black space, sparse dim stars of varied brightness, no nebula, seamless tileable texture",
                         "planets, nebula, galaxy, spacecraft, text, objects, perspective, seams, blur, cartoon",
                         200_003,
                         "environment for reflections in the titanium and gold (a tile, not a figure)",
                     ),
-                ],
+            ],
+            computed: vec![
+                calc("heat_shield_tile_coating", Calc::Surface(Surf::CeramicCoating, 200_004), "surface of the side parts; the tile grid itself is geometry (seed 200004: 200002 drew a 2x2 tile grid into the texture)"),
+            ],
                 sprites: s,
                 deferred: vec!["the attitude ball and its gimbal cage: markings settle in step 1 against the reference ball"],
                 notes: "Space-instrument materials for an out-of-this-world GT3 RS dash.",
@@ -387,13 +403,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "shibuya_chromatic_prisma" => Kit {
             key: "ShibuyaChromaticPrisma",
             build: 26,
-            textures: vec![tex(
-                "wet_asphalt_ripple",
-                "macro photograph of wet dark asphalt road surface under a thin film of rain water, fine aggregate grain and shallow puddle ripples, greyscale, flat top-down view, even diffuse light, seamless tileable texture",
-                "road markings, reflections of objects, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                260_001,
-                "greyscale height for the mirror-ripple normal map",
-            )],
+            computed: vec![
+                calc("wet_asphalt_ripple", Calc::Surface(Surf::WetAsphalt, 260_001), "greyscale height for the mirror-ripple normal map"),
+            ],
             notes: "The prism dispersion is the dash's optics; this is only the wet street grain.",
             ..Kit::default()
         },
@@ -415,7 +427,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "sim_input_trace" => Kit {
             key: "SimInputTrace",
             build: 31,
-            textures: vec![ANTIGLARE],
+            computed: vec![
+                calc("antiglare_matte_grain", Calc::Surface(Surf::Antiglare, 160_001), "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"),
+            ],
             swatches: vec![tile(
                 "dark_anodised_carrier",
                 mat::anodised([0.0232, 0.0252, 0.0296]),
@@ -427,13 +441,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "lorenz_butterfly" => Kit {
             key: "LorenzButterfly",
             build: 33,
-            textures: vec![tex(
-                "pad_rim_powder_coat",
-                "macro photograph of matte black powder-coat paint, very fine uniform grain with tiny soft flecks, near black, flat top-down view, even diffuse light, seamless tileable texture",
-                "orange peel bumps, scratches, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                330_001,
-                "labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4",
-            )],
+            computed: vec![
+                calc("pad_rim_powder_coat", Calc::Surface(Surf::PowderCoat, 330_001), "labelled grain on the rims of the true-black pads (the gear pad and the speed pad); the attractor is the dash's RK4"),
+            ],
             ..Kit::default()
         },
         "pagani_horologerie" => Kit {
@@ -456,40 +466,18 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "neural_cyber_synapse" => Kit {
             key: "NeuralCyberSynapse",
             build: 37,
-            textures: vec![tex(
-                "soma_membrane_grain",
-                "macro photograph of a translucent biological cell membrane under a microscope, soft cytoplasm granules and faint fibrous texture, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture",
-                "cell outlines, nucleus, stain colours, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                370_001,
-                "optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model",
-            )],
+            computed: vec![
+                calc("soma_membrane_grain", Calc::Surface(Surf::Membrane, 370_001), "optional modulation inside the 260 px soma (a gradient is the fallback); the nerve front is the dash's Nagumo model"),
+            ],
             ..Kit::default()
         },
         "suminagashi_marble" => Kit {
             key: "SuminagashiMarble",
             build: 42,
-            textures: vec![
-                tex(
-                    "urushi_lacquer",
-                    "macro photograph of polished black urushi lacquer, deep glossy black with very faint brush strokes and fine fibrous undercoat grain, flat top-down view, even diffuse light, seamless tileable texture",
-                    "gold leaf, maki-e, decoration, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                    420_001,
-                    "the tray rim's lacquer",
-                ),
-                tex(
-                    "still_water_sheen",
-                    "macro photograph of the still surface of dark water, extremely faint shallow ripples and micro capillary waves, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture",
-                    "reflections, ink, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                    420_002,
-                    "greyscale height for the water's faint sheen normal; the marbling is the dash's area-preserving maps",
-                ),
-                tex(
-                    "washi_paper_fibre",
-                    "macro photograph of handmade white washi paper, long translucent kozo fibres in a thin sheet, flat top-down view, even diffuse light, seamless tileable texture",
-                    "writing, ink, folds, stains, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                    420_003,
-                    "labelled fibre texture under the labels",
-                ),
+            computed: vec![
+                calc("urushi_lacquer", Calc::Surface(Surf::Urushi, 420_001), "the tray rim's lacquer"),
+                calc("still_water_sheen", Calc::Surface(Surf::StillWater, 420_002), "greyscale height for the water's faint sheen normal; the marbling is the dash's area-preserving maps"),
+                calc("washi_paper_fibre", Calc::Surface(Surf::Washi, 420_003), "labelled fibre texture under the labels"),
             ],
             deferred: vec!["the gear stone (200 px) and the side stones (260x130): pebble geometry is modelled with the layout"],
             ..Kit::default()
@@ -497,13 +485,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "t50_floodlit" => Kit {
             key: "T50Floodlit",
             build: 43,
-            textures: vec![tex(
-                "leather_binnacle_black",
-                "macro photograph of black full-grain nappa leather, fine natural pebble grain, soft satin sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                "stitching, perforation, plastic, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                430_001,
-                "the binnacle surround (leather(...).set(\"texture\")) for edges and reflections",
-            )],
+            computed: vec![
+                calc("leather_binnacle_black", Calc::Surface(Surf::Leather, 430_001), "the binnacle surround (leather(...).set(\"texture\")) for edges and reflections"),
+            ],
             swatches: vec![
                 disc("spun_aluminium_chapter", mat::spun(metal::ALUMINIUM), "the chapter ring's fine circular brushing"),
                 tile("carbon_twill_pane_frame", mat::carbon(10.0), "frames of the two 300x220 panes"),
@@ -551,7 +535,6 @@ pub fn kit(snake: &str) -> Option<Kit> {
             key: "HakosukaS20",
             build: 48,
             textures: vec![
-                CRACKLE,
                 tex(
                     "worn_steering_wood",
                     "macro photograph of worn varnished dark wood from a vintage steering wheel rim, fine straight grain, soft wear, flat top-down view, even diffuse light, seamless tileable texture",
@@ -559,6 +542,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
                     480_002,
                     "wood in the environment the bright rings reflect",
                 ),
+            ],
+            computed: vec![
+                calc("crackle_black_paint", Calc::Surface(Surf::Crackle, 480_001), "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"),
             ],
             sprites: {
                 let chrome = || {
@@ -581,7 +567,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "sim_pit_wall" => Kit {
             key: "SimPitWall",
             build: 49,
-            textures: vec![ANTIGLARE],
+            computed: vec![
+                calc("antiglare_matte_grain", Calc::Surface(Surf::Antiglare, 160_001), "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"),
+            ],
             swatches: vec![tile("carbon_twill_carrier", mat::carbon(10.0), "the LED carrier surface")],
             sprites: led_pair("shift_led_32_off", "shift_led_32_on", 32.0, "14 LEDs on 760x32: 32 px caps (the same design as SimInputTrace's)").to_vec(),
             ..Kit::default()
@@ -589,13 +577,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "kaleidoscope_mirror" => Kit {
             key: "KaleidoscopeMirror",
             build: 51,
-            textures: vec![tex(
-                "chip_glass_inclusions",
-                "macro photograph of clear antique glass with tiny seed bubbles and faint wavy striae, monochrome grey on black, flat top-down view, even diffuse light, seamless tileable texture",
-                "cracks, chips, colour, edges, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                510_001,
-                "labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group",
-            )],
+            computed: vec![
+                calc("chip_glass_inclusions", Calc::Surface(Surf::SeedGlass, 510_001), "labelled grain map inside the eight chips; the mirror copies are the dash's dihedral group"),
+            ],
             sprites: vec![ring(
                 "eyepiece_ring_380",
                 380.0,
@@ -646,13 +630,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "revuelto_corsa" => Kit {
             key: "RevueltoCorsa",
             build: 56,
-            textures: vec![tex(
-                "forged_composite_large_chips",
-                "macro photograph of forged carbon composite with large flat chopped carbon flakes, broad overlapping chips under glossy resin, black and graphite grey with soft fibre sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                "woven, twill, grid, checker pattern, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                560_001,
-                "the hexagon pod body",
-            )],
+            computed: vec![
+                calc("forged_composite_large_chips", Calc::Surface(Surf::ForgedChips, 560_001), "the hexagon pod body"),
+            ],
             deferred: vec![
                 "the hex-mesh grille: the hero library has no hexagon perforation yet",
                 "the 300 px hexagon pod: the library has no hexagon outline yet, and the anodise tint is not in the brief",
@@ -662,15 +642,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "z_nismo_sport" => Kit {
             key: "ZNismoSport",
             build: 57,
-            textures: vec![
-                CRACKLE,
-                tex(
-                    "dash_top_leatherette",
-                    "macro photograph of black automotive leatherette dash cover, fine embossed grain, soft matte sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                    "stitching, seams, perforation, text, objects, lighting falloff, perspective, blur, cartoon",
-                    570_002,
-                    "the dash top the pods stand on (stitching is geometry)",
-                ),
+            computed: vec![
+                calc("crackle_black_paint", Calc::Surface(Surf::Crackle, 480_001), "bare black panel finish (the same seed in HakosukaS20 and ZNismoSport, so both get the same texture)"),
+                calc("dash_top_leatherette", Calc::Surface(Surf::Leatherette, 570_002), "the dash top the pods stand on (stitching is geometry)"),
             ],
             sprites: vec![
                 ring(
@@ -699,13 +673,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "golden_angle" => Kit {
             key: "GoldenAngle",
             build: 60,
-            textures: vec![tex(
-                "bead_inner_sparkle",
-                "macro photograph of tiny sparkling inclusions inside clear crystal, sparse bright glints and fine internal facets on black, monochrome, flat top-down view, even diffuse light, seamless tileable texture",
-                "gemstones, shapes, colour, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                600_001,
-                "labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model",
-            )],
+            computed: vec![
+                calc("bead_inner_sparkle", Calc::Surface(Surf::Sparkle, 600_001), "labelled sparkle grain inside the bead; the seed spiral is the dash's Vogel model"),
+            ],
             sprites: vec![cap(
                 "seed_bead_26",
                 26.0,
@@ -724,27 +694,17 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "eva_bio_sync" => Kit {
             key: "EvaBioSync",
             build: 64,
-            textures: vec![tex(
-                "cell_nucleus_grain",
-                "macro photograph of translucent cell nucleus material under a microscope, soft granular chromatin texture, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture",
-                "cell outlines, hexagons, stain colours, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                640_001,
-                "optional modulation of the lit-cell gradient",
-            )],
+            computed: vec![
+                calc("cell_nucleus_grain", Calc::Surface(Surf::Chromatin, 640_001), "optional modulation of the lit-cell gradient"),
+            ],
             ..Kit::default()
         },
         "mclaren_slim_display" => Kit {
             key: "MclarenSlimDisplay",
             build: 65,
-            textures: vec![
-                ANTIGLARE,
-                tex(
-                    "alcantara_black",
-                    "macro photograph of black alcantara microfibre suede, soft dense nap with faint directional sheen, flat top-down view, even diffuse light, seamless tileable texture, material scan",
-                    "leather pores, stitching, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                    650_002,
-                    "the dash top the slab folds into (alcantara(...).set(\"texture\"))",
-                ),
+            computed: vec![
+                calc("antiglare_matte_grain", Calc::Surface(Surf::Antiglare, 160_001), "labelled micro-grain over the screen face (luminance modulation of 4% at most); the pixel grid stays procedural"),
+                calc("alcantara_black", Calc::Surface(Surf::Alcantara, 650_002), "the dash top the slab folds into (alcantara(...).set(\"texture\"))"),
             ],
             ..Kit::default()
         },
@@ -763,13 +723,9 @@ pub fn kit(snake: &str) -> Option<Kit> {
         "hyperbolic_tiles" => Kit {
             key: "HyperbolicTiles",
             build: 72,
-            textures: vec![tex(
-                "etched_glass_grain",
-                "macro photograph of finely acid-etched frosted glass, uniform fine matte grain, monochrome grey, flat top-down view, even diffuse light, seamless tileable texture",
-                "scratches, fingerprints, patterns, text, objects, lighting falloff, perspective, seams, blur, cartoon",
-                720_001,
-                "labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths",
-            )],
+            computed: vec![
+                calc("etched_glass_grain", Calc::Surface(Surf::EtchedGlass, 720_001), "labelled sparkle map on the two disc faces; the tiling is the dash's Poincaré maths"),
+            ],
             sprites: vec![ring(
                 "disc_rim_ring_400",
                 400.0,
