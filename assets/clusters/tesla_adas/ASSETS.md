@@ -1,6 +1,6 @@
 # TeslaAdas assets
 
-These files are built by `cargo run --release -p asset-forge -- --lane cloud build --set tesla_adas` from `tools/asset-forge/src/recipes/tesla_adas.rs`. Don't edit them by hand: change the recipe and rebuild. The committed set is one run on the cloud lane's RTX 4090 (28 Nov 2026, 04:55 to 05:04 UTC).
+These files are built by `cargo run --release -p asset-forge -- --lane cloud build --set tesla_adas` from `tools/asset-forge/src/recipes/tesla_adas.rs`. Don't edit them by hand: change the recipe and rebuild. The committed set is two runs on the cloud lane's RTX 4090: `tunnel_lights.png` from the first (28 Nov 2026, 04:55 to 05:04 UTC), the seven car images from the second (28 Nov 2026, about 05:55 to 06:04 UTC, jobs `ego`, `parked` and `traffic` after the shut lines were added).
 
 The ledger rows are also in `assets/ASSETS.md`. The dash draws a plain fallback for each image, used when `setup.assets` is `None` or the file is missing.
 
@@ -37,7 +37,7 @@ Copied from the build's scratch folders after the cloud run (the run was started
 | `tesla_adas_ego/` | `beauty_0.png` to `beauty_10.png`, `glow_0.exr` to `glow_10.exr`, `brake_0.exr` to `brake_10.exr` | The 11 yaw renders of the ego car, one per atlas cell, and the linear glow and brake passes. Masters of `ego.png`, `ego_glow.png`, `ego_brake.png`. |
 | `tesla_adas_parked/` | `parked.png` | The parked view as Blender wrote it, before the recipe's post. Master of `ego_parked.png`. |
 | `tesla_adas_traffic/` | `sedan_<e>_<h>.png`, `sport_<e>_<h>.png`, `kei_<e>_<h>.png` (elevation 0 to 3, heading 0 to 4; 60 files) | One render per atlas cell. Masters of the three traffic atlases. |
-| `runtime/` | the eight PNGs of this folder | Byte-identical copies of the runtime files (the route the cloud thread used to fetch them). |
+| `runtime/`, `runtime_v3/` | the runtime PNGs of each run | Byte-identical copies of the runtime files (the route the cloud thread used to fetch them); `runtime_v3/` holds the seven car images committed now. |
 | `boards/` | `cockpit_1_idle.png` to `hood_4_drift-braking.png` (8 files) | The Penpot boards of page `07 · TeslaAdas`, exported at 3840 × 2160. |
 | `before/` | the old build's review set | The dash on `main` before this rebuild (`preview-export --cluster TeslaAdas` at the start of the thread). |
 
@@ -45,13 +45,13 @@ SHA-256 of the runtime files as committed:
 
 | File | SHA-256 |
 |---|---|
-| `ego.png` | `81f60eca6df149c32247e3bab481245740a520fe5a02a865b02698d4b7875f65` |
-| `ego_glow.png` | `2ff1fa190079a8ae4dba9f4c447caeab5b0f066f1c225578c39d4e94c204ecb9` |
-| `ego_brake.png` | `c62094dc9f83245f9a028773483f262aabfdc74219c1090dd1f82332f6318af3` |
-| `ego_parked.png` | `b820de026995236828627bef5ff1f6b429f2eb78254535c5d469619f7ca22544` |
-| `traffic_sedan.png` | `bd8cdb4d8d3d3728d4c326f1ea10ed36abb1a31bf5532488b372a2e291c2f22c` |
-| `traffic_kei.png` | `b81ab6a584dd5f2c4b2ca9669e6f074515daf55a27951b971382a75b41bbfcf0` |
-| `traffic_sport.png` | `109697d9cd5caa98bfecc9d113dd9b60bb2dfa42e61a4ffbcdf24d974e4a277f` |
+| `ego.png` | `d2477b8032cb39b784f4b0e742e187c385175cd2960e6d2ab27b355e5e583b30` |
+| `ego_glow.png` | `56cacd310fb1a8d82654ee747c3681667e58da2dd9d2b1f4667640b5a4542823` |
+| `ego_brake.png` | `5ac94f00e0de20d03dc21046820d724fdc6197c83444fc36018f5404cade750b` |
+| `ego_parked.png` | `c81608ab4d89df51ab082bded039d68e89685aae27fc5dd1365b35f66a9b4de6` |
+| `traffic_sedan.png` | `727cbc7bbd15c323428b7fefaaa506d19353a8a1160350ec75cf023bcc0d45d8` |
+| `traffic_kei.png` | `6c5964224c5512b141383f00df8f1d06f1b950b0cbfabab453cd7f35106733a9` |
+| `traffic_sport.png` | `07d0f3b05938686abdd240384d1aafef72f45bcb21801fdeba2126c1e7e184ca` |
 | `tunnel_lights.png` | `5e9f2db1fe01bc12dcdfaa10cad0c842297ea34b76f5b26e823b5f86f27ef4a6` |
 
 ## The Japanese label face
