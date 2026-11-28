@@ -213,3 +213,18 @@ The decoder now reads every FH6 field (`docs/TELEMETRY_USAGE_MATRIX.md`): per-ty
 | Exhaust and intake temperatures (M7) | dropped | Still not sent; the Nismo G page stays as their replacement. |
 
 New edge cases: wheel speeds are zero or equal when stationary or airborne (the 5% rule must ignore speeds under about 3 m/s and wheels off the ground, using `suspension` travel near zero as the cue); `fuel` is constant when the game's fuel use is off; tyre temperatures in the game may be in °F (check C).
+
+## 16. Second photo hunt: F-TORQUE, night meters, Nismo pages (2026-11-28)
+
+23 more photos in the Drive folder `references\more\`; crops in the project files (`ref_ftorque_twin.jpg`, `ref_night_meters.jpg`).
+
+**16.1 The F-TORQUE dial is seen.** It is a TWIN-page dial in the same template as the others (8.4): 270° from 6 o'clock, the cut-away lower-right quadrant with a front-axle pictogram and the teal PEAK box. **It reads torque, not a share:** unit "[×10N·m]", labels 0, 2, 4, 6, 8, 10, 15, 20, 25, 30, 40, 50 (0 to 500 N·m) on a **non-linear scale**: measured clockwise from 6 o'clock, 0 = 0°, 2 ≈ 28°, 4 ≈ 71°, 6 ≈ 105°, 8 ≈ 131°, 10 ≈ 154°, 15 ≈ 174° (12 o'clock), 20 ≈ 197°, 25 ≈ 219°, 30 ≈ 237°, 40 ≈ 255°, 50 ≈ 272°: about 15° per 10 N·m up to 100 N·m, then about 3° per 10 N·m. Ring band about 0.23 R, hub about 0.26 R.
+**Our reading:** draw it as the real dial, in N·m: front torque = the modelled front share (sections 9, 15) × the engine `torque`. Whether the real gauge measures at the engine or at the front axle is not established; engine-side keeps it in the dial's range for an RB26 (about 390 N·m × 0.5). The scale's breakpoints are a lookup table the unit tests assert. This replaces "0 to 50 %" in sections 9 and 12.
+
+**16.2 The second needle is a peak-hold needle.** On both the boost and F-TORQUE dials a white needle points at the value in the PEAK box (0.12 and 1.2 in the crop; 7.3 in a second shot); the red needle is the live value. This corrects 8.4 and gives the signature moment a real behaviour: the white needle stays at the peak after the red one falls.
+
+**16.3 Late (kouki) units** show boost in "[×100 kPa]" from −0.5 to 1.2; the early units use kg/cm² and mmHg (8.4). The V-Spec II in the game is a late car: **kPa is the authentic unit for this dash**, kg/cm² an option.
+
+**16.4 Stock meters at night** (incandescent bulbs): the faces go fully black (#060304); numerals and ticks a neutral, slightly cool, dim white (#ACB1B7 at the brightest); captions dimmer (#6C6064); red-zone ticks 8 to 10 deep red (#900D1D); needles glow deep crimson (#9B0B24, temperature needle #D4242E); the odometer LCD is backlit pale lavender-white (#D9CAE4) with low-contrast grey-violet digits; warning lamps red. On a black OLED this night look is the natural default: it fits the house's true-black rule and the red budget (needles and red ticks only).
+
+**16.5 Nismo MFD pages** (clean screenshots): start-up with the GT-R badge, "nismo" and its red dot; a G page on a ±10 m/s² grid with a red target ring and a yellow dot; a lap page with LAP and BEST in `--'--"--`, a table of laps 1 to 5, START LAP and STOP buttons; an OIL-PRESS row; a −0.5 to 2.0 ×100 kPa boost dial. The G and lap pages are now drivable (section 15) in their real form.
