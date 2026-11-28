@@ -1,7 +1,8 @@
-//! Aero Plasma Blade (`ClusterTheme::AeroPlasmaBlade`), catalog row 25: Sci-Fi, hood, build #25.
+//! Aero Plasma Blade (`ClusterTheme::AeroPlasmaBlade`), catalog row 25.
+//! Sci-Fi category, Sci-Fi family, hood.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

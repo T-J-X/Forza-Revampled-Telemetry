@@ -1,9 +1,9 @@
 # Vernier Loupe (`VernierLoupe`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 31 (VernierLoupe — build #30 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 31) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** Liquid Glass (Design Council 3A), spec [docs/design/families/liquid-glass.md](../../../../../docs/design/families/liquid-glass.md), hero frames [docs/design/heroes/liquid-glass/](../../../../../docs/design/heroes/liquid-glass/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 30
 
 Frameless and horizontal. A 1200 px vernier rail runs across the crown with ticks every 100 rpm (2 px minor, 5 px major) and Barlow Semi Condensed 500 numerals at cap 20, all ≤20% luminance, plus a 4 px primary fill from the left. The precise reading is a 170×110 glass loupe that glides to the current rpm and magnifies the scale ×2.4 by self-lensing, with the lensed ticks lit in primary. Rank 1: 13 round cabochon pods in a 38 px strip above the rail. Below: the gear (Saira Condensed 700, cap 200) in a fixed 230 px lens, and the speed on the left in Saira 200 cap 112, ghost 8s. Rank 4: a 120 px G-lens roving over a 24 px dot lattice under the gear. Optional Michroma logo zone at the rail's left end.
 

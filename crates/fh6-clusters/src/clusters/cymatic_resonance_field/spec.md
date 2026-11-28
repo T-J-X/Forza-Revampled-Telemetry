@@ -1,9 +1,9 @@
 # Cymatic Resonance Field (`CymaticResonanceField`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 28 (CymaticResonanceField — build #28 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 28) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 28
 
 An acoustic-levitation bench. A polished black-chrome circular plate seen at a 62° tilt (ellipse 1100×300, centre (0,+90)) carries 20k GPU sand grains that gather on the nodal lines of circular-plate modes J_m(k_mn·r)·cos mθ. Its near rim, 9 o'clock round to 3 o'clock, is the tach (rank 3): a 6 px lit ribbon with Barlow Semi Condensed numerals inside; the far rim is a 1 px hairline. The gear (Exo 2 800, cap 200) levitates above the plate centre at (0,−130) on a dimming pad; speed (Exo 2 300, cap 112) at (+330,−120). Fifteen 10×36 tuning-fork tines form the shift strip at y −296. Grains are rank 4: inkMuted tinted 18% primary, no bloom; the centre clamp carries the crest.
 

@@ -1,9 +1,9 @@
 # Chrono Event Horizon (`ChronoEventHorizon`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 22 (ChronoEventHorizon — build #27 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 22) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 27
 
 A miniature black hole in the binnacle. The gear (Saira Condensed 700, cap 200, ink) floats in a 230 px shadow that is a feathered dimming pad (alpha up to 140 x (1 - scrim)), not paint. Rank 3: an accretion disk inclined 78 deg (an 1100x190 ellipse) whose lit arc grows clockwise from 7 o'clock with rpm. Its far side is lensed up over the shadow as a thin second arc, and a 1 px photon ring hugs the shadow. Doppler beaming changes intensity, never hue: the approaching side is primary lifted to white, the receding side 60%. Rank 1: a gently curved 34 px 15-pod strip along the lensed arc. Rank 2: Saira 200 tabular speed (cap 100) to the right. Rank 4: an embedding-funnel G meter under the speed.
 
