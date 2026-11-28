@@ -653,6 +653,14 @@ impl Fonts {
         }
     }
 
+    /// Rasterises every character of `text` for `font` now, on top of its preload set, so a face
+    /// for a script outside [`PRELOAD`] (a Japanese label face) is complete on its first frame
+    /// instead of one frame late. Call it when the cluster is built, not while drawing.
+    pub fn preload_text(&mut self, font: FontId, text: &str) {
+        self.ensure_preloaded(font);
+        self.generate(font.0, text.chars());
+    }
+
     fn add_face(
         &mut self,
         data: Cow<'static, [u8]>,

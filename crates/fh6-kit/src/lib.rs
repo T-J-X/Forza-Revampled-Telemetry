@@ -65,7 +65,7 @@ pub use paint::{
 pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};
 pub use pool::{Pool, MAX_POOLS};
-pub use renderer::FrameStats;
+pub use renderer::{FrameStats, GpuPassKind, GpuPassTime};
 pub use scene::{Backdrop, Bloom, LayerOptions, Scene};
 pub use shape::{
     Axis, Cap, Dome, Glow, Outline, Piece, Radii, SegmentedBar, Shadow, Shape, Stroke, StrokeAlign, StrokeUnit,

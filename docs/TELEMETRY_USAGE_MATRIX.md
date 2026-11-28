@@ -95,7 +95,7 @@ Dash scenarios (`DASH_SCENARIOS`):
 
 ## Dashes
 
-Six dashes have their own code today (Liquid Glass, GT7 Hood Pro, Porsche Analog, Bosch DDU,
+Six dashes have their own code today (Liquid Glass, Bonnet Line, Porsche Analog, Bosch DDU,
 Tesla ADAS, Retro Cyber). The other 66 (42 from the first catalog and the 24 added on 2026-11-28,
 at the end of the table) draw the shared scaffold (`common::scaffold`), which reads rpm, the
 limiter, gear and speed.
@@ -104,7 +104,7 @@ limiter, gear and speed.
 |---|---|---|
 | `LiquidGlass` | Liquid Glass | `race_on`, `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
 | `VisionSpatialGlass` | Vision Spatial Glass | `rpm`, `max_rpm`, `gear`, `speed` |
-| `Gt7HoodPro` | Bonnet Line | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `Gt7HoodPro` | Bonnet Line | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `g_long`, `velocity`, `boost` |
 | `AmgMbuxSuperscreen` | AMG MBUX Superscreen | `rpm`, `max_rpm`, `gear`, `speed`, `g_lat`, `g_long`, `power`, `boost` |
 | `DriftGlass` | Drift Glass | `rpm`, `max_rpm`, `gear`, `speed` |
 | `GlyphDotMatrix` | Glyph Dot Matrix | `rpm`, `max_rpm`, `gear`, `speed` |
@@ -116,11 +116,11 @@ limiter, gear and speed.
 | `BoschDdu` | Bosch DDU | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `clutch`, `handbrake`, `g_lat`, `g_long`, `velocity`, `drivetrain`, `power`, `boost` |
 | `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed` |
 | `Gt7ModularTripod` | GT7 Modular Tripod | `rpm`, `max_rpm`, `gear`, `speed` |
-| `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity` |
+| `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity`, `power` |
 | `WindshieldHud` | Windshield HUD | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ArNavWayfinder` | AR Nav Wayfinder | `rpm`, `max_rpm`, `gear`, `speed` |
 | `F35HelmetHmd` | F-35 Helmet HMD | `rpm`, `max_rpm`, `gear`, `speed` |
-| `RetroCyber` | Retro Cyber | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `boost` |
+| `RetroCyber` | Retro Cyber | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `car_ordinal`, `power`, `boost` |
 | `SynthwaveOutrun` | Synthwave Outrun | `rpm`, `max_rpm`, `gear`, `speed` |
 | `EvaBioSync` | EVA Bio-Sync | `rpm`, `max_rpm`, `gear`, `speed` |
 | `ChronoEventHorizon` | Chrono Event Horizon | `rpm`, `max_rpm`, `gear`, `speed` |

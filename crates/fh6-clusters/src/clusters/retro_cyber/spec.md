@@ -2,6 +2,8 @@
 
 Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 19 (★ RetroCyber — build #6 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
 
+> **2026-11-28 rebuild:** the dash now recreates the Toyota Supra A70 Panoramic Digital Meter. Where this brief and [RESEARCH.md](RESEARCH.md) differ (the octagon tube, the 15-pod strip and the chevrons are gone), RESEARCH.md and its list of deliberate changes win. The brief below is kept as the catalog wrote it.
+
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
 - **Kind:** rebuild · ★ pattern-setter · **View:** cockpit+hood · **Build order:** 6
 
