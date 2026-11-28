@@ -91,3 +91,48 @@ Ideas the research suggests for the telemetry (for the board to pick from, not a
 | Gravity drainage of a rigid film: ∂h/∂t = −(ρg ÷ 4μ) h² ∂h/∂z, so h ∼ √(z ÷ t) | Mysels (1959) as quoted by Aurégan and Deike, "Drainage and lifetime of thin liquid films", §1, [arxiv.org/abs/2411.03908](https://arxiv.org/pdf/2411.03908) | mobile films drain differently (their eq. 1, h ∝ z ÷ t); the oil film's thickness, and so its colour order, thins from the drop's crown towards its rim over time and is renewed by motion |
 
 **The kit's film tables, checked.** The pre-build kit (`assets/clusters/kinetic_liquid_metal/prebuild/`, `oil_on_mercury_film`) was checked here against an independent Airy sum at normal incidence (oil n 1.47 on mercury n + ik = 1.485 + 4.546i, `docs/specs/optics.md` §9): at 300 nm red dips (0.60 against 0.69 green and 0.78 blue; the table's 140, 179, 201 of 255 follow the same order), and at 450 nm green dips, as in the table. **What it means for the look:** an oil film on a metal this reflective only tints it. Across 0–1200 nm the largest spread between the red, green and blue reflectances is 0.19 for n 1.47, against 0.36 for a film of n 1.9 and 0.52 for n 2.4. So an oil slick on liquid metal is a pastel sheen, not a saturated rainbow; saturated colour on a metal needs a higher-index film, as in the temper colours of an oxide (gallium's own skin is Ga₂O₃, and its index needs a source before the dash uses it). The board takes this into account when it chooses how much colour the skin carries.
+
+## Real behaviour of the drop, worked through (for the board and the code)
+
+**Sources added.** Mercury beating heart: a mercury drop in an acid electrolyte with an oxidiser; an iron nail almost touching it makes it oscillate, because oxidation near the nail lowers the tension locally while reduction restores it over the whole drop (Wikipedia, [Mercury beating heart](https://en.wikipedia.org/wiki/Mercury_beating_heart); first seen by Volta and Henry in 1800). The gallium version "continuously oscillates between a dull flat puddle and a shiny sphere" for about 30 minutes ([Indiana University chemistry demos](https://www.chem.indiana.edu/faculty-research/faculty-resources/chemistry-demos/demo/the-gallium-beating-heart)). Viscous decay of drop modes, Lamb (1932) §355 as given by Padrino, Funada and Joseph, "Purely irrotational theories for the viscous effects on the oscillations of drops and bubbles", eqs. 2.24, 3.12, 3.16 ([umn.edu](https://dept.aem.umn.edu/people/faculty/joseph/archive/docs/946-sphere-short.pdf)): the decay rate of mode ℓ is (ℓ − 1)(2ℓ + 1)ν ÷ a², so τ = a² ÷ ((ℓ − 1)(2ℓ + 1)ν). The beating-heart pages give no shape counts or beat rates; those come from Dong et al. above.
+
+**The numbers for a galinstan drop** (σ 0.535 N/m, ρ 6440 kg/m³, μ 2.4 mPa·s, so ν = 3.73 × 10⁻⁷ m²/s; worked here):
+- The drive. An engine's firing frequency is proportional to rpm. A drop answers at half its drive. For a four-cylinder car the half-frequency is rpm ÷ 60 Hz, 15 Hz at a 900 rpm idle. The packet carries no cylinder count (the decoder's fields were checked), so the dash folds that constant into the drop's size.
+- The size. Setting the n = 3 mode at 15 Hz with Rayleigh's 2D relation gives R = 6.08 mm. That is a puddle (ℓ_c = 2.91 mm, so R ≈ 2 ℓ_c, the same ratio Dong et al. used for water), which is the shape that shows star modes from above.
+- The modes. n is the mode whose frequency is nearest the half-drive, so n(n² − 1) = 24 (rpm ÷ idle)². For idle 900 and limiter 8700, n runs 3 → 13: 3 at 900, 4 at 1500, 5 at 2200, 6 at 3000, 8 at 3900, 9 at 4900, 10 at 5900, 11 at 7000, 13 at 8200–8700 (figure `star_modes_study.png` in the project files). A car with a narrower band tops out lower (idle 1000, limiter 7000: n ≈ 11), which is real and fine.
+- Frequencies and ring-down: n = 3 at 15 Hz rings for τ = 7.1 s; n = 6 at 44 Hz for 1.5 s; n = 8 at 69 Hz for 0.83 s; n = 10 at 96 Hz for 0.52 s; n = 13 at 143 Hz for 0.31 s.
+
+**What that means on a 60 Hz OLED, and the honest way to show it.**
+- The star modes oscillate at 15–143 Hz, faster than the display. A real drop shows them only under a stroboscope, which is how the papers photograph them. The dash draws the drop **stroboscopically, at the phase of its peak**, so the star stands still while the drive is steady. Idle is still, as the house rules ask, and the figure is a true sample of the motion, not a stand-in.
+- A change of mode is a real transient: the old mode rings down with its Lamb τ and the new one grows. At high n this takes 0.3–0.8 s, a lively morph. At low n it would take seconds, too slow for a gauge, so the morph is capped (a deliberate change, listed at the end of this section).
+- An upshift kicks every mode at once and the drop rings, then settles back to its stroboscopic star. That is the upshift's signature, with no flash.
+
+**Telemetry mapping (verified fields only, the 97% rule):**
+
+| Packet input | Drives | Model |
+|---|---|---|
+| `current_engine_rpm`, `engine_idle_rpm`, `engine_max_rpm` | the number of star points n, and the exact rpm on the tach | n(n² − 1) = 24 (rpm ÷ idle)², nearest integer, 120 rpm hysteresis on each step |
+| `accel` (throttle) | how deep the points are | electrocapillary tension γ(V) = γ₀ − ½CV²; the amplitude grows as the tension falls |
+| the limiter (rpm within 1% of max) | fingering and satellites | the tension falls towards zero (the oxidation regime); points pinch off as drops of radius 1.89 × the neck (Rayleigh–Plateau), with volume conserved in one ledger |
+| `acceleration_x`, `acceleration_y` (lateral and vertical G) | the drop's lean and slide | tan θ = a_lat ÷ (g + a_vert), reached through the U-tube swing (ζ 0.35) |
+| `acceleration_z` (longitudinal G) | the signed G figure, and the film's drainage direction | figure in hundredths; drainage h ∼ √(z ÷ t) runs away from the deceleration |
+| `gear` | the numeral, and the ring impulse on a change | all modes kicked once; each decays with its own τ |
+| `speed_ms` | the tabular speed | display units, 0.6-unit hysteresis |
+| `brake` | the brake column (rank 4) | level ∝ brake |
+| `velocity_x`, `velocity_z` | body slip, the figure that turns amber above 8° | atan of the lateral over the forward velocity |
+
+**Edge cases to design for:**
+- Engine off or rpm 0: no drive; the drop relaxes to a round puddle (n = 0) and stays still.
+- Bad car data: idle ≥ max, or idle 0. Clamp the ratio, keep n between 2 and 13, never divide by zero.
+- Neutral and reverse: the void shows N or R. Reverse never drives a negative mode.
+- Rev-hanging on the limiter: the satellites accumulate. With volume conserved the main drop shrinks a little, and the satellites rejoin it within 300 ms after the shift. The pool can never empty.
+- Rapid shifts (under 100 ms apart): ring impulses add up but are clamped, so the numeral void always stays readable.
+- Drift at −1 g lateral: the drop leans 44° and slides about one radius, but stays inside its zone.
+- Hostile telemetry (G5 in the dash gates): non-finite values are rejected by the decoder, and any zero still gets its own guard.
+- Menus and pause: the dash hides within a frame. On return the drop starts from rest, not from a stale state.
+- A car change: idle and max change, so the mapping is recomputed. The drop re-forms with one ring instead of snapping.
+
+**Deliberate changes, liquid-metal version:**
+- The drop is drawn stroboscopically (see above), not at its real 15–143 Hz.
+- Mode changes are capped at about 0.25 s, against Lamb's 0.3–7 s, so the gauge stays instant. The real τ is kept for the upshift's ring-down at high n.
+- The cylinder count is folded into the drop's size, because the packet does not carry it.
