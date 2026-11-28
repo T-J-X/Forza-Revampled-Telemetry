@@ -1,9 +1,9 @@
 # Aero Plasma Blade (`AeroPlasmaBlade`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 25 (AeroPlasmaBlade — build #25 · hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 25) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `concept` · **Kind:** rebuild · **View:** hood
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** hood · **Build order:** 25
 
 A delta-wing planform seen from above, 1700x380 on the hood: apex up at X=1920, 55 deg leading-edge sweep, tips low on both sides. The skin is never filled; 1 px rims and three spar hairlines draw it, lit by the G light. Rank 3: both leading edges carry a dielectric-discharge line (6 px core, neon halo) that ignites from the apex to the tips in 20 steps per side, with 1000-rpm ticks along the edge. Rank 1: Saira Condensed 800 gear (cap 190) in the fuselage under the apex, with a 34 px 16-pod crown strip. Rank 2: B612 Mono speed (cap 96) on the spine below. Rank 4: nine unglowing hairline streamlines across the chord.
 

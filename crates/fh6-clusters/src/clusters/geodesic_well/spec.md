@@ -1,9 +1,11 @@
 # Geodesic Well (`GeodesicWell`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 40 (GeodesicWell — build #34 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 40) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 34
+
+**Category note.** The lattice floor and the well are geometry placed in the world under the car; no glass panes. The floor is a Gaussian well ([Real geometry and maths](../../../../../program/phases/07-cluster-factory/CATALOG.md#real-geometry-and-maths)), and the tyre slip and suspension travel this brief reads are not verified yet.
 
 Spacetime instead of scenery. A perspective lattice floor (24 px pitch at the near edge, 2 px hairlines at alpha 46, dissolving to black over 120 px) is bent into a Gaussian well beneath the gear by the force the driver feels. The car is a 28 px light puck at the well's centre, and its predicted path is a geodesic rolling across the warped grid. Z1: twelve 20 px round photon pods on a straight strip at y −292, filling outside-in. Gear (Saira Condensed 800, cap 180) floats above the well at (0, −160), speed left (Saira Light, cap 112), boost and lap right (Titillium). Rank 3 is an event-horizon ring, the well's rim on the floor, filling from its far point toward the near point on both sides.
 

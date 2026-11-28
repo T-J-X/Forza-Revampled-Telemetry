@@ -7,6 +7,7 @@ use crate::mesh::{MeshData, MeshId, Meshes};
 use crate::paint::ImageId;
 use crate::painter::Painter;
 use crate::palette::Palette;
+use crate::pool::Pool;
 use crate::renderer::{FrameStats, GpuPassTime, Renderer};
 use crate::scene::Scene;
 use crate::text::{FontError, FontRole, Fonts};
@@ -248,6 +249,15 @@ impl Kit {
     /// pass). It scales with the frame opacity. 0 (the default) turns it off.
     pub fn set_underlay(&mut self, alpha: f32) {
         self.renderer.set_underlay(alpha);
+    }
+
+    /// Sets the soft black pools under everything the next frames draw (see [`Pool`]): the same
+    /// picture as painting them first, written in one pass that blends nothing. They stay set
+    /// until the next call; an empty slice clears them. Pools that cannot show (no area, no
+    /// alpha, a value that is not finite) are skipped, and only the first [`crate::MAX_POOLS`]
+    /// of the rest are kept. Like everything drawn, they scale with the frame opacity.
+    pub fn set_pools(&mut self, pools: &[Pool]) {
+        self.renderer.set_pools(pools);
     }
 
     /// Enables GPU timestamp queries; false when the device lacks `TIMESTAMP_QUERY`.

@@ -1,9 +1,9 @@
 # Solaris Warp Core (`SolarisWarpCore`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 24 (SolarisWarpCore — build #26 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 24) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 26
 
 A fusion containment rig. Two vertical magnetic-bottle columns, 380 px tall, 90 px wide and 520 px apart, flank the gear. Each is ringed by 10 D-shaped coil hoops drawn as 1 px titanium rims lit by the G light; the space between them stays black. Rank 3: plasma rises in both columns in step, a soft-edged filament with a primary-to-white core whose waist pinches with boost. Rank 1: Saira Condensed 800 gear (cap 220) between the columns, under a 36 px 12-pod strip spanning the column caps. Rank 2: Saira Condensed 700 speed (cap 96) under the gear. Rank 4: four unglowing tyre-thermal cells at the column bases in the 4-step thermal colours. Power and torque sit in Chakra Petch micro-labels.
 

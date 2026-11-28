@@ -1,9 +1,11 @@
 # Rattrapante Sector (`RattrapanteSector`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 36 (RattrapanteSector — build #32 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 36) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 32
+
+**Category note.** Hypercar through watchmaking: a split-seconds chronograph movement opened up and seen working. It has no named car.
 
 A split-seconds chronograph opened into a sector. Two long lance hands rise from a hidden pivot 640 px below the anchor and sweep a 110° fan whose chapter arc (R 880) spans the binnacle, giving about 15 px per 100 rpm. Rank 1: Saira Condensed 800 gear, cap 210, in a sapphire lens (alpha 44, 1 px rim, crescent) on X = 1920 that the hands pass behind; 15 lume batons lie on a straight chord above the arc, 30 × 760 px. Rank 2: tabular Saira Condensed 600 speed, cap 100, in the fan's right wing, which no hand reaches. Rank 3: a primary-colour main hand plus an accent hairline split hand. Idle→shift spans −55°→0°, and the top 15% of the range opens out to +20°. Rank 4: a 'shot group' of the last five shifts under the speed. Rank 5: a titanium arc rail and the Michroma name. Hood view: the same sector at R 1000 inside the 1760 × 400 envelope.
 

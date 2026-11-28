@@ -121,6 +121,29 @@ fn on_the_track_face_every_lens_sits_over_the_approach_or_past_the_scale() {
     }
 }
 
+/// True when the needle never stands over `zone` (below the hub) from half the `shift` rpm to
+/// `max`: its angle stays wider than the zone's top corner seen from the hub.
+fn needle_clear(g: &Geom, zone: Rect, scale: &DialScale, max: f32, shift: f32) -> bool {
+    let reach = (zone.max.x - g.tach.x).atan2(zone.min.y - g.tach.y);
+    (0..=40).all(|k| {
+        let rpm = shift * 0.5 + (max - shift * 0.5) * k as f32 / 40.0;
+        shortest_turn(scale.angle(rpm), FRAC_PI_2).abs() > reach
+    })
+}
+
+/// Logo files from the Porsche wordmark's shape (8:1) down to the narrowest shipped dial: the
+/// Ferrari, BMW M, Acura, Toyota, square, Renault and Pontiac shapes.
+const LOGO_SHAPES: [(u32, u32); 8] = [
+    (1024, 128),
+    (1024, 276),
+    (1024, 411),
+    (1024, 584),
+    (1024, 758),
+    (1024, 1024),
+    (793, 1024),
+    (574, 1024),
+];
+
 /// Every scale the window and the logo must work for: both faces, short-shifting to
 /// redline-shifting (the OSD's `ShiftPointPct` is 0.80 to 1.00), small to big limiters.
 fn scales() -> Vec<(Mode, f32, f32, DialScale)> {
@@ -251,18 +274,11 @@ fn the_logo_zone_sits_across_the_hub_clear_of_the_window_and_the_scale() {
     assert!(g.logo_zone(&classic).center().y < g.tach.y && g.window_centre(&classic).y > g.tach.y);
     // Wherever the logo sits below the hub, the needle never stands over it from half the shift
     // rpm to the limiter, on any scale.
-    let needle_clear = |zone: Rect, scale: &DialScale, max: f32, shift: f32| {
-        let reach = (zone.max.x - g.tach.x).atan2(zone.min.y - g.tach.y);
-        (0..=40).all(|k| {
-            let rpm = shift * 0.5 + (max - shift * 0.5) * k as f32 / 40.0;
-            shortest_turn(scale.angle(rpm), FRAC_PI_2).abs() > reach
-        })
-    };
     for (mode, max, pct, scale) in scales() {
         let zone = g.logo_zone(&scale);
         if zone.center().y > g.tach.y {
             assert!(
-                needle_clear(zone, &scale, max, max * pct),
+                needle_clear(g, zone, &scale, max, max * pct),
                 "{mode:?} {max} {pct}: the needle crosses the logo"
             );
         }
@@ -395,8 +411,103 @@ fn the_logo_zone_shows_no_name_while_the_cars_dial_loads() {
     // any other car nothing, and never the name.
     assert_eq!(zone_art(None, maker, &loading), ZoneArt::Image(1));
     assert_eq!(zone_art::<u32>(None, None, &loading), ZoneArt::Nothing);
+    // Nothing of the car's own while it loads, not even an image sent with the flag, as the
+    // kit's `logo::draw` does.
+    assert_eq!(zone_art(car, None, &loading), ZoneArt::Nothing, "the car's image waits");
+    assert_eq!(
+        zone_art(car, maker, &loading),
+        ZoneArt::Image(1),
+        "the maker's stands in"
+    );
     assert_eq!(zone_art(car, maker, &names), ZoneArt::Image(7), "the car's dial wins");
     assert_eq!(zone_art(None, maker, &names), ZoneArt::Image(1), "else the maker's");
     assert_eq!(zone_art::<u32>(None, None, &names), ZoneArt::Names, "else the name");
     assert_eq!(zone_art(None, maker, &Logo::default()), ZoneArt::Nothing, "off");
+}
+
+#[test]
+fn a_logo_narrower_than_the_wordmark_keeps_its_area_and_stands_on_its_line() {
+    let g = &GEOM;
+    let track = DialScale::new(Mode::Track, 7500.0, 7275.0);
+    let classic = DialScale::new(Mode::Classic, 7500.0, 7275.0);
+    let narrow = Rect::from_center_size(g.tach + vec2(0.0, g.logo_below_narrow), g.logo_narrow);
+    for zone in [g.logo_zone(&track), g.logo_zone(&classic), narrow] {
+        // The wordmark itself, and anything wider, fits the zone exactly as before.
+        let wordmark = g.logo_art(zone, LOGO_SHAPES[0]);
+        assert_eq!(wordmark, fh6_kit::logo::fit(zone, LOGO_SHAPES[0]));
+        assert_eq!(g.logo_art(zone, (2048, 128)), fh6_kit::logo::fit(zone, (2048, 128)));
+        let area = wordmark.width() * wordmark.height();
+        let mut last = wordmark.height();
+        for (w, h) in LOGO_SHAPES {
+            let art = g.logo_art(zone, (w, h));
+            let aspect = w as f32 / h as f32;
+            assert!((art.width() / art.height() - aspect).abs() < 1e-3, "{w}x{h}: shape");
+            assert!(
+                art.height() <= g.logo_emblem_max + 1e-3,
+                "{w}x{h}: taller than the hub cap"
+            );
+            assert!(art.height() >= last - 1e-3, "{w}x{h}: a narrower logo is shorter");
+            last = art.height();
+            if art.height() < g.logo_emblem_max - 1e-3 {
+                let a = art.width() * art.height();
+                assert!(
+                    (a - area).abs() < area * 1e-3,
+                    "{w}x{h}: area {a}, the wordmark's {area}"
+                );
+            }
+            // On the wordmark's line, on the hub's vertical, inside the zone's width.
+            assert!((art.max.y - wordmark.max.y).abs() < 1e-3, "{w}x{h}: off the line");
+            assert!((art.center().x - g.tach.x).abs() < 1e-3, "{w}x{h}: off the vertical");
+            assert!(art.width() <= zone.width(), "{w}x{h}: wider than the zone");
+        }
+    }
+    // Toyota's dial (1024 x 758) stood 15.2 px tall, its lettering (23 % of the file) 3.5 px;
+    // now about 37 px and 8.6 px. A square emblem stops at the hub cap's width.
+    let below = g.logo_zone(&track);
+    let toyota = g.logo_art(below, (1024, 758)).height();
+    assert!((toyota - 37.0).abs() < 0.5, "Toyota {toyota} px");
+    assert_eq!(g.logo_art(below, (1024, 1024)).height(), g.logo_emblem_max);
+}
+
+#[test]
+fn every_logo_shape_stays_clear_of_the_window_the_hub_the_scale_and_the_needle() {
+    // The zone is chosen for the wordmark slot and its legend alone, so an emblem standing
+    // taller in it must clear everything the slot clears, on every scale.
+    let g = &GEOM;
+    for (mode, max, pct, scale) in scales() {
+        let zone = g.logo_zone(&scale);
+        let window = g.window_centre(&scale);
+        for size in LOGO_SHAPES {
+            let art = g.logo_art(zone, size);
+            let at = format!("{mode:?} {max} {pct} {size:?}");
+            assert!(
+                distance_to_rect(window, art) > g.porthole_rim + LOGO_CLEAR,
+                "{at}: the logo meets the window"
+            );
+            for k in corners(art) {
+                let r = (k - g.tach).length();
+                assert!(r < g.scale_in - 4.0, "{at}: logo corner at R {r}");
+            }
+            assert!(
+                distance_to_rect(g.tach, art) > g.needle_tail + g.needle_half_w + 1.0,
+                "{at}: the logo meets the hub or the needle's tail"
+            );
+            // It never reaches into the legend under it.
+            assert!(art.max.y < g.legend_box(zone).min.y, "{at}: the logo meets the legend");
+            if zone.center().y > g.tach.y {
+                assert!(
+                    needle_clear(g, art, &scale, max, max * pct),
+                    "{at}: the needle crosses the logo"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_wordmark_shape_is_its_files() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/logos/porsche_dial.png");
+    let bytes = std::fs::read(&path).expect("the Porsche wordmark ships in assets/logos");
+    let (w, h) = fh6_kit::images::png_size(&bytes).expect("a PNG header");
+    assert_eq!(w as f32 / h as f32, MAKER_ASPECT, "{w} x {h}");
 }

@@ -589,3 +589,46 @@ Before the merge, four fresh reviewers read the final module and this file throu
 | 37 | `fixed()` and `tucked()` untested | Fixed for `fixed()` (`Digits` is pure and tested); `tucked()` keeps its Painter (one cell width) |
 
 Refuted: `animating()` never settling on a NaN rpm (every `Signals` producer sanitises it), and the track-scale test's sweep check restating `end()` (other assertions in the same test cover the sweep).
+
+## After fix F: emblem logos (2026-11-28)
+
+**Task:** fix F (`program/phases/fix-f-brand-logos/HANDOVER.md`, known issues) put each car's brand dial in this dash's logo zone, a 160 × 20 slot made for the Porsche wordmark, so every dial narrower than about 10:1 drew 15.2 px tall at 4K: the BMW roundel read as a badge, but the lettering in Toyota's emblem (3.5 px) did not. The coordinator relayed TJS's "go" for it on 2026-11-28, with fix F's `Logo::loading` (the zone draws nothing while a dial loads). Findings and yes/no answers only.
+
+**What changed**
+- `Geom::logo_art`: a logo at least as wide as the Porsche wordmark (8:1, `MAKER_ASPECT`, checked against `porsche_dial.png`'s header by a test) fits the zone as before. A narrower one keeps the wordmark's box area and stands at most `logo_emblem_max` (40 px, the hub cap's width) tall, on the wordmark's line and the hub's vertical. In the full zone: Toyota 37 × 50 px (was 15 × 21), BMW and Mercedes 40 × 40 (15 × 15), Pontiac 40 × 22, BMW M 27 × 68 (15 × 38), Ferrari 22 × 83 (15 × 56). The hub cap's width is the cap so the brand never outgrows a part of the dial's hardware; the wordmark's area is the size so every brand carries the same weight as the dash's own mark.
+- The zone, the legend and the window's clearance still depend only on the scale, never on the logo, so nothing moves when a dial finishes loading.
+- `zone_art`: while `Logo::loading` is set the zone shows nothing of the car's own, its image included, as the kit's `logo::draw` does; a Porsche keeps the dash's wordmark. Before, an image sent with the flag would have drawn.
+- `draw_logo` draws the image itself at `logo_art` (the same two `ImagePaint` fills `logo::draw` made: the engraved shadow 1 px below-right, then the ink).
+- Considered and not done: the brand's name for emblems (it drops the logo fix F added), and sizing every lockup's lettering to the tokens' 12 px floor (Toyota's needs 52 px, Volvo's about 130: taller than the numerals' printing, so the logo would outrank the scale).
+
+**Verification output** (commit tree `84b5e6b` before this section, built in `Documents\fh6-targets\pa-verify-src`; the log shows `Compiling fh6-clusters` from that copy)
+```
+$ cargo fmt --all -- --check                                  exit 0
+$ cargo clippy --workspace --all-targets -- -D warnings       exit 0
+$ cargo test -p fh6-clusters --lib                            244 passed, 0 failed
+  a_logo_narrower_than_the_wordmark_keeps_its_area_and_stands_on_its_line ... ok
+  every_logo_shape_stays_clear_of_the_window_the_hub_the_scale_and_the_needle ... ok
+  the_wordmark_shape_is_its_files ... ok
+  the_logo_zone_shows_no_name_while_the_cars_dial_loads ... ok   (two new assertions)
+$ cargo test -p fh6-clusters --test dash_gates                10 passed
+$ preview-export --cluster PorscheAnalog --car N, main and this change, 11 cars (PC GPU, gpu.lock held)
+  car 3667 (Porsche): the four state renders byte-identical to main's
+  car 247 (Toyota): mean dE 0.05; changed area 50 x 39 px at (1894, 1864) only; golden tolerance: yes
+  car 1269 (BMW): mean dE 0.04; changed area 41 x 42 px at (1899, 1861) only
+```
+```
+$ cargo test -p fh6-clusters --test golden_images            49 passed, 0 failed (PC GPU, gpu.lock held)
+```
+
+**Visual review** (the lines this change touches; the rest judge the dash's design, which did not change, and are NOT ASSESSED for that reason)
+- **V3, cold reviewer (one run, neutral 1:1 crops `mockups/blind/logo-r1/L1–L8`, after only).** It named all eight makers unprompted (Pontiac "not fully sure") and read TOYOTA, MAZDA, VOLVO, the BMW M "M" and, just, VAUXHALL. Findings: Pontiac's arrowhead and BMW M's stripes are grey and soft (**not fixed**: the dial files are drawn that way, Phase 6's ink mode; an asset change); the letters in the BMW roundel's ring and Vauxhall's lettering are too small to read with confidence (**not fixed**: they are about 5 px tall (BMW at 40 px, Vauxhall at 36 px); see the considered options); the mark, its lettering and the legend read as a tight stack for the lockups (**kept**: the gap to the legend is the wordmark's, 10.8 px). Nothing touches the hub, the window or the numerals in any crop.
+- **V10, hierarchy.** Yes, no worse than main: in a squint blur (σ 3) the emblems measure 2.1 to 2.4:1 against the shipped Porsche wordmark's 3.1:1 in the same zone; the gear and shift lights are untouched.
+- **V11, static parts.** Yes: static p95 0.131 (BMW) and 0.136 (Toyota) against 0.143 for the Porsche wordmark (`visual-review static`, four states); the small areas over the cap are the same three as before.
+- **V20, near-black.** Yes: the emblem sits on the painted dial (no black pixels in its region), and the changed area is the emblem's box with its shadow, with no rectangle round it.
+- **V25, before and after.** Yes: the before's failure (an emblem 15 px tall, Toyota's lettering 3.5 px) is gone (Toyota 37 px, lettering 8.6 px; `docs/handover-shots/cluster-porsche_analog-emblems-1.png` to `-3.png`); what the before did better (the Porsche wordmark) is byte-identical.
+- **V26, goldens.** Yes: no golden changed and all 49 pass on the commit tree (the golden harness draws without a car, so the logo zone is empty there).
+- `design:design-critique` (once, on the three sheets): every brand now reads at a glance and the emblems pair with the legend like printed lockups; minor findings were the lockups' small lettering, BMW M's soft stripes (both above) and a sheet title that said 2x for 1:1 crops (fixed).
+
+**rust-review** (diff, application code): no must-fix or should-fix. Consider: the `u32 as f32` casts on image sizes (`cast_precision_loss`, pedantic) are exact, since the kit refuses dials over 1024 px; `logo_art` uses `min`/`max`, not `clamp`, so no input can panic it.
+
+**Closing lines (AGENTS.md):** no A/B/X/Y input touched; no `unwrap`/`expect`/`panic!` or `unsafe` in non-test code; no per-frame allocation (`logo_art` is arithmetic); no dependency; commit as TJX with no co-author trailer; nothing deployed; the shared checkout's branch never switched; the GPU lock held for every GPU job.

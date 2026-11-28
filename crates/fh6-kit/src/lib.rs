@@ -38,6 +38,7 @@ mod painter;
 pub mod palette;
 pub mod particles;
 pub mod perspective;
+mod pool;
 mod renderer;
 mod scene;
 pub mod scrim;
@@ -63,6 +64,7 @@ pub use paint::{
 };
 pub use painter::Painter;
 pub use palette::{Palette, PaletteSource};
+pub use pool::{Pool, MAX_POOLS};
 pub use renderer::{FrameStats, GpuPassKind, GpuPassTime};
 pub use scene::{Backdrop, Bloom, LayerOptions, Scene};
 pub use shape::{

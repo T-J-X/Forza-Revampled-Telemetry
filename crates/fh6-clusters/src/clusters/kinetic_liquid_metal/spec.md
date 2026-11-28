@@ -1,9 +1,11 @@
 # Kinetic Liquid Metal (`KineticLiquidMetal`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 27 (★ KineticLiquidMetal — build #7 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 27) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** rebuild · ★ pattern-setter · **View:** cockpit · **Build order:** 7
+
+**Category note.** The first Psychedelic dash to be built: its thread settles how a figure is tested against its row in the maths table. The shared `common::liquid` tilts the surface by atan(gLat ÷ (1 + |gLong|)); hydrostatics puts vertical g there, not longitudinal g, so its handover asks for that fix to the shared code.
 
 Sealed borosilicate, not a drawing: a 240° glass channel (R 225, bore 40, open at the bottom) wraps a domed ampoule (R 140) at (0,−20), and the live mercury column inside is the tach (rank 3), its meniscus the exact reading. Mercury is an SDF smooth-union surface, normals from a 1D height field, shaded by `liquidMetal` env bands that rotate with the G-light, tinted 0.18 toward primary. Gear: Exo 2 800, cap 200, floating above a mercury pool tilting on `fluidSlosh`. Eleven Ø26 droplet beads (≤14 px sag) form the shift strip; speed (Exo 2 300, cap 112) fills the bottom gap above a 520×28 G spirit-level vial. Glass alpha 28–44, 1 px rims, nothing filled on black.
 

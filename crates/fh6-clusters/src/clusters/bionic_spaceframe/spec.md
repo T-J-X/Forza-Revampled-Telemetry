@@ -1,9 +1,11 @@
 # Bionic Spaceframe (`BionicSpaceframe`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 39 (BionicSpaceframe — build #44 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 39) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `inspired` · **Kind:** new · **View:** cockpit
 - **Family:** Race Dash (Design Council 3B), spec [docs/design/families/race-dash.md](../../../../../docs/design/families/race-dash.md), hero frames [docs/design/heroes/race-dash/](../../../../../docs/design/heroes/race-dash/)
-- **Kind:** new · **View:** cockpit · **Build order:** 44
+
+**Category note.** Inspired by the Czinger 21C's printed node chassis: the frame is the dash. The 21C is not in the game.
 
 No panel, no bezel ring: the cluster hangs in a generative titanium spaceframe grown along stress lines from two column mounts (±420, +210) to a top beam and a central hub ring. At most 48 brushed struts (tangent-aligned anisotropic GGX, base ≤12% luminance) hold every module in a machined node boss: 10 pods in beam nodes, the `race` 800 gear at cap 240 inside the hub, speed (`race` 700, cap 112) in a left sub-node, corner-ticked lap tiles between right struts, four tyre nodes where the lower struts meet. Rank 3 is a 12 px LED channel milled along the beam. One `light` slides highlights along every strut through a corner; rims 1 px; only ranks 1–3 glow.
 

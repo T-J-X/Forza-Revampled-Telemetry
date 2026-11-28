@@ -153,6 +153,16 @@ fn percentile(sorted: &[f64], q: f64) -> Option<f64> {
     sorted.get(i).copied()
 }
 
+/// The pixels of the rank-4 figure the colour budget leaves out: only for a Psychedelic or
+/// Abstract dash, and only when the dash names its figure zone (CATALOG.md, colour law point 4).
+pub fn figure_pixels(cat: &CatalogEntry, cluster: &dyn Cluster, layout: &Layout) -> Option<crate::gallery::PixelRect> {
+    if !cat.category.pattern_first() {
+        return None;
+    }
+    let zone = cluster.figure_zone(layout)?;
+    Some(crate::gallery::zone_pixels(layout, zone, W, H))
+}
+
 /// Runs the per-cluster export for `name`.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
@@ -247,7 +257,8 @@ pub fn run(
                     .save_png(&dir.join("_thumbs").join(&file))?;
                 cockpit = Some(file);
             }
-            let badges = Badges::compute(&shot.img, &palette, tokens, &shot.stats, shot.gpu_ms);
+            let figure = figure_pixels(cat, cluster.as_ref(), &layout);
+            let badges = Badges::compute(&shot.img, &palette, tokens, &shot.stats, shot.gpu_ms, figure);
             println!(
                 "  {stem:<24} {:>6.3} ms GPU  {:>3} draws  {:>4} instances  ({:.1} s)",
                 shot.gpu_ms.unwrap_or(f64::NAN),
@@ -318,7 +329,7 @@ fn pct(v: f32) -> String {
 
 /// The look of the page: the tokens of `docs/design/CONFIGURATOR_DIRECTION.md` (the page grows
 /// into the catalog the configurator serves). No script; the motion reel is a CSS animation.
-const PAGE_CSS: &str = "\
+pub(crate) const PAGE_CSS: &str = "\
 @font-face{font-family:'Titillium Web';src:url('../../assets/fonts/titillium-web/TitilliumWeb-Regular.ttf')}\
 @font-face{font-family:'Titillium Web';font-weight:600;src:url('../../assets/fonts/titillium-web/TitilliumWeb-SemiBold.ttf')}\
 @font-face{font-family:'Michroma';src:url('../../assets/fonts/michroma/Michroma-Regular.ttf')}\
@@ -366,7 +377,7 @@ td:first-child,th:first-child{text-align:left}\
 
 /// Escapes text for HTML and renders the inline Markdown the dash READMEs use: `[text](target)`
 /// keeps its text, `` `code` `` becomes `<code>`, and `**` marks are dropped.
-fn inline_html(md: &str) -> String {
+pub(crate) fn inline_html(md: &str) -> String {
     let mut out = String::with_capacity(md.len() + 16);
     let mut rest = md;
     let mut code = false;
@@ -457,14 +468,18 @@ fn write_page(
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>{name} · FH6 WheelDash</title><style>{PAGE_CSS}</style></head><body>\
          <header class=\"bar\"><span class=\"mark\">FH6 WHEELDASH</span>\
-         <span class=\"crumb\">Dash catalogue · row {row}</span><span class=\"pill\">{family}</span></header><main>\
-         <section class=\"hero\"><div><p class=\"eyebrow\">{family} · {views}</p><h1>{name}</h1>\
+         <span class=\"crumb\">Dash catalogue · {category} · catalog row {row}</span><span class=\"pill\">{family}</span></header><main>\
+         <section class=\"hero\"><div><p class=\"eyebrow\">{category} · {family} · {views}</p><h1>{name}</h1>\
          <p class=\"lede\">{lede}</p><dl class=\"facts\">\
          <div><dt>GPU at 4K</dt><dd>{p50}</dd><dd class=\"sub\">p99 {p99} · budget 0.5 ms</dd></div>\
          <div><dt>Views</dt><dd>{views}</dd></div>\
+         <div><dt>Catalog row</dt><dd>{row}</dd><dd class=\"sub\">{category} · shelf {shelf} · {target}</dd></div>\
          <div><dt>Config value</dt><dd>{theme}</dd></div></dl></div>\
          <a class=\"stage\" href=\"{hero}\"><img src=\"_thumbs/{hero}\" alt=\"{name} as the driver sees it\"></a></section>",
         row = cat.row,
+        category = cat.category.label(),
+        shelf = cat.shelf,
+        target = cat.target.label(),
         family = cat.family.label(),
         views = cat.views.label(),
         theme = cat.theme.name(),
@@ -533,10 +548,19 @@ fn write_page(
             of = flag(b.black_outside),
         );
     }
+    let budget = if !cat.category.pattern_first() {
+        ""
+    } else if rows.iter().any(|r| r.badges.outside_figure) {
+        " Base hue, white and red are measured outside the rank-4 figure, whose hue follows its model \
+         (the colour law of CATALOG.md)."
+    } else {
+        " Flag: this dash names no figure zone (<code>Cluster::figure_zone</code>), so base hue, white and red \
+         are measured on the whole frame, figure included."
+    };
     let _ = writeln!(
         h,
         "</table></details><p class=\"note\" style=\"margin-top:18px\">Brief: <code>{spec}</code>. Rendered on \
-         {adapter} at 3840 × 2160.</p></section></main></body></html>",
+         {adapter} at 3840 × 2160.{budget}</p></section></main></body></html>",
         spec = cat.spec_path(),
         adapter = inline_html(adapter),
     );

@@ -1,9 +1,9 @@
 # EVA Bio-Sync (`EvaBioSync`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 21 (EvaBioSync — build #22 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 21) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Sci-Fi · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 22
 
 A pilot-to-machine synchronisation monitor grown on the family's 24 px lattice. Two honeycomb wings, three cells deep (44 px cells, 4 px gaps, 1 px rims), sweep up from a 300 px pointy-top hexagonal gear capsule like a bioreactor membrane. Rank 3: cells ignite from the wingtips inward along one fixed spine path, mirroring the shift row, filled primary with a 2-stop nucleus gradient; unlit cells are neutral rims at alpha 22. Rank 1: Saira Condensed 800 gear (cap 210) in the capsule, with a 36 px 14-pod strip capping the wings. Rank 2: Saira Condensed 700 speed (cap 100) under the capsule. Rank 4: a hex-framed dual-trace sync scope under the speed, unglowing. The capsule rim is lit by the G light.
 

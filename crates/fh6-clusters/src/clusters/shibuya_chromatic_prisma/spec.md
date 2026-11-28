@@ -1,9 +1,11 @@
 # Shibuya Chromatic Prisma (`ShibuyaChromaticPrisma`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 26 (ShibuyaChromaticPrisma — build #24 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 26) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 24
+
+**Category note.** In the Liquid Glass category the prism is clear `OpticalGlass`, and the colour split is the prism deviation of `docs/specs/optics.md` section 10, with body slip turning the prism (yaw is not verified). Tint comes from absorption only. The neon of this brief lives in the beam and in the wet-road mirror, never as tubes on the glass. Its family stays Sci-Fi.
 
 A rain-night optics bench. A 280 px equilateral glass prism, point-up at X=1920 (tint alpha 44, 1 px rim, fresnel band, neon-tube edges), holds the gear (Saira Condensed 800, cap 180) on a dimming pad. A white beam enters from the left, with the speed (Saira Condensed 700, cap 104) above it. Rank 3: from the right face a three-band fan in primary, secondary and accent exits; its length and opening grow with rpm against a 1 px rpm ruler. Rank 1: a 36 px 15-pod strip across the crown. Rank 4: under the prism, four short unglowing tyre beams that split with each tyre's slip. Rank 5: a wet-road mirror appears only when puddles are present.
 

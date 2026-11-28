@@ -251,8 +251,8 @@ const SHIFT: SliderSpec = SliderSpec::new(80.0, 100.0, 1.0, 0, "%");
 const HUE: SliderSpec = SliderSpec::new(0.0, 358.0, 2.0, 0, "°");
 const SAT: SliderSpec = SliderSpec::new(0.0, 100.0, 2.0, 0, "%");
 const VAL: SliderSpec = SliderSpec::new(10.0, 100.0, 2.0, 0, "%");
-const SEAT: SliderSpec = SliderSpec::new(-100.0, 50.0, 1.0, 0, " mm");
-const WHEEL: SliderSpec = SliderSpec::new(-80.0, 20.0, 1.0, 0, " mm");
+pub(crate) const SEAT: SliderSpec = SliderSpec::new(-100.0, 50.0, 1.0, 0, " mm");
+pub(crate) const WHEEL: SliderSpec = SliderSpec::new(-80.0, 20.0, 1.0, 0, " mm");
 const HEIGHT: SliderSpec = SliderSpec::new(-240.0, 240.0, 4.0, 0, " px");
 const SCALE: SliderSpec = SliderSpec::new(70.0, 140.0, 1.0, 0, "%");
 const HOLD: SliderSpec = SliderSpec::new(200.0, 1000.0, 50.0, 0, " ms");
@@ -582,7 +582,10 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
         RowId::CameraPatch => "Camera patch",
         RowId::ClusterHeight => "Cluster height",
         RowId::ClusterScale => "Cluster scale",
-        RowId::Scrim(i) => fit.scrim_rows().get(usize::from(i)).map_or("Dash blocker", |f| f.label),
+        RowId::Scrim(i) => fit
+            .scrim_rows()
+            .get(usize::from(i))
+            .map_or("Blocker strength", |f| f.label),
         RowId::Resync => "Resync camera",
         RowId::OsdButton => "OSD button",
         RowId::HoldTime => "Hold time",
@@ -591,21 +594,20 @@ pub fn label(row: RowId, fit: &dyn CockpitFit) -> &'static str {
     }
 }
 
-/// The section heading a row starts, if any (caps, drawn above it).
+/// The section heading a row starts, if any (drawn above it, in sentence case as shown).
 #[must_use]
 pub fn section(row: RowId) -> Option<&'static str> {
     Some(match row {
-        RowId::EditView => "CLUSTER",
-        RowId::SpeedUnit => "READOUTS",
-        RowId::ColourMode => "PALETTE",
-        RowId::GlassRefraction => "MATERIAL",
-        RowId::Font => "TYPE",
-        RowId::FovCockpit => "FIELD OF VIEW",
-        RowId::SeatHeight => "DRIVING POSITION",
-        RowId::ClusterHeight => "CLUSTER",
-        RowId::Scrim(0) => "DASH BLOCKER",
+        RowId::SpeedUnit => "Readouts",
+        RowId::ColourMode => "Palette",
+        RowId::GlassRefraction => "Material",
+        RowId::Font => "Type",
+        RowId::FovCockpit => "Field of view",
+        RowId::SeatHeight => "Driving position",
+        RowId::ClusterHeight => "Cluster",
+        RowId::Scrim(0) => "Dash blocker",
         RowId::OsdButton => "OSD",
-        RowId::Stats => "OVERLAY",
+        RowId::Stats => "Overlay",
         _ => return None,
     })
 }
@@ -645,6 +647,7 @@ pub fn help(row: RowId, edit: &EditState) -> Option<&'static str> {
         RowId::ClusterHeight => "Applies now, to the view you edit",
         RowId::ClusterScale => "Applies now",
         RowId::OsdButton => "Right, then hold the new button for 1 second",
+        RowId::HoldTime => "How long to hold the OSD button to open the menu",
         RowId::AutoPause => "Sends Esc when the OSD opens mid-race",
         _ => return None,
     })
@@ -672,59 +675,10 @@ pub fn theme_step(theme: ClusterTheme, steps: i32) -> ClusterTheme {
     all[(i + steps).rem_euclid(all.len() as i32) as usize]
 }
 
-/// The display name of a cluster.
+/// The display name of a cluster: its catalog row's (`fh6_clusters::catalog`, the only copy).
 #[must_use]
 pub fn theme_label(theme: ClusterTheme) -> &'static str {
-    match theme {
-        ClusterTheme::BoschDdu => "Bosch DDU",
-        ClusterTheme::DriftGlass => "Drift Glass",
-        ClusterTheme::PorscheAnalog => "Porsche Analog",
-        ClusterTheme::LiquidGlass => "Liquid Glass",
-        ClusterTheme::WindshieldHud => "Windshield HUD",
-        ClusterTheme::TeslaAdas => "Tesla ADAS",
-        ClusterTheme::RetroCyber => "Retro Cyber",
-        ClusterTheme::Gt7HoodPro => "GT7 Hood Pro",
-        ClusterTheme::AmgMbuxSuperscreen => "AMG MBUX",
-        ClusterTheme::LfaV10Nurburgring => "LFA V10",
-        ClusterTheme::PaganiHorologerie => "Pagani Horologerie",
-        ClusterTheme::F35HelmetHmd => "F-35 Helmet",
-        ClusterTheme::BugattiTourbillon => "Bugatti Tourbillon",
-        ClusterTheme::EvaBioSync => "EVA Bio-Sync",
-        ClusterTheme::KoenigseggGyro => "Koenigsegg Gyro",
-        ClusterTheme::ValkyrieLmp1 => "Valkyrie LMP1",
-        ClusterTheme::SynthwaveOutrun => "Synthwave Outrun",
-        ClusterTheme::ChronoMultiverse => "Chrono Multiverse",
-        ClusterTheme::ChronoEventHorizon => "Event Horizon",
-        ClusterTheme::NeuralCyberSynapse => "Neural Synapse",
-        ClusterTheme::Gt7ModularTripod => "GT7 Tripod",
-        ClusterTheme::ArNavWayfinder => "AR Wayfinder",
-        ClusterTheme::SolarisWarpCore => "Solaris Warp Core",
-        ClusterTheme::VisionSpatialGlass => "Vision Spatial",
-        ClusterTheme::GlyphDotMatrix => "Glyph Dot Matrix",
-        ClusterTheme::AeroPlasmaBlade => "Aero Plasma Blade",
-        ClusterTheme::CymaticResonanceField => "Cymatic Field",
-        ClusterTheme::KineticLiquidMetal => "Kinetic Liquid Metal",
-        ClusterTheme::ShibuyaChromaticPrisma => "Shibuya Prisma",
-        ClusterTheme::LumenEtch => "Lumen Etch",
-        ClusterTheme::VernierLoupe => "Vernier Loupe",
-        ClusterTheme::DichroicLouvre => "Dichroic Louvre",
-        ClusterTheme::FibreOpticCorona => "Fibre-Optic Corona",
-        ClusterTheme::ApertureNine => "Aperture Nine",
-        ClusterTheme::AeroSmokeTunnel => "Aero Smoke Tunnel",
-        ClusterTheme::RattrapanteSector => "Rattrapante Sector",
-        ClusterTheme::SapphireMystery => "Sapphire Mystery",
-        ClusterTheme::RackFocus => "Rack Focus",
-        ClusterTheme::BionicSpaceframe => "Bionic Spaceframe",
-        ClusterTheme::GeodesicWell => "Geodesic Well",
-        ClusterTheme::Lightpainter => "Lightpainter",
-        ClusterTheme::TreadSeismograph => "Tread Seismograph",
-        ClusterTheme::StarSailOrigami => "Star Sail Origami",
-        ClusterTheme::ArcLadderCascade => "Arc Ladder Cascade",
-        ClusterTheme::AuroraVeil => "Aurora Veil",
-        ClusterTheme::IsochromaticLoadPath => "Isochromatic Load Path",
-        ClusterTheme::AbyssalShearBloom => "Abyssal Shear Bloom",
-        ClusterTheme::HarmonographDrive => "Harmonograph Drive",
-    }
+    fh6_clusters::catalog::display_name(theme)
 }
 
 /// The label of a view.

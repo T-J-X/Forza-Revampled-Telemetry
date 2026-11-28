@@ -1,7 +1,8 @@
-//! Abyssal Shear Bloom (`ClusterTheme::AbyssalShearBloom`), catalog row 47: Fluid / Generative, cockpit, build #42.
+//! Abyssal Shear Bloom (`ClusterTheme::AbyssalShearBloom`), catalog row 47.
+//! Psychedelic category, Fluid / Generative family, cockpit.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

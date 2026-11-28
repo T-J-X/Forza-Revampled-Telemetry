@@ -56,6 +56,8 @@ struct State {
     segment: SegmentKey,
     /// When false, `layer` ignores backdrop requests (glass draws tint, rim and sheen only).
     backdrops: bool,
+    /// Text whose cap height comes out smaller than this many target pixels is not drawn.
+    min_text_px: f32,
 }
 
 /// Records one frame of drawing. Created by [`crate::Kit::begin_frame`].
@@ -103,6 +105,7 @@ impl<'f> Painter<'f> {
                     backdrop_px: None,
                 },
                 backdrops: true,
+                min_text_px: 0.0,
             },
             stack: [None; MAX_DEPTH],
             depth: 0,
@@ -235,6 +238,14 @@ impl<'f> Painter<'f> {
     /// and thumbnails drawn inside another surface turn it off).
     pub fn set_backdrops(&mut self, on: bool) {
         self.state.backdrops = on;
+    }
+
+    /// Leaves out text whose cap height would come out under `px` target pixels, until the
+    /// matching restore. A cluster drawn as a small thumbnail sets its labels and footers at a
+    /// few pixels, where they read as grey bars; its gear, speed and shapes still draw. `text`
+    /// still returns the bounds the text would have had, so layouts built on them hold.
+    pub fn set_min_text_px(&mut self, px: f32) {
+        self.state.min_text_px = finite_or(px, 0.0).max(0.0);
     }
 
     /// Sets the blend mode until the matching restore.
@@ -375,7 +386,7 @@ impl<'f> Painter<'f> {
             return;
         }
         let viewport = self.state.xf.apply_rect(&draw.viewport);
-        self.scene.bounds = self.scene.bounds.union(&viewport);
+        self.mark_drawn(&viewport);
         self.scene.meshes.push(MeshCmd {
             draw: *draw,
             viewport,
@@ -398,6 +409,9 @@ impl<'f> Painter<'f> {
             return Rect::from_points(pos, pos);
         };
         let origin = run.origin(pos);
+        if style.cap * self.state.xf.scale_factor() < self.state.min_text_px {
+            return run.bounds(origin);
+        }
         let paint = style.paint;
         let mut xf_saved = None;
         if style.slant.abs() > 1e-4 {
@@ -555,9 +569,22 @@ impl<'f> Painter<'f> {
             draws: at..at,
             blur_px: self.state.segment.blur_px,
             backdrop_px: self.state.segment.backdrop_px,
+            bounds: Rect::EMPTY,
         });
         self.segment_open = true;
         true
+    }
+
+    /// Adds what a draw over `world` (target pixels) reaches to the bounds of the frame and of
+    /// the open segment: the draw itself and, in a blurred layer, the three sigma its light
+    /// spreads to. The renderer blurs and composites a layer only inside these bounds
+    /// (`blur_region`), so every kind of draw must come through here.
+    fn mark_drawn(&mut self, world: &Rect) {
+        let drawn = world.expand(self.state.segment.blur_px * 3.0);
+        self.scene.bounds = self.scene.bounds.union(&drawn);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&drawn);
+        }
     }
 
     fn push(&mut self, enc: Encoded, bbox: Rect, paint: &Paint, coverage_mode: u32, style: [f32; 4]) {
@@ -618,9 +645,7 @@ impl<'f> Painter<'f> {
         let color = if is_glass { frame.to_array() } else { color.to_array() };
         // Glass keeps its whole shape in the work rectangle: its refraction and frost sample
         // the backdrop beyond the trimmed quad, and must find the same cleared margin there.
-        let world = xf.apply_rect(if is_glass { &frame } else { &bbox });
-        let blur_margin = self.state.segment.blur_px * 3.0;
-        self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
+        self.mark_drawn(&xf.apply_rect(if is_glass { &frame } else { &bbox }));
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };
         if bloom != 0 {
             self.scene.bloom_used = true;

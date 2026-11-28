@@ -59,6 +59,73 @@ const SETS: &[&str] = &[
     "bosch_ddu",
     "liquid_glass",
     "porsche_analog",
+    "osd",
+    "vision_spatial_glass",
+    "amg_mbux_superscreen",
+    "drift_glass",
+    "glyph_dot_matrix",
+    "pagani_horologerie",
+    "bugatti_tourbillon",
+    "lfa_v10_nurburgring",
+    "koenigsegg_gyro",
+    "valkyrie_lmp1",
+    "gt7_modular_tripod",
+    "windshield_hud",
+    "ar_nav_wayfinder",
+    "f35_helmet_hmd",
+    "synthwave_outrun",
+    "eva_bio_sync",
+    "chrono_event_horizon",
+    "neural_cyber_synapse",
+    "solaris_warp_core",
+    "aero_plasma_blade",
+    "shibuya_chromatic_prisma",
+    "kinetic_liquid_metal",
+    "cymatic_resonance_field",
+    "chrono_multiverse",
+    "lumen_etch",
+    "vernier_loupe",
+    "dichroic_louvre",
+    "fibre_optic_corona",
+    "aperture_nine",
+    "aero_smoke_tunnel",
+    "rattrapante_sector",
+    "sapphire_mystery",
+    "rack_focus",
+    "bionic_spaceframe",
+    "geodesic_well",
+    "lightpainter",
+    "tread_seismograph",
+    "star_sail_origami",
+    "arc_ladder_cascade",
+    "aurora_veil",
+    "isochromatic_load_path",
+    "abyssal_shear_bloom",
+    "harmonograph_drive",
+    "amg_mbux_supersport",
+    "skyline_r34_mfd",
+    "vision_petals",
+    "amg_one_f1",
+    "carplay_island",
+    "gt3_rs_apogee",
+    "gt7_cockpit_pro",
+    "liquid_morph",
+    "amg_mbux_track_pace",
+    "gtr_nismo_mfd",
+    "sim_input_trace",
+    "lorenz_butterfly",
+    "amg_mbux_classic",
+    "suminagashi_marble",
+    "t50_floodlit",
+    "hakosuka_s20",
+    "sim_pit_wall",
+    "kaleidoscope_mirror",
+    "revuelto_corsa",
+    "z_nismo_sport",
+    "golden_angle",
+    "mclaren_slim_display",
+    "hopf_fibration",
+    "hyperbolic_tiles",
 ];
 
 fn main() -> ExitCode {
@@ -290,6 +357,32 @@ fn doctor(paths: &paths::Paths) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The code re-cut registered a set for every dash, so a dash thread never edits the three
+    /// lists: each module directory of `fh6-clusters` has its set here, and every set has its arm in
+    /// `sets::build`.
+    #[test]
+    fn every_dash_module_has_a_set() {
+        let clusters = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/fh6-clusters/src/clusters");
+        let mut seen = 0;
+        for dir in std::fs::read_dir(&clusters).expect("the clusters folder").flatten() {
+            if !dir.path().is_dir() {
+                continue;
+            }
+            let name = dir.file_name().to_string_lossy().into_owned();
+            assert!(SETS.contains(&name.as_str()), "{name} has no asset-forge set");
+            seen += 1;
+        }
+        assert_eq!(seen, 72);
+        // `sets::build` ignores an unknown name, so a set without its arm would build nothing.
+        let arms = include_str!("sets/mod.rs");
+        for set in SETS {
+            assert!(
+                arms.contains(&format!("\"{set}\" =>")),
+                "{set} has no arm in sets::build"
+            );
+        }
+    }
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|a| (*a).to_owned()).collect()
