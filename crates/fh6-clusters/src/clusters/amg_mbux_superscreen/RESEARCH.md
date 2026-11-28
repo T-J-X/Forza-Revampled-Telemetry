@@ -159,6 +159,22 @@ So the wet road shows the clouds mirrored in the horizon, strong just under it a
 
 **FH6's real weather (what the sources say).** Pure Xbox and The Drive (both 17 Mar 2026, quoting Playground) confirm four seasons. Winter asphalt is "generally" clear of snow, off-road routes are snowy, and the Alpine Region has snow all year. None of the sources read documents rain, puddles, storms, wet grip or mid-session weather changes. One seller blog claims "Tokyo downpours" without a source. So rain in FH6 is likely but unconfirmed. The real-game check must confirm it, and also check whether snow sets the puddle flag.
 
+### Real display behaviour, second read (28 Nov 10:50)
+
+- **The styles are fixed.** MBUSA's E-Class interior release says there are "two display styles (Classic and Sporty) and three modes (Navigation, Assistance, Service)". Sporty is "dominated by the color red, with a dynamically designed central tachometer". It says nothing about how the tachometer reacts to revs, so gap 1 (motion) stays open, and the portal is this dash's own answer to it.
+- **Depth is part of the real product.** Display Daily (2 May 2023) describes the optional 3D driver display: "spatial scene perception with a real depth effect" by autostereoscopy. An owner on MBWorld (thread 905475, unverified) says the Sporty screen's red circular patterns "have depth". The portal tunnel is the flat-screen version of that depth, which supports the v4 direction.
+- **Speed-driven light is a Mercedes idea too.** MBUSA says the "Active Ambient Lighting is animated in accordance with the speed". That's the cabin strip, not the driver display, but the sky drifting with speed is in the same family.
+- **AMG content list.** The owner's manual page for a 2021 MBUX High car (GLC 253.9) lists the AMG content as "Rev counter / date, G-meter, Engine data, Warm-up, Trip computer, Navigation". Warm-up is a real AMG page. FH6 sends tyre temperatures (`TireTemp*`, bytes 268 to 280), but fh6-core doesn't decode them yet. **Idea for a later round:** the Engine data widget cycles to a tyre warm-up ring (four tyres, blue → white → red as they come up to temperature). It needs a core decode, so it goes in the handover as a shared request and not into v5.
+
+### Rain draw plan and budget (for the coding round)
+
+- **Streaks:** a fixed `[Streak; 72]` in `State`, each with an angle, a radial phase s in 0..1, and speed and length jitter from an index hash (no RNG, no allocation). Each frame s advances by dt × v_rel / depth. A streak's head is at foe + dir × s² × R_far, and its length is (|v_rel| × 1/60 s projected) clamped to 4 to 60 px. It is drawn as `Shape::line` (1 to 2 px) in one paint with alpha by s, clipped to the tunnel circle. Off-screen or past-edge streaks wrap to s = 0.
+- **Beads:** 24 fixed positions on the near three ribs below the horizon. Alpha follows wetness, and each bead fades in over 0.6 s. They're drawn as small circles with a 1 px highlight offset towards the sky.
+- **Mirror:** the sky image drawn again, flipped about the horizon (`scale_xy(1, −1)` about `horizon_pivot()`), under a vertical gradient mask from the Fresnel table above times wetness. It reuses the sky texture, so there's no new asset. Under the horizon tilt it leans with the sky.
+- **Wet road:** the assembly road multiplied by lerp(1, 0.55, wetness), one extra fill over the road polygon.
+- **Expected cost:** CPU is 72 lines + 24 beads + 2 fills, about 100 draws. That's likely 30 to 60 µs, inside the 0.3 ms share with the v4 dash at about 0.12 ms on the PC (to measure). On the GPU the streaks cover under 10 kpx, and the mirror is one road-sized image fill (about 0.03 to 0.05 ms per the kit costs in team memory). Clear weather draws none of it: the rain layer is skipped when wetness is 0.
+- **Tests to write first:** the source sits at the vertical limit when parked; it never goes behind the camera in reverse; it lies on the horizon side of the slip; wetness holds while packets stop; hysteresis has no chatter at the thresholds; the Fresnel ramp is monotonic; no streak leaves the tunnel circle.
+
 ### Telemetry mapping (all zones, v5 plan)
 
 | zone | input | rule |
