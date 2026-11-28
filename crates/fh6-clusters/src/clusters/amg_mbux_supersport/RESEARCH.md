@@ -100,7 +100,7 @@ Verified fields per `CATALOG.md` ("Flash and telemetry"): rpm (current, idle, ma
 
 | Real element | Packet source | Note |
 |---|---|---|
-| Current torque | derived: τ = P · 60 / (2π · rpm), rpm clamped to idle | torque is not a verified field; label it as derived in the handover |
+| Current torque | `torque` (now decoded, main 60c99c9) | live value; the derived formula stays only as a fallback |
 | Current power output | power, in `signals.power_unit` | verified |
 | Recuperation part of each scale | none | combustion layout only; no negative part |
 | Rev counter, red area, upshift bar | rpm, idle, max | the scale comes from the driven car's max rpm |
@@ -155,11 +155,12 @@ The dash gets `FrameInput` (`crates/fh6-kit/src/cluster.rs:355`): the raw packet
 | Speed | `signals.speed`, `signals.unit` | Rounded to a whole number with 0.6 hysteresis; unit text from `unit`. |
 | Gear | `signals.gear` | `Gear::label()`: `R`, `N`, `1` to `10`. Raw 0 is reverse, 11 and up are neutral. `M` beside it always. |
 | Power | `telemetry.power_watts` | `/ 745.7` for HP or `/ 1000` for kW, from `signals.power_unit`. |
-| Torque | power and rpm | `τ = P · 60 / (2π · max(rpm, idle_rpm, 500))` in Nm; × 0.7376 for lb ft when power is in HP. Labelled derived. |
+| Torque | `telemetry.torque` (main 60c99c9, N·m as Forza Motorsport sends; real-game check C confirms) | Shown as is; × 0.7376 for lb ft when power is in HP. Fallback when it reads 0 with power above 0 (not yet confirmed live): `τ = P · 60 / (2π · max(rpm, idle_rpm, 500))`, labelled derived. |
 | Arc tops | session peaks | Held maximum of power and torque since the last `car_ordinal` change, rounded up to a clean step; starts at a guess of 400 kW and 700 Nm. |
 | G (horizon and centre page) | `signals.g_lat`, `signals.g_long` | Already smoothed (60 ms). Total = `hypot(g_lat, g_long)`. |
 | Sparks drift | `signals.g_lat` | Sideways drift ∝ g_lat. |
 | Load light on the hills | throttle, rpm_fraction | `throttle · rpm_fraction`, eased over 400 ms. |
+| Fuel (fills the dropped bottom band's left gauge, optional) | `telemetry.fuel` (0..=1, to confirm in check C) | A thin segmented bar like the real one; only if the board keeps a bottom band. |
 | Shown at all | `signals.race_on` | Off-race: scene idles at rpm with no sparks. |
 
 **The scale map.** With `e = end` in thousands and `k = 1.4` (the measured stretch), the 0 to 2,000 band takes `k` units, every later 2,000 takes 1 unit:
