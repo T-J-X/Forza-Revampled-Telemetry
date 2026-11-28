@@ -193,7 +193,7 @@ Not read: pitch, roll, `yaw_rate` and per-tyre slip (unverified, section 6); `Wh
 
 **The geometry.** Rings equally spaced in depth project at scale 1/z. With the nearest ring at 1 and the farthest at `RING_FAR` 0.18 (z from 1 to 5.6), true perspective puts the ring scales at 0.18, 0.19, 0.20, 0.22, 0.23, 0.25, 0.27, 0.29, 0.32, 0.35, 0.40, 0.45, 0.52, 0.62, 0.77, 1.00. Our curve (`RING_FAR + (1 − RING_FAR)·k^1.6`) gives 0.18, 0.19, 0.21, 0.24, 0.28, 0.32, 0.37, 0.42, 0.48, 0.54, 0.61, 0.68, 0.75, 0.83, 0.91, 1.00 (chart: `build2/ring_spacing.png` in the project files).
 
-**What that means.** The pane's half width is 0.40 of the nearest ring, so in true perspective 11 of the 16 rings (everything below about 70% of the rev range) would sit behind the pane, and the last two rings would take a third of the whole width. The tunnel would read as "dark, dark, dark, BANG" instead of a rev scale. Our curve spaces the rings so each 1/15 of the rev range is a visible step, and leaves the depth to the other cues.
+**What that means.** The pane's half width is 0.40 of the nearest ring, so in true perspective 11 of the 16 rings (everything below about 70% of the rev range) would sit behind the pane (our curve hides 7), and the last two rings would take a third of the whole width. The tunnel would read as "dark, dark, dark, BANG" instead of a rev scale. Our curve spaces the rings so each 1/15 of the rev range is a visible step, and leaves the depth to the other cues.
 
 **The other cues, checked** (the pictorial cues in the CUNY and Hanover perception texts):
 
