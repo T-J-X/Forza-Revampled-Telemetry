@@ -423,7 +423,15 @@ impl Scene {
             }
             h.write_u32(i.ids[0]);
             h.write_u32(i.ids[3]);
-            h.write_u64(paints.get(i.ids[1] as usize).copied().unwrap_or(u64::MAX));
+            let pi = i.ids[1] as usize;
+            h.write_u64(paints.get(pi).copied().unwrap_or(u64::MAX));
+            // Optical glass with standing waves keeps them in the record after its own.
+            let waved = self.paints.get(pi).is_some_and(|p| {
+                p.head[0] == crate::painter::paint_kind::OPTIC && p.head[1] & crate::painter::optic_flag::STANDING != 0
+            });
+            if waved {
+                h.write_u64(paints.get(pi + 1).copied().unwrap_or(u64::MAX));
+            }
             h.write_u64(clips.get(i.ids[2] as usize).copied().unwrap_or(u64::MAX));
         }
         h.write_usize(self.points.len());
@@ -645,6 +653,28 @@ mod tests {
         let mut s = filled();
         s.clear();
         assert_eq!(s.fingerprint(), Scene::new().fingerprint(), "clear resets everything");
+    }
+
+    #[test]
+    fn fingerprint_follows_the_standing_waves_record() {
+        // Optical glass with standing waves keeps them in the record after its own; a dash that
+        // drives only their phases still changes the frame.
+        use crate::painter::{optic_flag, paint_kind};
+        let waved = |phase: f32, flagged: bool| {
+            let mut s = filled();
+            s.paints[1].head = [paint_kind::OPTIC, if flagged { optic_flag::STANDING } else { 0 }, 0, 0];
+            let mut waves = GpuPaint::zeroed();
+            waves.head = [paint_kind::WAVES, 1, 0, 0];
+            waves.colors[0] = [1.0, 0.0, 2.0, phase];
+            s.paints.push(waves);
+            s.fingerprint()
+        };
+        assert_ne!(waved(0.5, true), waved(0.25, true), "a wave's phase");
+        assert_eq!(
+            waved(0.5, false),
+            waved(0.25, false),
+            "an unflagged record is not drawn"
+        );
     }
 
     #[test]
