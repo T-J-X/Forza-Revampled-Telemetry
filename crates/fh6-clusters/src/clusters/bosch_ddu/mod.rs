@@ -21,7 +21,7 @@
 //! | L·S | side LEDs | 5 lenses 28 × 10 per side at x ±359, centres y −70 up to −222 (pitch 38) | left: brake (fifths, `warning`), on the brake bar's side; right: body slip (one per 2.5°, `caution`); a halo, no bloom |
 //! | S | screen | x ±312, y −204..170 | true black |
 //! | Z | horizon | y 9, across both panel columns and the gauge's disc | a tinted line with a soft band of light over it: it splits the rows, cuts the disc flat and carries the beam's apex |
-//! | R | rev gauge | centre (0, −39), scale ring R 115 over 270° from 7:30, the lit band R 91..113 inside it, numerals outside at R 137 (cap 20) | rank 3: the live rpm as a band in `primary` with a needle at its head (cross-faded to ink over the shift point, so only the LEDs carry `shift`); the limiter's tick wider than the others and reaching further in (its outer end where theirs is); the rpm digits (cap 36) and "rpm" in the disc |
+//! | R | rev gauge | centre (0, −39), scale ring R 115 over 270° from 7:30, the lit band R 91..113 inside it, numerals outside at R 137 (cap 20) | rank 3: the rpm as a band in `primary` with a needle at its head (cross-faded to ink over the shift point, so only the LEDs carry `shift`); the limiter's tick wider than the others and reaching further in (its outer end where theirs is); the rpm digits (cap 36) and "rpm" in the disc |
 //! | G | gear beam | trapezoid y 9..170, ±32 at the horizon, ±120 at the foot | rank 1: the gear (cap 132, every gear in ink) in a beam of `primary` light, whose two edge lines turn `warning` in reverse |
 //! | Q1 | PEDALS | x −312..−156, y −204..−15 | throttle and brake bars: 28 fine lines, a marker at the value |
 //! | Q2 | G-FORCE | x −312..−156, y 9..170 | a full ring (R 54, band 14) at (−234, 108) on a dim track (half `ink_ghost`), filled clockwise from 12 o'clock by the felt force of the shared `GBall` (full at 1.5 g), a bead at the force's bearing, the total G (cap 26) and its unit inside |
@@ -62,11 +62,11 @@
 //!   hotter core, the brow's brightest state for any palette (lens and halo), and the middle six strobe at 10 Hz on their own clock
 //!   (the strobe's first frame is lit) while the outer pairs stay lit, as the shared
 //!   `ShiftLights` strobes from the shift point too (the tokens' text says "at the limiter").
-//!   The LEDs go out within 50 ms of the rpm falling. The band always shows the live rpm; over
-//!   the shift point it cross-fades to ink in 0.1 s (held at least 0.35 s, no bloom while ink)
-//!   and only the rpm digits hold back: over the shift point, or on a limiter bounce just under
-//!   it, they show the highest rpm of the last 0.3 s, so no digit flickers on a bounce; an
-//!   upshift's drop releases them at once. With reduced flash the middle six breathe at 2 Hz between 0.6
+//!   The LEDs go out within 50 ms of the rpm falling. Over the shift point the band cross-fades
+//!   to ink in 0.1 s (held at least 0.35 s, no bloom while ink). Over the shift point, or on a
+//!   limiter bounce just under it, the rpm digits and the band show the highest rpm of the last
+//!   0.3 s, so neither the digits nor the band's head flicker on a bounce; an upshift's drop
+//!   releases them at once. With reduced flash the middle six breathe at 2 Hz between 0.6
 //!   and full, from the peak, instead of strobing.
 //! - **Gear change:** the token glyph motion inside the beam; the beam flares once.
 //! - **Light:** lateral G swings one key light 25° across the housing (three renders,
@@ -128,8 +128,9 @@ const RESUME_DT: f32 = 0.09;
 /// The rpm digits show the highest rpm of a window this long (s), kept in two buckets of half
 /// its length ([`PeakWindow`]), while [`holds_peak`] says so: over the shift point, or on a
 /// limiter bounce just under it. A bounce is 50 to 150 ms, so the window always holds a whole
-/// bounce and the digits stay on its peak instead of dipping and coming back. The arc is never
-/// held: it shows the live rpm.
+/// bounce and the digits stay on its peak instead of dipping and coming back. The band and its
+/// needle take the same held rpm, or their head would jump between the bounce's top and bottom
+/// on every frame of a limiter hold (a 30 Hz flash in the flash audit).
 const PEAK_HOLD_S: f32 = 0.3;
 /// A limiter bounce falls at most this far (rpm) under its peak: within [`ARC_HOLD_S`] of the
 /// rpm last reaching the shift point (its latch's band) the digits keep the peak while the rpm
@@ -885,6 +886,8 @@ struct RpmDigits {
     /// [`ARC_HOLD_S`].
     since_reached: f32,
     digits: Hysteresis,
+    /// The rpm the band and the digits follow: the window's peak while held, else the live rpm.
+    held: f32,
     /// The rpm shown, and the field's cells.
     shown: i64,
     cells: u8,
@@ -897,6 +900,7 @@ impl RpmDigits {
             holding: false,
             since_reached: ARC_HOLD_S,
             digits: Self::start(0.0),
+            held: 0.0,
             shown: 0,
             cells: 3,
         }
@@ -919,6 +923,7 @@ impl RpmDigits {
         let peak = self.peak.update(rpm, dt, snap);
         self.holding = holds_peak(over, self.holding && !snap, self.since_reached, peak, rpm);
         let held = if self.holding { peak } else { rpm };
+        self.held = held;
         if snap {
             self.digits = Self::start(held);
         }
@@ -1212,8 +1217,8 @@ impl Cluster for BoschDdu {
         self.flare.update(dt);
 
         // Shift lights, the rev band's colour and the rpm digits (over the shift point and on a
-        // limiter bounce they show the peak of the last 0.3 s, so a bounce never moves them;
-        // the arc draws the live rpm), then the side columns.
+        // limiter bounce they and the band show the peak of the last 0.3 s, so a bounce never
+        // moves them), then the side columns.
         self.rev.update(&sig, &self.palette, dt, self.calm, snap);
         if snap {
             self.slip_lit = 0;
@@ -1518,9 +1523,10 @@ impl BoschDdu {
                 red,
             );
         }
-        // The band is the live rpm. Over the shift point it turns ink, so only the LEDs carry
-        // the shift colour (the family's rule): a short cross-fade, never a step.
-        let rpm = self.sig.rpm.max(0.0);
+        // The band follows the rpm the digits show (the live rpm, or a limiter bounce's peak).
+        // Over the shift point it turns ink, so only the LEDs carry the shift colour (the
+        // family's rule): a short cross-fade, never a step.
+        let rpm = self.rev.digits.held.max(0.0);
         let mix = self.rev.arc.mix;
         if rpm > 0.0 {
             let lit = pal.primary.lerp(ink, mix);
@@ -2524,6 +2530,7 @@ mod tests {
             for (case, (period, top)) in shapes.into_iter().enumerate() {
                 let mut rev = Rev::new();
                 let mut shown = Vec::new();
+                let mut band = Vec::new();
                 let mut dropped_out = false;
                 for frame in 0..480 {
                     let phase = (frame % period) as f32 / period as f32;
@@ -2531,10 +2538,17 @@ mod tests {
                     rev.update(&signals_at(rpm, 9000.0, shift_rpm), &pal, dt, false, frame == 0);
                     dropped_out |= !rev.leds.over;
                     shown.push(rev.digits.shown);
+                    band.push(rev.digits.held);
                 }
                 assert!(
                     shown.iter().all(|&v| v == 9000),
                     "shift {shift_rpm}, depth {depth}, case {case}: the digits never change: {shown:?}"
+                );
+                // The band's head takes the same held rpm: it stays on the bounces' peaks
+                // (8980 to 9000) instead of following each bounce down.
+                assert!(
+                    band.iter().all(|&v| (8980.0..=9000.0).contains(&v)),
+                    "shift {shift_rpm}, depth {depth}, case {case}: the band holds the peak: {band:?}"
                 );
                 if shift_rpm == 9000.0 || depth > 400.0 {
                     assert!(
