@@ -109,6 +109,86 @@ TJS rejected the first flat outline sheet ("This is ass") and set the rule now i
 
 Board and code coordinates: the zone table in `mod.rs`.
 
+## 10. Deeper pass while the 4K library finishes (28 Nov, after board v4)
+
+Research only: nothing here is drawn yet. Each finding ends in a plan line for after LIBRARY DONE.
+
+### 10.1 How the real thing behaves (Apple's own words, checked)
+
+| Apple says | Source | Where the dash stands | Plan |
+|---|---|---|---|
+| Light sources make highlights that follow the geometry; on interaction the lights *move*, so light travels round the material and draws its outline; sometimes they follow device motion | WWDC25 219 | `VirtualLight` swings with felt lateral G, and the Z-hop glint runs wings → pane → blade on each upshift | Keep. Check at the closing review that the highlight visibly moves between `02` and `04` (V19) |
+| Glass shows scale and place through specular reflections and shadows | HIG Windows | Rims and the pane crescent (board v3) carry the light; no drop shadows (OLED black has nothing to cast on) | Keep: a shadow on black is invisible, so depth goes to light and parallax |
+| Shadow opacity rises over text and falls over light backgrounds | WWDC25 219 | The black cores under the pane and the puck are exactly this: a denser shadow where the digits sit | Keep; the core's alpha (0.92) is the "over text" case |
+| Clear glass never adapts and needs a dimming layer; use it only over rich content when the content above is bold and bright | WWDC25 219 | Our glass is the Clear variant over the tunnel, with the cores as its dimming layer, and the digits on it are bold white: Apple's own condition for Clear | Keep. Never mix in a frosted (Regular) piece |
+| Larger glass shapes cast deeper shadows, lens more and scatter light more softly | WWDC25 219 | The wings (r 95–120), the pane (r 72) and the puck (r 54) share one lens strength | After the library: scale the lens depth with each piece's size (wings strongest, puck weakest) and check V19 again |
+| Glass materializes by modulating lensing, never by fading | WWDC25 219 | The 200 ms show grows each piece's thickness back to front | Keep (V14) |
+| Concentric corners: inner radius + padding = outer radius | WWDC23 10076 | Core radius = pane radius 72 − inset 22 = 50 | Already true |
+| Ornaments overlap the window by 20 pt at the bottom (of a 1280 × 720 pt window) | WWDC23 10076 | The puck overlaps the pane by 34 px (2.8% of 720 pt scales to 11 px on our 396 px pane); the blade floats 22 px *above* the pane with no overlap | Penpot after the library: try the blade overlapping the pane's top by about 11 px, as a visionOS top ornament does, and the puck at 11 px; keep whichever reads better at a glance |
+| Text on glass is white; colour goes in backgrounds, not labels; body text is semibold | createwithswift; WWDC23 10076 | Lit wing numerals are their ring's hue mixed halfway to white; the gear and speed are white | Keep the half-white mix; never draw a fully saturated numeral |
+| A window turns more transparent while it is being moved | createwithswift | Not used | Rejected: the stack shears with G all the time in a race, and fading the glass then would cost legibility exactly when the driver is busy |
+
+### 10.2 Reference photos
+
+On Drive (TJS's 08:53 yes), never in the repo: R1 Apple Newsroom visionOS window over a room, R2 WWDC25 Liquid Glass hero (folder `4K Masters/vision_spatial_glass/references`). Still wanted, as sources only (the container's proxy blocks image downloads, so the PC fetches them later if needed):
+- WWDC25 219 frames at 7:20 (lensing on a bright background) and 16:50 (Clear over media with its dimming layer): the "glass over the tunnel" case.
+- HIG Windows page figures of a window with its bottom ornament: the overlap above.
+- WWDC23 10076 frames of the eye-focus highlight on an icon: the size of a highlight against its shape.
+
+### 10.3 Motion notes (every animation, its trigger and its calm form)
+
+| Motion | Trigger (telemetry) | Timing | Reduced-flash (`calm`) form |
+|---|---|---|---|
+| Show | `race_on` turns true | 200 ms, back to front | Same (no flash) |
+| Tunnel fill | rpm through `backlash` (60 rpm band) | Spring tracking `rpm_rate` | Same |
+| Shift-colour heat | pods past the shift point (`LimiterCue`, 0.25 s) | Eases in | Same, no strobe |
+| Pod strobe | limiter held | 10 Hz, 3 frames on / 3 off | Steady lit strip |
+| Z-hop glints | upshift | wings 0, pane 40, blade 80 ms; each 20 ms | Off |
+| Warp ring | upshift | 220 ms, far to near on k² | Off |
+| Pane recede | upshift | 6 px over 200 ms | Off |
+| Gear entry | any gear change | Shared `HeroGear` entry | Shared calm form |
+| Parallax shear | felt lateral G | Spring ω 12 rad/s, clamped at 1.5 g | Same (driven by data) |
+| Horizon tilt | felt lateral G | 4° per g on the same spring | Same |
+| Wing toe-in | derived yaw = a_lat / v (from 3 m/s) | ±2° | Same |
+| Streaks | speed | 0.019 rail-lengths per m/s per s | Same |
+| Cloud drift | speed | 0.4 px/s per m/s | Same |
+| Floor glow | throttle (0.9) / brake (0.6) | Smoothed | Same |
+| Bead and halo | felt G, body slip | 40 px per g, clamped at 40 px | Same |
+
+Rule check: every motion above is driven by data or by a one-off event in the data; none loops on its own clock except the limiter strobe, which has a calm form (AGENTS rule 7, WCAG 2.3.1).
+
+### 10.4 Telemetry mapping
+
+| Field | Units | Drives | If missing or not finite |
+|---|---|---|---|
+| `race_on` | flag | Starts the show | Stays as drawn |
+| `rpm`, `idle_rpm`, `max_rpm`, `rpm_rate` | rpm, rpm/s | Tunnel fill, head ring, lit wing numerals | Span floored at 1 rpm; rpm held |
+| `shift_rpm` / `shift_fraction` | rpm | Shift colour from that ring on, pods | From the car profile |
+| `gear` | R, N, 1–10 | Hero gear; upshift → glints, warp, recede | Last gear kept |
+| `speed`, `unit` | mph or km/h | Speed digits and unit; streak speed; cloud drift | Streaks stop below 0.5 m/s or when not finite |
+| `throttle`, `brake` | 0–1 | Floor glow; brake → three caution arcs on the puck | Taken as 0 |
+| `g_lat`, `g_long` | g (smoothed acceleration) | Shear, horizon tilt, light angle, bead, derived yaw | Taken as 0 |
+| `slip_deg` | degrees (body slip from velocity) | Bead halo | Taken as 0 |
+| `velocity` | m/s | Body slip (via `slip_deg`) | — |
+
+Not read: pitch, roll, `yaw_rate` and per-tyre slip (unverified, section 6); `WheelInPuddle` (not decoded yet).
+
+### 10.5 Edge cases, checked against the code
+
+| Case | What happens now | Finding | Plan |
+|---|---|---|---|
+| Reverse | Gear shows R; streaks still run *towards* the driver | `speed` is a magnitude, so going backwards looks like going forwards | After the library: when the gear is R, run the streaks and clouds backwards (towards the vanishing point). Cheap and true to the data |
+| R → 1 | Counts as an upshift, so the warp plays | Reads as "drive engaged", which is fine | Keep |
+| Neutral while rolling | N at the anchor, streaks keep running | Correct | — |
+| Paused or in a menu (`race_on` false) | Streaks keep flowing at the last speed if the game keeps sending it | A paused game should look paused | Freeze the flow and the cloud drift while `race_on` is false |
+| km/h | Speed up to 3 digits; "KM/H" sits to the right of the speed cells | ~132 px from centre, well inside the pane's clear 256 px | Add a golden-free unit test that the km/h label fits |
+| 10th gear | "10" at cap 236 is about 280 px wide | Inside the 512 px clear pane | Add to the digit test |
+| Low-revving car (800–4500 rpm) | Measured: 3 and 4 fit, at x 352 and 557 | Sparse but readable | Accept |
+| High-revving car (1000–18 000 rpm) | Measured: 11 to 17 fit, 40 to 51 px apart | **Two-digit numerals overlap**: "11" at cap 36 is about 43 px wide, and `numeral_fits` checks the pane, not the gap to the neighbour | Before goldens: thin the numerals to every 2nd (or 5th) when their pitch is under 1.2 × the numeral cap, and add a test for an 18 000 rpm car |
+| `max_rpm` ≤ `idle_rpm` (menus, bad profile) | Span floored at 1 rpm | No division by zero | — |
+| Limiter held in calm mode | Strip lit steady, no strobe, no glints, no warp | Correct | — |
+| Speed above 999 | Shared `TabularSpeed` clamps | — | — |
+
 ## 8. Sources
 
 Apple:
@@ -122,5 +202,9 @@ Cars:
 - BMW Group, "New BMW Panoramic iDrive" (CES 2025): https://www.press.bmwgroup.com/asia/article/detail/T0447361EN/new-bmw-panoramic-idrive-revolutionises-vehicle-operation-visionary-technology-package-for-the-neue-klasse-celebrates-world-premiere-at-ces-2025
 - Porsche Newsroom, Taycan interior design: https://newsroom.porsche.com/en/products/taycan/interior-design-18552.html
 - Christophorus 392 (2019), Taycan interior: https://christophorus.porsche.com/en/2019/392/taycan-design-interior-e-mobility.html
+
+- Human Interface Guidelines, Windows: https://developer.apple.com/design/human-interface-guidelines/windows
+- WWDC24 session 10152, "Create custom hover effects in visionOS": https://developer.apple.com/videos/play/wwdc2024/10152/
+- Create with Swift, "Ensuring interface legibility and contrast in visionOS": https://www.createwithswift.com/ensuring-interface-legibility-and-contrast-in-visionos
 
 No frame grabs were measured in this pass, so no pixel value in the design comes from Apple or car-maker footage.
