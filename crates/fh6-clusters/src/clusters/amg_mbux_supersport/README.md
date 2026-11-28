@@ -31,4 +31,13 @@ Penpot master file `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, page `07 · AmgMbuxSu
 | v1 · 04 drift braking | `347e5ae2-9e0b-80b1-8009-039d3c31af94` |
 | v1 · 05 motion notes | `347e5ae2-9e0b-80b1-8009-039d8eb1d71c` |
 
-Exports (PNG and SVG) are in the Drive masters folder `amg_mbux_supersport/board_v1/`.
+Board v2 (2026-11-28, current): thick fire jets shot from the tunnel-end mesh, the real blue brightness, subtler hills and gear, a bolder speed (TJS 09:12).
+
+| Board | ID |
+|---|---|
+| v2 · 01 idle | `347e5ae2-9e0b-80b1-8009-03a02ede3ed6` |
+| v2 · 02 mid cruise | `347e5ae2-9e0b-80b1-8009-03a0327b599f` |
+| v2 · 03 redline strobe | `347e5ae2-9e0b-80b1-8009-03a03648412d` |
+| v2 · 04 drift braking | `347e5ae2-9e0b-80b1-8009-03a03a859dc7` |
+
+Exports (PNG and SVG) are in the Drive masters folder `amg_mbux_supersport/board_v1/` and `board_v2/`.
