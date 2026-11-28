@@ -198,3 +198,18 @@ Sources: Wikipedia "ATTESA"; DSPORT, "ATTESA Explained" pages 2 and 3 (2018); Ha
 8. Tyre slip all zero (review states, some game modes): the velocity fallback in section 11.
 9. Very low speed: `car_slip_angle` is noisy below 3 m/s (the helper already fades it); the model must not fire at a standstill.
 10. The limiter's 8640/8690 rpm bounce in the review sequence: peak-hold the lamp row and dial band above the shift point (BoschDdu lesson).
+
+## 15. The full 88-field packet changes the drop list (2026-11-28, main 60c99c9)
+
+The decoder now reads every FH6 field (`docs/TELEMETRY_USAGE_MATRIX.md`): per-tyre slip ratio, combined slip, wheel rotation speed and tyre temperature, torque, cylinders, fuel and race progress (laps, lap times, position, distance). Offsets and units are still to be confirmed by the real-game check C. Revised against sections 4, 5 and 9:
+
+| Part | Before | Now |
+|---|---|---|
+| F-TORQUE (M6) | modelled from slip angles | **Driven by the real ATTESA cue:** front torque when a rear wheel turns 5% or more faster than the fronts (A4), from `wheel_speed` (rear mean over front mean minus 1), with `tyre_slip_ratio` as a cross-check. The 10% floor, 50% ceiling, lateral-G reduction and handbrake rule stay (A1, A2, A5). The velocity fallback of section 11 is still needed for the review states, which leave wheel speeds at zero. |
+| Fuel corner dial (8.10) | dropped | **Drivable** from `fuel` (0 to 1 is the expected range, to confirm in check C). The stock meters' small fuel dial (F at top, E at bottom) comes back in its real form. |
+| Water temperature corner dial (8.10) and the MFD's OIL-TEMP, W-TEMP rows | dropped | Still not sent. `tyre_temp` is the closest honest heat reading: the temperature rows become **TYRE-TEMP F / R** (mean of each axle), in °C on the real 70 to 150 scale of the oil-temperature page (8.5), which a road tyre spans well. Labelled as tyres, never as oil or water. |
+| Injector duty (M7) | load from power | `torque` is now sent: load = torque ÷ the highest torque seen with this car (closer to the real injector duty's meaning than power is), or a TORQUE row in N·m. |
+| Lap timer of the Nismo MFD (M14) | dropped | **Drivable** from `race_progress`: current, last and best lap. Shown only when `lap_number` or the lap times are non-zero (free roam has none). |
+| Exhaust and intake temperatures (M7) | dropped | Still not sent; the Nismo G page stays as their replacement. |
+
+New edge cases: wheel speeds are zero or equal when stationary or airborne (the 5% rule must ignore speeds under about 3 m/s and wheels off the ground, using `suspension` travel near zero as the cue); `fuel` is constant when the game's fuel use is off; tyre temperatures in the game may be in °F (check C).
