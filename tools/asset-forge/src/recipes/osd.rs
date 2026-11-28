@@ -14,8 +14,9 @@
 //!   H-point. Rendered orthographic from the front left at [`MASTER_SCALE`] times the OSD's
 //!   scale, one layer at a time: the wheel with the dash as a holdout, so the column is cut
 //!   where it enters the dash; a pass lit by the rim light alone for the seat and the wheel,
-//!   which the OSD tints with the accent when their row has focus; and the whole view as the
-//!   hero still.
+//!   which the OSD tints with the accent when their row has focus (the rim strip plus a world
+//!   that lights only from behind the subject, so every silhouette edge catches it); and the
+//!   whole view as the hero still. The rig is low key, so the black materials stay near black.
 //!
 //! The layers are box-filtered to the OSD's scale and cropped to fixed rectangles, which
 //! `crates/fh6-osd/src/drive.rs` mirrors (its tests check the same numbers). The build fails if
@@ -23,9 +24,10 @@
 //!
 //! `cargo run --release -p asset-forge -- --lane cloud --masters osd build --set osd` (hold the
 //! lane's GPU lock). The SDXL texture is cached by its fingerprint and the renders by theirs, so
-//! a rebuild with nothing changed uses no GPU. With `--masters` the Blender outputs and the
-//! 4096 px texture are copied to the Drive masters folder `osd\`, with a `*_preview.png` beside
-//! each for the tracker.
+//! a rebuild with nothing changed uses no GPU. With `--masters` the Blender outputs go to the
+//! Drive masters folder `osd\osd_drive\` and both 4096 px textures (ComfyUI's and the neutral
+//! one Blender reads) to `osd\comfyui\` under the names the ledger gives them, with a
+//! `*_preview.png` beside each for the tracker.
 use crate::blender;
 use crate::ctx::Ctx;
 use crate::error::{io_err, tool_err, Result};
@@ -126,11 +128,15 @@ const _: () = {
 const NAP_TILE: f32 = 0.24;
 const QUILT: f32 = 0.05;
 /// Light power (W): the key softbox, the overhead sky, the cool rim strip and the warm kicker;
-/// the studio world's strength (camera-invisible, for curved reflections); and how much the
-/// rim light is boosted in the rim-only passes.
-const LIGHTS: [f32; 4] = [80.0, 40.0, 300.0, 20.0];
-const WORLD: f32 = 0.12;
+/// the studio world's strength (camera-invisible, for curved reflections); how much the rim
+/// light is boosted in the rim-only passes; and the strength of those passes' backlight world
+/// (light from behind the subject only, so every silhouette edge catches a rim). Low key: the
+/// black upholstery and carbon stay near black on the OLED and their edges and coats carry the
+/// shape (the first cloud batch at 80/40/300/20 and world 0.12 read as grey, median sRGB 47).
+const LIGHTS: [f32; 4] = [35.0, 10.0, 340.0, 8.0];
+const WORLD: f32 = 0.02;
 const RIM_GAIN: f32 = 2.5;
+const BACKLIGHT: f32 = 3.0;
 
 /// One layer the OSD draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,13 +213,16 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let textures = scratch.join("textures");
     let sdxl = texture::make_texture(&ctx.paths, &NAP, NAP_SIZE, &textures)?;
     let nap = neutral_nap(&sdxl, &textures)?;
+    // The ComfyUI lane copies its output under ComfyUI's own file name, and not at all when the
+    // texture comes from the cache, so both textures go to Drive by the ledger's names here.
+    copy_texture_masters(ctx, &[&sdxl, &nap])?;
     masters.push((sdxl, "alcantara (ComfyUI, seamless 4096 px)".into()));
     masters.push((
         nap.clone(),
         "alcantara made neutral (luminance only, mid-grey mean, fixed spread): the file Blender reads".into(),
     ));
     rows.push(format!(
-        "| (no runtime file: rendered into the seat and the wheel) | seamless alcantara texture | {s}x{s} | master | comfyui:osd::NAP (SDXL base 1.0 + refiner when installed, 1024², dpmpp_2m karras, half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed={seed} prompt=\"{prompt}\" | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the upholstery of the seat's quilted centre and the wheel's rim (one repeat per {NAP_TILE} m). Master `{file}` |",
+        "| (no runtime file: rendered into the seat and the wheel) | seamless alcantara texture | {s}x{s} | master | comfyui:osd::NAP (SDXL base 1.0 + refiner when installed, 1024², dpmpp_2m karras, half-offset seam repaint at denoise 0.55, 4x-UltraSharp) seed={seed} prompt=\"{prompt}\" | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the upholstery of the seat's quilted centre and the wheel's rim (one repeat per {NAP_TILE} m). Master `comfyui/{file}` |",
         s = NAP_SIZE,
         seed = NAP.seed,
         prompt = squash(NAP.prompt),
@@ -241,7 +250,11 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             vh * MASTER_SCALE,
             outputs().len()
         );
-        blender::run(&ctx.paths, JOB, DRIVE, &params)?;
+        let log = blender::run(&ctx.paths, JOB, DRIVE, &params)?;
+        // Each layer's extent on the image plane, and the device and resolution that rendered.
+        for line in log.lines().filter(|l| l.contains("bounds ") || l.contains("device ")) {
+            println!("  {}", line.trim());
+        }
         img::write_file(&fp_path, fp.as_bytes())?;
     }
 
@@ -296,9 +309,9 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "\nThe view is {vw}x{vh} px at {PX_PER_M} px per m (orthographic, yaw {YAW_DEG}°, pitch {PITCH_DEG}°). The driver's eye at seat height 0, ({}, {}, {}) m from the H-point, lands at ({ex:.2}, {ey:.2}) px; `crates/fh6-osd/src/drive.rs` mirrors these numbers.",
         EYE[0], EYE[1], EYE[2]
     );
-    md.push_str("\n## 4K masters (Google Drive, `FH6 WheelDash v2 - 4K Masters/osd/`)\n\nCopied by `--masters osd`: the Blender outputs into `osd_drive/` (16-bit PNG, 4x the OSD's scale), the ComfyUI master into `comfyui/`, and a `*_preview.png` beside each for the tracker.\n\n| Master | What it is |\n|---|---|\n");
+    md.push_str("\n## 4K masters (Google Drive, `FH6 WheelDash v2 - 4K Masters/osd/`)\n\nCopied by `--masters osd`: the Blender outputs into `osd_drive/` (16-bit PNG, 4x the OSD's scale), both textures into `comfyui/` (the ComfyUI lane also leaves its raw output there under ComfyUI's own name the first time it runs), and a `*_preview.png` beside each for the tracker.\n\n| Master | What it is |\n|---|---|\n");
     for (path, what) in &masters {
-        let _ = writeln!(md, "| `{}` | {what} |", file_name(path));
+        let _ = writeln!(md, "| `{}` | {what} |", drive_name(path, &textures));
     }
     let _ = writeln!(md, "\n{previews} preview(s) written.");
     img::write_file(&ctx.abs(&format!("{DIR}/ASSETS.md")), md.as_bytes())?;
@@ -384,6 +397,7 @@ fn params(out: &Path, nap: &Path) -> Value {
         "lights": LIGHTS,
         "world": WORLD,
         "rim_gain": RIM_GAIN,
+        "backlight": BACKLIGHT,
         "layers": LAYERS.iter().map(|l| l.name).collect::<Vec<_>>(),
         "rim_layers": LAYERS.iter().filter(|l| l.rim).map(|l| l.name).collect::<Vec<_>>(),
         "composite": true,
@@ -452,6 +466,33 @@ fn file_name(p: &Path) -> String {
         .map_or_else(String::new, |s| s.to_string_lossy().to_string())
 }
 
+/// Copies the texture masters into the Drive folder's `comfyui/` under the names the ledger
+/// gives them, when `--masters` is on.
+fn copy_texture_masters(ctx: &Ctx, files: &[&Path]) -> Result<()> {
+    let Some(masters) = &ctx.paths.masters else {
+        return Ok(());
+    };
+    let dest = masters.join("comfyui");
+    std::fs::create_dir_all(&dest).map_err(|e| io_err(&dest, e))?;
+    for &file in files {
+        let to = dest.join(file_name(file));
+        std::fs::copy(file, &to).map_err(|e| io_err(&to, e))?;
+    }
+    println!("  masters: {} texture(s) copied to {}", files.len(), dest.display());
+    Ok(())
+}
+
+/// Where a master sits in the Drive folder: the textures in `comfyui/`, each render in its
+/// job's folder.
+fn drive_name(path: &Path, textures: &Path) -> String {
+    let folder = if path.parent() == Some(textures) {
+        "comfyui".to_owned()
+    } else {
+        path.parent().map_or_else(String::new, file_name)
+    };
+    format!("{folder}/{}", file_name(path))
+}
+
 /// A prompt on one line, with runs of spaces collapsed.
 fn squash(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -514,11 +555,12 @@ def carbon(name):
     lk(nt, bump.outputs['Normal'], b.inputs['Normal'])
     return m
 
-def suede(name, color, quilt=0.0):
+def suede(name, color, quilt=0.0, sheen=0.9):
     # Alcantara: the neutral ComfyUI nap drives the colour (x0.45 .. x1.55 round the material's,
     # 1.0 at its mid-grey mean), the nap's roughness and a fine bump; with `quilt` (the diamond's
-    # size in m) the padding rises in pillows between darker seams.
-    m, nt, b = principled(name, color, 0.86, sheen=0.9, spec=0.25)
+    # size in m) the padding rises in pillows between darker seams. `sheen` is the nap's velvet
+    # glow at grazing angles.
+    m, nt, b = principled(name, color, 0.86, sheen=sheen, spec=0.25)
     try:
         b.inputs['Sheen Roughness'].default_value = 0.35
         b.inputs['Sheen Tint'].default_value = (0.9, 0.92, 1.0, 1.0)
@@ -612,10 +654,13 @@ def leather(name, color):
 
 M_CARBON = carbon('osd_carbon')
 M_SUEDE_Q = suede('osd_suede_quilted', (0.020, 0.020, 0.022), quilt=float(ARGS['quilt']))
-M_SUEDE = suede('osd_suede', (0.018, 0.018, 0.020))
+# The wheel's rim is a thin tube seen at every angle, so a full sheen would wash it out grey.
+M_SUEDE = suede('osd_suede', (0.016, 0.016, 0.018), sheen=0.4)
 M_LEATHER = leather('osd_leather', (0.009, 0.009, 0.010))
-M_DASH, _, _ = principled('osd_dash', (0.006, 0.006, 0.007), 0.6, spec=0.35)
-M_SECTION, _, _ = principled('osd_section', (0.016, 0.016, 0.018), 0.38, spec=0.4)
+# Soft-touch black: rough enough that the broad faces do not mirror the sky softbox grey.
+M_DASH, _, _ = principled('osd_dash', (0.006, 0.006, 0.007), 0.78, spec=0.25)
+# The cut face looks at the key softbox: rough and dark, so it reads as a section, not a grey slab.
+M_SECTION, _, _ = principled('osd_section', (0.008, 0.008, 0.009), 0.66, spec=0.2)
 M_TRIM, _, _ = principled('osd_trim', (0.30, 0.30, 0.32), 0.18, metal=1.0)
 M_SHROUD, _, _ = principled('osd_shroud', (0.006, 0.006, 0.007), 0.4, spec=0.35)
 
@@ -836,6 +881,37 @@ resolution(sc, round((F[2] - F[0]) * px_per_m), round((F[3] - F[1]) * px_per_m))
 
 WORLD = float(ARGS['world'])
 studio_world(sc, strength=WORLD, visible=False)
+STUDIO = sc.world
+
+def backlight_world(strength):
+    # The rim passes' world: light only from behind the subject (directions within about 65° of
+    # the view direction), so every silhouette edge catches a rim the way a backlit product shot
+    # does, on the carbon's coat and the nap's sheen alike.
+    w = bpy.data.worlds.new('osd_backlight')
+    try:
+        w.use_nodes = True
+    except Exception:
+        pass
+    nt = w.node_tree
+    nt.nodes.clear()
+    out = node(nt, 'ShaderNodeOutputWorld')
+    bg = node(nt, 'ShaderNodeBackground')
+    bg.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+    lk(nt, bg.outputs[0], out.inputs['Surface'])
+    tc = node(nt, 'ShaderNodeTexCoord')
+    dot = node(nt, 'ShaderNodeVectorMath', operation='DOT_PRODUCT')
+    lk(nt, tc.outputs['Generated'], dot.inputs[0])
+    dot.inputs[1].default_value = (d_ax.x, d_ax.y, d_ax.z)
+    ramp = node(nt, 'ShaderNodeMapRange')
+    lk(nt, dot.outputs['Value'], ramp.inputs['Value'])
+    ramp.inputs['From Min'].default_value = 0.4
+    ramp.inputs['From Max'].default_value = 0.9
+    ramp.inputs['To Min'].default_value = 0.0
+    ramp.inputs['To Max'].default_value = strength
+    lk(nt, ramp.outputs['Result'], bg.inputs['Strength'])
+    return w
+
+BACKLIGHT = backlight_world(float(ARGS['backlight']))
 target = (0.25, 0.0, 0.35)
 P = ARGS['lights']  # key, sky, rim, kick
 # Key: a big softbox high on the camera side; sky: overhead; rim: a cool strip behind the far
@@ -862,8 +938,8 @@ def only(name):
             ob.is_holdout = k in keep
 
 def lights(mode):
-    # 'beauty': the whole rig. 'rim': the rim strip alone, white and boosted, for the pass the
-    # OSD tints with its accent.
+    # 'beauty': the whole rig in the studio world. 'rim': the rim strip alone, white and boosted,
+    # in the backlight world, for the pass the OSD tints with its accent.
     for k, l in LIGHTS.items():
         if mode == 'beauty':
             l.data.energy = BASE[k]
@@ -873,7 +949,7 @@ def lights(mode):
             l.data.color = (1.0, 1.0, 1.0)
         else:
             l.data.energy = 0.0
-    sc.world.node_tree.nodes['Background'].inputs['Strength'].default_value = WORLD if mode == 'beauty' else 0.0
+    sc.world = STUDIO if mode == 'beauty' else BACKLIGHT
 
 def layer_bounds(obs):
     # Image-plane bounds (m) of the evaluated geometry: x along r_ax, y along u_ax.
@@ -1149,6 +1225,19 @@ mod tests {
         assert!(seen > 20, "{seen} parameters read");
         assert_eq!(outputs().len(), 6);
         assert!(outputs().contains(&"wheel_rim.png".to_owned()) && !outputs().contains(&"dash_rim.png".to_owned()));
+    }
+
+    #[test]
+    fn masters_are_named_by_their_drive_folder() {
+        let textures = Path::new("scratch/osd/textures");
+        assert_eq!(
+            drive_name(&textures.join("osd_alcantara.png"), textures),
+            "comfyui/osd_alcantara.png"
+        );
+        assert_eq!(
+            drive_name(Path::new("scratch/osd/osd_drive/seat_rim.png"), textures),
+            "osd_drive/seat_rim.png"
+        );
     }
 
     #[test]
