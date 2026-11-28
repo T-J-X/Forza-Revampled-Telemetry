@@ -159,7 +159,7 @@ pub fn figure_pixels(cat: &CatalogEntry, cluster: &dyn Cluster, layout: &Layout)
     if !cat.category.pattern_first() {
         return None;
     }
-    let zone = cluster.figure_zone()?;
+    let zone = cluster.figure_zone(layout)?;
     Some(crate::gallery::zone_pixels(layout, zone, W, H))
 }
 

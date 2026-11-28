@@ -358,7 +358,8 @@ mod tests {
     use super::*;
 
     /// The code re-cut registered a set for every dash, so a dash thread never edits the three
-    /// lists: each module directory of `fh6-clusters` has its set here and in `sets::build`.
+    /// lists: each module directory of `fh6-clusters` has its set here, and every set has its arm in
+    /// `sets::build`.
     #[test]
     fn every_dash_module_has_a_set() {
         let clusters = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/fh6-clusters/src/clusters");
@@ -372,6 +373,14 @@ mod tests {
             seen += 1;
         }
         assert_eq!(seen, 72);
+        // `sets::build` ignores an unknown name, so a set without its arm would build nothing.
+        let arms = include_str!("sets/mod.rs");
+        for set in SETS {
+            assert!(
+                arms.contains(&format!("\"{set}\" =>")),
+                "{set} has no arm in sets::build"
+            );
+        }
     }
 
     fn args(list: &[&str]) -> Vec<String> {

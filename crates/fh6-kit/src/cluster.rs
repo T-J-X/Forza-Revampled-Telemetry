@@ -410,11 +410,12 @@ pub trait Cluster {
         false
     }
 
-    /// The zone of the dash's rank-4 figure in local px (the rect its `Geom` table names), or
-    /// `None`. Only a Psychedelic or Abstract dash names one: `preview-export` measures its colour
-    /// budget outside this zone, where the colour law of CATALOG.md lets the figure's hue follow
-    /// its model. Never called per frame by the host.
-    fn figure_zone(&self) -> Option<Rect> {
+    /// The zone of the dash's rank-4 figure in local px under `layout` (the rect its `Geom` table
+    /// names for `layout.view`), or `None`. Only a Psychedelic or Abstract dash names one:
+    /// `preview-export` measures its colour budget outside this zone, where the colour law of
+    /// CATALOG.md lets the figure's hue follow its model. Never called per frame by the host.
+    fn figure_zone(&self, layout: &Layout) -> Option<Rect> {
+        let _ = layout;
         None
     }
 }
