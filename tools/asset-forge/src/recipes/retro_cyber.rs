@@ -373,13 +373,13 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             let rel = format!("{DIR}/{file}");
             let bytes = img::save_png(&im, &ctx.abs(&rel), false, true)?;
             rows.push(format!(
-                "| `{file}` | colour, straight alpha | {}x{} | {} KB | blender:retro_cyber::HOUSING view={view} lens={w}x{h} r={r} strip_drop={} hump={}..{} blend={LENS_BLEND} ring={ring} light={az}° scale={SCALE} samples=96 seed={BLENDER_SEED}; {grain_note} | MIT (asset-forge); grain CreativeML Open RAIL++-M output (SDXL) | the surround; blended with the other light by lateral G |",
-                v.strip_drop,
-                v.hump.0,
-                v.hump.1,
-                im.w,
-                im.h,
-                bytes / 1024
+                "| `{file}` | colour, straight alpha | {iw}x{ih} | {kb} KB | blender:retro_cyber::HOUSING view={view} lens={w}x{h} r={r} strip_drop={drop} hump={h0}..{h1} blend={LENS_BLEND} ring={ring} light={az}° scale={SCALE} samples=96 seed={BLENDER_SEED}; {grain_note} | MIT (asset-forge); grain CreativeML Open RAIL++-M output (SDXL) | the surround; blended with the other light by lateral G |",
+                iw = im.w,
+                ih = im.h,
+                kb = bytes / 1024,
+                drop = v.strip_drop,
+                h0 = v.hump.0,
+                h1 = v.hump.1,
             ));
         }
     }
