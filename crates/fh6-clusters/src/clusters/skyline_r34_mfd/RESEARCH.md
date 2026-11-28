@@ -152,3 +152,49 @@ Sources: Wikipedia "ATTESA"; DSPORT, "ATTESA Explained" pages 2 and 3 (2018); Ha
 - **The MFD's type** (8.2) is a wide bold oblique sans. The repo's OFL pack has no italic face, but the kit has a synthetic slant (`fh6-kit/src/text.rs`, horizontal shear, "about 0.2 = italic"). The nearest match is Saira (variable, width axis to 125) at Bold with that slant; Saira Condensed 800 stays the gear and speed face from the brief, slanted the same way so the whole dash shares the MFD's italic. Michroma and Orbitron are too geometric and have no oblique.
 - **The stock meter numerals** (8.10) are a fairly wide italic sans: the same Saira with slant, at a lighter weight.
 - **Pre-built library parts that fit what the photos show:** `spun_aluminium` (the brushed-aluminium binnacle panel of the stock meters, SCN, 8.10); the Blender rings and bezels (the tachometer ring; `tach_ring_440` is already built for this dash); `shift_led_32_off` (the lamp row's unlit caps, and the REV. LED of the MFD housing, 8.9); `lcd_backlight_mura` (built for this dash; the tiles' backlight). The MFD's diagonal wear streaks (8.1) are a possible extra texture, faint, if the board keeps them; the pixel grid stays procedural (400 × 234 cells per tile-screen, 8.1).
+
+## 11. ATTESA model study (2026-11-28)
+
+`/mnt/project-files/skyline_r34_mfd/research/attesa_model_study.png` runs the section 9 model (gains `k_s` 0.03 per degree of rear-minus-front slip, `k_a` 0.15, `k_y` 0.12 per g, lag 80 ms) over a 14 s sample drive. Findings:
+
+- Drift: 47% at 22° rear and 6° front slip, under the 50% ceiling; it falls back to the 10% floor within about a second of the exit. Reads like the real system's "torque forward when the rear steps out".
+- Launch: 31%. That is too high: Wikipedia gives 0:100 under clean acceleration, and only wheelspin should send torque forward. **Our reading:** `k_a` should be small (about 0.05) or apply only with rear slip; the code's unit tests assert the clean-pull case stays near the floor.
+- Braking and the lateral-G term pull the share to the floor, as A5 says; the handbrake drops it to zero at once (A5).
+- **Edge:** the review states and the sequence leave the per-tyre slip angles at zero, even in `04_drift_braking` (27° body slip from velocity). Fed only by tyre slip, the dial would sit on the floor in the drift review frame. The model needs `car_slip_angle_deg()` (from velocity, already in `fh6-core`) as a fallback cue for rear slip when the tyre values are all zero.
+
+## 12. Telemetry mapping, units and scales (2026-11-28)
+
+| Part | Input | Mapping and units (sources) |
+|---|---|---|
+| Boost (bar, dial, line graph) | `boost_psi` | kg/cm² = psi × 0.07031; vacuum in mmHg = psi × 51.715. The real scale is −600 mmHg to 1.2 kg/cm², 0 at 9 o'clock (8.4). The review states give −2 psi at idle (−103 mmHg), 5.6 psi in mid cruise (0.39 kg/cm²) and 16 psi on the limiter (1.12 kg/cm²): the whole range sits inside the real scale. Clamp past 1.2 and let the red zone catch it; a Nismo 2.0 scale is an option for tuned cars (M11). |
+| Throttle bar | `accel` (0 to 255) | percent, 0.0% to 100.0% as on the real page ("3%", "0.0%"). |
+| Load bar (replaces injector duty) | `power_watts` | percent of the highest power seen with this `car_ordinal` this session; resets on a new car. |
+| Tachometer, lamp row | rpm, idle, max | scale from `engine_max_rpm` (house rule); real stock face 0 to 10 ×1000 r/min with red from 8 (8.10). |
+| Speed | `speed_ms` | km/h or mph from the config; the stock JDM speedometer stops at 180 km/h (8.10), the digits do not. |
+| Gear | `gear` | 0 = R, 11+ = N (as `gear_string`). |
+| F-TORQUE (modelled) | tyre slip ×4, velocity (slip fallback), `acceleration_z`, `acceleration_x`, `accel`, `brake`, `hand_brake` | 0 to 50 %, section 9 and 11. |
+| G page (Nismo) | `acceleration_x`, `acceleration_z` | g = m/s² ÷ 9.80665; ring at 1.0 g, trace over the last 2 s. |
+| Chassis page | `normalized_suspension_travel_*` | 0 to 1 per corner; red zone near 1 (bump stop). |
+| PEAK boxes | each value | stored extremes since `race_on`, as the real MFD stored a drive's extremes (M13, 8.4). |
+
+## 13. How the real parts move (2026-11-28)
+
+- **MFD refresh.** No source gives the real update rate. **Our reading** from the 2000-era hardware: a few updates a second for numbers and a smooth needle. For readability at 4K: needles and bars on springs every frame, numbers held for about 0.1 s with display hysteresis (TeslaAdas lesson), the line graph sampled at 30 Hz (900 points over 30 s, M5) or 20 Hz if the budget needs it.
+- **Start-up.** The GT-R logo first, then the readouts (M10); temperatures blank until warm (M12). Here: logo at `race_on`, then each readout fills in turn, "- - -" until its first value.
+- **Needles.** The real meters are stepper-driven analogue needles with no visible overshoot; the dial uses the kit's `needle` spring (feed-forward, critically damped) and the house sweep on the first race start only.
+- **Red zone.** The real bar turns red past its mark and stays red while over it (M8); nothing flashes. Matches the brief's steady signature.
+- **Shift light.** One red LED flashing at the set rpm (M9). The lamp row strobes only on the limiter (house flash rules, the outer lamps steady per the BoschDdu lesson).
+- **Night dimming.** The real MFD has a night mode that dims every element to grey-violet on #1E1F2A (8.7). Possible tie-in: the overlay's own dim setting, if one exists; otherwise leave it out.
+
+## 14. Edge cases to design for (2026-11-28)
+
+1. Reverse and neutral in the gear window ("R", "N").
+2. `engine_max_rpm` far from the R34's 8,000 (a 6,000 rpm diesel or a 12,000 rpm race engine): the dial scale and the stock "red from 8" become a fraction of max.
+3. Cars with no turbo: `boost_psi` sits at a small vacuum or zero. The boost bar then reads only vacuum; consider swapping the boost row for load automatically when no boost has been seen this session.
+4. Boost above 1.2 kg/cm² on tuned cars: clamp the bar, the PEAK box keeps the real number.
+5. Rear- and front-drive cars (`drivetrain_type`): ATTESA does not exist on them. F-TORQUE shows the car's fixed split (0% or 100% front) or hides, never the model.
+6. A new car (`car_ordinal` changes): reset PEAK boxes, load's power peak and the line-graph history.
+7. Paused or menu (`is_race_on` = 0): freeze needles and history; on the next race start, play the logo once.
+8. Tyre slip all zero (review states, some game modes): the velocity fallback in section 11.
+9. Very low speed: `car_slip_angle` is noisy below 3 m/s (the helper already fades it); the model must not fire at a standstill.
+10. The limiter's 8640/8690 rpm bounce in the review sequence: peak-hold the lamp row and dial band above the shift point (BoschDdu lesson).
