@@ -250,16 +250,19 @@ impl Geom {
         Rect::from_center_size(self.sug_c, self.sug_outer)
     }
 
-    /// Pedal slot `i` (0 brake, 1 throttle): its base, or the slot itself when `inner`.
-    pub fn slot_rect(&self, i: usize, inner: bool) -> Rect {
-        let x = self.slots_x[i.min(1)];
-        let size = if inner { self.slot_inner } else { self.slot_outer };
-        Rect::from_center_size(vec2(x, self.slot_cy), size)
+    /// Pedal slot `i` (0 brake, 1 throttle): the slot the fill rises in.
+    pub fn slot_rect(&self, i: usize) -> Rect {
+        Rect::from_center_size(vec2(self.slots_x[i.min(1)], self.slot_cy), self.slot_inner)
+    }
+
+    /// Pedal slot `i`'s base (black chrome round the slot).
+    pub fn slot_outer_rect(&self, i: usize) -> Rect {
+        Rect::from_center_size(vec2(self.slots_x[i.min(1)], self.slot_cy), self.slot_outer)
     }
 
     /// The fill of pedal slot `i` at `level` (0..=1), rising from the slot's floor.
     pub fn fill_rect(&self, i: usize, level: f32) -> Rect {
-        let slot = self.slot_rect(i, true).inset(self.fill_inset);
+        let slot = self.slot_rect(i).inset(self.fill_inset);
         let level = if level.is_finite() { level.clamp(0.0, 1.0) } else { 0.0 };
         let h = slot.height() * level;
         Rect::from_xywh(slot.min.x, slot.max.y - h, slot.width(), h)
@@ -357,7 +360,7 @@ mod tests {
             ("logo", rect(g.logo)),
         ];
         for i in 0..2 {
-            z.push(("slot", g.slot_rect(i, false)));
+            z.push(("slot", g.slot_outer_rect(i)));
             z.push(("lamp", lamp_rect(g, i)));
             z.push(("label", g.slot_label_rect(i, 64.0)));
         }
@@ -451,8 +454,8 @@ mod tests {
             g.car_rect(),
             boost_rect(g),
             g.trip_outer_rect(),
-            g.slot_rect(0, false),
-            g.slot_rect(1, false),
+            g.slot_outer_rect(0),
+            g.slot_outer_rect(1),
             lamp_rect(g, 0),
             lamp_rect(g, 1),
             g.pill_rect(0),
@@ -511,7 +514,7 @@ mod tests {
     #[test]
     fn the_recipe_renders_the_same_band() {
         let g = &HOOD;
-        let pairs: [(&str, Vec<f32>); 28] = [
+        let pairs: [(&str, Vec<f32>); 29] = [
             ("PLATE", g.plate.to_vec()),
             ("REV_X", g.rev_x.to_vec()),
             ("TICK_Y", g.tick_y.to_vec()),
@@ -528,6 +531,7 @@ mod tests {
             ("BOOST_R", vec![g.boost_r]),
             ("BOOST_BAND", vec![g.boost_band]),
             ("BOOST_SWEEP", g.boost_sweep.to_vec()),
+            ("BOOST_BAR", g.boost_bar.to_vec()),
             ("BOOST_GROOVE", vec![g.boost_track[0], g.boost_groove]),
             ("SLOTS_X", g.slots_x.to_vec()),
             ("SLOT_CY", vec![g.slot_cy]),
@@ -564,7 +568,7 @@ mod tests {
         let full = g.fill_rect(0, 1.0);
         assert!(empty.height().abs() < 1e-4);
         assert!((empty.max.y - full.max.y).abs() < 1e-4, "both sit on the floor");
-        assert!(g.slot_rect(0, true).contains(full.min) && g.slot_rect(0, true).contains(full.max));
+        assert!(g.slot_rect(0).contains(full.min) && g.slot_rect(0).contains(full.max));
         assert_eq!(g.fill_rect(1, f32::NAN).height(), 0.0);
     }
 

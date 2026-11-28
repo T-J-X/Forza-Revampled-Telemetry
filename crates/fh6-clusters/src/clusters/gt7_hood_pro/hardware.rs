@@ -100,8 +100,9 @@ fn blend(p: &mut Painter<'_>, set: &[Option<ImageId>; AZIMUTHS], rect: Rect, w: 
     true
 }
 
-/// Weights of the renders (rest, −25°, +25°) for the virtual light's `angle` (radians): the
-/// rest render always at 1, a swing render on top in proportion to the swing.
+/// Weights of the renders (rest, −25°, +25°) for the virtual light's `angle` (radians): a swing
+/// render in proportion to the swing. The rest entry is always 1 and only marks the slot;
+/// [`blend`] draws the rest render at 1 minus the swing weights.
 pub(super) fn light_weights(angle: f32) -> [f32; AZIMUTHS] {
     let d = (angle.to_degrees() - REST_DEG) / SWING_DEG;
     if !d.is_finite() {
@@ -166,10 +167,10 @@ pub(super) fn fallback_plate(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
 
     // The pedal slots.
     for i in 0..2 {
-        let outer = g.slot_rect(i, false);
+        let outer = g.slot_outer_rect(i);
         p.fill(&Shape::round_rect(outer, 6.0), core);
         p.stroke(&Shape::round_rect(outer, 6.0), rim, rim_px);
-        p.fill(&Shape::round_rect(g.slot_rect(i, true), 4.0), face);
+        p.fill(&Shape::round_rect(g.slot_rect(i), 4.0), face);
     }
 
     // The telltale rings round their lamps.

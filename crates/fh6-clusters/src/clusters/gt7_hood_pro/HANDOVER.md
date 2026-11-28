@@ -218,6 +218,7 @@ The third pass (commit `248cc98`) adds two thin strip lights straight up and str
 1. **Hero library texture cache (RC-1):** the Blender cache keys a texture parameter on its path, so a changed texture at the same path does not reach the render. Hashing the file's bytes into the key would fix it.
 2. **ComfyUI master copy (RC-2):** the Drive master of a ComfyUI texture is not copied under its ledger name; it should be, so the ledger and the masters folder agree.
 3. **Review telemetry steering:** `steer` is 0 in every review state and sequence frame, so a steering indicator (this dash's dot) can never be checked from renders. A small steer value in `04_drift_braking` and a sweep in the sequence would let siblings check it.
+4. **`common::VirtualLight` settled check:** a `settled()` accessor would let a dash's `animating()` keep the render loop drawing while the light's spring settles after a corner (rust-review finding 5).
 
 ## What sibling dashes must know
 - **A flat polished face in a top-down ortho render mirrors only the zenith.** A bright overhead sky turns every flat black-glass face uniform grey; keep the zenith dark and light the faces from low angles.
@@ -283,3 +284,16 @@ A low band of separate black parts sits on the bonnet below the road, centred un
 - **1.4.1:** the shift state reads by count and the tile's presence, not by colour alone (cvd sheet).
 - **2.3.1:** one flashing area, the LED run (758 x 26 px), 10 Hz at 3 on / 3 off; the worst 10-degree field holds 7950 of 21526 px2 (under 25%); no red flash. The reduced-flash mode, from the code (`RevBar::level`): the strobe keeps `STROBE_FLOOR` of the light in its off phase, and with `FrameInput::reduced_flash` set the run breathes slowly (`Strobe::breath`, never under the floor) instead of flashing at 10 Hz.
 - No motion without data: the idle frames 6 to 9 are still.
+
+### `rust-review` (with `rust-skills`, closing round, one run)
+
+No unwrap, expect or panic outside tests, no per-frame allocation, and no unguarded division by a packet value; clippy clean for this module.
+
+| # | Finding | Fixed? | Evidence or reason |
+|---|---|---|---|
+| 1 | The gear change was detected by `since_change() == 0.0`; a frame with dt 0 after a shift would read as a second change and restart the tile's hand-over | fixed | `changed` compares the shown gear before and after `HeroGear::update` |
+| 2 | The recipe's `BOOST_BAR` was not in the drift test, so the baked boost marks could leave the live fill | fixed | `("BOOST_BAR", g.boost_bar)` added to `the_recipe_renders_the_same_band` |
+| 3 | A master that fails to load was skipped silently in `write_previews` | fixed | prints which preview was skipped and why |
+| 4 | `Geom::slot_rect(i, inner: bool)` was a bool parameter used across files | fixed | split into `slot_rect` and `slot_outer_rect`, like `sug_outer_rect` |
+| 5 | `animating()` ignores the virtual light's spring, so the plate's cross-fade can settle on a frame the loop skips | not fixed | `common::VirtualLight` has no settled accessor and is shared code; logged under requests. While racing a packet arrives every frame |
+| 6 | `light_weights`' doc said the rest render is drawn at 1; `blend` draws it at 1 minus the swing | fixed | doc corrected |

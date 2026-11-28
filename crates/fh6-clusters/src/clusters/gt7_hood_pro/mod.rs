@@ -524,8 +524,11 @@ impl Cluster for Gt7HoodPro {
         if fresh {
             self.gear.snap(sig.gear);
         }
+        let shown = self.gear.gear();
         self.gear.update(sig.gear, 0.0, dt);
-        let changed = !fresh && self.gear.since_change() == 0.0;
+        // A change is the shown gear moving on, not a zero clock: a frame with dt 0 after a shift
+        // would read as a second change and restart the hand-over.
+        let changed = !fresh && self.gear.gear() != shown;
         self.tile.update(sig.gear, changed, self.rev.over, dt);
         if fresh {
             // A tile found on the first frame is shown at rest, with no pop.
