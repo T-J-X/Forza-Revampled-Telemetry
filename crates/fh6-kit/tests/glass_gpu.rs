@@ -465,11 +465,18 @@ fn a_lens_drawn_band_by_band_under_clips_is_the_lens_drawn_once() {
         exponent: 2.0,
     });
     optic.absorption = [0.004, 0.002, 0.001];
-    let paints: [(&str, fh6_kit::Paint); 2] = [("optic", optic.into()), ("liquid", fh6_kit::Glass::default().into())];
-    for (name, paint) in paints {
+    let mut frosted = optic;
+    frosted.frost = 0.6;
+    // (name, paint, the layer's frost sigma): frost samples the backdrop well past the quad.
+    let paints: [(&str, fh6_kit::Paint, f32); 3] = [
+        ("optic", optic.into(), 0.0),
+        ("liquid", fh6_kit::Glass::default().into(), 0.0),
+        ("optic_frosted", frosted.into(), 12.0),
+    ];
+    for (name, paint, sigma) in paints {
         let whole = render(&mut kit, &ctx, &format!("bands_whole_{name}"), |p| {
             scene(p);
-            p.layer(LayerOptions::glass(0.0), |p| {
+            p.layer(LayerOptions::glass(sigma), |p| {
                 p.scoped(|p| {
                     p.clip(around, 0.0);
                     p.fill(&Shape::round_rect(lens, 36.0), paint);
@@ -478,7 +485,7 @@ fn a_lens_drawn_band_by_band_under_clips_is_the_lens_drawn_once() {
         });
         let banded = render(&mut kit, &ctx, &format!("bands_tiled_{name}"), |p| {
             scene(p);
-            p.layer(LayerOptions::glass(0.0), |p| {
+            p.layer(LayerOptions::glass(sigma), |p| {
                 for tile in tiles {
                     p.scoped(|p| {
                         p.clip(tile, 0.0);

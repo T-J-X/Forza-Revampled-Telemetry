@@ -125,6 +125,9 @@ fn main() -> Result<()> {
     if glass_spikes {
         return spikes::run(frames, out.as_deref(), csv.as_deref());
     }
+    if csv.is_some() {
+        return Err("--csv goes with --glass-spikes".into());
+    }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let tokens = Tokens::load(&root.join("data/design_tokens.json")).unwrap_or_default();
     let ctx = GpuContext::headless()?;

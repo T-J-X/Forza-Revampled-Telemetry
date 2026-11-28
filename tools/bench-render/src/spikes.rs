@@ -17,7 +17,9 @@
 use crate::{Result, H, W};
 use fh6_gpu::GpuContext;
 use fh6_kit::testing::{Offscreen, OFFSCREEN_FORMAT};
-use fh6_kit::{vec2, Color, GpuPassTime, Kit, LayerOptions, Layout, Painter, Palette, Rect, Shape, Tokens, View};
+use fh6_kit::{
+    vec2, Color, GpuPassKind, GpuPassTime, Kit, LayerOptions, Layout, Painter, Palette, Rect, Shape, Tokens, View,
+};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -27,8 +29,8 @@ use std::time::{Duration, Instant};
 const SPIKE_MS: f64 = 0.15;
 /// Frames per block before the next variant and pacing take over.
 const BLOCK: usize = 50;
-/// Frames drawn and thrown away before any block is timed.
-const WARMUP: usize = 120;
+/// Frames per variant and pacing drawn and thrown away before any block is timed.
+const WARMUP: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Variant {
@@ -93,10 +95,10 @@ fn intervals(passes: &[GpuPassTime]) -> Vec<(String, f64)> {
     let mut out = Vec::with_capacity(passes.len() * 2);
     let mut last_end: Option<Duration> = None;
     for p in passes {
-        let name = if p.name == "resolve" {
-            p.name.to_string()
+        let name = if p.kind == GpuPassKind::Resolve {
+            p.kind.name().to_string()
         } else {
-            format!("{} #{}", p.name, p.segment)
+            format!("{} #{}", p.kind.name(), p.segment)
         };
         if let Some(e) = last_end {
             out.push((format!("gap before {name}"), ms(p.start.saturating_sub(e))));
@@ -208,11 +210,7 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
         for pacing in Pacing::ALL {
             for variant in Variant::ALL {
                 // Block 0 is the warm-up, timed by nobody.
-                let count = if block == 0 {
-                    WARMUP / (Pacing::ALL.len() * 2) + 1
-                } else {
-                    BLOCK
-                };
+                let count = if block == 0 { WARMUP } else { BLOCK };
                 for _ in 0..count {
                     frame_no += 1;
                     {
@@ -237,8 +235,9 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
                     if pacing == Pacing::Readback {
                         let _ = target.read(&ctx.device)?;
                     }
-                    let total = kit.gpu_time(&ctx.device);
+                    // One readback: the frame runs from the first pass's start to the resolve's end.
                     let passes = kit.gpu_timeline(&ctx.device);
+                    let total = passes.as_ref().and_then(|p| p.last()).map(|p| p.end);
                     if pacing == Pacing::Paced8ms {
                         std::thread::sleep(Duration::from_millis(8));
                     }
@@ -268,10 +267,11 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
     );
     let _ = writeln!(
         report,
-        "3840x2160, adapter {adapter}, {frames} frames per variant and pacing in blocks of {BLOCK}, \
+        "3840x2160, adapter {adapter}, {} frames per variant and pacing in blocks of {BLOCK}, \
 interleaved. GPU times from the kit's pass timeline, in ms. A spike is a frame more than {SPIKE_MS} ms \
 over its row's median; \"spikes put down to\" names the interval that grew the most over its own median \
-in each spike.\n"
+in each spike.\n",
+        blocks * BLOCK
     );
     let _ = writeln!(
         report,

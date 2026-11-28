@@ -616,7 +616,9 @@ impl<'f> Painter<'f> {
         // from the shape's own bounds, never from the trimmed quad. A glass paint has no solid
         // colour, so the instance colour carries those bounds (`shape.wgsl` `glass_frame`).
         let color = if is_glass { frame.to_array() } else { color.to_array() };
-        let world = xf.apply_rect(&bbox);
+        // Glass keeps its whole shape in the work rectangle: its refraction and frost sample
+        // the backdrop beyond the trimmed quad, and must find the same cleared margin there.
+        let world = xf.apply_rect(if is_glass { &frame } else { &bbox });
         let blur_margin = self.state.segment.blur_px * 3.0;
         self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };

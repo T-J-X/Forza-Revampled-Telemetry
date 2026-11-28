@@ -327,12 +327,37 @@ pub struct FrameStats {
     pub dropped: u32,
 }
 
+/// What a timed pass drew.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum GpuPassKind {
+    /// A layer segment's shapes.
+    Shapes,
+    /// A layer segment that samples a backdrop: copied before the pass, or cleared when nothing
+    /// was drawn before it.
+    GlassShapes,
+    /// The resolve into the caller's target.
+    Resolve,
+}
+
+impl GpuPassKind {
+    /// A short name for reports.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Shapes => "shapes",
+            Self::GlassShapes => "glass shapes",
+            Self::Resolve => "resolve",
+        }
+    }
+}
+
 /// One pass of the last frame on the GPU, from the pass timeline ([`crate::Kit::set_gpu_timeline`]).
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct GpuPassTime {
-    /// What ran: `"shapes"`, `"glass shapes"` (a segment that began with a backdrop copy) or
-    /// `"resolve"`.
-    pub name: &'static str,
+    /// What ran.
+    pub kind: GpuPassKind,
     /// The layer segment a shapes pass drew (0 for the resolve).
     pub segment: u32,
     /// When the pass began, from the start of the frame's first pass.
@@ -342,9 +367,10 @@ pub struct GpuPassTime {
     pub end: Duration,
 }
 
-/// Timestamps one frame can write: the frame's begin and end, then a begin and an end for every
-/// shapes pass after the first and for the resolve when the pass timeline is on.
-const TIMER_QUERIES: u32 = 2 + 2 * (MAX_SEGMENTS as u32 + 1);
+/// Timestamps one frame can write: the frame's begin (the first pass) and end (the resolve), and
+/// with the pass timeline on, the first pass's end, a begin and an end for every later shapes pass
+/// and the resolve's begin (at most 2 + 2 x segments).
+const TIMER_QUERIES: u32 = 2 + 2 * MAX_SEGMENTS as u32;
 
 #[derive(Debug)]
 struct GpuTimer {
@@ -357,7 +383,7 @@ struct GpuTimer {
 /// A pass of the pass timeline: its name, segment and timestamp indices.
 #[derive(Debug, Clone, Copy)]
 struct TimelineMark {
-    name: &'static str,
+    kind: GpuPassKind,
     segment: u32,
     begin: u32,
     end: u32,
@@ -1436,10 +1462,10 @@ impl Renderer {
                 let begin = if first_pass { 0 } else { take_query(&mut next_query) };
                 let end = take_query(&mut next_query);
                 self.timeline.push(TimelineMark {
-                    name: if seg.backdrop_px.is_some() {
-                        "glass shapes"
+                    kind: if seg.backdrop_px.is_some() {
+                        GpuPassKind::GlassShapes
                     } else {
-                        "shapes"
+                        GpuPassKind::Shapes
                     },
                     segment: si as u32,
                     begin,
@@ -1607,7 +1633,7 @@ impl Renderer {
                 let begin = timeline_on.then(|| {
                     let begin = take_query(&mut next_query);
                     self.timeline.push(TimelineMark {
-                        name: "resolve",
+                        kind: GpuPassKind::Resolve,
                         segment: 0,
                         begin,
                         end: 1,
@@ -1641,6 +1667,7 @@ impl Renderer {
                 stats.draw_calls += 1;
             }
         }
+        debug_assert!(next_query <= TIMER_QUERIES, "{next_query} timestamps");
         self.queries_used = next_query;
         self.finish_timer(encoder);
 
@@ -1697,8 +1724,9 @@ impl Renderer {
         })
     }
 
-    /// Reads every pass of the last submitted frame when the pass timeline is on (blocks;
-    /// benches only). Times run from the start of the frame's first pass.
+    /// Reads every pass of the last frame when the pass timeline is on (blocks; benches only).
+    /// Times run from the start of the frame's first pass. The passes are those of the last
+    /// [`Renderer::render`], so read once after each render and its submit.
     pub(crate) fn read_gpu_timeline(&self, device: &wgpu::Device) -> Option<Vec<GpuPassTime>> {
         if !self.timeline_enabled {
             return None;
@@ -1710,7 +1738,7 @@ impl Renderer {
                 .iter()
                 .map(|m| {
                     Some(GpuPassTime {
-                        name: m.name,
+                        kind: m.kind,
                         segment: m.segment,
                         start: at(m.begin)?,
                         end: at(m.end)?,

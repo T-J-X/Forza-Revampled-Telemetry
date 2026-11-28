@@ -261,15 +261,16 @@ impl Kit {
         self.renderer.read_gpu_time(device)
     }
 
-    /// Times every pass of each frame, not only the whole frame (turns GPU timing on with it);
-    /// false when the device lacks `TIMESTAMP_QUERY`. A diagnostic for benches: the extra
-    /// timestamps cost a little GPU time themselves.
+    /// Times every pass of each frame, not only the whole frame (turns GPU timing on with it;
+    /// turning the timeline off leaves frame timing as it is); false when the device lacks
+    /// `TIMESTAMP_QUERY`. A diagnostic for benches: the extra timestamps cost a little GPU time.
     pub fn set_gpu_timeline(&mut self, on: bool) -> bool {
         self.renderer.set_timeline(on)
     }
 
-    /// Every pass of the last submitted frame, in order, when the pass timeline is on (blocks
-    /// until it is available; for benches).
+    /// Every pass of the last frame, in order, when the pass timeline is on (blocks until it is
+    /// available; for benches). Read it once after each `render` and its submit: the pass names
+    /// belong to the last frame rendered.
     #[must_use]
     pub fn gpu_timeline(&self, device: &wgpu::Device) -> Option<Vec<GpuPassTime>> {
         self.renderer.read_gpu_timeline(device)
