@@ -8,10 +8,15 @@
 //! - `mockups/index.html`: a script-free gallery with badges computed from the renders (GPU time,
 //!   draw calls, colour budget shares);
 //! - `mockups/osd/`: the kit OSD (every tab, focus, slider, keyboard and remap states) with
-//!   GPU timings; `--backdrop PNG` also writes each state composited over a game frame;
+//!   GPU timings, its 180-frame motion sequence (`sequence/`, half size) and its product page
+//!   `index.html`; `--backdrop PNG` also writes each state composited over a game frame;
 //! - the OEM scrim at 0/50/100% on the kit (`fit::scrims`).
 //!
 //! `--fit` renders only the Phase 8 cockpit fit review into `mockups/fit/` (see `fit.rs`).
+//!
+//! `--osd` renders only the OSD (states, sequence and page) into `mockups/osd/`; `--osd-state
+//! <name>` renders only the states whose name contains `<name>`, without the sequence and the
+//! page (both skip the clusters, the scrims and the gallery).
 //!
 //! `--cluster <Name>` renders only one catalog cluster's review set into `mockups/<Theme>/`
 //! (4 states per view at 4K, crops, in-cockpit composites, the 60-frame sequence; `cluster.rs`).
@@ -65,6 +70,9 @@ struct Args {
     out: Option<PathBuf>,
     cluster: Option<String>,
     backdrop: Option<PathBuf>,
+    osd: bool,
+    osd_state: Option<String>,
+    no_timing: bool,
     car: i32,
     no_assets: bool,
 }
@@ -77,6 +85,9 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args> {
         out: None,
         cluster: None,
         backdrop: None,
+        osd: false,
+        osd_state: None,
+        no_timing: false,
         car: DEFAULT_CAR,
         no_assets: false,
     };
@@ -88,13 +99,19 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args> {
             "--out" => args.out = Some(PathBuf::from(it.next().ok_or("--out needs a value")?)),
             "--cluster" => args.cluster = Some(it.next().ok_or("--cluster needs a name")?),
             "--backdrop" => args.backdrop = Some(PathBuf::from(it.next().ok_or("--backdrop needs a value")?)),
+            "--osd" => args.osd = true,
+            "--no-timing" => args.no_timing = true,
+            "--osd-state" => {
+                args.osd = true;
+                args.osd_state = Some(it.next().ok_or("--osd-state needs a name")?);
+            }
             "--car" => {
                 let value = it.next().ok_or("--car needs an ordinal")?;
                 args.car = value.parse().map_err(|e| format!("--car {value:?}: {e}"))?;
             }
             "-h" | "--help" => {
                 println!(
-                    "preview-export [--fit] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] [--car ORDINAL] [--no-assets]"
+                    "preview-export [--fit] [--osd] [--osd-state NAME] [--no-timing] [--cluster NAME] [--frames N] [--out DIR] [--backdrop PNG] [--car ORDINAL] [--no-assets]"
                 );
                 std::process::exit(0);
             }
@@ -146,7 +163,8 @@ fn run() -> Result<()> {
     let ctx = GpuContext::headless()?;
     println!("GPU: {}", ctx.adapter_summary());
     let mut kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
-    let timing = kit.set_gpu_timing(true);
+    // `--no-timing` renders two frames per OSD state instead of 120 (software adapters).
+    let timing = !args.no_timing && kit.set_gpu_timing(true);
     let asset_dir = root.join("assets");
     // What the dashes and the OSD are built with: the asset folder, or nothing (`--no-assets`).
     let assets = (!args.no_assets).then_some(asset_dir.as_path());
@@ -195,6 +213,45 @@ fn run() -> Result<()> {
     if args.fit {
         fit::run(&ctx, &mut kit, &tokens, &root, assets, &out, args.frames, &logo)?;
         println!("Fit review written to {}", out.join("fit").display());
+        return Ok(());
+    }
+    let backdrop = match &args.backdrop {
+        Some(p) => {
+            let (width, height, pixels) = fh6_kit::images::decode_png(&fs::read(p)?)?;
+            Some(RgbaImage { width, height, pixels })
+        }
+        None => None,
+    };
+    if args.osd {
+        let only = args.osd_state.as_deref();
+        let cars = cars.as_ref().ok_or("the car database was not read")?;
+        let osd_renders = osd::render_all(
+            &ctx,
+            &mut kit,
+            &tokens,
+            assets,
+            cars,
+            &out,
+            timing,
+            backdrop.as_ref(),
+            &logo,
+            only,
+        )?;
+        if let (Some(name), true) = (only, osd_renders.is_empty()) {
+            return Err(format!("--osd-state {name:?} matches no OSD state").into());
+        }
+        verify_osd(&out, &osd_renders)?;
+        // The product page lists every state and plays the motion sequence, so a run of some
+        // states leaves both alone.
+        if only.is_none() {
+            let reel = osd::render_sequence(&ctx, &mut kit, &tokens, assets, cars, &logo, &out)?;
+            osd::write_page(&out, &osd_renders, &reel, ctx.adapter_summary().to_string().as_str())?;
+        }
+        println!(
+            "OSD: {} states written to {}",
+            osd_renders.len(),
+            out.join("osd").display()
+        );
         return Ok(());
     }
     let target = Offscreen::new(&ctx.device, W, H);
@@ -302,13 +359,6 @@ fn run() -> Result<()> {
         }
     }
 
-    let backdrop = match &args.backdrop {
-        Some(p) => {
-            let (width, height, pixels) = fh6_kit::images::decode_png(&fs::read(p)?)?;
-            Some(RgbaImage { width, height, pixels })
-        }
-        None => None,
-    };
     let cars = cars.as_ref().ok_or("the car database was not read")?;
     let osd_renders = osd::render_all(
         &ctx,
@@ -320,9 +370,13 @@ fn run() -> Result<()> {
         timing,
         backdrop.as_ref(),
         &logo,
+        None,
     )?;
     fit::scrims(&ctx, &mut kit, &tokens, assets, &out)?;
-    gallery::write_index(&out, &renders, &osd_renders, ctx.adapter_summary().to_string().as_str())?;
+    let adapter = ctx.adapter_summary().to_string();
+    gallery::write_index(&out, &renders, &osd_renders, &adapter)?;
+    let reel = osd::render_sequence(&ctx, &mut kit, &tokens, assets, cars, &logo, &out)?;
+    osd::write_page(&out, &osd_renders, &reel, &adapter)?;
     verify(&out, &renders, &osd_renders)?;
     println!("Export complete: {} kit renders in {}", renders.len(), out.display());
     Ok(())
@@ -462,7 +516,7 @@ fn rel(root: &Path, p: &Path) -> String {
     p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
 }
 
-fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> {
+fn verify_osd(out: &Path, osd: &[osd::OsdRender]) -> Result<()> {
     for r in osd {
         for f in [&r.full, &r.thumb] {
             if !out.join(f).is_file() {
@@ -470,6 +524,11 @@ fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> 
             }
         }
     }
+    Ok(())
+}
+
+fn verify(out: &Path, renders: &[Render], osd: &[osd::OsdRender]) -> Result<()> {
+    verify_osd(out, osd)?;
     for r in renders {
         for f in [&r.full, &r.thumb] {
             let p = out.join(f);

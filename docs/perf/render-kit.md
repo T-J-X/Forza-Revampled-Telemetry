@@ -77,3 +77,21 @@ Levers for Phase 8 (not taken here, to keep the kit's look stable): a "performan
 | Pipelined, full resolution 1240x560 | 299 | 0.579 / 0.802 / 1.373 | 0.479 / 0.882 |
 
 Setup (D3D11 device, capture item, frame pool, session) takes 270–280 ms, so the overlay starts it outside the frame path and retries at most every 5 s. With capture on, the live CPU p50 rose by about 0.013 ms and p99 by about 0.08 ms. On the GPU the refraction sample is free (0.097 vs 0.096 ms). The image is one frame behind (pipelined readback). Capture is off unless `"GlassRefraction": true` is set in `config.json`.
+
+## Glass layer, pass by pass (`bench-render --glass-spikes`)
+
+RTX 3070 Ti Laptop (DX12), 3840x2160, a RetroCyber-sized panel (634,880 work px) with one flat optical-glass lens over it, 1000 frames per row in blocks of 50, interleaved, twice (28 Nov 2026, head 89f4aff). GPU ms from the kit's pass timeline (`Kit::set_gpu_timeline`); the three pacings (back to back, a 4K readback per frame as `preview-export` does, an 8 ms idle per frame as the overlay leaves the GPU) agree to within 0.003 ms.
+
+| Variant | Frame p50 | p99 | Glass pass | Gap before it (copy, barriers) |
+|---|---|---|---|---|
+| no glass | 0.121 | 0.124 | - | - |
+| glass layer with a plain fill (copy and segment only) | 0.167 | 0.171 | 0.028 | 0.018 |
+| glass lens, one draw | 0.251 | 0.254 | 0.111 | 0.018 |
+| glass lens as 9 clipped tiles | 0.258 | 0.262 | 0.118 | 0.018 |
+| glass lens, rim band only (4 clipped strips, 48 px) | 0.184 | 0.188 | 0.044 | 0.018 |
+| glass lens with backdrops off (same pass as the panel) | 0.219 | 0.221 | (in the panel pass, +0.098) | - |
+
+- The layer itself (backdrop copy, a new segment and its target reload) costs about 0.046 ms; the optics shader over a panel-sized lens about 0.083 ms more.
+- Trimming glass to its clip (PR #14) lets a lens be drawn only where it shows: the rim band alone saves 0.067 ms here. Tiling the whole lens costs 0.007 ms over one draw (the clip test at the seams), so tiles pay only when some are left out.
+- Spikes: none. In 36,000 timed frames no frame was more than 0.022 ms over its row's median (a spike is +0.15 ms), in every pacing. The glass pass, the copy and the segment break do not stall in steady state.
+- A fresh kit's first frame (head 9514b6f, 20 kits per variant): 0.017 ms more in every variant (in the gap before the resolve), and 0.017 ms more again before a glass segment, from first use of the newly allocated work targets; its frames 2 to 5 match steady state. The ~0.3 ms single-frame spikes seen while timing a dash on 28 Nov did not come back in 66,000 frames here; if they return, time that dash with `Kit::set_gpu_timeline` to see which pass or gap grows.

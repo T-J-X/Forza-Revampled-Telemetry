@@ -23,6 +23,11 @@ use crate::tokens::Tokens;
 /// Most nested `save` levels.
 const MAX_DEPTH: usize = 32;
 
+/// How far (target pixels) a glass quad trimmed to a clip reaches past the clip's rectangle.
+/// The clip's coverage, `clamp(0.5 - distance)`, is zero from half a pixel out, so one pixel
+/// keeps every pixel the untrimmed draw wrote, with room for rounding.
+const GLASS_CLIP_SLACK_PX: f32 = 1.0;
+
 /// Paint kinds (must match `shape.wgsl`).
 mod paint_kind {
     pub const SOLID: u32 = 0;
@@ -51,6 +56,8 @@ struct State {
     segment: SegmentKey,
     /// When false, `layer` ignores backdrop requests (glass draws tint, rim and sheen only).
     backdrops: bool,
+    /// Text whose cap height comes out smaller than this many target pixels is not drawn.
+    min_text_px: f32,
 }
 
 /// Records one frame of drawing. Created by [`crate::Kit::begin_frame`].
@@ -98,6 +105,7 @@ impl<'f> Painter<'f> {
                     backdrop_px: None,
                 },
                 backdrops: true,
+                min_text_px: 0.0,
             },
             stack: [None; MAX_DEPTH],
             depth: 0,
@@ -230,6 +238,14 @@ impl<'f> Painter<'f> {
     /// and thumbnails drawn inside another surface turn it off).
     pub fn set_backdrops(&mut self, on: bool) {
         self.state.backdrops = on;
+    }
+
+    /// Leaves out text whose cap height would come out under `px` target pixels, until the
+    /// matching restore. A cluster drawn as a small thumbnail sets its labels and footers at a
+    /// few pixels, where they read as grey bars; its gear, speed and shapes still draw. `text`
+    /// still returns the bounds the text would have had, so layouts built on them hold.
+    pub fn set_min_text_px(&mut self, px: f32) {
+        self.state.min_text_px = finite_or(px, 0.0).max(0.0);
     }
 
     /// Sets the blend mode until the matching restore.
@@ -370,7 +386,7 @@ impl<'f> Painter<'f> {
             return;
         }
         let viewport = self.state.xf.apply_rect(&draw.viewport);
-        self.scene.bounds = self.scene.bounds.union(&viewport);
+        self.mark_drawn(&viewport);
         self.scene.meshes.push(MeshCmd {
             draw: *draw,
             viewport,
@@ -393,6 +409,9 @@ impl<'f> Painter<'f> {
             return Rect::from_points(pos, pos);
         };
         let origin = run.origin(pos);
+        if style.cap * self.state.xf.scale_factor() < self.state.min_text_px {
+            return run.bounds(origin);
+        }
         let paint = style.paint;
         let mut xf_saved = None;
         if style.slant.abs() > 1e-4 {
@@ -550,9 +569,22 @@ impl<'f> Painter<'f> {
             draws: at..at,
             blur_px: self.state.segment.blur_px,
             backdrop_px: self.state.segment.backdrop_px,
+            bounds: Rect::EMPTY,
         });
         self.segment_open = true;
         true
+    }
+
+    /// Adds what a draw over `world` (target pixels) reaches to the bounds of the frame and of
+    /// the open segment: the draw itself and, in a blurred layer, the three sigma its light
+    /// spreads to. The renderer blurs and composites a layer only inside these bounds
+    /// (`blur_region`), so every kind of draw must come through here.
+    fn mark_drawn(&mut self, world: &Rect) {
+        let drawn = world.expand(self.state.segment.blur_px * 3.0);
+        self.scene.bounds = self.scene.bounds.union(&drawn);
+        if let Some(seg) = self.scene.segments.last_mut() {
+            seg.bounds = seg.bounds.union(&drawn);
+        }
     }
 
     fn push(&mut self, enc: Encoded, bbox: Rect, paint: &Paint, coverage_mode: u32, style: [f32; 4]) {
@@ -581,14 +613,22 @@ impl<'f> Painter<'f> {
         let image = paint.image();
 
         // Anti-aliasing margin: 1.5 device pixels.
-        let mut bbox = bbox.expand(1.5 / px_scale);
+        let frame = bbox.expand(1.5 / px_scale);
+        let mut bbox = frame;
         // Trim the quad to the clip when the transform is axis-aligned: pixels outside the clip
-        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep) costs only
-        // the clipped area.
-        // Glass derives its optics from the full bounds, so it is never trimmed.
-        if let (Some(clip), false) = (self.state.clip_rect, is_glass) {
+        // are discarded anyway, so a large clipped shape (a dome lip, a masked sweep, a lens
+        // drawn band by band) costs only the clipped area.
+        if let Some(clip) = self.state.clip_rect {
             let [a, b, c, d, tx, ty] = xf.m;
             if b == 0.0 && c == 0.0 && a > 1e-6 && d > 1e-6 {
+                // The clip's anti-aliased edge covers pixel centres up to half a pixel outside
+                // its rectangle. Glass keeps those pixels, so its trimmed draw writes exactly what
+                // the untrimmed one did; other shapes keep the trim they always had.
+                let clip = if is_glass {
+                    clip.expand(GLASS_CLIP_SLACK_PX)
+                } else {
+                    clip
+                };
                 let local = Rect::from_points(
                     vec2((clip.min.x - tx) / a, (clip.min.y - ty) / d),
                     vec2((clip.max.x - tx) / a, (clip.max.y - ty) / d),
@@ -599,9 +639,13 @@ impl<'f> Painter<'f> {
                 }
             }
         }
-        let world = xf.apply_rect(&bbox);
-        let blur_margin = self.state.segment.blur_px * 3.0;
-        self.scene.bounds = self.scene.bounds.union(&world.expand(blur_margin));
+        // Glass derives its optics (centre, rim gradient, sheen, caustic, the fallback outline)
+        // from the shape's own bounds, never from the trimmed quad. A glass paint has no solid
+        // colour, so the instance colour carries those bounds (`shape.wgsl` `glass_frame`).
+        let color = if is_glass { frame.to_array() } else { color.to_array() };
+        // Glass keeps its whole shape in the work rectangle: its refraction and frost sample
+        // the backdrop beyond the trimmed quad, and must find the same cleared margin there.
+        self.mark_drawn(&xf.apply_rect(if is_glass { &frame } else { &bbox }));
         let bloom = if is_glass { 0 } else { pack_bloom(self.state.bloom) };
         if bloom != 0 {
             self.scene.bloom_used = true;
@@ -615,7 +659,7 @@ impl<'f> Painter<'f> {
             p1: enc.p1,
             p2: enc.p2,
             style,
-            color: color.to_array(),
+            color,
             ids: [
                 enc.kind | (coverage_mode << 8) | (enc.flags << 16),
                 paint_index,

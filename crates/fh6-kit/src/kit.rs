@@ -7,7 +7,8 @@ use crate::mesh::{MeshData, MeshId, Meshes};
 use crate::paint::ImageId;
 use crate::painter::Painter;
 use crate::palette::Palette;
-use crate::renderer::{FrameStats, Renderer};
+use crate::pool::Pool;
+use crate::renderer::{FrameStats, GpuPassTime, Renderer};
 use crate::scene::Scene;
 use crate::text::{FontError, FontRole, Fonts};
 use crate::tokens::Tokens;
@@ -250,6 +251,15 @@ impl Kit {
         self.renderer.set_underlay(alpha);
     }
 
+    /// Sets the soft black pools under everything the next frames draw (see [`Pool`]): the same
+    /// picture as painting them first, written in one pass that blends nothing. They stay set
+    /// until the next call; an empty slice clears them. Pools that cannot show (no area, no
+    /// alpha, a value that is not finite) are skipped, and only the first [`crate::MAX_POOLS`]
+    /// of the rest are kept. Like everything drawn, they scale with the frame opacity.
+    pub fn set_pools(&mut self, pools: &[Pool]) {
+        self.renderer.set_pools(pools);
+    }
+
     /// Enables GPU timestamp queries; false when the device lacks `TIMESTAMP_QUERY`.
     pub fn set_gpu_timing(&mut self, on: bool) -> bool {
         self.renderer.set_timing(on)
@@ -259,5 +269,20 @@ impl Kit {
     #[must_use]
     pub fn gpu_time(&self, device: &wgpu::Device) -> Option<Duration> {
         self.renderer.read_gpu_time(device)
+    }
+
+    /// Times every pass of each frame, not only the whole frame (turns GPU timing on with it;
+    /// turning the timeline off leaves frame timing as it is); false when the device lacks
+    /// `TIMESTAMP_QUERY`. A diagnostic for benches: the extra timestamps cost a little GPU time.
+    pub fn set_gpu_timeline(&mut self, on: bool) -> bool {
+        self.renderer.set_timeline(on)
+    }
+
+    /// Every pass of the last frame, in order, when the pass timeline is on (blocks until it is
+    /// available; for benches). Read it once after each `render` and its submit: the pass names
+    /// belong to the last frame rendered.
+    #[must_use]
+    pub fn gpu_timeline(&self, device: &wgpu::Device) -> Option<Vec<GpuPassTime>> {
+        self.renderer.read_gpu_timeline(device)
     }
 }

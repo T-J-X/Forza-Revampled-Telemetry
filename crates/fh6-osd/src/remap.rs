@@ -1,15 +1,18 @@
 //! The OSD button remapper: hold the new button or combination for one second to bind it.
 //! A, B, X and Y and the D-pad are ignored (the gearbox and the menu's own navigation); LB or
-//! RB alone is refused because they also switch tabs and drive the camera ring.
+//! RB alone is refused because they also switch tabs and drive the camera ring. D-pad left
+//! cancels at once, and the time limit restarts whenever the held buttons change.
 use fh6_core::config::{sanitize_toggle_mask, MASK_MANUAL_LOCK};
 use std::time::Duration;
 
 /// How long the new combination must be held.
 pub const COMMIT_HOLD: Duration = Duration::from_millis(1000);
-/// Capture gives up after this long without a commit.
-pub const TIMEOUT: Duration = Duration::from_secs(10);
+/// Capture gives up after this long with no change in the held buttons and no commit.
+pub const TIMEOUT: Duration = Duration::from_secs(30);
 /// D-pad bits (menu navigation; never part of the toggle).
 pub const MASK_DPAD: u16 = 0x000F;
+/// D-pad left: cancels the capture.
+pub const DPAD_LEFT: u16 = crate::nav::LEFT;
 /// LB.
 pub const LB: u16 = 0x0100;
 /// RB.
@@ -38,8 +41,10 @@ pub enum RemapOutcome {
     Pending,
     /// Bound: the sanitised mask to save.
     Committed(u16),
-    /// Timed out.
+    /// D-pad left cancelled it.
     Cancelled,
+    /// Nothing bindable was held for [`COMMIT_HOLD`] within [`TIMEOUT`] of the last change.
+    TimedOut,
 }
 
 /// A running capture.
@@ -79,7 +84,7 @@ impl RemapCapture {
         (now.saturating_sub(self.stable_since).as_secs_f32() / COMMIT_HOLD.as_secs_f32()).clamp(0.0, 1.0)
     }
 
-    /// Seconds left before the capture times out.
+    /// Seconds left before the capture times out (it restarts when the held buttons change).
     #[must_use]
     pub fn remaining(&self, now: Duration) -> f32 {
         TIMEOUT.saturating_sub(now.saturating_sub(self.started)).as_secs_f32()
@@ -87,17 +92,21 @@ impl RemapCapture {
 
     /// Feeds the held buttons at `now`.
     pub fn update(&mut self, held: u16, now: Duration) -> RemapOutcome {
+        if held & DPAD_LEFT != 0 {
+            return RemapOutcome::Cancelled;
+        }
         let mask = capturable(held);
         if mask != self.candidate {
             self.candidate = mask;
             self.stable_since = now;
+            self.started = now;
             self.message = if mask == 0 { None } else { refusal(mask) };
         }
         if mask != 0 && refusal(mask).is_none() && now.saturating_sub(self.stable_since) >= COMMIT_HOLD {
             return RemapOutcome::Committed(sanitize_toggle_mask(mask));
         }
         if now.saturating_sub(self.started) >= TIMEOUT {
-            return RemapOutcome::Cancelled;
+            return RemapOutcome::TimedOut;
         }
         RemapOutcome::Pending
     }
@@ -145,8 +154,9 @@ mod tests {
     #[test]
     fn abxy_and_dpad_are_never_captured() {
         let mut cap = RemapCapture::start(MS(0));
+        // A, B, X, Y and D-pad up, down and right (left cancels).
         for t in (0..3000).step_by(100) {
-            assert_eq!(cap.update(0xF00F, MS(t)), RemapOutcome::Pending, "{t}");
+            assert_eq!(cap.update(0xF00B, MS(t)), RemapOutcome::Pending, "{t}");
         }
         assert_eq!(cap.candidate(), 0);
         // ABXY held together with View: only View is bound.
@@ -156,15 +166,33 @@ mod tests {
     }
 
     #[test]
-    fn lone_bumper_is_refused_and_timeout_cancels() {
+    fn lone_bumper_is_refused_and_the_capture_times_out() {
         let mut cap = RemapCapture::start(MS(0));
         cap.update(RB, MS(0));
         assert_eq!(cap.update(RB, MS(5000)), RemapOutcome::Pending);
         assert_eq!(cap.message, Some("Pair LB or RB with another button"));
-        assert_eq!(cap.update(RB, MS(10_000)), RemapOutcome::Cancelled);
+        assert_eq!(cap.update(RB, MS(29_900)), RemapOutcome::Pending);
+        assert_eq!(cap.update(RB, MS(30_000)), RemapOutcome::TimedOut);
         let mut cap = RemapCapture::start(MS(0));
         cap.update(RB | 0x0020, MS(0));
         assert_eq!(cap.update(RB | 0x0020, MS(1000)), RemapOutcome::Committed(0x0220));
+    }
+
+    #[test]
+    fn dpad_left_cancels_and_a_change_restarts_the_limit() {
+        let mut cap = RemapCapture::start(MS(0));
+        assert_eq!(cap.update(0x0040, MS(25_000)), RemapOutcome::Pending);
+        assert!(
+            (cap.remaining(MS(25_000)) - 30.0).abs() < 1e-3,
+            "restarted on the change"
+        );
+        cap.update(0, MS(25_500));
+        assert_eq!(
+            cap.update(0, MS(50_000)),
+            RemapOutcome::Pending,
+            "30 s from the last change"
+        );
+        assert_eq!(cap.update(DPAD_LEFT, MS(50_100)), RemapOutcome::Cancelled);
     }
 
     #[test]
