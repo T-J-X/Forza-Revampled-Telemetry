@@ -1,6 +1,6 @@
 # HANDOVER: Dash · RetroCyber (catalog row 19)
 
-**Thread / branch:** "Rebuild RetroCyber as the Supra A70 dash" (slot D), `claude/project-thread-191tnq`, draft PR #9  **Date:** 2026-11-28  **Result:** DRAFT. Written while the build is finished; the closing review, the goldens, the live bench and the Penpot import are still to come, and each section marked *pending* is filled in at the close.
+**Thread / branch:** "Rebuild RetroCyber as the Supra A70 dash" (slot D), `claude/project-thread-191tnq`, draft PR #9  **Date:** 2026-11-28  **Result:** finished; the closing review is below, and the job is reported for the merge.
 
 Findings and yes/no answers only; there are no scores in this file. TJX is hands-off (AGENTS.md rule 12): the self-review stands in for TJX's direction check and sign-off. TJX's own words in the thread are quoted where they decided something.
 
@@ -9,15 +9,15 @@ Findings and yes/no answers only; there are no scores in this file. TJX is hands
 |---|---|---|
 | The introduction was posted, and the thread is not archived | yes | the thread's first message; the thread is open |
 | `RESEARCH.md` is written, with sources | yes | [RESEARCH.md](RESEARCH.md): the A70 Panoramic Digital Meter, its features with sources, the match table, deliberate changes A to G, the gaps |
-| The design board is the Penpot page `07 · RetroCyber`, 4 states per view, its IDs here and in the README | *pending* | the eight state boards and the motion notes are drawn from `Geom` (outlined text); the import waits for the Penpot queue |
+| The design board is the Penpot page `07 · RetroCyber`, 4 states per view, its IDs here and in the README | yes | "Penpot board" below; the boards came after the code (Penpot was held by other threads), and the one later code change (f5a33f2) was put on the boards too |
 | A bespoke ComfyUI asset and a bespoke Blender asset are used, with ledger rows and 4K masters on Drive; the before and after pair is here | yes | [assets/clusters/retro_cyber/ASSETS.md](../../../../../assets/clusters/retro_cyber/ASSETS.md); "Assets and masters"; "Before and after pair" |
 | The module is complete, with no TODOs, and goldens pass | yes | 17 unit tests and dash_gates pass; the 8 goldens pass (rendered and checked in the cloud, f5a33f2) |
 | 4K renders, the 60-frame sequence and the product page are in `mockups/RetroCyber/` | yes | `preview-export --cluster RetroCyber` on the PC at 43f7d8a (product page with the PC's GPU timings) and in the cloud at f5a33f2 |
 | The live bench report and the GPU time under 0.5 ms are recorded | yes | "GPU budget": every state 0.423 to 0.487 ms at a1fd67c; live CPU share +0.032 ms |
 | The direction check was posted and self-reviewed, with its findings here | yes | "Direction check" (posted 28 Nov 04:20 UTC) |
 | Every line of the closing review is yes, or a line that could not be fixed afterwards is reported | yes | V5, V13 and V15 reported under "Visual review" |
-| The visual review (V1 to V26) is here, each line with its evidence | yes, V16 pending the Penpot import | "Visual review" |
-| The handover is written, the job is reported for the merge | *pending* | this file |
+| The visual review (V1 to V26) is here, each line with its evidence | yes | "Visual review" |
+| The handover is written, the job is reported for the merge | yes | this file; READY FOR MERGE posted in the thread |
 
 ## What was built
 - `crates/fh6-clusters/src/clusters/retro_cyber/`
@@ -166,7 +166,7 @@ A long low black panel sits in the steering-column gap; its outline steps up in 
 | V13 | no, stays no | "Don't know." (the direction check's answer was the same) |
 | V14 | yes | F1 windows 20 / 20 / 18 px apart (cockpit) and 20 px (hood), stepped outline; F2 order by test; F4 4 bars per 1000 rpm, last bar 6.5x (cockpit) and 4.7x (hood) the first; F5 numerals at their bars' x; F6 red from the shift thousand plus the bracket, line and tick (logged change); F7 speed 4.9x and 4.4x the numeral cap; F8 G 0.48x and 0.69x the speed (logged change); F9 2 columns of 10; F10 slip window 0.26 and 0.35 of its height; F11 lean 12 deg with figures; F12 hues as at the direction check (palette unchanged); F13 ghosts 7%, lens face 0/255; F15 the boot runs only on the first race start, idle frames settled |
 | V15 | no | the cold reviewer's blurred-mass comparison gave "Different" against R1 and R2 in both orders this round (the direction check gave "Same" against R1); the differences it names are the logged changes A, C and D. The reference photos stay on the PC, so this thread's own blurred sheet was not made |
-| V16 | *pending* | the Penpot import runs now |
+| V16 | yes | `mockups/RetroCyber/review/board_vs_render.png` (the board's own export of cockpit 02 against the render): every zone in the same place at the same size (the speed's lit pixels start at x 1440, y 1685 in both); the render adds the graphite ring and its highlight, the phosphor mesh and glow, the ghosts and the lens, so it reads clearly richer than the flat board and the before render |
 | V17 | yes | full frame: graphite ring with one highlight, clear lens over black, lit phosphor with mesh |
 | V18 | yes | the materials checks that apply (lens black level, rim highlight, phosphor plate, surround at 1:1 with no seams); dropped: metal dials, needles, glass drops |
 | V19 | yes | one OpticalGlass lens over the whole panel: clear over black (0/255), rims crisp, its key light swings with lateral G between 02 and 04, never over other glass |
@@ -177,6 +177,8 @@ A long low black panel sits in the steering-column gap; its outline steps up in 
 | V24 | yes | `motion`: one spike at frame 10, the first pull frame after idle (rpm and speed jump in the data) |
 | V25 | yes | the before's octagon tube that copied no car is gone; the before's DRIFT/SLIP lamps are not kept (the A70 has none; slip stays as a bar) |
 | V26 | yes | the 8 goldens opened and checked at 676d428 and f5a33f2 (the second changes only the red-zone line) |
+
+Penpot board (28 Nov, 07:15 to 07:35 UTC): file `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, page `07 · RetroCyber` `6fe75c5e-bb22-8084-8008-fd924684ddca`. Boards (3840x2160): cockpit 01 idle `347e5ae2-9e0b-80b1-8009-03889f3834ca`, 02 mid cruise `347e5ae2-9e0b-80b1-8009-038896a7afaf`, 03 redline strobe `347e5ae2-9e0b-80b1-8009-03889ff4af02`, 04 drift braking `347e5ae2-9e0b-80b1-8009-0388a0e0841c`; hood 01 `347e5ae2-9e0b-80b1-8009-0388a19f0a16`, 02 `347e5ae2-9e0b-80b1-8009-0388a8b4027a`, 03 `347e5ae2-9e0b-80b1-8009-0388a9a8f9e2`, 04 `347e5ae2-9e0b-80b1-8009-0388aaa292ab`; motion notes (1920x1080, editable text) `347e5ae2-9e0b-80b1-8009-03890a6cdf00`. The first design's eight boards are kept on the page as "superseded · ..." below the new grid.
 
 Lines that could not be fixed afterwards: V5 (the zone on 3 of 8 glances), V13 (the car not named), V15 (different arrangement in both orders, from logged changes).
 
