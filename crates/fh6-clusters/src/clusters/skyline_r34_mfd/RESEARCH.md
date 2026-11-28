@@ -228,3 +228,7 @@ New edge cases: wheel speeds are zero or equal when stationary or airborne (the 
 **16.4 Stock meters at night** (incandescent bulbs): the faces go fully black (#060304); numerals and ticks a neutral, slightly cool, dim white (#ACB1B7 at the brightest); captions dimmer (#6C6064); red-zone ticks 8 to 10 deep red (#900D1D); needles glow deep crimson (#9B0B24, temperature needle #D4242E); the odometer LCD is backlit pale lavender-white (#D9CAE4) with low-contrast grey-violet digits; warning lamps red. On a black OLED this night look is the natural default: it fits the house's true-black rule and the red budget (needles and red ticks only).
 
 **16.5 Nismo MFD pages** (clean screenshots): start-up with the GT-R badge, "nismo" and its red dot; a G page on a ±10 m/s² grid with a red target ring and a yellow dot; a lap page with LAP and BEST in `--'--"--`, a table of laps 1 to 5, START LAP and STOP buttons; an OIL-PRESS row; a −0.5 to 2.0 ×100 kPa boost dial. The G and lap pages are now drivable (section 15) in their real form.
+
+## 17. Direction from TJX (2026-11-28 10:53)
+
+On the night meters and the real MFD dials (16.1, 16.4): "Yes these old school ones that look realistic is what I'm looking for." The board leads with the real stock meters at night (black faces, cool-white numerals, crimson needles, deep red zone) and the real MFD dial template, drawn realistically at 4K, with the twist (floating MFD tiles) and the filled-in parts kept in that period look.
