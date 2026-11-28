@@ -54,6 +54,7 @@ pub mod lorenz_butterfly;
 pub mod lumen_etch;
 pub mod mclaren_slim_display;
 pub mod neural_cyber_synapse;
+pub mod osd;
 pub mod pagani_horologerie;
 pub mod porsche_analog;
 pub mod rack_focus;
