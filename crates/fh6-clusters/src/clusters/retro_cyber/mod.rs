@@ -266,7 +266,7 @@ const HOOD: Geom = Geom {
     gear: vec2(250.0, 26.0),
     gear_cap: 150.0,
     readout: vec2(-590.0, 40.0),
-    readout_cap: 50.0,
+    readout_cap: 66.0,
     label_y: 120.0,
     label_cap: 14.0,
     figure_cap: 13.0,
