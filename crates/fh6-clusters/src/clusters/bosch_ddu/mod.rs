@@ -25,7 +25,7 @@
 //! | G | gear beam | trapezoid y 9..170, ±32 at the horizon, ±120 at the foot | rank 1: the gear (cap 132, every gear in ink) in a beam of `primary` light, whose two edge lines turn `warning` in reverse |
 //! | Q1 | PEDALS | x −312..−156, y −204..−15 | throttle and brake bars: 28 fine lines, a marker at the value |
 //! | Q2 | G-FORCE | x −312..−156, y 9..170 | a full ring (R 54, band 14) at (−234, 108) on a dim track (half `ink_ghost`), filled clockwise from 12 o'clock by the felt force of the shared `GBall` (full at 1.5 g), a bead at the force's bearing, the total G (cap 26) and its unit inside |
-//! | Q3 | ENGINE | x 156..312, y −204..−15 | power (cap 28, `signals.power_unit`), boost (psi; its value in ink, its label the panel's one accent line: the text-safe accent at the print's light), the shift rpm boxed |
+//! | Q3 | ENGINE | x 156..312, y −204..−15 | power (cap 28, `signals.power_unit`), boost (its label the panel's one accent line, the text-safe accent at the print's light; its value in ink with "psi" after it in print), the shift rpm boxed |
 //! | Q4 | SPEED | x 156..312, y 9..170 | rank 2: tabular speed (cap 58, no ghost 8s: at a glance they read as digits) and its unit |
 //! | C | chin | y 170..232 | the custom name (left zone), the car's logo zone (right); the hood view keeps a logo image only |
 //!
@@ -257,6 +257,9 @@ const LIMIT_TICK_OUT: f32 = TICK_OUT - (LIMIT_TICK_W - TICK_W) * 0.5;
 /// unit.
 const SHIFT_PAD: f32 = 6.0;
 const ROW_GAP: f32 = 4.0;
+/// The gap (px) between the boost value and its unit after it: a thin space at the label cap,
+/// which leaves the value 7.5 px clear of the accent label at the widest value ("60.0").
+const UNIT_GAP: f32 = 2.0;
 /// The red zone on the scale ring (px wide), and its strength (alpha of `warning`; a static part,
 /// held under [`STATIC_CAP`]).
 const RED_BAND: f32 = 5.0;
@@ -1803,12 +1806,29 @@ impl BoschDdu {
         let big = self.figures(g.power_cap, pal.roles.ink, Align::Right);
         p.number(vec2(x1, s.head + g.power_dy), self.power_shown, POWER_CELLS, &big, None);
 
-        // Boost: the label and its unit on the left in the text-safe accent at the printed
-        // parts' light, the value on the right in ink (vacuum reads 0).
+        // Boost: the label alone on the left in the text-safe accent at the printed parts'
+        // light; on the right the value in ink (vacuum reads 0) with its unit after it in print,
+        // so the value stands clear of the accent label at a glance (board v2).
         let boost_y = s.head + g.boost_dy;
-        self.row(p, g, vec2(x0, boost_y), "BOOST", "psi", accent_print(pal));
+        let label_y = boost_y + LABEL_NUDGE;
+        p.text(
+            vec2(x0, label_y),
+            "BOOST",
+            &self.row_label(g.label_cap, accent_print(pal)),
+        );
+        let unit = self
+            .row_label(g.label_cap, print_ink(pal))
+            .align(Align::Right, VAlign::CapMiddle);
+        let unit_w = p.measure("psi", &unit).width;
+        p.text(vec2(x1, label_y), "psi", &unit);
         let small = self.figures(g.value_cap, pal.roles.ink, Align::Right);
-        draw_fixed(p, vec2(x1, boost_y), self.boost_shown.max(0), 1, &small);
+        draw_fixed(
+            p,
+            vec2(x1 - unit_w - UNIT_GAP, boost_y),
+            self.boost_shown.max(0),
+            1,
+            &small,
+        );
 
         // The shift point in an outlined box, as the DDU boxes its key value. It never changes
         // while a car is driven, so it is printed at the labels' level, on black.
@@ -2836,7 +2856,7 @@ mod tests {
         const AIR: f32 = 4.0;
         let row = TextStyle::new(label, g.label_cap);
         let small = TextStyle::new(figures, g.value_cap).tabular();
-        let boost = width("BOOST", &row) + ROW_GAP + width("psi", &row) + AIR + width("60.0", &small);
+        let boost = width("BOOST", &row) + AIR + width("60.0", &small) + UNIT_GAP + width("psi", &row);
         assert!(boost <= narrow, "BOOST row: {boost} px in {narrow}");
         let shift = width("SHIFT", &row) + AIR + SHIFT_PAD + 5.0 * fonts.tabular_cell(&small) + SHIFT_PAD;
         assert!(
