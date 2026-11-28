@@ -4,22 +4,23 @@ How a branch on GitHub (`origin`, T-J-X/Forza-Revampled-Telemetry) gets deleted,
 
 ## Who can delete a branch
 
-**Not a thread.** Claude's cloud sessions reach GitHub through a proxy that lets a push create or update a branch and refuses every branch deletion with `HTTP 403` (the "GitHub proxy" part of https://code.claude.com/docs/en/cloud-environments). The GitHub tools a thread has do not delete branches either. A Remote Control session on the PC has the PC's own GitHub sign-in, but its permission check denies the delete as destructive before git runs (tried on 2026-11-28). Both refusals are on purpose, not faults. Do not retry a refused delete, and do not build a way round it.
+**Not a thread on its own.** Claude's cloud sessions reach GitHub through a proxy that lets a push create or update a branch and refuses every branch deletion with `HTTP 403` (the "GitHub proxy" part of https://code.claude.com/docs/en/cloud-environments). The GitHub tools a thread has do not delete branches either. A Remote Control session on the PC has the PC's own GitHub sign-in, but its permission check denied the delete as destructive before git ran (2026-11-28). Both are guardrails, not faults. Do not retry a refused delete, and do not look for another route.
 
 Two can:
 
-1. **GitHub itself**, through the repository setting "Automatically delete head branches" (Settings, General, Pull Requests). Only TJX can change it, and a thread cannot read it. With it on, GitHub deletes a pull request's head branch when the pull request merges. Its documentation does not say whether that covers the way work is merged here: a push of the branch's commits to `main`, which GitHub then marks as merged (an "indirect merge"). TJX was asked to turn it on on 2026-11-28. The first merge after that is the test, and its result goes in that day's section below. GitHub ties a branch to a merge only through its pull request, which is why rule 17 gives every pushed branch one.
-2. **TJX, signed in on GitHub.** The link `https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=<code>`, with the last six characters of the branch name as `<code>`, shows that one branch and its bin. The page of a merged pull request has a "Delete branch" button. At a terminal with their own GitHub sign-in, step 5 below does the same.
+1. **GitHub itself**, through the repository setting "Automatically delete head branches" (Settings, General, Pull Requests), which has been on since 2026-11-28. It is TJX's to change. With it on, GitHub deletes a pull request's head branch when the pull request merges. Its documentation does not say whether that covers the way work is merged here: a push of the branch's commits to `main`, which GitHub then marks as merged (an "indirect merge"). Public reports say it does, but it has not been seen here yet. The first merge after the setting went on is the test, and the coordinator writes its result in the 2026-11-28 section below. GitHub ties a branch to a merge only through its pull request, which is why rule 17 gives every pushed branch one.
+2. **TJX, signed in on GitHub.** The link `https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=<code>`, with the last six characters of the branch name as `<code>`, shows that one branch and its bin. The page of a merged pull request has a "Delete branch" button. Neither button has a lease: it deletes whatever the branch points at when it is pressed, so whoever presses first sees that the head is still the checked one (`git ls-remote origin refs/heads/<branch>`, or 0 commits ahead of `main` on that row). A thread that pushes to its branch again tells the coordinator, who takes the link back. At a terminal with TJX's own GitHub sign-in, step 5 deletes with a lease. TJX can also have a thread press those buttons in the browser of the Claude desktop app, where TJX is signed in to GitHub (step 6). That is TJX's delete, not the thread's: a thread does it only when TJX has told that thread to, and only for the branches TJX named. No thread opens that browser to delete a branch on its own.
 
 ## The check before a branch is deleted
 
-Whoever puts a branch on TJX's list runs steps 1 to 4 first, and gives TJX the link above.
+The coordinator runs steps 1 to 4 before it passes TJX the link above. A delete after a single merge is passed to TJX in a message and needs no section here; a cleanup of several branches gets a dated section.
 
 1. Work in a full clone: if `git rev-parse --is-shallow-repository` prints `true`, run `git fetch --unshallow origin`. Then `git fetch --prune origin`.
-2. Take the branch's head from `git ls-remote origin`. `git merge-base --is-ancestor <head> origin/main` exits 0, so every commit on the branch is already in `main`.
+2. Take the branch's head from `git ls-remote origin`. `git merge-base --is-ancestor <head> origin/main` exits 0, so every commit on the branch is already in `main`. If it exits 1 only because the work reached `main` rebased, `git cherry origin/main <head>` prints nothing but lines that start with `-`; any line that starts with `+` is a commit `main` lacks, and the branch stays.
 3. No open pull request has the branch as its head or its base. Deleting the head branch of an open pull request closes it.
-4. The branch's thread has closed, or it is your own thread's branch and its work is on `main`.
+4. The branch's thread has closed.
 5. Only TJX, at a terminal with their own GitHub sign-in: delete with a lease, so that the delete goes through only if the branch still points at the head that was checked: `git push --force-with-lease=refs/heads/<branch>:<head> origin :refs/heads/<branch>`. A plain `git push origin --delete <branch>` would also delete commits pushed since the check.
+6. Only a thread that TJX has told to, in the browser of the Claude desktop app: open the branch's link and, just before the click, see that the page lists that one branch and no other, that GitHub counts it 0 commits ahead of `main`, that it has no open pull request, and that `git ls-remote origin` still gives the head that was checked. The "Delete branch" button has no lease, so this look is the lease. Take one branch at a time, and see with `git ls-remote origin` that it is gone before the next.
 
 A branch is kept when `main` lacks any of its commits, or when its thread is still at work, even if it is merged. If unsure, keep it and tell the coordinator.
 
@@ -39,13 +40,17 @@ TJX found GitHub cluttered with the branches of finished threads and asked for a
 
 **Snapshot:** `git ls-remote origin` at 03:52 UTC, with `main` at `fd13cf5`. There were no tags. Seven threads were at work: Rust fix phases F and G, the Liquid Glass OSD, and the TeslaAdas, BoschDdu, RetroCyber and Gt7HoodPro rebuilds (Gt7HoodPro had not pushed a branch yet). Their branches keep moving, and a branch that moves or appears after the snapshot is not part of this cleanup.
 
-**Result:** nothing is deleted yet, and nothing else changed.
+**Result:** six branches are deleted, the setting is on, and nothing else changed. GitHub went from 16 branches to 10. Its 12 pull requests stayed as they were: 5 merged, and 7 open drafts of threads at work.
 
-- 03:56 UTC: the cloud session's seven leased deletes were refused with `HTTP 403`.
-- About 04:20 UTC: the cloud GPU lane's thread came back, pushed one more commit to `claude/project-thread-obs70c` and merged it a minute later (`main` is now `7648f02`). That branch is in use again, so it leaves this cleanup. This is what the lease in step 5 is for: a plain delete in that minute would have taken a commit that `main` did not have yet.
-- 04:21 UTC: TJX had said to force it, so a Remote Control session on the PC tried the leased deletes with the PC's own GitHub sign-in. Its permission check denied the command as destructive before git ran.
+- 03:56 UTC: the seven leased deletes from the cleanup thread's cloud session were refused with `HTTP 403`.
+- 04:20 UTC: the cloud GPU lane's thread came back and pushed one more commit (`7648f02`) to `claude/project-thread-obs70c` and to `main` at the same time. That branch is in use again, so it leaves this cleanup.
+- 04:21 UTC: TJX had said to force it, so a Remote Control session on the PC tried the leased deletes with the PC's own GitHub sign-in. Its permission check denied the command as destructive before git ran. The command still named the old head `8aebf2b` for `claude/project-thread-obs70c`, so the lease in step 5 would have refused that one, where a plain delete would have removed a branch its thread had just pushed to.
+- 04:24 UTC: TJX was asked to press the links and turn the setting on.
+- 04:25 UTC: TJX answered "yes sign in here and do that", choosing to sign in to GitHub in the browser of the Claude desktop app and to have this cleanup's thread press the buttons there. At 04:38 UTC TJX was signed in and said to go ahead.
+- 04:40 to 04:41 UTC: the thread deleted the six branches below there, one at a time, each with the "Delete branch" button on its own filtered page (step 6). Before each click the page listed that one branch, 0 commits ahead of `main` and with no open pull request, and `git ls-remote origin` gave the head in the table. After each click `git ls-remote origin` no longer listed the branch. It still lists `refs/pull/1/head`, `refs/pull/2/head`, `refs/pull/4/head` and `refs/pull/6/head` at their old commits.
+- 04:42 UTC: the thread ticked "Automatically delete head branches" in the repository settings, and the box was still ticked after a reload.
 
-Six branches wait for TJX, each behind its link:
+The six, each with the link that showed it:
 
 - `claude/phase-3-design-system-449d2f`: https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=449d2f
 - `claude/project-thread-euvhdf`: https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=euvhdf
@@ -54,7 +59,9 @@ Six branches wait for TJX, each behind its link:
 - `claude/project-thread-ruv0ss`: https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=ruv0ss
 - `claude/project-thread-urfb8s`: https://github.com/T-J-X/Forza-Revampled-Telemetry/branches/all?query=urfb8s
 
-At 04:22 UTC all six still pointed at the heads in the table, and `main` contained each of them. One branch had appeared since the snapshot, `claude/project-thread-h7qahw` (the Gt7HoodPro rebuild, at work, no pull request yet), so GitHub held 15 branches and 9 pull requests.
+Between the snapshot and the deletes two branches appeared, `claude/project-thread-h7qahw` (the Gt7HoodPro rebuild) and `claude/project-thread-5xdfjx` (this cleanup), and three pull requests were opened (#10 for the Gt7HoodPro rebuild, #11 for the Liquid Glass OSD, #12 for this cleanup). That is why 16 branches and 12 pull requests stood before the first delete.
+
+Left on GitHub: `main` and nine thread branches. Seven belong to threads at work, each with an open draft pull request (`191tnq`, `5xdfjx`, `czxgs6`, `h7qahw`, `ovnqwk`, `q6crd5`, `r828zb`). Two are fully in `main` and wait for the next sweep: `claude/project-thread-obs70c` (cloud GPU lane, no pull request, its thread was at work at 04:20 UTC) and `claude/project-thread-ocd2bw` (Rust fix G, #5 merged, its thread has one item left).
 
 ### Branches before: 14
 

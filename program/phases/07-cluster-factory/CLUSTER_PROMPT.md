@@ -219,4 +219,7 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 - Every line of the closing review is yes, or a line that could not be fixed afterwards is reported in the handover, in the thread and to the coordinator.
 - The visual review (`fh6-visual-review`, V1 to V26) is in the handover, each line with its evidence.
 - The handover is written, the job is reported to the coordinator for the merge, and the product page and the completed checklist are posted in the thread.
-- Last, once the work is on `main`: the pull request shows as merged, and you have checked whether your thread's branch is still on GitHub and told the coordinator if it is (AGENTS.md rule 17; a thread cannot delete a branch).
+- A draft pull request has been open since your branch's first push (AGENTS.md rule 17).
+
+## After the merge
+Once the coordinator has told you that your work is in `main` and pushed, do the last step of AGENTS.md rule 17: make sure your pull request shows as merged (if it still shows open, close it with a one-line comment; never merge it yourself), check with `git ls-remote origin` whether your branch is still on GitHub, and say in your closing post and to the coordinator whether it is, with its name and head. Do not delete it yourself. This is not an exit criterion: it is not copied into the handover and needs no further commit.
