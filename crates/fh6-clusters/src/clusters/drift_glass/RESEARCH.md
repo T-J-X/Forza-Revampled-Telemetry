@@ -29,6 +29,18 @@ An owner of a DriftBox, or a D1GP viewer, should recognise in DriftGlass: the li
 | B8 | **10 Hz GPS with a temperature-compensated yaw sensor**; drift angle resolution 0.01°, accuracy 1°. | Cited: datasheet [S13] | Ours reads the game's velocity at frame rate. The readout shows whole degrees, since 1° is the real meter's accuracy. |
 | B9 | The DriftBox's angle is **unsigned**; no page shows which side the car slides to. | Cited [S9, S11, S13] | Changed: DriftGlass shows the side, because the wedge opens toward it (a 2027 elevation). |
 
+### 2.1 What the reference photos show
+
+Photos saved 2026-11-28 to the Drive masters folder `drift_glass\references\` (12 files, with `sources.md`); they stay out of git. Read by eye from the files named.
+
+| # | Photo | What it shows | Our reading for DriftGlass |
+|---|---|---|---|
+| P1 | `01_driftbox_unit_drift_screen.jpg` (Racelogic product photo) | A monochrome LCD headed DRIFT ANGLE in three cells: speed on the left (`54` over `KMH`), the live angle large in the centre (`24°`, heavy condensed bold), the peak on the right (`34°` over `PEAK`), and a segmented bar strip along the bottom. | The DriftBox's signature is the triad speed · live angle · peak, with the live angle the largest figure. DriftGlass keeps the triad and its order of size; the house rank rule still puts the gear above all three. |
+| P2 | `04_d1gp_doss_solo_score_96_6.jpg` (D1GP 2024 Rd.10 Odaiba, broadcast frame) | Black screen, white 1 px grid, white condensed sans caps. A table ZONE · LINE OFF · JUDGE AREA · Sec. Point with five sector points to two decimals (25.17, 19.93, 19.63, 14.16, 18.74); entry speed `113.8 km/h` to one decimal; a total `96.6` in very large yellow; a red cell (`Z1`) marks a zone deduction; RANK in a gold box. The five sector points sum to 97.63, so the shown total is the sector sum less deductions. | DOSS shows sector points to two decimals and the total to one. DriftGlass shows the slide score to two decimals (as the press reports, B6) and the chain total to one, like the board's total. The deduction cue is a red cell on black: in DriftGlass red stays reserved for the limiter, so SPIN uses the `caution` role and the handover says why. |
+| P3 | `05_d1gp_doss_solo_score_91_3.jpg` | The same screen with a judge-area deduction (J3 in red), 105.76 km/h, total 91.3. | Same reading as P2; the speed shows two decimals here, so DOSS's decimals vary by field. |
+| P4 | `07_fd_rdl_udsm_gauge_closeup.jpg` (Formula Drift 2026, Race Data Labs review tool) | A round gauge: a speed arc 0 to 150 mph with one bar per driver in their colour (blue, magenta), each driver's speed large (`43 mph`) with the angle under it (`50°`), an acceleration-delta bar each (`+1.2 ft/s`), and a green PROX bar (`PROX 5.2 ft`) along the bottom. Thin white ticks, translucent dark centre panel. | The modern benchmark pairs speed with angle in one stack and compares two runs side by side. That is the ghost-lead idea (§7): the live slide in the palette's primary, the ghost in a dimmer secondary, and a match bar in place of PROX. |
+| P5 | `10`, `11`, `12_visor_bell_panovision_*.jpg`, `08_visor_stilo_st5_dark_smoke.jpg` | Visor cutouts at three-quarter view: a constant-thickness shell, a curved top edge with a slight lip, flanks that wrap back to round pivot bosses, a pull tab low on one side. The flank seen obliquely is visibly darker than the face seen square-on, in light smoke and dark smoke alike; the iridium one adds a bright mirror sheen across the upper half. | Confirms V3: the darkening toward the flanks is path length (Beer-Lambert), not a painted gradient. The pivot bosses and the pull tab are the visor's recognisable hardware and are candidates for the Blender part (§9). |
+
 ## 3. The visor: what a smoked race visor is
 
 | # | Finding | Source |
@@ -132,7 +144,9 @@ From the benchmark and the category, these parts need data the packet does not s
 - ComfyUI: the gasket's moulded rubber and the pivot plates' carbon, as visible surfaces at 4096 px; or a smoked-polycarbonate micro-scratch normal map.
 - From other kits, if they fit: the carbon twill swatches and Blender bezels that the library shares.
 
-These wait for LIBRARY DONE (the rule at the top of CLUSTER_PROMPT.md).
+These wait for LIBRARY DONE (the rule at the top of CLUSTER_PROMPT.md); TJS added on 2026-11-28 09:28 that Penpot, ComfyUI and Blender all wait for it.
+
+**Earlier assets found.** The Drive holds Phase 6 Blender renders of a DriftGlass visor from 2026-11-23 (`visor_l.png`, `visor_c.png`, `visor_r.png`, 2528 × 728 at 128 samples, seed 1010, three light keys at azimuths −9°, 0° and 9°), made from a bpy script in an old worktree. They predate the 2026-11-27 rules (all assets 4K and 1:1 at the 3840 × 2160 frame; Penpot before assets), so they are not reused as the final plate. Their three-key approach (one render per light azimuth, swapped by lateral G) matches the brief's facet swap and is worth keeping in the new Blender recipe.
 
 ## 10. Sources
 
