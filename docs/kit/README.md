@@ -279,7 +279,7 @@ impl Cluster for MyCluster {
 }
 ```
 
-- `update(&mut self, &FrameInput)`: `telemetry` (raw packet), `signals` (decoded and smoothed: speed in the user's unit, rpm and its rate, `rpm_fraction`, `shift_fraction`, `Gear`, pedals, smoothed G and slip, yaw rate, position), `dt`, `t`, `config`, `palette`, `tokens`, `fonts` (display / text / wide, with the user's font override), `logo`, `view`, `reduced_flash`.
+- `update(&mut self, &FrameInput)`: `telemetry` (raw packet), `signals` (decoded and smoothed: speed in the user's unit (`signals.unit`), the user's power unit (`signals.power_unit`: show power in it, never by the speed unit), rpm and its rate, `rpm_fraction`, `shift_fraction`, `Gear`, pedals, smoothed G and slip, yaw rate, position), `dt`, `t`, `config`, `palette`, `tokens`, `fonts` (display / text / wide, with the user's font override), `logo`, `view`, `reduced_flash`.
 - `draw(&self, &mut Painter, &Layout)`: record only; no state changes, no allocation.
 - Each cluster module exports its constructor, and the registry row (generated once in Phase 7 from `catalog::CATALOG`, never edited by a cluster chat) points at it:
 

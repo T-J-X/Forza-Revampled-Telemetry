@@ -109,6 +109,11 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("preview-export failed: {e}");
+            let mut cause = e.source();
+            while let Some(c) = cause {
+                eprintln!("  caused by: {c}");
+                cause = c.source();
+            }
             ExitCode::FAILURE
         }
     }
@@ -190,7 +195,7 @@ fn run() -> Result<()> {
 
     for entry in REGISTRY {
         let name = entry.theme.to_string();
-        let palette = Palette::family(&tokens, entry.family);
+        let palette = Palette::family(&tokens, entry.family.key());
         for state in &STATES {
             let started = Instant::now();
             let mut cluster = {

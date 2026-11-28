@@ -57,10 +57,20 @@ impl KitResources {
             let a = d.join("assets");
             a.join(BRANDS_FILE).is_file().then_some(a)
         });
-        let cars = assets
-            .as_ref()
-            .map(|a| CarDatabase::load(a.join(BRANDS_FILE)))
-            .unwrap_or_default();
+        let cars = match assets.as_ref().map(|a| CarDatabase::load(a.join(BRANDS_FILE))) {
+            Some(Ok(cars)) => {
+                tracing::info!(cars = cars.len(), brands = cars.brand_count(), "car database loaded");
+                cars
+            }
+            Some(Err(err)) => {
+                let cause = std::error::Error::source(&err)
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette");
+                CarDatabase::default()
+            }
+            None => CarDatabase::default(),
+        };
         let user_fonts = exe_dir.map(|d| d.join("fonts")).filter(|d| d.is_dir());
         Self {
             tokens,
@@ -84,7 +94,7 @@ mod tests {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let r = KitResources::resolve(&repo.join("data/config.json"));
         assert!(r.assets.is_some(), "assets/ found from data/config.json");
-        assert!(!r.cars.brand_palettes.is_empty());
+        assert!(r.cars.brand_count() > 0);
         assert!(!r.tokens.family_defaults.is_empty());
     }
 }

@@ -23,6 +23,7 @@ pub mod anim;
 mod clock;
 pub mod cluster;
 pub mod color;
+mod family;
 pub mod fluid;
 pub mod images;
 mod kit;
@@ -47,9 +48,11 @@ pub mod tokens;
 
 pub use anim::{Easing, Hysteresis, Smoothed, Spring, SpringSpec, Strobe, Tween};
 pub use cluster::{
-    Cluster, ClusterEntry, FontChoice, FrameInput, Gear, Layout, Logo, Setup, SignalSmoother, Signals, SpeedUnit, View,
+    Cluster, ClusterEntry, FontChoice, FrameInput, Gear, Layout, Logo, PowerUnit, Setup, SignalSmoother, Signals,
+    SpeedUnit, View,
 };
 pub use color::Color;
+pub use family::Family;
 pub use images::Images;
 pub use kit::{Kit, KitError};
 pub use math::{deg, vec2, Affine, Rect, Vec2};

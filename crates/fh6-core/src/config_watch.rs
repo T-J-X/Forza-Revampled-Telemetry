@@ -48,7 +48,7 @@ impl ConfigHandle {
     }
 
     /// Forces `theme` as the style of every view for the rest of the run (the cockpit, hood and
-    /// chase styles and the legacy `HudStyle`), including every later hot reload. Used by
+    /// chase styles), including every later hot reload. Used by
     /// `FH6_WheelDash --cluster <Name>` to review one cluster live; the file is never written.
     /// Only the first call takes effect.
     pub fn force_cluster_style(&self, theme: ClusterTheme) {
@@ -67,19 +67,9 @@ impl ConfigHandle {
 
 /// Sets every view's style to `theme`.
 fn force_style(cfg: &mut AppConfig, theme: ClusterTheme) {
-    let name = theme.name();
-    for s in [
-        &mut cfg.hud_style,
-        &mut cfg.cockpit_hud_style,
-        &mut cfg.bonnet_hud_style,
-        &mut cfg.chase_hud_style,
-    ] {
-        s.clear();
-        s.push_str(name);
-    }
-    cfg.cockpit_hud_style_typed = theme;
-    cfg.bonnet_hud_style_typed = theme;
-    cfg.chase_hud_style_typed = theme;
+    cfg.cockpit_hud_style = theme;
+    cfg.bonnet_hud_style = theme;
+    cfg.chase_hud_style = Some(theme);
 }
 
 /// Watches a config file and republishes it when its modification time or size changes.
@@ -234,22 +224,22 @@ impl Drop for ConfigWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fit::FitView;
 
     #[test]
     fn a_forced_style_survives_every_publish() {
         let base = AppConfig {
-            cockpit_hud_style: "LiquidGlass".into(),
+            cockpit_hud_style: ClusterTheme::LiquidGlass,
             ..AppConfig::default()
         };
         let handle = ConfigHandle::fixed(base.clone());
         handle.force_cluster_style(ClusterTheme::VernierLoupe);
         let cfg = handle.current();
-        assert_eq!(cfg.cockpit_hud_style, "VernierLoupe");
-        assert_eq!(cfg.bonnet_hud_style, "VernierLoupe");
-        assert_eq!(cfg.chase_hud_style, "VernierLoupe");
-        assert_eq!(cfg.cockpit_hud_style_typed, ClusterTheme::VernierLoupe);
+        for view in [FitView::Cockpit, FitView::Hood, FitView::Chase] {
+            assert_eq!(cfg.theme(view), ClusterTheme::VernierLoupe, "{view:?}");
+        }
         // A hot reload of the file keeps the override.
         handle.publish(base);
-        assert_eq!(handle.current().cockpit_hud_style, "VernierLoupe");
+        assert_eq!(handle.current().cockpit_hud_style, ClusterTheme::VernierLoupe);
     }
 }

@@ -15,8 +15,8 @@ use fh6_gpu::GpuContext;
 use fh6_kit::fluid::{Fluid, FluidConfig};
 use fh6_kit::testing::{Offscreen, OFFSCREEN_FORMAT};
 use fh6_kit::{
-    vec2, Cluster, Color, FrameInput, Glass, ImagePaint, Kit, LayerOptions, Layout, Logo, Palette, Rect, Refraction,
-    Shape, SignalSmoother, Tokens, View,
+    vec2, Cluster, Color, Family, FrameInput, Glass, ImagePaint, Kit, LayerOptions, Layout, Logo, Palette, Rect,
+    Refraction, Shape, SignalSmoother, Tokens, View,
 };
 use std::error::Error;
 use std::fmt::Write as _;
@@ -253,7 +253,7 @@ fn main() -> Result<()> {
             None
         });
         let entry = sc.theme.map(fh6_clusters::registry::resolve);
-        let palette = Palette::family(&tokens, entry.map_or("liquidGlass", |e| e.family));
+        let palette = Palette::family(&tokens, entry.map_or(Family::LiquidGlass, |e| e.family).key());
         kit.set_palette(palette);
         let mut cluster: Option<Box<dyn Cluster>> =
             entry.map(|e| (e.make)(&mut kit.setup(&ctx.device, &ctx.queue, None)));

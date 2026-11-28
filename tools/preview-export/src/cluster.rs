@@ -188,7 +188,7 @@ pub fn run(
         brand_name: String::new(),
         custom_name: cfg.custom_driver_name.clone(),
     };
-    let palette = Palette::family(tokens, entry.family);
+    let palette = Palette::family(tokens, entry.family.key());
     kit.set_palette(palette);
     let fonts = kit.font_choice(None);
     let photo = background(root, "cockpit_with_wheel.jpg").ok();
