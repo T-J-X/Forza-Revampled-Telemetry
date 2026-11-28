@@ -9,6 +9,10 @@
 //! Run with `FH6_UPDATE_GOLDEN=1` to (re)write the goldens after an intended visual change; review
 //! the new PNGs before committing them. A cluster chat only ever rewrites its own goldens.
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(
+    clippy::expect_used,
+    reason = "test: a cluster missing from the registry or catalog should stop the test with its name"
+)]
 
 mod support;
 

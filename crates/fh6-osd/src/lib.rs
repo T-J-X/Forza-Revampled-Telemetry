@@ -13,6 +13,7 @@
 //! - [`pause`]: auto-pause (ESC on open mid-race) behind a [`pause::KeyboardInjector`].
 //! - [`saver`]: debounced background saves.
 //! - [`fit`]: the seam to the cockpit-fit backend (camera files, scrim rows).
+#![forbid(unsafe_code)]
 
 pub mod anim;
 pub mod draw;

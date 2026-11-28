@@ -1,4 +1,5 @@
 //! fh6-core: Core data models, telemetry parser, config, and state machines for FH6 WheelDash.
+#![forbid(unsafe_code)]
 
 pub mod atomic_file;
 pub mod camera_status;

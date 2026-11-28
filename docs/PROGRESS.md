@@ -38,6 +38,24 @@ The v2 build program is running. See [program/README.md](../program/README.md) f
 - **OSD:** the dyno is a fixed frame, ESC injection is mocked, and LB/RB tab switching is a no-op. (Phase 9)
 - **Logos and brand colours:** no logo support, and brand palettes are never applied at runtime. (Phases 5, 6 and 7)
 
+## State of the code (after Rust fix phase G, 2026-11-28)
+| Check | Result |
+|---|---|
+| `cargo test --workspace` | ✅ in the cloud: 810 passed, 88 failed, 1 ignored, the 88 being the container's known reds (no DX12 adapter, Windows paths); the GPU tests and image goldens pass on a software GPU (lavapipe), every golden frame byte-identical to main's. The PC's GPU run is pending (its session paused on the usage limit) |
+| `cargo test -p fh6-clusters --test dash_gates` | ✅ 10 passed, no GPU, about 50 s |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean, with the workspace lint table |
+| `cargo fmt --all -- --check` | ✅ clean |
+| `parity-dump tests/golden/packets` | ✅ 20/20 OK, 0 orphaned goldens |
+| MSRV 1.90 (`cargo +1.90.0 check`) | ✅ |
+| `cargo build -p fh6-kit --target wasm32-unknown-unknown` | ✅ |
+
+What fix phase G changed (the test findings and findings 16 and 18 of the 2026-11-27 Rust assessment; `program/phases/fix-g-gates/HANDOVER.md`):
+- **Every dash is gated without a GPU.** `crates/fh6-clusters/tests/dash_gates.rs` builds all 48 registry dashes on wgpu's no-op backend and checks the telemetry matrix input by input (G2, G3), hostile telemetry and odd targets (G5), warm-frame allocation and the no-asset fallback. A dash thread runs it and keeps its row in `docs/TELEMETRY_USAGE_MATRIX.md` true.
+- **Packet floats are cleaned once.** `decode` turns NaN and the infinities into 0 and clamps to `±MAX_ABS`; zeros still pass, so divisions need a guard. `normalized_rpm` is gone.
+- **The goldens mean something.** `golden_telemetry` checks every field bit for bit, and `parity-dump` fails on a missing or orphaned golden.
+- **The rules are checks.** One `[workspace.lints]` table denies `unsafe` outside `fh6-win` and `fh6-input`'s `xinput`, and `unwrap`, `expect`, `panic!`, `todo!` and `dbg!` outside tests; the safe crates forbid `unsafe`. The MSRV is 1.90, checked.
+- **The kit counts what it hides** (`fh6_kit::math::repairs`), and `Scene::fingerprint` tells a test whether an input reached the frame.
+
 ## State of the code (after Rust fix phase D, 2026-11-27)
 | Check | Result |
 |---|---|
@@ -225,6 +243,7 @@ What exists:
 18. Only a panic on the render thread is caught. A render thread that hangs without panicking is not detected, and a panic on another thread is logged while the app carries on. `panic = "abort"` for release builds would cover every thread; it is TJX's decision (it skips the OSD's pending save).
 19. The OSD's power unit row (HP or kW) changes nothing on the three dashes that exist: Bosch DDU and PorscheAnalog pick power from the speed unit, and Liquid Glass always shows hp. Each reads `signals.power_unit` when it is rebuilt (Rust fix phase D gave every dash the unit and edited none).
 20. `--cluster <Name>` forces the style in the live config, and the OSD copies that config for editing, so an OSD edit during such a run saves the forced style into all three style keys (found by the fix phase D review; not fixed there).
+21. `fh6_kit::Meshes::upload` never reuses a mesh: each call creates new buffers and a new `MeshId`, and nothing frees them, so every rebuild of a dash that uploads meshes leaks them (Tesla ADAS uploads 5 per build; the OSD carousel and a style switch rebuild). Found by the fix phase G review. A fix is a content key or a release on drop; the gate's fingerprint already numbers mesh handles by first use so it is not affected.
 
 ## Backlog (not yet scheduled)
 **Pre-05A: Liquid Glass OSD and cockpit optics**
@@ -259,12 +278,16 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 - reactive sci-fi kinematics (P8-2)
 - motorsport rebuilds (P8-3)
 
+**Lints**
+- `clippy::chunks_exact_to_as_chunks` is allowed in the workspace lint table (it fires since the MSRV is 1.90): about 40 `chunks_exact` calls in 21 files can become `as_chunks` in a quiet moment.
+- `clippy::allow_attributes_without_reason` would make every `#[allow]` carry its reason, as the ones fix phase G added do.
+
 **Gates G1 to G5**
 - G1: a scan for forbidden patterns.
-- G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output. The v1 test (`telemetry_sensitivity.rs`) went with the v1 clusters in Rust fix phase E; the kit clusters have their four golden states and their own unit tests of their telemetry mappings, but no per-input sensitivity test.
-- G3: matrix integrity.
+- ~~G2: per-cluster telemetry sensitivity. Every input in `docs/TELEMETRY_USAGE_MATRIX.md` that a cluster claims must change its output.~~ Done in Rust fix phase G (2026-11-27): `crates/fh6-clusters/tests/dash_gates.rs` probes every registry dash, input by input, on wgpu's no-op backend (no GPU).
+- ~~G3: matrix integrity.~~ Done in fix phase G: the same test fails on an input that changes a dash's frame without being listed, a dash without a row, a row for no dash, and an Inputs or Scenarios table that differs from the test.
 - G4: OSD dispatch. The v1 test (`g4_dispatch.rs`) went with the v1 OSD renderer in Phase 9; the OSD now draws the cluster through `fh6_clusters::registry`, covered by `fh6-osd` unit tests (`host`, `model`) and `preview-export`'s OSD states.
-- G5: robustness against NaN, Inf and zero-size inputs.
+- ~~G5: robustness against NaN, Inf and zero-size inputs.~~ Done in fix phase G: the decoder bounds every packet float, and `dash_gates` drives every dash with hostile packets and odd targets and fails on a NaN in the frame, a dropped item, a value the kit had to repair, or a panic.
 
 ## Open questions for TJX
 1. ~~Which design file is the master?~~ Answered 2026-11-23: the Penpot master file (docs/design/PENPOT.md).
@@ -413,6 +436,13 @@ Bring every cluster up to `docs/specs/phase-8-materials-and-shaders.md`:
 | 2026-11-27 | `FOV_RANGE` (40 to 110 degrees, the game's `MinFOV` / `MaxFOV`) moves from `fh6-win::camera_patcher` to `fh6_core::config`; the config clamps the six FOVs to it and the OSD slider uses it | One range for the file, the OSD and the camera patch |
 | 2026-11-27 | `car_profiles.json` loads car by car: a car whose key or profile does not load is skipped with a warning | One bad value used to drop every car's fit |
 | 2026-11-27 | `parity-dump` compares a golden's values, not its text, and writes new goldens with sorted keys | With `preserve_order` on in `fh6-core`, its keys came out in insertion order and every golden "mismatched" while every value matched |
+| 2026-11-27 | Rust fix phase G: the dash gates (`crates/fh6-clusters/tests/dash_gates.rs`) build every registry dash on wgpu's no-op backend and check G2 and G3 against `docs/TELEMETRY_USAGE_MATRIX.md` (rebuilt from what the gate observes), G5, warm-frame allocation and the no-asset fallback. Dev-dependencies of `fh6-clusters`: wgpu's `noop` feature, `allocation-counter` 0.8.1 (counts this thread's heap allocations; it installs its global allocator only in the binaries that use it) and `serde_json` | The v1 sensitivity test went with the v1 clusters, and nothing checked a kit dash input by input. A no-op device needs no GPU and no lock, so every dash is checked in about a minute on any machine |
+| 2026-11-27 | A probe switches an input in for 20 frames and back out, and compares four frames with a build that never saw it, in five common scenarios (the four review states and a lift off) and every view the catalog designs a dash for | The first version only compared settled frames; the fix phase G review showed it missed inputs a dash reads as an edge (Liquid Glass and Retro Cyber's start show on `race_on`, Porsche Analog's peak reset on a new `car_ordinal`), which the matrix now lists |
+| 2026-11-27 | `fh6_core::telemetry::decode` is the one place hostile floats are handled: NaN and the infinities become 0 and the rest are clamped to `MAX_ABS` (1e7). Zeros pass through, and corrupt packets become zeros rather than being rejected. `encode` is its inverse, for tools and tests; `normalized_rpm` is gone (no caller after fix E) | Finding 18 of the Rust assessment: every consumer guarded NaN on its own, unevenly. Real readings sit far below 1e7, and the bound keeps a dash's products finite |
+| 2026-11-27 | The kit counts repairs (`fh6_kit::math::repairs`, per thread): every `finite_or` that replaces a NaN or an infinity, and every non-finite transform or shape the painter ignores. A layer merged into the last segment when the segment list is full counts as dropped. `Scene::fingerprint` hashes what a frame draws (visible instances with their paint and clip by content, mesh handles by first use) and `Fonts::atlas_generation` tells when glyph UVs moved | The painter's sanitising hid a dash's own NaNs (a needle left where it was), so G5 could pass on a broken dash. The count costs nothing on a healthy frame (the branch is cold) |
+| 2026-11-27 | One lint table for the workspace (`[workspace.lints]`: `unsafe_code`, `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `dbg_macro` and `undocumented_unsafe_blocks` denied; tests allowed through `clippy.toml`), inherited by every member. `#![forbid(unsafe_code)]` in `fh6-core`, `fh6-kit`, `fh6-clusters`, `fh6-osd`, `fh6-gpu` and `fh6-app`; `unsafe` is allowed only in `fh6-win` (whose camera patcher and car brand table forbid it) and on `fh6-input`'s `xinput` module | Finding 16 of the Rust assessment: the rules of directive 6 were conventions, checked by hand. `clippy::chunks_exact_to_as_chunks` is allowed until a quiet moment (backlog) |
+| 2026-11-27 | MSRV 1.90 (`rust-version` and `clippy.toml`), checked with rustc 1.90.0 | `ordered-float` 5.5.1 (through `wgpu-hal` 30.0.2) needs 1.90, so the declared 1.87 never built |
+| 2026-11-27 | The goldens check every field bit for bit (`fh6-core/tests/golden_telemetry.rs`), and `parity-dump` fails on a missing golden or a golden with no packet; `--write-missing` writes a new packet's golden with `create_new`, its keys sorted through a `BTreeMap`; it compares values as fix phase D made it | A deleted or missing golden passed before |
 | 2026-11-27 | OSD rebuild (thread "Build the Liquid Glass OSD"): glass is the navigation only. The tab bar, the hint bar, the focus platter, the keyboard's key cap and the notice pill are `fh6_kit::OpticalGlass` pieces over black, with no panel behind the rows; focus reads by an accent light from within the platter; the OSD mirrors the Liquid Glass cluster's studio and lean; `fh6-osd` no longer uses the legacy `Glass`. Spec `docs/design/OSD.md`. No new dependency | TJX rejected the slab look in the first pilot, and AGENTS 3A forbids a glass panel. Apple's own rule is that glass is the navigation layer and lists are content |
 | 2026-11-28 | The OSD's camera rows show a rendered driving position (`fh6_osd::drive`, asset-forge set `osd`): five Cycles layers (dash, wheel, wheel rim, seat, seat rim) over a ComfyUI alcantara, moved live by seat height and wheel offset, with the eye, the default eye and the FOV fan drawn on top, and a line drawing as the fallback. The focus echo lifts 300 px on its own spring to make room. The rim layers are the parts lit by a backlit world alone, tinted with the accent for the focused part | It is the one picture in the menu about hardware. Separate layers let the parts move without a render per value, and a white rim pass takes any accent |
 | 2026-11-28 | The FOV fan opens at the setting's angle in the side view. Whether FH6's FOV setting is vertical or horizontal is not verified | No source settles it; the real-game check (C) does, and only the fan's angle would change |

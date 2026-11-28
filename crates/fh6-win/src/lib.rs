@@ -1,5 +1,11 @@
 //! fh6-win: the overlay window, monitor and focus tracking, the quit signal, and the game's
-//! camera file patcher. All Win32 `unsafe` lives here (and in fh6-input / fh6-gpu).
+//! camera file patcher. All Win32 `unsafe` lives here (XInput's is in fh6-input's `xinput`
+//! module; every other crate forbids or denies `unsafe`). The modules that need none, the camera
+//! patcher and the car brand table, forbid it.
+#![allow(
+    unsafe_code,
+    reason = "the Win32 layer: every `unsafe` block names its invariant in a `// SAFETY:` comment"
+)]
 
 #[cfg(windows)]
 pub mod app_window;

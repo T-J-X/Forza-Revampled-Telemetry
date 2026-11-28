@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "wgpu DX12 device and the premultiplied overlay surface"
 
+[lints]
+workspace = true
+
 [dependencies]
 wgpu = { workspace = true }
 thiserror.workspace = true

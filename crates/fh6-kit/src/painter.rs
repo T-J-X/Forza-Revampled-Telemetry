@@ -5,7 +5,7 @@
 //! handful of draw calls whatever its shape count.
 use crate::color::Color;
 use crate::images::Images;
-use crate::math::{finite_or, vec2, Affine, Rect, Vec2};
+use crate::math::{finite_or, note_repair, vec2, Affine, Rect, Vec2};
 use crate::mesh::{MeshCmd, MeshDraw};
 use crate::paint::{BlendMode, Environment, GradientKind, ImageId, ImageWrap, Paint, Refraction, Spread};
 use crate::palette::Palette;
@@ -169,8 +169,11 @@ impl<'f> Painter<'f> {
 
     /// Applies `t` in local space (it runs before the current transform).
     pub fn transform(&mut self, t: &Affine) {
-        if t.is_finite() {
-            self.state.xf = t.then(&self.state.xf);
+        let xf = t.then(&self.state.xf);
+        if xf.is_finite() {
+            self.state.xf = xf;
+        } else {
+            note_repair();
         }
     }
 
@@ -194,6 +197,8 @@ impl<'f> Painter<'f> {
     pub fn set_transform(&mut self, xf: Affine) {
         if xf.is_finite() {
             self.state.xf = xf;
+        } else {
+            note_repair();
         }
     }
 
@@ -537,11 +542,10 @@ impl<'f> Painter<'f> {
             return true;
         }
         if self.scene.segments.len() >= MAX_SEGMENTS {
-            // Keep drawing into the last segment rather than dropping content.
+            // Keep drawing into the last segment rather than dropping content, but count it: the
+            // layer loses its own blur or backdrop.
+            self.scene.dropped += 1;
             self.segment_open = !self.scene.segments.is_empty();
-            if !self.segment_open {
-                self.scene.dropped += 1;
-            }
             return self.segment_open;
         }
         let at = self.scene.draws.len() as u32;
@@ -562,6 +566,10 @@ impl<'f> Painter<'f> {
         }
         let xf = self.state.xf;
         let px_scale = xf.scale_factor();
+        if !(bbox.min.is_finite() && bbox.max.is_finite()) {
+            note_repair();
+            return;
+        }
         if px_scale <= 1e-6 || bbox.is_empty() && enc.kind != kind::GLYPH {
             return;
         }

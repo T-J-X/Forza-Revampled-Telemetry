@@ -11,6 +11,7 @@
 //!    the trailing newline, key spelling and every other byte stay as they were. Files are
 //!    written UTF-8 without BOM, atomically (temp file + rename).
 //! 4. A file that lacks a required key or the DriverCam offset layer is not touched at all.
+#![forbid(unsafe_code)]
 use crate::car_brands::{BindCarBrandError, BindOutcome, CarBinding};
 use crate::steam::camera_dir;
 use fh6_core::atomic_file::write_atomically;

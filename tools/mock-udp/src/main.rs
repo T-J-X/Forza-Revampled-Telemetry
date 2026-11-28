@@ -262,7 +262,13 @@ fn main() {
         i += 1;
     }
 
-    let sock = UdpSocket::bind("0.0.0.0:0").expect("bind udp");
+    let sock = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(sock) => sock,
+        Err(e) => {
+            eprintln!("[FH6 Mock UDP] cannot bind a UDP socket: {e}");
+            std::process::exit(1);
+        }
+    };
     let interval = Duration::from_secs_f32(1.0 / rate_hz.max(1.0));
     let start = Instant::now();
     let mut sent = 0usize;

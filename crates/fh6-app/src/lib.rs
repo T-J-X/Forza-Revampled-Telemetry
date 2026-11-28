@@ -1,7 +1,8 @@
 //! fh6-app: the `FH6_WheelDash` overlay and the `FH6_SteamLauncher` wrapper.
 //!
-//! All Win32 and GPU `unsafe` lives in fh6-win, fh6-input and fh6-gpu; this crate wires
-//! their safe APIs together.
+//! All `unsafe` (Win32 and XInput) lives in fh6-win and fh6-input; this crate wires their safe
+//! APIs together and forbids `unsafe` itself.
+#![forbid(unsafe_code)]
 
 #[cfg(windows)]
 pub mod app;

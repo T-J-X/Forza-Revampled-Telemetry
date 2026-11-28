@@ -1,6 +1,12 @@
 //! Shared GPU harness for the integration tests (goldens and component shots): one headless
 //! device and kit per test binary, bound to the repo tokens and the Phase 6 font pack.
 #![allow(dead_code)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "test harness: a GPU setup, readback or golden that fails should stop the test with its message"
+)]
 
 use fh6_clusters::review::{DriveContext, Driver, ReviewState};
 use fh6_core::AppConfig;

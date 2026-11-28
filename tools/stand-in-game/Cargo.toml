@@ -7,6 +7,9 @@ authors.workspace = true
 rust-version.workspace = true
 description = "A solid-colour, focusable full-screen window that stands in for the game in manual overlay tests"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "fh6-stand-in"
 path = "src/main.rs"

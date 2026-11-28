@@ -1,6 +1,11 @@
 //! GPU tests of optical glass: the shader against the CPU reference in `fh6_kit::optics`, and
 //! the conservation check of `docs/specs/optics.md` §8.
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "test helpers: a GPU setup or readback that fails should stop the test with its message"
+)]
 
 use fh6_gpu::GpuContext;
 use fh6_kit::color::srgb_to_linear;
