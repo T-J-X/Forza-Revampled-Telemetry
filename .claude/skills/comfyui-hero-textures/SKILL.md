@@ -106,11 +106,12 @@ text in a prompt.
 ## 8 GB VRAM safety
 
 - One GPU job at a time on this card, across Blender and ComfyUI and across every thread. Hold
-  `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job (root `SKILLS.md`, section 5). Never
+  `%USERPROFILE%\Documents\Dash_Tools\gpu.lock` for the job through `gpu-lock` (root `SKILLS.md`, section 5). Never
   start ComfyUI work while a Cycles render is running from the same recipe.
 - ComfyUI jobs run on the rented 24 GB pod by default (TJX, 2026-11-27: cloud first):
   `--lane cloud` before the asset-forge command runs the same graphs there, under
-  `gpu-cloud.lock` or `gpu-cloud-2.lock` (root `SKILLS.md`, section 5; `docs/cloud-gpu.md`).
+  `gpu-cloud.lock` or `gpu-cloud-2.lock`, queued with `gpu-lock run --lane cloud` (root `SKILLS.md`, section 5;
+  `docs/cloud-gpu.md`).
   Measured there on 2026-11-27: the same 4096² texture in 9 to 12 s once the checkpoint is
   loaded, against 27 s here. The 8 GB rules in this section apply when a job runs on this PC.
 - Measured on this card (2026-11-27): 1024² at 32 steps plus the 4x upscale to 4096² takes 58 s

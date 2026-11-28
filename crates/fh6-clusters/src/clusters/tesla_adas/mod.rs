@@ -1,193 +1,225 @@
 //! Tesla ADAS (`ClusterTheme::TeslaAdas`), catalog row 15: the ADAS & HUD family's pattern-setter
 //! (cockpit + hood, build #5).
 //!
-//! A clay-and-light diorama floating frameless in the column gap. Zone table (local 4K px around
-//! the anchor; [`COCKPIT`] / [`HOOD`]):
+//! It recreates the Model S and Model X (2021+) driver display: Tesla's driving visualisation in
+//! the centre, the Track Mode G-meter card on the left, and the gear and speed stacked on the
+//! right, frameless on true black. On TJX's direction it is Japan-inspired, as a Japan-market car
+//! would show it on the Bayshore Route at night: Japanese road paint, a kei box in the traffic,
+//! and labels set like Japanese guide signs. `RESEARCH.md` holds the sources and every deliberate
+//! change.
 //!
-//! | Zone | Element | Cockpit | Hood |
+//! Zone table (local 4K px around the view's anchor; [`COCKPIT`] / [`HOOD`]):
+//!
+//! | Rank | Element | Cockpit | Hood |
 //! |---|---|---|---|
-//! | Z1 | 10 pill pods, outside-in onto the centre pair | 60 × 22 at y −296, pitch 82 | 52 × 18 at y −208, pitch 70 |
-//! | Z3 | 6 px (hood 3 px) rev ribbon, primary → accent, 12 px white comet, redline share | ±640 at y −270 | ±760 at y −189 |
-//! | Z1 | gear (Saira Condensed 800) in a 1 px vertical pill, n+1 above / n−1 below as ghosts | cap 170 at (0, −144), pill ±72 × −258..−30 | cap 96 at (0, −100), pill ±52 × −176..−24 |
-//! | Z2 | speed (Saira Light, no ghost 8s), unit below | cap 112 at (−380, −150) | cap 84 at (−470, −100) |
-//! | Z5 | rpm and the shy SLIP / LIM chips | (380, −178) cap 44, chips y −112 | (470, −122) cap 36, chips y −70 |
-//! | Z4 | chase-cam road scene ([`scene`]): glTF clay cars, carpet, lanes, arcs | 1440 × 260 from (−720, −20), 8° pitch | 1760 × 180 from (−880, 0), 8° pitch |
+//! | 1 | shift line: 16 pills, outside-in onto the centre pair | 52 × 12, pitch 60, y −300 | 62 × 10, pitch 70, y −204 |
+//! | 1 | gear (Noto Sans 600) | cap 160 at (490, −170) | cap 150 at (470, −110) |
+//! | 2 | speed (Noto Sans 500), unit under it | cap 96 at (490, 14) | cap 84 at (470, 46) |
+//! | 3 | power line: centre-zero, power to the right, negative power to the left in green | ±216 at y 226 | ±200 at y 170 |
+//! | 3 | rpm and power figures under their two-language labels | x −560 and −420, y 164 to 214 | x −530 and −410, y 114 to 158 |
+//! | 4 | road scene ([`scene`]) | 720 × 492 from (−360, −252) | 660 × 362 from (−330, −182) |
+//! | 4 | G-meter with its peak history | r 96 at (−490, −22) | r 70 at (−470, −26) |
+//! | 5 | logo zone, card label, R · N · D row | left column top; right column foot | the same |
 //!
-//! Signature moments:
-//! - **Brake dive:** in the frame the brake passes 5% the ego twin's tail bar lights warning red,
-//!   its nose dips by the measured deceleration (4°/g, clamped 4°, fast spring) and a 2 px
-//!   caution stop line drops across the lanes at `v² / (2 · max(−a_long, 2 m/s²))`, with its
-//!   distance in Titillium cap 16 (hidden beyond 120 m). The carpet beyond it falls to 35%.
-//! - **Upshift:** one 250 ms accent wake climbs the carpet (alpha only, no bloom) while the gear
-//!   pill rolls 24 px.
-//! - **Limiter:** only the pod strip strobes (10 Hz); the underglow holds a steady limiter violet
-//!   and the gear pulses at 2 Hz after 0.5 s.
-//! - **Drift:** the ego yaws into the bend by the slip angle, the carpet and underglow turn amber
-//!   and the SLIP chip lights.
+//! The shift line is the only part that strobes (10 Hz at the shift point, 12 px tall). Below
+//! the first shift stage its pills fill dimly with the revs; the stage colours then replace them
+//! from the outside in. The glow under the ego car follows the same stages and holds the shift
+//! colour, steady, at the shift point.
 //!
-//! Telemetry (verified fields only): rpm, idle, limiter and the tokens' shift point → pods and
-//! ribbon; gear → pill; speed → readout, dash scroll, carpet; brake and longitudinal acceleration
-//! → lamps, dive, stop line; lateral acceleration → path curvature (`a_lat / v²`), roll and the
-//! light; body slip (from velocity) → ego yaw, drift and SLIP; car ordinal → the factory palette
-//! (brand-tinted ego). The traffic is a seeded ambient simulation with no numbers on it.
-//!
-//! Brief: `spec.md`; departures are in `HANDOVER.md` ("My calls").
+//! Telemetry (verified fields only): rpm, idle and limiter → shift line, rev fill, rpm figure;
+//! gear → gear and the R · N · D row; speed → figure, road scroll, parked view; brake and
+//! longitudinal acceleration → brake light, slow-down dashes, stop bar and 止まれ; lateral
+//! acceleration → the path's bend and the G-meter; velocity (body slip) → the ego car's yaw;
+//! power → power line and figure. The traffic is a seeded ambient simulation.
 mod scene;
 
-use crate::common::adas_road::EYE;
+use crate::common::gball::{GBall, RINGS_G};
 use crate::common::glass_plate::legibility_halo;
 use crate::common::hero_gear::HeroGear;
-use crate::common::label::shy;
-use crate::common::shift::{LimiterCue, PodShape, PodStyle};
+use crate::common::label::{logo_zone, LogoVariant};
+use crate::common::shift::{draw_pod, LimiterCue, PodStyle};
 use crate::common::speed::TabularSpeed;
 use crate::common::ShiftLights;
 use fh6_kit::cluster::Setup;
-use fh6_kit::math::{smoothstep, vec3};
+use fh6_kit::math::{finite_or, smoothstep};
 use fh6_kit::{
-    vec2, Align, BlendMode, Cap, Cluster, Color, FontId, FontRole, FrameInput, Gear, Glow, Gradient, ImageId,
-    ImagePaint, LayerOptions, Layout, Painter, Palette, Rect, Shape, Spring, Stroke, TextStyle, Tokens, VAlign, Vec2,
-    View,
+    vec2, Align, Cap, Cluster, FontId, FontRole, FrameInput, Gear, Hysteresis, Layout, Logo, Painter, Palette,
+    PowerUnit, Rect, Shape, Spring, TextStyle, Tokens, VAlign, Vec2, View,
 };
 use scene::{Scene, SceneGeom, SceneInput};
+use std::f32::consts::TAU;
 
-/// Standard gravity (m/s^2).
+/// Standard gravity (m/s²).
 const G: f32 = 9.80665;
-/// LED cap atlas cell and the lens inside it (render px; the recipe's `CAP_CELL` / `CAP_LENS_PX`).
-const CAP_CELL: [f32; 2] = [288.0, 128.0];
-const CAP_LENS: [f32; 2] = [240.0, 88.0];
-/// How strongly the off cap's bevel and specular are added over a lit cap.
-const CAP_SPECULAR: f32 = 0.8;
-/// A lit cap's core mix toward white; less at the limiter, so the strobe stays a saturated alarm.
-const CAP_CORE: f32 = 0.25;
-const CAP_CORE_LIMITER: f32 = 0.10;
-/// The pod count (catalog brief).
-const PODS: u32 = 10;
-/// Width of the comet at the head of the rev ribbon (px).
-const COMET_PX: f32 = 12.0;
+/// Pills in the shift line.
+const SEGMENTS: u32 = 16;
+/// How bright a pill is while it only shows the revs (below the first shift stage): an opaque
+/// grey of this share of the ink's light, so it reads the same over the scrim and on the hood
+/// and stays 3:1 against black.
+const REV_LEVEL: f32 = 0.24;
+/// The power line reads full at the engine's highest power seen so far, and never at less than
+/// this (W), so a small engine's first metres do not fill the line.
+const POWER_FLOOR_W: f32 = 110_000.0;
+/// The Japanese label face (`asset-forge` set `tesla_adas`, job `tesla_adas/font`).
+const JP_FAMILY: &str = "Noto Sans JP";
+const JP_FONT: &str = "clusters/tesla_adas/NotoSansJP-Medium-subset.ttf";
+/// Every Japanese character the dash draws, rasterised when it is built.
+const JP_TEXT: &str = "トラックモード回転数出力止まれ";
+/// Label sizes (cap heights): the Japanese line, the Latin line under it (the tokens' floor).
+const JP_CAP: f32 = 16.0;
+const LATIN_CAP: f32 = 12.0;
+/// The figures move only past these changes: rpm in steps of 50 (so 1.5 steps), power in its
+/// unit. The limiter swings the revs by 50 and the power by about 3 every frame.
+const RPM_HOLD: f32 = 1.5;
+const POWER_HOLD: f32 = 4.0;
+/// Directions the G-meter's peak history keeps.
+const PEAK_BINS: usize = 24;
 
 /// Geometry of one view (local 4K px around the anchor).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Geom {
-    pods_y: f32,
-    pod_size: Vec2,
-    pod_pitch: f32,
-    ribbon_y: f32,
-    ribbon_half: f32,
-    ribbon_px: f32,
+    shift_y: f32,
+    shift_pitch: f32,
+    pill: Vec2,
+    scene: SceneGeom,
+    power_y: f32,
+    power_half: f32,
+    power_px: f32,
     gear: Vec2,
     gear_cap: f32,
-    pill: Rect,
-    /// Vertical distance from the gear's centre to each neighbour ghost.
-    ghost_dy: f32,
-    ghost_cap: f32,
-    /// How far the pill's contents roll on a gear change.
-    roll_px: f32,
     speed: Vec2,
     speed_cap: f32,
+    /// The unit label's cap top and cap height.
     unit_y: f32,
-    rpm: Vec2,
-    rpm_cap: f32,
-    chips_y: f32,
-    chip_size: Vec2,
-    chip_x: [f32; 2],
-    /// The hood's legibility halo behind the top zone (none in the cockpit: the scrim is dark).
-    halo: Option<Rect>,
-    scene: SceneGeom,
+    unit_cap: f32,
+    /// The N of the R · N · D row, the letters' spacing and cap height.
+    prnd: Vec2,
+    prnd_pitch: f32,
+    prnd_cap: f32,
+    logo: Rect,
+    /// The Track Mode label's Japanese line, and the drop to its Latin line.
+    card: Vec2,
+    card_stack: f32,
+    meter: Vec2,
+    meter_r: f32,
+    /// The two status cells' centres, and the y of their Japanese, Latin and value lines.
+    status_x: [f32; 2],
+    status_y: [f32; 3],
+    status_cap: f32,
+    /// Legibility halos (the hood view has no scrim).
+    halos: [Option<Rect>; 4],
 }
 
 impl Geom {
-    /// The pod centres, evenly spaced about x = 0.
-    fn pod_centers(&self) -> [Vec2; PODS as usize] {
-        let mut out = [Vec2::ZERO; PODS as usize];
-        let first = -self.pod_pitch * (PODS - 1) as f32 * 0.5;
-        for (i, c) in out.iter_mut().enumerate() {
-            *c = vec2(first + self.pod_pitch * i as f32, self.pods_y);
-        }
-        out
+    /// Pill `i`'s rectangle.
+    fn pill_rect(&self, i: u32) -> Rect {
+        let x = (i as f32 - (SEGMENTS - 1) as f32 * 0.5) * self.shift_pitch;
+        Rect::from_center_size(vec2(x, self.shift_y), self.pill)
     }
 }
 
 const COCKPIT: Geom = Geom {
-    pods_y: -296.0,
-    pod_size: vec2(60.0, 22.0),
-    pod_pitch: 82.0,
-    ribbon_y: -270.0,
-    ribbon_half: 640.0,
-    ribbon_px: 6.0,
-    gear: vec2(0.0, -144.0),
-    gear_cap: 170.0,
-    pill: Rect {
-        min: vec2(-72.0, -258.0),
-        max: vec2(72.0, -30.0),
-    },
-    ghost_dy: 100.0,
-    ghost_cap: 18.0,
-    roll_px: 24.0,
-    speed: vec2(-380.0, -150.0),
-    speed_cap: 112.0,
-    unit_y: -78.0,
-    rpm: vec2(380.0, -178.0),
-    rpm_cap: 44.0,
-    chips_y: -112.0,
-    chip_size: vec2(84.0, 28.0),
-    chip_x: [334.0, 426.0],
-    halo: None,
+    shift_y: -300.0,
+    shift_pitch: 60.0,
+    pill: vec2(52.0, 12.0),
     scene: SceneGeom {
         viewport: Rect {
-            min: vec2(-720.0, -20.0),
-            max: vec2(720.0, 240.0),
+            min: vec2(-360.0, -252.0),
+            max: vec2(360.0, 240.0),
         },
-        eye: EYE,
-        pitch_deg: 8.0,
-        // About the tokens' 33° field (`components.adasRoad`), the horizon 22 px below the band's
-        // top so the far road and the lead car sit clear of the gear pill.
-        focal: 440.0,
-        horizon_frac: 0.085,
-        pool: 0,
+        focal: 700.0,
+        horizon_y: -226.0,
+        surface: 0.022,
+        parked: Rect {
+            min: vec2(-290.0, -160.0),
+            max: vec2(290.0, 170.0),
+        },
     },
+    power_y: 226.0,
+    power_half: 216.0,
+    power_px: 4.0,
+    gear: vec2(490.0, -170.0),
+    gear_cap: 160.0,
+    speed: vec2(490.0, 14.0),
+    speed_cap: 96.0,
+    unit_y: 80.0,
+    unit_cap: 16.0,
+    prnd: vec2(490.0, 196.0),
+    prnd_pitch: 50.0,
+    prnd_cap: 22.0,
+    logo: Rect {
+        min: vec2(-600.0, -254.0),
+        max: vec2(-380.0, -210.0),
+    },
+    card: vec2(-490.0, -174.0),
+    card_stack: 24.0,
+    meter: vec2(-490.0, -22.0),
+    meter_r: 96.0,
+    status_x: [-560.0, -420.0],
+    status_y: [164.0, 187.0, 214.0],
+    status_cap: 22.0,
+    halos: [None; 4],
 };
 
-/// Hood [4]: the scrim is 0%, so the top zone sits on a legibility halo and the scene widens to
-/// ±880 × 180 px.
+/// Hood: the scrim is 0%, so every group sits on a legibility halo.
 const HOOD: Geom = Geom {
-    pods_y: -208.0,
-    pod_size: vec2(52.0, 18.0),
-    pod_pitch: 70.0,
-    ribbon_y: -189.0,
-    ribbon_half: 760.0,
-    ribbon_px: 3.0,
-    gear: vec2(0.0, -100.0),
-    gear_cap: 96.0,
-    pill: Rect {
-        min: vec2(-52.0, -176.0),
-        max: vec2(52.0, -24.0),
-    },
-    ghost_dy: 64.0,
-    ghost_cap: 12.0,
-    roll_px: 16.0,
-    speed: vec2(-470.0, -100.0),
-    speed_cap: 84.0,
-    unit_y: -44.0,
-    rpm: vec2(470.0, -122.0),
-    rpm_cap: 36.0,
-    chips_y: -56.0,
-    chip_size: vec2(72.0, 24.0),
-    chip_x: [430.0, 510.0],
-    halo: Some(Rect {
-        min: vec2(-640.0, -216.0),
-        max: vec2(640.0, -16.0),
-    }),
+    shift_y: -204.0,
+    shift_pitch: 70.0,
+    pill: vec2(62.0, 10.0),
     scene: SceneGeom {
         viewport: Rect {
-            min: vec2(-880.0, 0.0),
-            max: vec2(880.0, 180.0),
+            min: vec2(-330.0, -182.0),
+            max: vec2(330.0, 180.0),
         },
-        eye: vec3(0.0, 2.8, -6.5),
-        pitch_deg: 8.0,
-        focal: 400.0,
-        horizon_frac: 0.02,
-        pool: 1,
+        focal: 520.0,
+        horizon_y: -160.0,
+        surface: 0.0,
+        parked: Rect {
+            min: vec2(-220.0, -110.0),
+            max: vec2(220.0, 140.0),
+        },
     },
+    power_y: 170.0,
+    power_half: 200.0,
+    power_px: 3.0,
+    gear: vec2(470.0, -110.0),
+    gear_cap: 150.0,
+    speed: vec2(470.0, 46.0),
+    speed_cap: 84.0,
+    unit_y: 100.0,
+    unit_cap: 14.0,
+    prnd: vec2(470.0, 152.0),
+    prnd_pitch: 46.0,
+    prnd_cap: 20.0,
+    logo: Rect {
+        min: vec2(-570.0, -192.0),
+        max: vec2(-370.0, -152.0),
+    },
+    card: vec2(-470.0, -136.0),
+    card_stack: 21.0,
+    meter: vec2(-470.0, -26.0),
+    meter_r: 70.0,
+    status_x: [-530.0, -410.0],
+    status_y: [114.0, 135.0, 161.0],
+    status_cap: 24.0,
+    halos: [
+        Some(Rect {
+            min: vec2(-560.0, -212.0),
+            max: vec2(560.0, -196.0),
+        }),
+        Some(Rect {
+            min: vec2(-610.0, -196.0),
+            max: vec2(-340.0, 170.0),
+        }),
+        Some(Rect {
+            min: vec2(-320.0, -176.0),
+            max: vec2(320.0, 176.0),
+        }),
+        Some(Rect {
+            min: vec2(350.0, -190.0),
+            max: vec2(600.0, 166.0),
+        }),
+    ],
 };
 
 fn geom(view: View) -> &'static Geom {
@@ -201,22 +233,98 @@ fn geom(view: View) -> &'static Geom {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Faces {
     gear: FontId,
-    speed: FontId,
-    metric: FontId,
+    figure: FontId,
     label: FontId,
+    /// The Japanese label face, when its file is installed.
+    kanji: Option<FontId>,
+    wide: FontId,
     role_display: FontId,
 }
 
-/// The neighbour gears shown as ghosts above (n+1) and below (n−1) the current one.
-fn neighbours(gear: Gear) -> (Option<Gear>, Option<Gear>) {
-    match gear {
-        Gear::Reverse => (Some(Gear::Neutral), None),
-        Gear::Neutral => (Some(Gear::Forward(1)), Some(Gear::Reverse)),
-        Gear::Forward(n) => {
-            let up = (n < 10).then_some(Gear::Forward(n + 1));
-            let down = if n <= 1 { Gear::Neutral } else { Gear::Forward(n - 1) };
-            (up, Some(down))
+/// Finds the Japanese face, loading it the first time (the cluster is rebuilt on every view
+/// change and must not load a second copy).
+fn japanese_face(setup: &mut Setup<'_>) -> Option<FontId> {
+    let font = match setup.fonts.find(JP_FAMILY, 500, false) {
+        Some(font) => font,
+        None => {
+            let bytes = std::fs::read(setup.assets?.join(JP_FONT)).ok()?;
+            setup.fonts.load(bytes, None).ok()?
         }
+    };
+    setup.fonts.preload_text(font, JP_TEXT);
+    Some(font)
+}
+
+/// The cells a figure needs, so a centred figure sits on its label's axis whatever its length.
+fn cells_of(value: i64) -> u8 {
+    match value.unsigned_abs() {
+        0..=9 => 1,
+        10..=99 => 2,
+        100..=999 => 3,
+        1000..=9999 => 4,
+        _ => 5,
+    }
+}
+
+/// The lighting order of pill `i`: 0 for the outermost pair, 7 for the centre pair.
+fn pair_of(i: u32) -> f32 {
+    let half = (SEGMENTS - 1) as f32 * 0.5;
+    half - (i as f32 - half).abs()
+}
+
+/// How much of pill `i` the rev fill lights for `progress` (0 at idle, 1 at the first shift
+/// stage): the pairs fill one after another from the outside in.
+fn rev_fill(i: u32, progress: f32) -> f32 {
+    let pairs = (SEGMENTS / 2) as f32;
+    let j = pair_of(i);
+    smoothstep(j / pairs, (j + 1.0) / pairs, progress)
+}
+
+/// The revs' share of the way from idle to the first shift stage.
+fn rev_progress(rpm: f32, idle: f32, first_stage_rpm: f32) -> f32 {
+    let span = first_stage_rpm - idle;
+    if span.is_finite() && span >= 1.0 && rpm.is_finite() {
+        ((rpm - idle) / span).clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+/// The G-meter's history: the largest felt force seen in each direction, as Tesla's Track Mode
+/// shades it. It is kept until the engine changes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PeakTrace {
+    peak: [f32; PEAK_BINS],
+}
+
+impl PeakTrace {
+    const fn new() -> Self {
+        Self { peak: [0.0; PEAK_BINS] }
+    }
+
+    /// Records the felt force `g` (in g, screen axes). The neighbouring directions rise with it
+    /// so one hard stop draws a lobe, not a spike.
+    fn record(&mut self, g: Vec2) {
+        let m = g.x.hypot(g.y).min(RINGS_G[2]);
+        if !m.is_finite() || m < 0.02 {
+            return;
+        }
+        let at = g.y.atan2(g.x).rem_euclid(TAU) / TAU * PEAK_BINS as f32;
+        let bin = (at.round() as usize) % PEAK_BINS;
+        for (step, share) in [(0usize, 1.0f32), (1, 0.86), (2, 0.6)] {
+            for b in [(bin + step) % PEAK_BINS, (bin + PEAK_BINS - step) % PEAK_BINS] {
+                self.peak[b] = self.peak[b].max(m * share);
+            }
+        }
+    }
+
+    /// The history's outline around `center` at `per_g` px per g. Returns false when it is empty.
+    fn outline(&self, center: Vec2, per_g: f32, out: &mut [Vec2; PEAK_BINS]) -> bool {
+        for (i, (slot, peak)) in out.iter_mut().zip(self.peak).enumerate() {
+            let a = i as f32 / PEAK_BINS as f32 * TAU;
+            *slot = center + vec2(a.cos(), a.sin()) * (peak * per_g);
+        }
+        self.peak.iter().any(|p| *p > 0.05)
     }
 }
 
@@ -226,132 +334,134 @@ pub struct TeslaAdas {
     faces: Faces,
     palette: Palette,
     view: View,
+    logo: Logo,
     scene: Scene,
     shift: ShiftLights,
     cue: LimiterCue,
     gear: HeroGear,
-    roll: Spring,
-    rev: Spring,
-    rev_target: f32,
-    red_from: f32,
-    caution_from: f32,
-    /// A copy of the shared gear glyph's entry spring (same spec, same steps), so the 1.12 entry
-    /// scale can be cancelled inside the pill.
-    entry: Spring,
     speed: TabularSpeed,
-    rpm: f32,
+    ball: GBall,
+    peaks: PeakTrace,
+    /// The revs' share of the way to the first shift stage.
+    rev: f32,
+    /// Power as a share of the highest power seen (-1..1), and that highest power (W).
+    power: Spring,
+    power_target: f32,
+    power_top: f32,
+    power_shown: Hysteresis,
+    power_value: i64,
+    power_unit: &'static str,
+    rpm: i64,
+    /// The rpm figure in steps of 50: it moves only when the revs move by more than a step, so
+    /// the limiter's bounce does not flicker its last digits.
+    rpm_shown: Hysteresis,
+    /// The engine's limiter and idle rpm: a change means another car, so the peaks start again.
+    engine: (f32, f32),
     unit: &'static str,
-    micro_cap: f32,
     tracking: f32,
-    /// The Blender LED caps (off, on; `assets/clusters/tesla_adas/led_caps.png`), or `None` for
-    /// the shared vector pods.
-    caps: Option<ImageId>,
+    started: bool,
 }
 
 impl TeslaAdas {
-    /// Builds the cluster: faces and the four car meshes (Phase 6 glTF, or the kit's proxy).
+    /// Builds the cluster: faces, the Japanese label face and the car sprites.
     #[must_use]
     pub fn new(setup: &mut Setup<'_>) -> Self {
         let t: &Tokens = setup.tokens;
         let display = setup.fonts.role(FontRole::Display);
         let text = setup.fonts.role(FontRole::Text);
+        let kanji = japanese_face(setup);
         let faces = Faces {
-            gear: setup.fonts.find("Saira Condensed", 800, false).unwrap_or(display),
-            speed: setup.fonts.find("Saira", 300, false).unwrap_or(display),
-            metric: setup.fonts.find("Saira", 400, false).unwrap_or(display),
-            label: setup.fonts.find("Titillium Web", 600, false).unwrap_or(text),
+            gear: setup.fonts.find("Noto Sans", 600, false).unwrap_or(display),
+            figure: setup.fonts.find("Noto Sans", 500, false).unwrap_or(display),
+            label: setup.fonts.find("Noto Sans", 500, false).unwrap_or(text),
+            kanji,
+            wide: setup.fonts.role(FontRole::Wide),
             role_display: display,
         };
-        let springs = t.springs;
-        let micro_cap = t.type_scale.micro_label;
-        let tracking = t.type_scale.label_tracking;
-        let assets = scene::load_assets(setup);
-        let caps = setup
-            .assets
-            .map(|a| a.join("clusters/tesla_adas/led_caps.png"))
-            .and_then(|path| {
-                path.is_file()
-                    .then(|| setup.images.load_file(setup.device, setup.queue, &path, None).ok())
-                    .flatten()
-            });
+        let sprites = scene::load_sprites(setup);
         Self {
             faces,
             palette: Palette::family(t, "adasHud"),
             view: View::Cockpit,
-            scene: Scene::new(t, assets),
-            shift: ShiftLights::new(PODS),
+            logo: Logo::default(),
+            scene: Scene::new(sprites),
+            shift: ShiftLights::new(SEGMENTS),
             cue: LimiterCue::new(),
             gear: HeroGear::new(t),
-            roll: Spring::new(springs.snap, 0.0),
-            rev: Spring::new(springs.snap, 0.0),
-            rev_target: 0.0,
-            red_from: 1.0,
-            caution_from: 1.0,
-            entry: Spring::new(springs.fast, 0.0),
             speed: TabularSpeed::new(),
-            rpm: 0.0,
+            ball: GBall::new(t),
+            peaks: PeakTrace::new(),
+            rev: 0.0,
+            power: Spring::new(t.springs.fast, 0.0),
+            power_target: 0.0,
+            power_top: POWER_FLOOR_W,
+            power_shown: Hysteresis::new(0.0, POWER_HOLD),
+            power_value: 0,
+            power_unit: PowerUnit::Hp.label(),
+            rpm: 0,
+            rpm_shown: Hysteresis::new(0.0, RPM_HOLD),
+            engine: (0.0, 0.0),
             unit: "MPH",
-            micro_cap,
-            tracking,
-            caps,
+            tracking: t.type_scale.label_tracking,
+            started: false,
         }
-    }
-
-    /// Fraction of the ribbon for `rpm` (idle → limiter).
-    fn rev_fraction(rpm: f32, idle: f32, max: f32) -> f32 {
-        let span = (max - idle).max(1.0);
-        ((rpm - idle) / span).clamp(0.0, 1.0)
     }
 }
 
 impl Cluster for TeslaAdas {
     fn update(&mut self, input: &FrameInput<'_>) {
-        let dt = input.dt.max(0.0);
+        let dt = finite_or(input.dt, 0.0).max(0.0);
         let sig = *input.signals;
         self.palette = *input.palette;
         self.view = input.view;
+        if self.logo != *input.logo {
+            self.logo.clone_from(input.logo);
+        }
         if input.fonts.display != self.faces.role_display {
             self.faces.gear = input.fonts.display;
-            self.faces.speed = input.fonts.display;
-            self.faces.metric = input.fonts.display;
+            self.faces.figure = input.fonts.display;
             self.faces.role_display = input.fonts.display;
         }
 
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.cue.update(self.shift.over_shift(), 0.25, dt);
-        self.gear.update(sig.gear, self.cue.held(), dt);
-        if self.gear.since_change() == 0.0 {
-            let g = geom(self.view);
-            // n+1 sits above: an upshift rolls the new gear down from above, a downshift up.
-            let from = if self.gear.was_upshift() { -g.roll_px } else { g.roll_px };
-            self.roll.reset(from);
-            if self.gear.was_upshift() {
-                self.scene.wake();
-            }
-        }
-        self.roll.update(0.0, dt);
-        // Mirror `GearGlyph`'s entry: reset on the change (1 up, -1 down), then one step.
-        if self.gear.since_change() == 0.0 {
-            self.entry.reset(if self.gear.was_upshift() { 1.0 } else { -1.0 });
-        }
-        self.entry.update(0.0, dt);
-
-        self.rev_target = Self::rev_fraction(sig.rpm, sig.idle_rpm, sig.max_rpm);
-        self.rev.update(self.rev_target, dt);
-        // The ribbon warms with the pods: caution from the first amber pod, red from the first
-        // red pod (the palette's rev stages are fractions of the shift rpm).
-        let stage_x = |stage: f32| {
-            if sig.shift_rpm >= 1.0 {
-                Self::rev_fraction(stage * sig.shift_rpm, sig.idle_rpm, sig.max_rpm)
-            } else {
-                1.0
-            }
-        };
-        self.caution_from = stage_x(self.palette.stages[1]);
-        self.red_from = stage_x(self.palette.stages[2]);
+        self.rev = rev_progress(sig.rpm, sig.idle_rpm, self.palette.stages[0] * sig.shift_rpm);
+        let steps = self
+            .rpm_shown
+            .update(finite_or(sig.rpm, 0.0).clamp(0.0, 99_950.0) / 50.0);
+        self.rpm = steps * 50;
         self.speed.update(sig.speed);
-        self.rpm = if sig.rpm.is_finite() { sig.rpm.max(0.0) } else { 0.0 };
         self.unit = sig.unit.label();
+
+        // Another engine: the power scale and the G history belong to the last car.
+        let engine = (finite_or(sig.max_rpm, 0.0), finite_or(sig.idle_rpm, 0.0));
+        if engine != self.engine {
+            self.engine = engine;
+            self.power_top = POWER_FLOOR_W;
+            self.peaks = PeakTrace::new();
+        }
+        let watts = finite_or(input.telemetry.power_watts, 0.0);
+        self.power_top = self.power_top.max(watts.abs());
+        self.power_target = (watts / self.power_top).clamp(-1.0, 1.0);
+        self.power_unit = sig.power_unit.label();
+        let shown = match sig.power_unit {
+            PowerUnit::Hp => watts / 745.7,
+            PowerUnit::Kw => watts / 1000.0,
+        };
+        self.power_value = self.power_shown.update(shown.clamp(0.0, 9999.0));
+
+        self.ball.update(&sig, dt);
+        self.peaks.record(self.ball.ball());
+
+        if self.started {
+            self.gear.update(sig.gear, self.cue.held(), dt);
+            self.power.update(self.power_target, dt);
+        } else {
+            // The cluster is rebuilt on every view change: start on the reading, not from zero.
+            self.gear.snap(sig.gear);
+            self.power.reset(self.power_target);
+            self.started = true;
+        }
 
         self.scene.update(
             &SceneInput {
@@ -360,8 +470,8 @@ impl Cluster for TeslaAdas {
                 a_long: sig.g_long * G,
                 slip_deg: sig.slip_deg,
                 brake: sig.brake,
-                reverse: sig.gear == Gear::Reverse,
-                limiter: self.cue.level(),
+                shift_level: self.shift.level(),
+                over_shift: self.shift.over_shift(),
             },
             dt,
         );
@@ -370,245 +480,170 @@ impl Cluster for TeslaAdas {
     fn draw(&self, p: &mut Painter<'_>, _layout: &Layout) {
         let g = geom(self.view);
         let pal = self.palette;
-
-        if let Some(r) = g.halo {
-            legibility_halo(p, r, 0.5, &pal);
+        for halo in g.halos.into_iter().flatten() {
+            legibility_halo(p, halo, 0.5, &pal);
         }
-        // Z4 first: the scene is rank 4 and sits behind everything else.
-        self.scene.draw(p, &g.scene, &pal, self.faces.label);
-        self.draw_ribbon(p, g, &pal);
-        self.draw_pods(p, g, &pal);
-        self.draw_gear(p, g, &pal);
-        self.draw_readouts(p, g, &pal);
-        // Clay meshes only for cars without a sprite (missing assets): they depth-test only against
-        // each other, so they come last, over the 2D scene.
-        self.scene.draw_meshes(p, &g.scene, &pal);
+        // Rank 4 first: the scene sits behind everything else.
+        self.scene.draw(p, &g.scene, &pal, self.faces.kanji);
+        self.draw_power(p, g, &pal);
+        self.draw_shift(p, g, &pal);
+        self.draw_card(p, g, &pal);
+        self.draw_status(p, g, &pal);
+        self.draw_drive(p, g, &pal);
     }
 
     fn animating(&self) -> bool {
         self.shift.animating()
             || self.cue.animating()
             || self.gear.animating()
+            || self.ball.animating()
             || self.scene.animating()
-            || !self.roll.settled(0.0, 0.05)
-            || !self.entry.settled(0.0, 1e-3)
-            || !self.rev.settled(self.rev_target, 1e-3)
+            || !self.power.settled(self.power_target, 1e-3)
     }
 }
 
 impl TeslaAdas {
-    /// The shift lights: the Blender LED caps (a smoked acrylic lens, or the back-lit diffuser
-    /// tinted with the pod's colour over its glow, bloomed), or the shared vector pods without
-    /// the asset. The shared `ShiftLights` decides each pod's colour and the strobe.
-    fn draw_pods(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let Some(caps) = self.caps else {
-            self.shift.draw_at(
-                p,
-                &g.pod_centers(),
-                g.pod_size,
-                pal,
-                &PodStyle {
-                    glow_sigma: 6.0,
-                    unlit_alpha: 1.0 / 255.0,
-                    unlit_rim: 0.02,
-                    ..PodStyle::default().with_shape(PodShape::Pill)
+    /// The shift line. Unlit pills carry the rev fill; the shared `ShiftLights` decides the
+    /// stage colours and the strobe, and while it strobes the dark phase is dark.
+    fn draw_shift(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let style = PodStyle {
+            glow_sigma: 5.0,
+            glow: 0.45,
+            unlit_alpha: 10.0 / 255.0,
+            unlit_rim: 0.05,
+            ..PodStyle::default()
+        };
+        for i in 0..SEGMENTS {
+            let rect = g.pill_rect(i);
+            let color = self.shift.color_of(i as usize, pal);
+            draw_pod(p, rect, color, &style, pal);
+            if color.is_none() && !self.shift.over_shift() {
+                let fill = rev_fill(i, self.rev);
+                if fill > 0.01 {
+                    p.fill(
+                        &Shape::round_rect(rect, rect.height() * 0.5),
+                        pal.roles.ink.intensity(REV_LEVEL).fade(fill),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Tesla's power meter: a hairline with a centre mark, filled to the right with power and
+    /// to the left, in green, with negative power.
+    fn draw_power(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let roles = pal.roles;
+        let (y, half, w) = (g.power_y, g.power_half, g.power_px);
+        p.fill(&Shape::line(vec2(-half, y), vec2(half, y), 1.0), roles.hairline);
+        p.fill(
+            &Shape::line(vec2(0.0, y - w * 1.5), vec2(0.0, y + w * 1.5), 2.0),
+            roles.ink_label,
+        );
+        let v = self.power.value().clamp(-1.0, 1.0);
+        if v.abs() > 0.004 {
+            let color = if v > 0.0 { roles.ink } else { roles.go };
+            p.fill(
+                &Shape::Line {
+                    a: vec2(0.0, y),
+                    b: vec2(half * v, y),
+                    width_a: w,
+                    width_b: w,
+                    cap: Cap::Round,
                 },
+                color,
             );
+        }
+    }
+
+    /// A two-language label, set like a Japanese guide sign. Without the Japanese face it is
+    /// the Latin line alone, at the Japanese line's size.
+    fn sign(&self, p: &mut Painter<'_>, pos: Vec2, japanese: &str, latin: &str, stack: f32, pal: &Palette) {
+        let ink = pal.roles.ink_label;
+        let latin_style = |cap: f32| TextStyle::new(self.faces.label, cap).paint(ink).tracking(self.tracking);
+        let Some(kanji) = self.faces.kanji else {
+            p.text(pos, latin, &latin_style(JP_CAP).align(Align::Center, VAlign::CapMiddle));
             return;
         };
-        // The lens fills CAP_LENS of each cell; the cell grows by the same ratio round the pod.
-        let cell = vec2(
-            g.pod_size.x * CAP_CELL[0] / CAP_LENS[0],
-            g.pod_size.y * CAP_CELL[1] / CAP_LENS[1],
+        let jp_style = TextStyle::new(kanji, JP_CAP).paint(ink).tracking(0.06);
+        p.text(pos, japanese, &jp_style.align(Align::Center, VAlign::CapMiddle));
+        p.text(
+            pos + vec2(0.0, stack),
+            latin,
+            &latin_style(LATIN_CAP).align(Align::Center, VAlign::CapMiddle),
         );
-        let uv = |i: f32| Rect::from_xywh(0.5 * i, 0.0, 0.5, 1.0);
-        for (i, c) in g.pod_centers().iter().enumerate() {
-            let pod = Rect::from_center_size(*c, g.pod_size);
-            let rect = Rect::from_center_size(*c, cell);
-            let lens = |p: &mut Painter<'_>, lit: bool, tint: Color| {
-                let paint = ImagePaint {
-                    uv: uv(f32::from(u8::from(lit))),
-                    ..ImagePaint::new(caps, rect).tint(tint)
-                };
-                p.fill(&Shape::rect(rect), paint);
-            };
-            match self.shift.color_of(i, pal) {
-                Some(color) => {
-                    let shape = Shape::round_rect(pod, pod.height() * 0.5);
-                    // A tight glow (under 0.6x the 22 px gap) and no bloom, so neighbours never merge.
-                    p.glow(&shape, color, Glow::new(4.0, 0.40));
-                    // The diffuser, its core toward white; then the off cap added on top: black
-                    // adds nothing, so only its bevel rim and specular land on the lit lens and the
-                    // two states read as one object.
-                    let core = if self.shift.over_shift() {
-                        CAP_CORE_LIMITER
-                    } else {
-                        CAP_CORE
-                    };
-                    lens(p, true, color.lerp(Color::WHITE.with_alpha(color.a), core));
-                    p.scoped(|p| {
-                        p.set_blend(BlendMode::Add);
-                        lens(p, false, Color::WHITE.fade(CAP_SPECULAR));
-                    });
-                }
-                None => lens(p, false, Color::WHITE),
-            }
-        }
     }
 
-    /// The rev ribbon (rank 3, outside the bloom): a hairline track, the redline share in a dim
-    /// warning, the fill from primary to accent and a 12 px white comet at its head.
-    fn draw_ribbon(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let (y, half, w) = (g.ribbon_y, g.ribbon_half, g.ribbon_px);
-        let x_at = |f: f32| -half + 2.0 * half * f.clamp(0.0, 1.0);
-        let line = |a: f32, b: f32, width: f32| Shape::Line {
-            a: vec2(a, y),
-            b: vec2(b, y),
-            width_a: width,
-            width_b: width,
-            cap: Cap::Butt,
-        };
-        p.fill(&line(-half, half, 1.0), pal.roles.hairline);
-        let red = x_at(self.red_from);
-        if red < half - 1.0 {
-            p.fill(&line(red, half, 2.0), pal.roles.warning.intensity(0.45));
+    /// The left card: the logo zone, the Track Mode label and the G-meter over its peak history.
+    fn draw_card(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        logo_zone(p, g.logo, &self.logo, self.faces.wide, LogoVariant::Full, pal);
+        self.sign(p, g.card, "トラックモード", "TRACK MODE", g.card_stack, pal);
+        let mut outline = [Vec2::ZERO; PEAK_BINS];
+        if self.peaks.outline(g.meter, g.meter_r / RINGS_G[2], &mut outline) {
+            p.fill(&Shape::Polygon { points: &outline }, pal.primary.with_alpha(0.16));
         }
-        let head = x_at(self.rev.value());
-        if head > -half + 1.0 {
-            let fill = Gradient::linear(vec2(-half, y), vec2(half, y))
-                .stop(0.0, pal.primary.intensity(0.55))
-                .stop(1.0, pal.accent);
-            let caution = x_at(self.caution_from);
-            p.fill(&line(-half, head.min(caution), w), fill);
-            // Past the first amber pod the fill turns caution, past the first red pod warning,
-            // so the ribbon tells the same story as the pods.
-            if head > caution {
-                p.fill(&line(caution, head.min(red), w), pal.roles.caution);
-            }
-            if head > red {
-                p.fill(&line(red, head, w), pal.roles.warning);
-            }
-            let tail = (head - COMET_PX).max(-half);
-            let ink = pal.roles.ink;
-            p.fill(
-                &line(tail, head, w),
-                Gradient::linear(vec2(tail, y), vec2(head, y))
-                    .stop(0.0, ink.with_alpha(0.0))
-                    .stop(1.0, ink),
-            );
-            p.glow(&Shape::circle(vec2(head, y), w * 0.5), ink, Glow::new(4.0, 0.45));
-        }
+        self.ball.draw_meter(p, g.meter, g.meter_r, pal);
+        let cap = p.tokens().type_scale.metric_secondary;
+        let baseline = GBall::readout_baseline(g.meter, g.meter_r, cap);
+        // The shared readout sets its value in the muted ink. Here it is a figure the driver
+        // reads at a glance, so it gets the full ink.
+        let mut figures = *pal;
+        figures.roles.ink_muted = pal.roles.ink;
+        self.ball
+            .draw_readout(p, baseline, &figures, self.faces.figure, self.faces.label);
     }
 
-    /// The gear in its 1 px vertical pill, with the neighbours as ghosts; the contents roll on a
-    /// change and the glyph pulses at 2 Hz on a held limiter.
-    fn draw_gear(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-        let radius = g.pill.width() * 0.5;
-        let pill = Shape::round_rect(g.pill, radius);
-        // A quiet pad so the glyph reads over the scene's far road, and the lit 1 px rim
-        // (brighter at the top, towards the light).
-        p.fill(
-            &pill,
-            Gradient::linear(g.pill.min, vec2(g.pill.min.x, g.pill.max.y))
-                .stop(0.0, roles.oled_black.with_alpha(0.0))
-                .stop(0.25, roles.oled_black.with_alpha(0.85))
-                .stop(1.0, roles.oled_black.with_alpha(0.85)),
-        );
-        p.stroke(
-            &pill,
-            Gradient::linear(g.pill.min, vec2(g.pill.min.x, g.pill.max.y))
-                .stop(0.0, roles.rim_specular.with_alpha(0.42))
-                .stop(0.5, roles.ink.with_alpha(0.10))
-                .stop(1.0, roles.ink.with_alpha(0.22)),
-            Stroke::rim_px(1.0),
-        );
-        let roll = self.roll.value();
-        let (up, down) = neighbours(self.gear.gear());
-        p.scoped(|p| {
-            // The glyph keeps the shared 24 px roll but not its 1.12 entry scale, so it stays
-            // inside a straight-edged window 10 px inside the pill.
-            p.clip(g.pill.inset(10.0), 0.0);
-            let s = self.entry.value();
-            p.translate(g.gear);
-            p.scale(1.0 / (1.0 + 0.12 * s.abs()));
-            p.translate(-g.gear);
-            self.gear.draw(p, g.gear, self.faces.gear, g.gear_cap, pal);
-            let pulse = self.gear.pulse();
-            if pulse > 0.01 {
-                p.layer(LayerOptions::bloom(), |p| {
-                    let c = self.gear.color(pal).fade(0.35 * pulse);
-                    self.gear.draw_with(p, g.gear, self.faces.gear, g.gear_cap, c);
-                });
-            }
-        });
-        p.scoped(|p| {
-            p.clip(g.pill.inset(4.0), radius - 4.0);
-            // The neighbours wait until the glyph has settled, then fade in (never under it).
-            let ghost = TextStyle::new(self.faces.label, g.ghost_cap)
-                .paint(
-                    roles
-                        .ink_label
-                        .fade(0.6 * smoothstep(0.18, 0.32, self.gear.since_change())),
-                )
-                .align(Align::Center, VAlign::CapMiddle);
-            if let Some(n) = up {
-                p.text(vec2(g.gear.x, g.gear.y - g.ghost_dy + roll), n.label(), &ghost);
-            }
-            if let Some(n) = down {
-                p.text(vec2(g.gear.x, g.gear.y + g.ghost_dy + roll), n.label(), &ghost);
-            }
-        });
-    }
-
-    /// Speed (rank 2) on the left; rpm and the shy chips on the right.
-    fn draw_readouts(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let roles = pal.roles;
-
-        self.speed
-            .draw(p, g.speed, self.faces.speed, g.speed_cap, roles.ink, None);
-        // The unit sits under the digits' right edge (the units cell is always lit, so it never
-        // drifts away from a short figure such as "0").
-        let digits = TextStyle::new(self.faces.speed, g.speed_cap).tabular();
-        let right = g.speed.x + 1.5 * p.fonts().tabular_cell(&digits);
-        let unit = TextStyle::new(self.faces.label, self.micro_cap)
-            .paint(roles.ink_label)
-            .tracking(self.tracking)
-            .align(Align::Right, VAlign::CapTop);
-        p.text(vec2(right, g.unit_y), self.unit, &unit);
-
-        // Rpm in 50s (a steady figure), 80% ink, its label under it.
-        let rpm = ((self.rpm / 50.0).round() * 50.0).clamp(0.0, 99_999.0) as i64;
-        let cells = if rpm >= 10_000 { 5 } else { 4 };
-        let value = TextStyle::new(self.faces.metric, g.rpm_cap)
-            .paint(roles.ink.fade(0.8))
+    /// The status row: rpm and power, each under its two-language label.
+    fn draw_status(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let value = TextStyle::new(self.faces.figure, g.status_cap)
+            .paint(pal.roles.ink)
             .align(Align::Center, VAlign::CapMiddle)
             .tabular();
-        p.number(g.rpm, rpm, cells, &value, None);
-        let label = TextStyle::new(self.faces.label, self.micro_cap)
+        let [y_label, y_latin, y_value] = g.status_y;
+        let cells = [("回転数", "RPM", self.rpm), ("出力", self.power_unit, self.power_value)];
+        for ((japanese, latin, number), x) in cells.into_iter().zip(g.status_x) {
+            self.sign(p, vec2(x, y_label), japanese, latin, y_latin - y_label, pal);
+            p.number(vec2(x, y_value), number, cells_of(number), &value, None);
+        }
+    }
+
+    /// The right column: gear, speed with its unit, and Tesla's R · N · D row with the current
+    /// letter lit.
+    fn draw_drive(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let roles = pal.roles;
+        // Neutral is as bright as a gear: at a standstill the gear still leads the speed.
+        let gear_ink = match self.gear.gear() {
+            Gear::Neutral => roles.ink,
+            _ => self.gear.color(pal),
+        };
+        self.gear.draw_with(p, g.gear, self.faces.gear, g.gear_cap, gear_ink);
+        // The speed is centred under the gear, as the real display centres it, with no ghost 8s
+        // (the real display has none). The unit is centred under it.
+        let digits = TextStyle::new(self.faces.figure, g.speed_cap)
+            .paint(roles.ink)
+            .align(Align::Center, VAlign::CapMiddle)
+            .tabular();
+        let shown = self.speed.value();
+        p.number(g.speed, shown, cells_of(shown), &digits, None);
+        let unit = TextStyle::new(self.faces.label, g.unit_cap)
             .paint(roles.ink_label)
             .tracking(self.tracking)
             .align(Align::Center, VAlign::CapTop);
-        p.text(vec2(g.rpm.x, g.rpm.y + g.rpm_cap * 0.5 + 10.0), "RPM", &label);
-
-        // Shy chips: dark until active (SLIP: a latched drift; LIM: at the shift point).
-        let chips = [
-            ("SLIP", self.scene.drifting(), roles.caution),
-            ("LIM", self.shift.over_shift(), pal.shift),
-        ];
-        for ((text, on, color), x) in chips.into_iter().zip(g.chip_x) {
-            let rect = Rect::from_center_size(vec2(x, g.chips_y), g.chip_size);
-            let shape = Shape::round_rect(rect, g.chip_size.y * 0.5);
-            if on {
-                p.fill(&shape, color.intensity(0.10));
-            }
-            let rim = if on { color } else { roles.ink.with_alpha(0.06) };
-            p.stroke(&shape, rim, Stroke::rim_px(1.0));
-            let style = TextStyle::new(self.faces.label, g.chip_size.y * 0.42)
-                .paint(shy(on, color, pal))
-                .tracking(self.tracking)
+        p.text(vec2(g.speed.x, g.unit_y), self.unit, &unit);
+        let current = match self.gear.gear() {
+            Gear::Reverse => 0,
+            Gear::Neutral => 1,
+            Gear::Forward(_) => 2,
+        };
+        for (i, letter) in ["R", "N", "D"].into_iter().enumerate() {
+            let ink = if i == current {
+                roles.ink
+            } else {
+                roles.ink_label.fade(0.8)
+            };
+            let style = TextStyle::new(self.faces.label, g.prnd_cap)
+                .paint(ink)
                 .align(Align::Center, VAlign::CapMiddle);
-            p.text(rect.center(), text, &style);
+            p.text(g.prnd + vec2((i as f32 - 1.0) * g.prnd_pitch, 0.0), letter, &style);
         }
     }
 }
@@ -623,58 +658,111 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_stays_inside_the_view_envelopes() {
+    fn layout_stays_inside_the_view_envelopes_and_meets_the_zone_minimums() {
         let t = Tokens::default();
         for (g, env) in [(&COCKPIT, t.layout.cockpit_envelope), (&HOOD, t.layout.hood_envelope)] {
             let inside = |r: Rect| env.contains(r.min) && env.contains(r.max);
             assert!(inside(g.scene.viewport), "scene {:?} in {env:?}", g.scene.viewport);
-            assert!(inside(g.pill), "pill in the envelope");
-            for c in g.pod_centers() {
-                assert!(inside(Rect::from_center_size(c, g.pod_size)), "pod at {c:?}");
+            assert!(inside(g.logo), "logo zone");
+            for i in 0..SEGMENTS {
+                assert!(inside(g.pill_rect(i)), "pill {i}");
             }
-            assert!(g.pod_size.y <= 42.0, "the strobing strip is <= 42 px tall");
-            let ribbon = Rect::from_points(
-                vec2(-g.ribbon_half, g.ribbon_y - 2.0),
-                vec2(g.ribbon_half, g.ribbon_y + 2.0),
+            // Zone minimums (tokens): the strobing strip at most 42 px tall and at least 720 px
+            // wide, the gear at least 150 px, the speed at least 84 px and within 460 px of it.
+            let span = g.pill_rect(SEGMENTS - 1).max.x - g.pill_rect(0).min.x;
+            assert!(g.pill.y <= 42.0 && span >= 720.0, "shift line {span} x {}", g.pill.y);
+            assert!(g.gear_cap >= 150.0 && g.speed_cap >= 84.0);
+            let apart = g.gear - g.speed;
+            assert!(apart.x.hypot(apart.y) <= 460.0, "the speed sits by the gear");
+            // The shift line clears the gear, the gear clears the speed, and the R N D row sits
+            // under the unit, all inside the envelope.
+            let gear_top = g.gear.y - g.gear_cap * 0.5;
+            assert!(
+                gear_top - (g.shift_y + g.pill.y * 0.5) >= 8.0,
+                "gear under the shift line"
             );
-            assert!(inside(ribbon), "ribbon in the envelope");
-            // Pods clear the ribbon, the ribbon clears the pill, and the pill holds the glyph and
-            // both ghosts (with the roll) inside its straight part and end caps.
-            assert!(g.ribbon_y - g.ribbon_px * 0.5 - (g.pods_y + g.pod_size.y * 0.5) >= 8.0);
-            assert!(g.pill.min.y - (g.ribbon_y + g.ribbon_px * 0.5) >= 8.0);
-            let glyph_half = g.gear_cap * 0.5;
-            for dir in [-1.0f32, 1.0] {
-                let ghost = g.gear.y + dir * g.ghost_dy;
-                let gap = (ghost - g.gear.y).abs() - glyph_half - g.ghost_cap * 0.5;
-                assert!(gap >= 4.0, "ghost {gap} px from the glyph");
-                assert!(
-                    ghost - g.ghost_cap * 0.5 > g.pill.min.y && ghost + g.ghost_cap * 0.5 < g.pill.max.y,
-                    "ghost inside the pill"
-                );
-            }
-            assert!(g.roll_px <= 24.0, "the pill rolls 24 px at most");
-            // The readouts clear the pill and stay above the scene's road (they may overlap its
-            // dissolving far end only).
-            assert!(g.speed.x + g.speed_cap * 1.0 < g.pill.min.x);
-            assert!(g.chip_x[0] - g.chip_size.x * 0.5 > g.pill.max.x);
+            assert!((g.speed.y - g.speed_cap * 0.5) - (g.gear.y + g.gear_cap * 0.5) >= 30.0);
+            assert!(g.unit_y >= g.speed.y + g.speed_cap * 0.5 + 6.0);
+            assert!(g.prnd.y - g.prnd_cap * 0.5 >= g.unit_y + g.unit_cap + 12.0);
+            assert!(g.prnd.y + g.prnd_cap * 0.5 <= env.max.y);
+            // The columns stay clear of the scene's undimmed middle, and the power line lies
+            // inside the band, under the ego car.
+            let clear = g.scene.viewport.width() * 0.5 * 0.64;
+            assert!(g.gear.x - g.gear_cap * 0.5 > clear);
+            assert!(g.meter.x + g.meter_r * 1.18 < -clear);
+            assert!(g.power_half < g.scene.viewport.width() * 0.5);
+            assert!(g.power_y + g.power_px <= g.scene.viewport.max.y);
+            // The left column, top to bottom: logo, label, meter (a ball at the limit reaches
+            // 1.18 r), the G readout, then the status rows down to the envelope.
+            assert!(g.card.y - JP_CAP * 0.5 >= g.logo.max.y + 8.0);
+            let label_foot = g.card.y + g.card_stack + LATIN_CAP * 0.5;
+            assert!(
+                g.meter.y - g.meter_r * 1.06 >= label_foot + 8.0,
+                "meter under the label"
+            );
+            let readout = GBall::readout_baseline(g.meter, g.meter_r, t.type_scale.metric_secondary).y;
+            assert!(
+                g.status_y[0] - JP_CAP * 0.5 >= readout + 8.0,
+                "status under the readout"
+            );
+            assert!(g.status_y[2] + g.status_cap * 0.5 <= env.max.y);
+            assert!(g.status_y[1] - g.status_y[0] >= (JP_CAP + LATIN_CAP) * 0.5 + 4.0);
+            assert!(g.status_x[0] - 60.0 >= env.min.x);
         }
+        assert!(LATIN_CAP >= t.type_scale.micro_label * 0.75, "no label under the floor");
     }
 
     #[test]
-    fn neighbours_follow_the_gearbox() {
-        assert_eq!(neighbours(Gear::Neutral), (Some(Gear::Forward(1)), Some(Gear::Reverse)));
-        assert_eq!(
-            neighbours(Gear::Forward(1)),
-            (Some(Gear::Forward(2)), Some(Gear::Neutral))
-        );
-        assert_eq!(neighbours(Gear::Forward(10)), (None, Some(Gear::Forward(9))));
-        assert_eq!(neighbours(Gear::Reverse), (Some(Gear::Neutral), None));
+    fn the_hood_view_has_halos_and_the_cockpit_has_none() {
+        assert!(COCKPIT.halos.iter().all(Option::is_none), "the scrim is dark");
+        assert!(HOOD.halos.iter().all(Option::is_some), "the hood has no scrim");
     }
 
     #[test]
-    fn the_ribbon_runs_idle_to_limiter() {
-        assert_eq!(TeslaAdas::rev_fraction(900.0, 900.0, 8700.0), 0.0);
-        assert_eq!(TeslaAdas::rev_fraction(8700.0, 900.0, 8700.0), 1.0);
-        assert_eq!(TeslaAdas::rev_fraction(f32::NAN.max(0.0), 900.0, 8700.0), 0.0);
+    fn the_rev_fill_runs_outside_in_and_is_dark_at_idle() {
+        for i in 0..SEGMENTS {
+            assert_eq!(rev_fill(i, 0.0), 0.0, "pill {i} at idle");
+            assert_eq!(rev_fill(i, 1.0), 1.0, "pill {i} at the first stage");
+            assert_eq!(rev_fill(i, 0.4), rev_fill(SEGMENTS - 1 - i, 0.4), "mirrored");
+        }
+        assert_eq!(pair_of(0), 0.0);
+        assert_eq!(pair_of(7), 7.0);
+        assert_eq!(pair_of(8), 7.0);
+        assert!(rev_fill(0, 0.2) > rev_fill(3, 0.2), "the outer pair leads");
+        assert_eq!(rev_fill(7, 0.5), 0.0, "the centre pair is last");
+    }
+
+    #[test]
+    fn rev_progress_needs_a_real_shift_stage() {
+        assert_eq!(rev_progress(900.0, 900.0, 6000.0), 0.0);
+        assert_eq!(rev_progress(6000.0, 900.0, 6000.0), 1.0);
+        assert_eq!(rev_progress(9000.0, 900.0, 6000.0), 1.0);
+        assert_eq!(rev_progress(3000.0, 900.0, 0.0), 0.0, "no shift point: no fill");
+        assert_eq!(rev_progress(f32::NAN, 900.0, 6000.0), 0.0);
+    }
+
+    #[test]
+    fn the_peak_history_keeps_the_largest_force_per_direction() {
+        let mut peaks = PeakTrace::new();
+        let mut out = [Vec2::ZERO; PEAK_BINS];
+        assert!(!peaks.outline(Vec2::ZERO, 100.0, &mut out), "empty at first");
+        peaks.record(vec2(1.0, 0.0));
+        peaks.record(vec2(0.4, 0.0));
+        assert!(peaks.outline(Vec2::ZERO, 100.0, &mut out));
+        assert!((out[0].x - 100.0).abs() < 1e-3, "1 g to the right: {:?}", out[0]);
+        assert!(out[1].x > 60.0 && out[PEAK_BINS - 1].x > 60.0, "a lobe, not a spike");
+        assert_eq!(out[PEAK_BINS / 2], Vec2::ZERO, "nothing to the left yet");
+        peaks.record(vec2(f32::NAN, 0.0));
+        peaks.record(vec2(9.0, 0.0));
+        assert!(peaks.peak[0] <= RINGS_G[2], "held at the outer ring");
+    }
+
+    #[test]
+    fn every_japanese_character_drawn_is_preloaded() {
+        for text in ["トラックモード", "回転数", "出力", "止まれ"] {
+            for ch in text.chars() {
+                assert!(JP_TEXT.contains(ch), "{ch} is drawn but not preloaded");
+            }
+        }
     }
 }
