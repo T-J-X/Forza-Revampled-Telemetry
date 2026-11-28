@@ -27,6 +27,9 @@
 //! | Q4 | SPEED | x 168..312, y −34..150 | rank 2: tabular speed (cap 52, no ghost 8s: at a glance they read as digits) and its unit |
 //! | C | chin | y 150..232 | the driver's name (left), the car's logo zone (right) |
 //!
+//! The four quarter panels can be swapped or hidden with the config key `BoschDduPanels`: every
+//! panel fits every slot.
+//!
 //! Signature moments:
 //! - **Shift lights:** the brow fills left to right in the frame each stage is crossed, green,
 //!   amber, red; at the shift point all ten turn `shift`, and on the limiter the middle six strobe
@@ -163,20 +166,22 @@ pub(super) struct Geom {
     head_cap: f32,
     label_cap: f32,
     bar_h: f32,
-    thr_y: f32,
-    brk_y: f32,
-    g_c: Vec2,
+    /// Offsets below a panel's header line (px): the pedal bars, the G ring's centre and its
+    /// value, the power figure, the boost row, the shift box (top, bottom), the speed and its unit.
+    thr_dy: f32,
+    brk_dy: f32,
+    g_dy: f32,
     g_r: f32,
-    g_value_y: f32,
+    g_value_dy: f32,
     g_value_cap: f32,
-    power_y: f32,
+    power_dy: f32,
     power_cap: f32,
-    boost_y: f32,
+    boost_dy: f32,
     value_cap: f32,
-    shift_box: Rect,
-    speed_at: Vec2,
+    shift_dy: (f32, f32),
+    speed_dy: f32,
     speed_cap: f32,
-    unit_y: f32,
+    unit_dy: f32,
     name_at: Vec2,
     name_cap: f32,
     logo: Rect,
@@ -222,23 +227,20 @@ const GEOM: Geom = Geom {
     head_cap: 15.0,
     label_cap: 13.0,
     bar_h: 14.0,
-    thr_y: -160.0,
-    brk_y: -112.0,
-    g_c: Vec2 { x: -244.0, y: 54.0 },
+    thr_dy: 48.0,
+    brk_dy: 96.0,
+    g_dy: 80.0,
     g_r: 40.0,
-    g_value_y: 122.0,
+    g_value_dy: 148.0,
     g_value_cap: 22.0,
-    power_y: -142.0,
+    power_dy: 66.0,
     power_cap: 34.0,
-    boost_y: -104.0,
+    boost_dy: 104.0,
     value_cap: 18.0,
-    shift_box: Rect {
-        min: Vec2 { x: 168.0, y: -84.0 },
-        max: Vec2 { x: 312.0, y: -52.0 },
-    },
-    speed_at: Vec2 { x: 244.0, y: 48.0 },
+    shift_dy: (124.0, 156.0),
+    speed_dy: 74.0,
     speed_cap: 52.0,
-    unit_y: 86.0,
+    unit_dy: 112.0,
     name_at: Vec2 { x: -318.0, y: 192.0 },
     name_cap: 16.0,
     logo: Rect {
@@ -247,7 +249,42 @@ const GEOM: Geom = Geom {
     },
 };
 
+/// One quarter panel's place: its x range, its header line and its side of the gauge (headers
+/// and rules mirror about the gauge).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Slot {
+    x: (f32, f32),
+    head: f32,
+    right_side: bool,
+}
+
+/// Quarter panels, in the order of the `BoschDduPanels` list: left top, left bottom, right top,
+/// right bottom.
+const PANELS: usize = 4;
+
 impl Geom {
+    /// Quarter panel `i` (see [`PANELS`]).
+    fn slot(&self, i: usize) -> Slot {
+        let right_side = i >= 2;
+        Slot {
+            x: if right_side { self.right } else { self.left },
+            head: if i.is_multiple_of(2) {
+                self.head_top
+            } else {
+                self.head_bottom
+            },
+            right_side,
+        }
+    }
+
+    /// The shift point's box in an ENGINE panel at `s`.
+    fn shift_box(&self, s: Slot) -> Rect {
+        Rect::from_points(
+            vec2(s.x.0, s.head + self.shift_dy.0),
+            vec2(s.x.1, s.head + self.shift_dy.1),
+        )
+    }
+
     /// The housing's body below the arch.
     fn body(&self) -> Rect {
         Rect::from_points(vec2(-self.half_w, self.top), vec2(self.half_w, self.bottom))
@@ -291,6 +328,65 @@ impl Geom {
             vec2(b, foot),
             vec2(-b, foot),
         ]
+    }
+}
+
+/// What a quarter panel shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Content {
+    Pedals,
+    GForce,
+    Engine,
+    Speed,
+    Off,
+}
+
+impl Content {
+    fn parse(value: &str) -> Option<Content> {
+        let v = value.trim();
+        [
+            ("pedals", Content::Pedals),
+            ("g", Content::GForce),
+            ("gforce", Content::GForce),
+            ("engine", Content::Engine),
+            ("speed", Content::Speed),
+            ("off", Content::Off),
+            ("hidden", Content::Off),
+        ]
+        .into_iter()
+        .find_map(|(name, content)| v.eq_ignore_ascii_case(name).then_some(content))
+    }
+}
+
+/// The dash's own option, from the config's extra key `BoschDduPanels` (hot-reloaded; the
+/// configurator and the OSD set it): the four quarter panels' contents as a comma-separated
+/// list in the order left top, left bottom, right top, right bottom, each `Pedals`, `G`,
+/// `Engine`, `Speed` or `Off` (default `Pedals,G,Engine,Speed`). A missing or unknown entry
+/// keeps its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Options {
+    panels: [Content; PANELS],
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            panels: [Content::Pedals, Content::GForce, Content::Engine, Content::Speed],
+        }
+    }
+}
+
+impl Options {
+    fn parse(list: Option<&str>) -> Self {
+        let mut opts = Self::default();
+        if let Some(list) = list {
+            for (slot, name) in opts.panels.iter_mut().zip(list.split(',')) {
+                if let Some(content) = Content::parse(name) {
+                    *slot = content;
+                }
+            }
+        }
+        opts
     }
 }
 
@@ -459,6 +555,9 @@ pub struct BoschDdu {
     calm: bool,
     logo: Logo,
     driver: String,
+    opts: Options,
+    /// The `BoschDduPanels` text `opts` was parsed from (parsed again only when it changes).
+    opts_text: String,
     leds: TopLeds,
     /// Side columns lit: left (slip), right (brake).
     slip_lit: usize,
@@ -513,6 +612,8 @@ impl BoschDdu {
             calm: false,
             logo: Logo::default(),
             driver: String::new(),
+            opts: Options::default(),
+            opts_text: String::new(),
             leds: TopLeds::new(),
             slip_lit: 0,
             brake_lit: 0,
@@ -590,6 +691,16 @@ impl Cluster for BoschDdu {
         }
         if self.driver != input.config.custom_driver_name {
             self.driver.clone_from(&input.config.custom_driver_name);
+        }
+        let panels = input
+            .config
+            .extra
+            .get("BoschDduPanels")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if panels != self.opts_text {
+            panels.clone_into(&mut self.opts_text);
+            self.opts = Options::parse((!panels.is_empty()).then_some(panels));
         }
 
         // The gear first. Snapped frames show the engaged gear at rest.
@@ -687,10 +798,16 @@ impl Cluster for BoschDdu {
         self.draw_leds(p, g, &pal);
         self.draw_rev(p, g, &pal);
         self.draw_gear(p, g, &pal);
-        self.draw_pedals(p, g, &pal);
-        self.draw_g(p, g, &pal);
-        self.draw_engine(p, g, &pal);
-        self.draw_speed(p, g, &pal);
+        for (i, content) in self.opts.panels.iter().enumerate() {
+            let slot = g.slot(i);
+            match content {
+                Content::Pedals => self.draw_pedals(p, g, slot, &pal),
+                Content::GForce => self.draw_g(p, g, slot, &pal),
+                Content::Engine => self.draw_engine(p, g, slot, &pal),
+                Content::Speed => self.draw_speed(p, g, slot, &pal),
+                Content::Off => {}
+            }
+        }
         self.draw_chin(p, g, &pal);
         p.restore();
     }
@@ -884,16 +1001,8 @@ impl BoschDdu {
     }
 
     /// A quarter panel's caps header over a rule whose inner end turns down at 45°.
-    fn header(
-        &self,
-        p: &mut Painter<'_>,
-        g: &Geom,
-        x: (f32, f32),
-        y: f32,
-        text: &str,
-        pal: &Palette,
-        inner_right: bool,
-    ) {
+    fn header(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, text: &str, pal: &Palette) {
+        let (x, y, inner_right) = (s.x, s.head, s.right_side);
         let style = self.label(
             g.head_cap,
             pal.roles.ink.with_alpha(LEVEL_LABEL),
@@ -929,19 +1038,21 @@ impl BoschDdu {
     }
 
     /// PEDALS: throttle and brake.
-    fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        self.header(p, g, g.left, g.head_top, "PEDALS", pal, false);
+    fn draw_pedals(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "PEDALS", pal);
         let label = self.label(g.label_cap, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Left);
-        p.text(vec2(g.left.0, g.thr_y - 14.0), "THR", &label);
-        Self::bar(p, g.left, g.thr_y, g.bar_h, self.sig.throttle, pal.primary, pal);
-        p.text(vec2(g.left.0, g.brk_y - 14.0), "BRK", &label);
-        Self::bar(p, g.left, g.brk_y, g.bar_h, self.sig.brake, pal.roles.warning, pal);
+        let (thr, brk) = (s.head + g.thr_dy, s.head + g.brk_dy);
+        p.text(vec2(s.x.0, thr - 14.0), "THR", &label);
+        Self::bar(p, s.x, thr, g.bar_h, self.sig.throttle, pal.primary, pal);
+        p.text(vec2(s.x.0, brk - 14.0), "BRK", &label);
+        Self::bar(p, s.x, brk, g.bar_h, self.sig.brake, pal.roles.warning, pal);
     }
 
     /// G-FORCE: the felt force as a dot in a 1.5 g ring, and its size.
-    fn draw_g(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        self.header(p, g, g.left, g.head_bottom, "G-FORCE", pal, false);
-        let c = g.g_c;
+    fn draw_g(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "G-FORCE", pal);
+        let c = vec2((s.x.0 + s.x.1) * 0.5, s.head + g.g_dy);
+        let value_y = s.head + g.g_value_dy;
         let rule = pal.roles.ink.with_alpha(LEVEL_RULE);
         p.stroke(&Shape::circle(c, g.g_r), rule, Stroke::new(2.0));
         p.stroke(
@@ -962,18 +1073,19 @@ impl BoschDdu {
         let mut buf = [0u8; 16];
         let text = fixed(&mut buf, self.g_digits.shown, 2);
         let value = self.figures(g.g_value_cap, pal.roles.ink, Align::Right);
-        p.text(vec2(c.x + 18.0, g.g_value_y), text, &value);
+        p.text(vec2(c.x + 18.0, value_y), text, &value);
         let unit = self.label(g.label_cap, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Left);
-        p.text(vec2(c.x + 24.0, g.g_value_y + 2.0), "g", &unit);
+        p.text(vec2(c.x + 24.0, value_y + 2.0), "g", &unit);
     }
 
     /// ENGINE: power in the user's unit, boost, and the shift point boxed.
-    fn draw_engine(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        let (x0, x1) = g.right;
-        self.header(p, g, g.right, g.head_top, "ENGINE", pal, true);
+    fn draw_engine(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        let (x0, x1) = s.x;
+        self.header(p, g, s, "ENGINE", pal);
+        let (power_y, boost_y) = (s.head + g.power_dy, s.head + g.boost_dy);
         let label = self.label(g.label_cap, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Left);
         let unit = self.label(g.label_cap, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Right);
-        let ly = g.power_y - g.power_cap * 0.5 - 12.0;
+        let ly = power_y - g.power_cap * 0.5 - 12.0;
         p.text(vec2(x0, ly), "POWER", &label);
         p.text(
             vec2(x1, ly),
@@ -984,27 +1096,27 @@ impl BoschDdu {
             &unit,
         );
         let big = self.figures(g.power_cap, pal.roles.ink, Align::Right);
-        p.number(vec2(x1, g.power_y), self.power.shown.clamp(0, 9999), 4, &big, None);
+        p.number(vec2(x1, power_y), self.power.shown.clamp(0, 9999), 4, &big, None);
 
         // Boost: the label and its unit on the left, the value on the right (vacuum reads 0).
         let row = self.row_label(g.label_cap, pal.roles.ink.with_alpha(LEVEL_LABEL));
         let label_w = p.measure("BOOST", &row).width;
-        p.text(vec2(x0, g.boost_y), "BOOST", &row);
+        p.text(vec2(x0, boost_y), "BOOST", &row);
         let (decimals, boost_unit) = match self.sig.unit {
             SpeedUnit::Mph => (1, "psi"),
             SpeedUnit::Kmh => (2, "bar"),
         };
-        p.text(vec2(x0 + label_w + 6.0, g.boost_y), boost_unit, &row);
+        p.text(vec2(x0 + label_w + 6.0, boost_y), boost_unit, &row);
         let small = self.figures(g.value_cap, pal.roles.ink, Align::Right);
         let mut buf = [0u8; 16];
         p.text(
-            vec2(x1, g.boost_y),
+            vec2(x1, boost_y),
             fixed(&mut buf, self.boost.shown.max(0), decimals),
             &small,
         );
 
         // The shift point, boxed in the accent colour as the DDU boxes its key value.
-        let b = g.shift_box;
+        let b = g.shift_box(s);
         p.stroke(
             &Shape::round_rect(b, 4.0),
             pal.primary.with_alpha(0.8),
@@ -1023,17 +1135,17 @@ impl BoschDdu {
 
     /// SPEED: tabular digits (no ghost 8s: at a glance a ghost read as a digit), and the unit in
     /// lower case.
-    fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
-        self.header(p, g, g.right, g.head_bottom, "SPEED", pal, true);
-        // Flush right, as every value on this side is; the unit sits under the last digit.
+    fn draw_speed(&self, p: &mut Painter<'_>, g: &Geom, s: Slot, pal: &Palette) {
+        self.header(p, g, s, "SPEED", pal);
+        // Flush right, as every value in a panel is; the unit sits under the last digit.
         let digits = self.figures(g.speed_cap, pal.roles.ink, Align::Right);
-        p.number(vec2(g.right.1, g.speed_at.y), self.speed.value(), 3, &digits, None);
+        p.number(vec2(s.x.1, s.head + g.speed_dy), self.speed.value(), 3, &digits, None);
         let unit = self.label(g.label_cap + 2.0, pal.roles.ink.with_alpha(LEVEL_LABEL), Align::Right);
         let text = match self.sig.unit {
             SpeedUnit::Mph => "mph",
             SpeedUnit::Kmh => "km/h",
         };
-        p.text(vec2(g.right.1, g.unit_y), text, &unit);
+        p.text(vec2(s.x.1, s.head + g.unit_dy), text, &unit);
     }
 
     /// The chin: the driver's name on the left, the car's logo zone on the right.
@@ -1149,7 +1261,7 @@ mod tests {
             "logo zone on the chin"
         );
         assert!(g.logo.max.x < g.half_w - g.corner_bottom, "logo clear of the corner");
-        let box_ok = g.shift_box.max.y < g.head_bottom - g.head_cap;
+        let box_ok = g.shift_box(g.slot(2)).max.y < g.head_bottom - g.head_cap;
         assert!(box_ok, "the shift box clears the SPEED header");
         // ISO 15008 minimums: every dynamic readout at least 17.7 px cap, the gear at least 40.
         for cap in [
@@ -1163,6 +1275,46 @@ mod tests {
             assert!(cap >= 17.7);
         }
         assert!(g.gear_cap >= 40.0);
+    }
+
+    #[test]
+    fn every_panel_fits_every_slot() {
+        let g = &GEOM;
+        // The tallest content of each kind ends above the next header (top row) or the screen's
+        // foot (bottom row), whichever slot it is put in.
+        let lowest = [
+            g.brk_dy + g.bar_h,
+            g.g_value_dy + g.g_value_cap * 0.5,
+            g.shift_dy.1,
+            g.unit_dy + g.label_cap,
+        ];
+        for i in 0..PANELS {
+            let s = g.slot(i);
+            let floor = if i.is_multiple_of(2) {
+                g.head_bottom - g.head_cap
+            } else {
+                g.screen.max.y
+            };
+            for dy in lowest {
+                assert!(
+                    s.head + dy <= floor,
+                    "slot {i}: {dy} px under the header passes {floor}"
+                );
+            }
+            assert!(s.x.0 >= g.screen.min.x && s.x.1 <= g.screen.max.x);
+        }
+    }
+
+    #[test]
+    fn panels_option_swaps_and_hides() {
+        assert_eq!(Options::parse(None), Options::default());
+        let o = Options::parse(Some("speed, OFF, bogus"));
+        assert_eq!(
+            o.panels,
+            [Content::Speed, Content::Off, Content::Engine, Content::Speed],
+            "unknown and missing entries keep their defaults"
+        );
+        assert_eq!(Options::parse(Some("g,gforce,hidden,pedals")).panels[2], Content::Off);
     }
 
     fn signals(rpm: f32) -> Signals {
