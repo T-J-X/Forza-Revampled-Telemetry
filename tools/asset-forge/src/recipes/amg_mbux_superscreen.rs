@@ -8,16 +8,20 @@
 //!   out in Rust (SDXL draws organic variation well but not a regular screen). It is the dotted
 //!   halftone of the real W214 Sporty display, on the tunnel wall, the disc and the crescents.
 //! - **Brushed metal (ComfyUI):** a macro of brushed anodised aluminium, grey and seamless; it
-//!   drives the roughness of the tunnel's metal ridges and the scale bands.
-//! - **Assembly (Blender, Cycles):** the tunnel and the side scales, modelled at 1 Blender unit
-//!   per 4K px: a glossy near-black funnel lofted through the ring table with the halftone
-//!   glowing towards the disc, six grey brushed-metal ridges, a shallow dotted disc lit at its
-//!   rim, a dark road floor with a lit lip and metal edges, and two tapered dark-chrome scale
-//!   bands with polished rims. Lit by a dim studio HDRI and one key 38° up, rendered once per key
-//!   azimuth (rest −115°, swung −65°); the cluster cross-fades the two with lateral G.
-//! - **Crescents (Blender):** both crescent bodies, extruded and bevelled, the halftone glowing
-//!   brightest at the outer edge; turned into a luminance plate (white, the light in alpha) so the
-//!   cluster tints it with the palette's primary and lights it bottom to top with the rpm.
+//!   drives the roughness of the tunnel's ring lines and the scale bands' rims.
+//! - **Assembly (Blender, Cycles):** board v3 (measured from the W214 photos after TJS's note of
+//!   07:41, "It looks nothing like how it should"), modelled at 1 Blender unit per 4K px: a
+//!   shallow near-black funnel from the crescents' inner edge to the disc with a faint halftone
+//!   towards the light, five thin satin-grey ring lines, the light at the end of the tunnel (a
+//!   flat dotted disc cut at the horizon, brightest where it meets the road, one darker ring
+//!   inside), a black veil below the horizon, a dark road lit from the horizon with fading edge
+//!   and lane lines, the bright horizon lip and a dim cross line, and two dark plum-charcoal scale
+//!   bands with a polished rim on the outer edge and a dim lip on the inner one. Lit by a dim
+//!   studio HDRI and one key 38° up, rendered once per key azimuth (rest −115°, swung −65°); the
+//!   cluster cross-fades the two with lateral G.
+//! - **Crescents (Blender):** both crescent bodies, extruded and bevelled, a solid halftone a
+//!   little brighter at the outer edge; turned into a luminance plate (white, the light in alpha)
+//!   so the cluster tints it with the palette's primary (always lit, like the real display).
 //! - **Lens and gauge (Blender):** the G-Force lens (a dome of dark smoked glass in a polished
 //!   ring) and the boost gauge (a dark face in a chrome bezel), each per key azimuth.
 //!
@@ -48,31 +52,30 @@ const LIGHTS: [f32; 2] = [-115.0, -65.0];
 /// The tunnel centre (`Geom::tunnel`, local 4K px, y down).
 const TUNNEL: (f32, f32) = (0.0, -36.0);
 /// The crescents: outer radius, width at 9 and 3 o'clock, half span (degrees).
-const CRESCENT: (f32, f32, f32) = (278.0, 66.0, 56.0);
-/// The disc: centre and radius.
-const DISC: (f32, f32, f32) = (0.0, -62.0, 92.0);
-/// The funnel's lip radius (round [`TUNNEL`]); the wall runs from it to the disc.
-const LIP_R: f32 = 212.0;
-/// Metal ridges: count, outermost and innermost radius, outermost and innermost width.
-const RIDGES: usize = 6;
-/// See [`RIDGES`].
-const RIDGE_R: (f32, f32) = (200.0, 100.0);
-/// See [`RIDGES`].
-const RIDGE_W: (f32, f32) = (4.5, 2.5);
-/// Wall loops from the lip to the disc, and how deep each sits behind the one before it.
-const WALL_LOOPS: usize = 8;
-/// See [`WALL_LOOPS`].
-const RING_DEPTH: f32 = 46.0;
-/// The floor: top y, top half width, bottom y, bottom half width.
-const FLOOR: [f32; 4] = [34.0, 64.0, 208.0, 176.0];
-/// The scale bands: inner radius, width, from and to (degrees, the left band; the right mirrors).
-const BAND: [f32; 4] = [362.0, 34.0, 138.0, 218.0];
+const CRESCENT: (f32, f32, f32) = (300.0, 80.0, 43.0);
+/// The disc (the light at the end of the tunnel): centre and radius.
+const DISC: (f32, f32, f32) = (0.0, -62.0, 88.0);
+/// The horizon (local y): the disc is cut here and the road starts here.
+const HORIZON: f32 = -58.0;
+/// Ring lines: count, the gap outside the disc, the gap inside the crescents, and the ease.
+const RINGS: usize = 5;
+/// See [`RINGS`].
+const RING_GAPS: (f32, f32) = (18.0, 16.0);
+/// See [`RINGS`].
+const RING_EASE: f32 = 1.15;
+/// How far the disc sits behind the outermost ring line (px).
+const DEPTH: f32 = 40.0;
+/// The road: top y, top half width, bottom y, bottom half width.
+const FLOOR: [f32; 4] = [HORIZON, 44.0, 200.0, 214.0];
+/// The scale bands: inner radius, outer radius, from and to (degrees, the left band; the right
+/// mirrors).
+const BAND: [f32; 4] = [312.0, 392.0, 150.0, 216.0];
 /// The plate rects (local px): min x, min y, max x, max y.
-const ASSEMBLY_RECT: [f32; 4] = [-404.0, -300.0, 404.0, 236.0];
+const ASSEMBLY_RECT: [f32; 4] = [-404.0, -280.0, 404.0, 208.0];
 /// See [`ASSEMBLY_RECT`].
-const CRESCENT_RECT: [f32; 4] = [-282.0, -272.0, 282.0, 200.0];
+const CRESCENT_RECT: [f32; 4] = [-304.0, -244.0, 304.0, 172.0];
 /// The widgets' radius, and the margin each plate keeps round it (lens, gauge).
-const WIDGET_R: f32 = 84.0;
+const WIDGET_R: f32 = 76.0;
 /// See [`WIDGET_R`].
 const MARGINS: (f32, f32) = (12.0, 16.0);
 /// The halftone's tile on the wall (local px): 32 dots across, a 7 px pitch.
@@ -102,10 +105,10 @@ const DOTS_ACROSS: usize = 32;
 /// See [`DOT_SIZE`].
 const DOT_ROWS: usize = 36;
 
-/// The tunnel and the side scales. Params: `rect`, `scale`, `rings` (`[cx, cy, r, z]` from the
-/// lip to the disc), `ridges` (`[cx, cy, r, z, w]`), `disc` (`[cx, cy, r]`), `floor`, `band`
-/// (`[cx, cy, r, w, from, to]`), `lights`, `samples`, `dots`, `dot_tile`, `metal` (path or ""),
-/// `metal_tile`, `prefix`.
+/// The tunnel and the side scales. Params: `rect`, `scale`, `rings` (`[cx, cy, r]` from the disc
+/// out to the crescents), `disc` (`[cx, cy, r]`), `horizon`, `depth`, `floor`, `band` (`[cx, cy,
+/// r_in, r_out, from, to]`), `lights`, `samples`, `dots`, `dot_tile`, `metal` (path or ""),
+/// `metal_tile`, `world`, `prefix`.
 pub const ASSEMBLY_BPY: &str = r#"
 sc = reset()
 gpu_cycles(sc, samples=ARGS.get('samples', 128), denoise=True, bounces=8)
@@ -171,16 +174,48 @@ def dots_tex(NT, tile):
     lk(NT, mp.outputs[0], tex.inputs['Vector'])
     return tex.outputs['Color']
 
-RINGS = ARGS['rings']          # [cx, cy, r, z] lip .. disc
-RIDGES = ARGS['ridges']        # [cx, cy, r, z, w] the metal ridges
-dcx, dcy, dr = [float(v) for v in ARGS['disc']]
 
-# The tunnel wall: a loft through the ring table, glossy near-black, the halftone glowing faintly
-# towards the disc.
+RINGS = ARGS['rings']          # [cx, cy, r] the thin ring lines, disc .. crescents
+dcx, dcy, dr = [float(v) for v in ARGS['disc']]
+HZ = float(ARGS['horizon'])
+DEPTH = float(ARGS['depth'])
+
+def screen_y_mask(NT, y_from, y_to, lo, hi):
+    # a factor that runs lo -> hi as the screen y goes from y_from to y_to (Blender Y = -y)
+    geo = node(NT, 'ShaderNodeNewGeometry')
+    sp = node(NT, 'ShaderNodeSeparateXYZ')
+    lk(NT, geo.outputs['Position'], sp.inputs[0])
+    mr = node(NT, 'ShaderNodeMapRange', clamp=True)
+    mr.inputs['From Min'].default_value = -y_from
+    mr.inputs['From Max'].default_value = -y_to
+    mr.inputs['To Min'].default_value = lo
+    mr.inputs['To Max'].default_value = hi
+    lk(NT, sp.outputs['Y'], mr.inputs['Value'])
+    return mr.outputs['Result'], sp
+
+def flat(name, pts, z, mat):
+    bm = bmesh.new()
+    vv = [bm.verts.new(P(x, y, z)) for x, y in pts]
+    bm.faces.new(vv)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    for f in bm.faces:
+        if f.normal.z < 0:
+            f.normal_flip()
+    ob = mesh_obj(name, bm)
+    ob.data.materials.append(mat)
+    return ob
+
+# The tunnel wall: a shallow funnel from the crescents' inner edge down to the disc, glossy near
+# black with a faint halftone that glows towards the light.
+n = len(RINGS)
 bm = bmesh.new()
 loops = []
-for cx, cy, r, z in RINGS:
+for k in range(n - 1, -1, -1):
+    cx, cy, r = RINGS[k]
+    z = -DEPTH * (1.0 - (k / max(n - 1, 1)))
     loops.append([bm.verts.new(P(cx + r * math.cos(2 * math.pi * i / SEG), cy + r * math.sin(2 * math.pi * i / SEG), z)) for i in range(SEG)])
+inner = [bm.verts.new(P(dcx + (dr + 4) * math.cos(2 * math.pi * i / SEG), dcy + (dr + 4) * math.sin(2 * math.pi * i / SEG), -DEPTH - 2)) for i in range(SEG)]
+loops.append(inner)
 for a, b in zip(loops[:-1], loops[1:]):
     for k in range(SEG):
         bm.faces.new((a[k], a[(k + 1) % SEG], b[(k + 1) % SEG], b[k]))
@@ -191,135 +226,172 @@ for f in bm.faces:
 wall = mesh_obj('wall', bm)
 for p in wall.data.polygons:
     p.use_smooth = True
-zmin = min(rg[3] for rg in RINGS)
 m, NT = new_mat('wall')
 bsdf = node(NT, 'ShaderNodeBsdfPrincipled')
-bsdf.inputs['Base Color'].default_value = (0.010, 0.010, 0.012, 1.0)
-bsdf.inputs['Roughness'].default_value = 0.22
-bsdf.inputs['Coat Weight'].default_value = 0.5
-bsdf.inputs['Coat Roughness'].default_value = 0.05
-geo = node(NT, 'ShaderNodeNewGeometry')
-sp = node(NT, 'ShaderNodeSeparateXYZ')
-lk(NT, geo.outputs['Position'], sp.inputs[0])
-depth = node(NT, 'ShaderNodeMapRange', clamp=True)
-depth.inputs['From Min'].default_value = zmin * 0.35
-depth.inputs['From Max'].default_value = zmin
-depth.inputs['To Min'].default_value = 0.0
-depth.inputs['To Max'].default_value = 0.22
-lk(NT, sp.outputs['Z'], depth.inputs['Value'])
+bsdf.inputs['Base Color'].default_value = (0.003, 0.003, 0.004, 1.0)
+bsdf.inputs['Roughness'].default_value = 0.55
+bsdf.inputs['Specular IOR Level'].default_value = 0.08
+glow, wsp = screen_y_mask(NT, dcy - RINGS[-1][2], HZ, 0.0, 0.06)
+wdx = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, wsp.outputs['X'], wdx.inputs[0]); wdx.inputs[1].default_value = dcx
+wdy = node(NT, 'ShaderNodeMath', operation='ADD'); lk(NT, wsp.outputs['Y'], wdy.inputs[0]); wdy.inputs[1].default_value = dcy
+wcv = node(NT, 'ShaderNodeCombineXYZ'); lk(NT, wdx.outputs[0], wcv.inputs[0]); lk(NT, wdy.outputs[0], wcv.inputs[1])
+wln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, wcv.outputs[0], wln.inputs[0])
+wfo = node(NT, 'ShaderNodeMapRange', clamp=True)
+wfo.inputs['From Min'].default_value = dr; wfo.inputs['From Max'].default_value = RINGS[-1][2]
+wfo.inputs['To Min'].default_value = 1.0; wfo.inputs['To Max'].default_value = 0.0
+lk(NT, wln.outputs['Value'], wfo.inputs['Value'])
+wg = node(NT, 'ShaderNodeMath', operation='MULTIPLY'); lk(NT, glow, wg.inputs[0]); lk(NT, wfo.outputs['Result'], wg.inputs[1])
 mul = node(NT, 'ShaderNodeMath', operation='MULTIPLY')
-lk(NT, dots_tex(NT, ARGS['dot_tile']), mul.inputs[0])
-lk(NT, depth.outputs['Result'], mul.inputs[1])
+lk(NT, dots_tex(NT, ARGS['dot_tile'] * 0.6), mul.inputs[0])
+lk(NT, wg.outputs[0], mul.inputs[1])
 lk(NT, mul.outputs[0], bsdf.inputs['Emission Strength'])
-bsdf.inputs['Emission Color'].default_value = (0.85, 0.88, 0.92, 1.0)
+bsdf.inputs['Emission Color'].default_value = (0.70, 0.78, 0.90, 1.0)
 out = node(NT, 'ShaderNodeOutputMaterial')
 lk(NT, bsdf.outputs[0], out.inputs['Surface'])
 wall.data.materials.append(m)
 
-# The metal ridges: flattened tori standing out of the wall, grey brushed metal, dimmer in depth.
-ridge_mats = []
-for i, (cx, cy, r, z, w) in enumerate(RIDGES):
-    bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=w * 0.5, major_segments=SEG, minor_segments=24, location=P(cx, cy, z + w * 0.15))
+# The ring lines: thin satin-grey tori lying on the wall, fainter towards the crescents.
+for k, (cx, cy, r) in enumerate(RINGS):
+    z = -DEPTH * (1.0 - (k / max(n - 1, 1)))
+    u = k / max(n - 1, 1)
+    w = 1.3 + 0.9 * u
+    bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=w * 0.5, major_segments=SEG, minor_segments=12, location=P(cx, cy, z + w * 0.3))
     tor = bpy.context.active_object
-    tor.scale = (1.0, 1.0, 0.55)
+    tor.scale = (1.0, 1.0, 0.6)
     bpy.ops.object.shade_smooth()
-    u = i / max(len(RIDGES) - 1, 1)
-    g = 0.42 - 0.22 * u
-    tor.data.materials.append(metal_mat('ridge%d' % i, (g, g * 1.02, g * 1.06), 0.26 + 0.1 * u))
+    g = 0.30 - 0.10 * u
+    tor.data.materials.append(metal_mat('ring%d' % k, (g, g * 1.02, g * 1.08), 0.45, 0.0))
 
-# The disc: a shallow dome at the bottom of the tube; dark core, lit rim, brightest at the top,
-# a fine halftone over all of it.
-bpy.ops.mesh.primitive_uv_sphere_add(radius=dr, segments=128, ring_count=64, location=P(dcx, dcy, zmin - dr * 0.8))
-disc = bpy.context.active_object
-disc.scale = (1.0, 1.0, 0.18)
-bpy.ops.object.shade_smooth()
-m, NT = new_mat('disc')
-geo = node(NT, 'ShaderNodeNewGeometry')
-sp = node(NT, 'ShaderNodeSeparateXYZ')
-lk(NT, geo.outputs['Position'], sp.inputs[0])
-dx = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, sp.outputs['X'], dx.inputs[0]); dx.inputs[1].default_value = dcx
-dy = node(NT, 'ShaderNodeMath', operation='ADD'); lk(NT, sp.outputs['Y'], dy.inputs[0]); dy.inputs[1].default_value = dcy
-cv = node(NT, 'ShaderNodeCombineXYZ'); lk(NT, dx.outputs[0], cv.inputs[0]); lk(NT, dy.outputs[0], cv.inputs[1])
-ln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, cv.outputs[0], ln.inputs[0])
-rad = node(NT, 'ShaderNodeMapRange', clamp=True)
-rad.inputs['From Min'].default_value = 0.0; rad.inputs['From Max'].default_value = dr
-lk(NT, ln.outputs['Value'], rad.inputs['Value'])
-ramp = node(NT, 'ShaderNodeValToRGB')
-el = ramp.color_ramp.elements
-el[0].position = 0.0; el[0].color = (0.05, 0.05, 0.055, 1.0)
-el[1].position = 1.0; el[1].color = (0.75, 0.78, 0.82, 1.0)
-e2 = el.new(0.72); e2.color = (0.16, 0.17, 0.18, 1.0)
-lk(NT, rad.outputs['Result'], ramp.inputs['Fac'])
-top = node(NT, 'ShaderNodeMapRange', clamp=True)
-top.inputs['From Min'].default_value = -dcy - dr; top.inputs['From Max'].default_value = -dcy + dr
-top.inputs['To Min'].default_value = 0.7; top.inputs['To Max'].default_value = 1.3
-lk(NT, sp.outputs['Y'], top.inputs['Value'])
-dmix = node(NT, 'ShaderNodeMapRange', clamp=True)
-dmix.inputs['To Min'].default_value = 0.45; dmix.inputs['To Max'].default_value = 1.0
-lk(NT, dots_tex(NT, ARGS['dot_tile'] * 0.55), dmix.inputs['Value'])
-m1 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, ramp.outputs['Color'], m1.inputs[0]); lk(NT, top.outputs['Result'], m1.inputs['Scale'])
-m2 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, m1.outputs[0], m2.inputs[0]); lk(NT, dmix.outputs['Result'], m2.inputs['Scale'])
-emission_out(NT, m2.outputs[0], strength=1.0)
-disc.data.materials.append(m)
-
-# The floor: a dark wedge in front of the tube, a lit lip along its top and thin metal edges.
-ft, fth, fb, fbh = [float(v) for v in ARGS['floor']]
+# The light at the end of the tunnel: a flat disc cut at the horizon, brightest where it meets
+# the road, a fine halftone over it and one darker ring line inside.
 bm = bmesh.new()
-vs = [bm.verts.new(P(-fth, ft, 3.0)), bm.verts.new(P(fth, ft, 3.0)), bm.verts.new(P(fbh, fb, 3.0)), bm.verts.new(P(-fbh, fb, 3.0))]
-bm.faces.new(vs)
+pts = []
+for i in range(SEG + 1):
+    a = math.pi + math.pi * i / SEG
+    x, y = dcx + dr * math.cos(a), dcy + dr * math.sin(a)
+    pts.append((x, min(y, HZ)))
+if dcy < HZ:
+    half = math.sqrt(max(dr * dr - (HZ - dcy) ** 2, 0.0))
+    pts = [(-half + dcx, HZ)] + [p for p in pts if p[1] <= HZ] + [(half + dcx, HZ)]
+vv = [bm.verts.new(P(x, y, -DEPTH - 3)) for x, y in pts]
+bm.faces.new(vv)
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:
     if f.normal.z < 0:
         f.normal_flip()
-floor = mesh_obj('floor', bm)
-m, NT = new_mat('floor')
-b = node(NT, 'ShaderNodeBsdfPrincipled')
-b.inputs['Roughness'].default_value = 0.6
-b.inputs['Specular IOR Level'].default_value = 0.03
-geo = node(NT, 'ShaderNodeNewGeometry'); sp = node(NT, 'ShaderNodeSeparateXYZ'); lk(NT, geo.outputs['Position'], sp.inputs[0])
-fr = node(NT, 'ShaderNodeMapRange', clamp=True)
-fr.inputs['From Min'].default_value = -ft; fr.inputs['From Max'].default_value = -fb
-lk(NT, sp.outputs['Y'], fr.inputs['Value'])
-framp = node(NT, 'ShaderNodeValToRGB')
-fe = framp.color_ramp.elements
-fe[0].position = 0.0; fe[0].color = (0.010, 0.010, 0.011, 1.0)
-fe[1].position = 1.0; fe[1].color = (0.004, 0.004, 0.004, 1.0)
-e = fe.new(0.3); e.color = (0.004, 0.004, 0.0045, 1.0)
-lk(NT, fr.outputs['Result'], framp.inputs['Fac'])
-lk(NT, framp.outputs['Color'], b.inputs['Base Color'])
-o = node(NT, 'ShaderNodeOutputMaterial'); lk(NT, b.outputs[0], o.inputs['Surface'])
-floor.data.materials.append(m)
+disc = mesh_obj('disc', bm)
+m, NT = new_mat('disc')
+lit, sp = screen_y_mask(NT, dcy - dr, HZ, 0.0, 1.0)
+ramp = node(NT, 'ShaderNodeValToRGB')
+el = ramp.color_ramp.elements
+el[0].position = 0.0; el[0].color = (0.035, 0.042, 0.055, 1.0)
+el[1].position = 1.0; el[1].color = (0.92, 0.95, 1.0, 1.0)
+e2 = el.new(0.6); e2.color = (0.24, 0.29, 0.36, 1.0)
+lk(NT, lit, ramp.inputs['Fac'])
+dx = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, sp.outputs['X'], dx.inputs[0]); dx.inputs[1].default_value = dcx
+dy = node(NT, 'ShaderNodeMath', operation='ADD'); lk(NT, sp.outputs['Y'], dy.inputs[0]); dy.inputs[1].default_value = dcy
+cv = node(NT, 'ShaderNodeCombineXYZ'); lk(NT, dx.outputs[0], cv.inputs[0]); lk(NT, dy.outputs[0], cv.inputs[1])
+ln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, cv.outputs[0], ln.inputs[0])
+ring_d = node(NT, 'ShaderNodeMath', operation='SUBTRACT'); lk(NT, ln.outputs['Value'], ring_d.inputs[0]); ring_d.inputs[1].default_value = dr * 0.64
+ring_a = node(NT, 'ShaderNodeMath', operation='ABSOLUTE'); lk(NT, ring_d.outputs[0], ring_a.inputs[0])
+ring_m = node(NT, 'ShaderNodeMapRange', clamp=True)
+ring_m.inputs['From Min'].default_value = 0.6; ring_m.inputs['From Max'].default_value = 2.2
+ring_m.inputs['To Min'].default_value = 0.35; ring_m.inputs['To Max'].default_value = 1.0
+lk(NT, ring_a.outputs[0], ring_m.inputs['Value'])
+dmix = node(NT, 'ShaderNodeMapRange', clamp=True)
+dmix.inputs['To Min'].default_value = 0.62; dmix.inputs['To Max'].default_value = 1.0
+lk(NT, dots_tex(NT, ARGS['dot_tile'] * 0.5), dmix.inputs['Value'])
+m1 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, ramp.outputs['Color'], m1.inputs[0]); lk(NT, ring_m.outputs['Result'], m1.inputs['Scale'])
+m2 = node(NT, 'ShaderNodeVectorMath', operation='SCALE'); lk(NT, m1.outputs[0], m2.inputs[0]); lk(NT, dmix.outputs['Result'], m2.inputs['Scale'])
+emission_out(NT, m2.outputs[0], strength=1.0)
+disc.data.materials.append(m)
+
+# Below the horizon the tunnel sinks into shadow: a black veil over the wall and rings.
+veil, VNT = new_mat('veil')
+fac, _ = screen_y_mask(VNT, HZ, HZ + 120.0, 0.7, 0.92)
+tr = node(VNT, 'ShaderNodeBsdfTransparent')
+bk = node(VNT, 'ShaderNodeEmission'); bk.inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+mx = node(VNT, 'ShaderNodeMixShader')
+lk(VNT, fac, mx.inputs['Fac']); lk(VNT, tr.outputs[0], mx.inputs[1]); lk(VNT, bk.outputs[0], mx.inputs[2])
+vo = node(VNT, 'ShaderNodeOutputMaterial'); lk(VNT, mx.outputs[0], vo.inputs['Surface'])
+vr = RINGS[-1][2] + 6.0
+flat('veil', [(-vr, HZ), (vr, HZ), (vr, 240.0), (-vr, 240.0)], 2.0, veil)
+
+# The road: a dark wedge lit from the horizon, bright edge lines that fade towards the viewer,
+# two lane lines, the bright horizon lip and a dim cross line.
+ft, fth, fb, fbh = [float(v) for v in ARGS['floor']]
+m, NT = new_mat('road')
+rl, _ = screen_y_mask(NT, ft, fb, 0.0, 1.0)
+rr = node(NT, 'ShaderNodeValToRGB')
+fe = rr.color_ramp.elements
+fe[0].position = 0.0; fe[0].color = (0.030, 0.034, 0.040, 1.0)
+fe[1].position = 1.0; fe[1].color = (0.0004, 0.0004, 0.0005, 1.0)
+e = fe.new(0.28); e.color = (0.0045, 0.005, 0.006, 1.0)
+lk(NT, rl, rr.inputs['Fac'])
+emission_out(NT, rr.outputs['Color'], strength=1.0)
+flat('road', [(-fth, ft), (fth, ft), (fbh, fb), (-fbh, fb)], 3.0, m)
 
 def strip(name, a, b, width, z, mat):
     ax, ay = a; bx, by = b
     nx, ny = -(by - ay), (bx - ax)
     l = math.hypot(nx, ny); nx, ny = nx / l * width * 0.5, ny / l * width * 0.5
-    bm = bmesh.new()
-    vv = [bm.verts.new(P(ax + nx, ay + ny, z)), bm.verts.new(P(bx + nx, by + ny, z)), bm.verts.new(P(bx - nx, by - ny, z)), bm.verts.new(P(ax - nx, ay - ny, z))]
-    bm.faces.new(vv)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    for f in bm.faces:
-        if f.normal.z < 0:
-            f.normal_flip()
-    ob = mesh_obj(name, bm)
-    ob.data.materials.append(mat)
-    return ob
+    return flat(name, [(ax + nx, ay + ny), (bx + nx, by + ny), (bx - nx, by - ny), (ax - nx, ay - ny)], z, mat)
 
-lip, LNT = new_mat('lip')
-lrgb = node(LNT, 'ShaderNodeRGB'); lrgb.outputs[0].default_value = (0.9, 0.93, 0.96, 1.0)
-emission_out(LNT, lrgb.outputs[0], strength=1.1)
-strip('lip', (-fth, ft), (fth, ft), 2.5, 3.4, lip)
-edge = metal_mat('edge', (0.7, 0.72, 0.75), 0.18, 0.0)
-strip('edge_l', (-fth, ft), (-fbh, fb), 2.2, 3.4, edge)
-strip('edge_r', (fth, ft), (fbh, fb), 2.2, 3.4, edge)
-lane = metal_mat('lane', (0.35, 0.36, 0.38), 0.3, 0.0)
+def fading(name, top, bottom, y0, y1):
+    mm, MNT = new_mat(name)
+    f, _ = screen_y_mask(MNT, y0, y1, top, bottom)
+    c = node(MNT, 'ShaderNodeRGB'); c.outputs[0].default_value = (0.80, 0.84, 0.90, 1.0)
+    sc_ = node(MNT, 'ShaderNodeVectorMath', operation='SCALE'); lk(MNT, c.outputs[0], sc_.inputs[0]); lk(MNT, f, sc_.inputs['Scale'])
+    emission_out(MNT, sc_.outputs[0], strength=1.0)
+    return mm
+
+edge_m = fading('edge', 1.0, 0.12, ft, fb)
+strip('edge_l', (-fth, ft), (-fbh, fb), 2.2, 3.4, edge_m)
+strip('edge_r', (fth, ft), (fbh, fb), 2.2, 3.4, edge_m)
+lane_m = fading('lane', 0.35, 0.05, ft, fb)
 for sx in (-1.0, 1.0):
-    strip('lane', (sx * fth * 0.42, ft + 6.0), (sx * fbh * 0.42, fb), 1.4, 3.3, lane)
+    strip('lane', (sx * fth * 0.45, ft), (sx * fbh * 0.45, fb), 1.3, 3.3, lane_m)
+cross_m = fading('cross', 0.16, 0.16, ft, fb)
+strip('cross', (-fth - 70.0, 0.0), (fth + 70.0, 0.0), 1.4, 3.3, cross_m)
 
-# The side scales: tapered dark-chrome bands with a polished rim, mirrored.
-bcx, bcy, br, bw, b0, b1 = [float(v) for v in ARGS['band']]
-band_m = metal_mat('band', (0.20, 0.22, 0.25), 0.20, 0.6)
-rim_m = metal_mat('rim', (0.92, 0.93, 0.95), 0.07, 0.0)
+hz_m, HNT = new_mat('horizon')
+geo = node(HNT, 'ShaderNodeNewGeometry'); hsp = node(HNT, 'ShaderNodeSeparateXYZ'); lk(HNT, geo.outputs['Position'], hsp.inputs[0])
+hab = node(HNT, 'ShaderNodeMath', operation='ABSOLUTE'); lk(HNT, hsp.outputs['X'], hab.inputs[0])
+hmr = node(HNT, 'ShaderNodeMapRange', clamp=True)
+hlen = RINGS[-1][2] - 12.0
+hmr.inputs['From Min'].default_value = 0.0; hmr.inputs['From Max'].default_value = hlen
+hmr.inputs['To Min'].default_value = 1.0; hmr.inputs['To Max'].default_value = 0.0
+lk(HNT, hab.outputs[0], hmr.inputs['Value'])
+hpw = node(HNT, 'ShaderNodeMath', operation='POWER'); lk(HNT, hmr.outputs['Result'], hpw.inputs[0]); hpw.inputs[1].default_value = 1.6
+hc = node(HNT, 'ShaderNodeRGB'); hc.outputs[0].default_value = (0.86, 0.93, 1.0, 1.0)
+hs = node(HNT, 'ShaderNodeVectorMath', operation='SCALE'); lk(HNT, hc.outputs[0], hs.inputs[0]); lk(HNT, hpw.outputs[0], hs.inputs['Scale'])
+emission_out(HNT, hs.outputs[0], strength=1.2)
+strip('horizon', (-hlen, HZ), (hlen, HZ), 2.6, 3.6, hz_m)
+
+# The side scales: dark plum-charcoal bands with a polished rim on the outer edge and a dim line
+# on the inner edge, mirrored.
+bcx, bcy, bri, bro, b0, b1 = [float(v) for v in ARGS['band']]
+band_m, BNT = new_mat('band')
+bb = node(BNT, 'ShaderNodeBsdfPrincipled')
+bb.inputs['Base Color'].default_value = (0.0055, 0.005, 0.0075, 1.0)
+bb.inputs['Roughness'].default_value = 0.6
+bb.inputs['Coat Weight'].default_value = 0.0
+bb.inputs['Specular IOR Level'].default_value = 0.12
+bb.inputs['Coat Roughness'].default_value = 0.12
+bgeo = node(BNT, 'ShaderNodeNewGeometry'); bsp = node(BNT, 'ShaderNodeSeparateXYZ'); lk(BNT, bgeo.outputs['Position'], bsp.inputs[0])
+bdx = node(BNT, 'ShaderNodeMath', operation='SUBTRACT'); lk(BNT, bsp.outputs['X'], bdx.inputs[0]); bdx.inputs[1].default_value = bcx
+bdy = node(BNT, 'ShaderNodeMath', operation='ADD'); lk(BNT, bsp.outputs['Y'], bdy.inputs[0]); bdy.inputs[1].default_value = bcy
+bcv = node(BNT, 'ShaderNodeCombineXYZ'); lk(BNT, bdx.outputs[0], bcv.inputs[0]); lk(BNT, bdy.outputs[0], bcv.inputs[1])
+bln = node(BNT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(BNT, bcv.outputs[0], bln.inputs[0])
+bmr = node(BNT, 'ShaderNodeMapRange', clamp=True)
+bmr.inputs['From Min'].default_value = bri; bmr.inputs['From Max'].default_value = bro
+bmr.inputs['To Min'].default_value = 0.0; bmr.inputs['To Max'].default_value = 0.010
+lk(BNT, bln.outputs['Value'], bmr.inputs['Value'])
+lk(BNT, bmr.outputs['Result'], bb.inputs['Emission Strength'])
+bb.inputs['Emission Color'].default_value = (0.75, 0.70, 0.95, 1.0)
+bo = node(BNT, 'ShaderNodeOutputMaterial'); lk(BNT, bb.outputs[0], bo.inputs['Surface'])
+rim_m = metal_mat('rim', (0.90, 0.92, 0.95), 0.08, 0.0)
+lip_m = metal_mat('lip', (0.22, 0.23, 0.26), 0.25, 0.0)
 NA = 160
 for side in (-1.0, 1.0):
     bm = bmesh.new()
@@ -327,14 +399,14 @@ for side in (-1.0, 1.0):
     for i in range(NA + 1):
         t = i / NA
         a = math.radians(b0 + (b1 - b0) * t)
-        taper = 0.55 + 0.45 * math.sin(math.pi * t) ** 0.5
-        w = bw * taper
+        taper = 0.72 + 0.28 * math.sin(math.pi * t) ** 0.5
         x, y = math.cos(a), math.sin(a)
         if side > 0:
             x = -x
-        ro, ri = br + w, br
-        for lst, rr in ((top, ro), (bot, ri)):
-            lst.append((bcx + x * rr, bcy + y * rr))
+        ro = bro
+        ri = bro - (bro - bri) * taper
+        top.append((bcx + x * ro, bcy + y * ro))
+        bot.append((bcx + x * ri, bcy + y * ri))
     vt = [bm.verts.new(P(x, y, 4.0)) for x, y in top]
     vb = [bm.verts.new(P(x, y, 4.0)) for x, y in bot]
     for i in range(NA):
@@ -354,18 +426,18 @@ for side in (-1.0, 1.0):
     for p in ob.data.polygons:
         p.use_smooth = True
     ob.data.materials.append(band_m)
-    # the rim along the outer edge
-    curve = bpy.data.curves.new('rim', 'CURVE')
-    curve.dimensions = '3D'
-    curve.bevel_depth = 1.6
-    curve.bevel_resolution = 6
-    spl = curve.splines.new('POLY')
-    spl.points.add(NA)
-    for i, (x, y) in enumerate(top):
-        spl.points[i].co = (x, -y, 4.6, 1.0)
-    rob = bpy.data.objects.new('rim', curve)
-    bpy.context.collection.objects.link(rob)
-    rob.data.materials.append(rim_m)
+    for nm, pts_, depth_, mat_ in (('rim', top, 1.5, rim_m), ('lip', bot, 0.7, lip_m)):
+        curve = bpy.data.curves.new(nm, 'CURVE')
+        curve.dimensions = '3D'
+        curve.bevel_depth = depth_
+        curve.bevel_resolution = 6
+        spl = curve.splines.new('POLY')
+        spl.points.add(NA)
+        for i, (x, y) in enumerate(pts_):
+            spl.points[i].co = (x, -y, 4.4, 1.0)
+        rob = bpy.data.objects.new(nm, curve)
+        bpy.context.collection.objects.link(rob)
+        rob.data.materials.append(mat_)
 
 studio_world(sc, strength=float(ARGS.get('world', 0.35)), rotation=0.4, visible=False)
 span_x, span_y = X1 - X0, Y1 - Y0
@@ -399,8 +471,8 @@ def P(x, y, z=0.0):
     return (x, -y, z)
 
 # One crescent body per side: the outer arc, the tapered inner edge, extruded and bevelled so its
-# edges catch a little light. Emission only: the halftone glows brightest at the outer (front)
-# edge and fades to a quarter at the inner edge, so the cluster can tint the plate with the
+# edges catch a little light. Emission: a solid halftone, a little brighter at the outer (front)
+# edge than at the inner edge, so the cluster can tint the plate with the
 # primary and light it bottom to top with the rpm.
 m, NT = new_mat('crescent')
 tc = node(NT, 'ShaderNodeTexCoord')
@@ -422,12 +494,12 @@ ln = node(NT, 'ShaderNodeVectorMath', operation='LENGTH'); lk(NT, cv.outputs[0],
 front = node(NT, 'ShaderNodeMapRange', clamp=True)
 front.inputs['From Min'].default_value = cr - cw
 front.inputs['From Max'].default_value = cr
-front.inputs['To Min'].default_value = 0.08
+front.inputs['To Min'].default_value = 0.55
 front.inputs['To Max'].default_value = 1.0
 lk(NT, ln.outputs['Value'], front.inputs['Value'])
-pw = node(NT, 'ShaderNodeMath', operation='POWER'); lk(NT, front.outputs['Result'], pw.inputs[0]); pw.inputs[1].default_value = 2.6
+pw = node(NT, 'ShaderNodeMath', operation='POWER'); lk(NT, front.outputs['Result'], pw.inputs[0]); pw.inputs[1].default_value = 1.4
 dm = node(NT, 'ShaderNodeMapRange', clamp=True)
-dm.inputs['To Min'].default_value = 0.72
+dm.inputs['To Min'].default_value = 0.45
 dm.inputs['To Max'].default_value = 1.0
 lk(NT, tex.outputs['Color'], dm.inputs['Value'])
 mul = node(NT, 'ShaderNodeMath', operation='MULTIPLY'); lk(NT, pw.outputs[0], mul.inputs[0]); lk(NT, dm.outputs['Result'], mul.inputs[1])
@@ -448,7 +520,7 @@ for side in (-1.0, 1.0):
             a = math.radians(180.0 + half - 2.0 * half * tt)
         else:
             a = math.radians(-half + 2.0 * half * tt)
-        w = cw * max(math.sin(math.pi * tt), 0.0) ** 0.7
+        w = cw * max(math.sin(math.pi * tt), 0.0) ** 0.38
         ox, oy = ccx + cr * math.cos(a), ccy - cr * math.sin(a)
         ix, iy = ccx + (cr - w - 0.4) * math.cos(a), ccy - (cr - w - 0.4) * math.sin(a)
         outer.append(bm.verts.new(P(ox, oy, 0.0)))
@@ -552,44 +624,19 @@ for i, az in enumerate(ARGS['lights']):
 done()
 "#;
 
-/// The wall loops (`[cx, cy, r, z]`) from the lip to the disc: the centre slides to the disc and
-/// the radius shrinks with a slight ease, as in the cluster's `Geom::ring`.
-fn wall_table() -> Vec<[f32; 4]> {
-    (0..WALL_LOOPS)
+/// The ring lines (`[cx, cy, r]`) from the disc out to the crescents' inner edge: the centre
+/// slides from the disc to the tunnel centre and the radius grows with a slight ease, as in the
+/// cluster's `Geom::ring`.
+fn ring_table() -> Vec<[f32; 3]> {
+    let r0 = DISC.2 + RING_GAPS.0;
+    let r1 = CRESCENT.0 - CRESCENT.1 - RING_GAPS.1;
+    (1..=RINGS)
         .map(|k| {
-            let t = k as f32 / (WALL_LOOPS as f32 - 1.0);
-            let r = LIP_R + (DISC.2 * 1.04 - LIP_R) * t.powf(0.85);
+            let u = k as f32 / RINGS as f32;
             [
-                TUNNEL.0 + (DISC.0 - TUNNEL.0) * t,
-                TUNNEL.1 + (DISC.1 - TUNNEL.1) * t,
-                r,
-                -RING_DEPTH * k as f32,
-            ]
-        })
-        .collect()
-}
-
-/// The metal ridges (`[cx, cy, r, z, w]`), each at the depth the wall has at its radius.
-fn ridge_table() -> Vec<[f32; 5]> {
-    let wall = wall_table();
-    (0..RIDGES)
-        .map(|k| {
-            let u = k as f32 / (RIDGES as f32 - 1.0);
-            let r = RIDGE_R.0 + (RIDGE_R.1 - RIDGE_R.0) * u;
-            let z = wall
-                .windows(2)
-                .find(|w| w[0][2] >= r && r >= w[1][2])
-                .map(|w| {
-                    let f = (w[0][2] - r) / (w[0][2] - w[1][2]).max(1e-3);
-                    w[0][3] + (w[1][3] - w[0][3]) * f
-                })
-                .unwrap_or(0.0);
-            [
-                TUNNEL.0 + (DISC.0 - TUNNEL.0) * u,
-                TUNNEL.1 + (DISC.1 - TUNNEL.1) * u,
-                r,
-                z,
-                RIDGE_W.0 + (RIDGE_W.1 - RIDGE_W.0) * u,
+                DISC.0 + (TUNNEL.0 - DISC.0) * u,
+                DISC.1 + (TUNNEL.1 - DISC.1) * u,
+                r0 + (r1 - r0) * u.powf(RING_EASE),
             ]
         })
         .collect()
@@ -672,7 +719,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let metal_rel = format!("{DIR}/metal_brushed.png");
     let bytes = img::save_png(&metal, &ctx.abs(&metal_rel), false, false)?;
     rows.push(format!(
-        "| `metal_brushed.png` | grey, tileable | {s}x{s} | {} KB | {sdxl} seed={METAL_SEED} prompt=\"{METAL_PROMPT}\" → grey, seamless, 2..98% stretched, tile seam score {:.2} | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the roughness grain of the metal ridges and scale bands (Blender input) |",
+        "| `metal_brushed.png` | grey, tileable | {s}x{s} | {} KB | {sdxl} seed={METAL_SEED} prompt=\"{METAL_PROMPT}\" → grey, seamless, 2..98% stretched, tile seam score {:.2} | CreativeML Open RAIL++-M output (SDXL); MIT (asset-forge) | the roughness grain of the ring lines and the scale bands' rims (Blender input) |",
         bytes / 1024,
         img::tile_seam_score(&metal),
         s = DOT_SIZE
@@ -686,9 +733,10 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "seed": BLENDER_SEED,
         "rect": ASSEMBLY_RECT,
         "scale": SCALE,
-        "rings": wall_table(),
-        "ridges": ridge_table(),
+        "rings": ring_table(),
         "disc": [DISC.0, DISC.1, DISC.2],
+        "horizon": HORIZON,
+        "depth": DEPTH,
         "floor": FLOOR,
         "band": [TUNNEL.0, TUNNEL.1, BAND[0], BAND[1], BAND[2], BAND[3]],
         "lights": LIGHTS,
@@ -697,6 +745,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
         "dot_tile": DOT_TILE,
         "metal": metal_abs,
         "metal_tile": METAL_TILE,
+        "world": 0.30,
         "prefix": "assembly",
     });
     println!("  blender assembly");
@@ -706,7 +755,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             ctx,
             &scratch,
             &format!("assembly_{i}.png"),
-            &format!("blender:amg_mbux_superscreen::ASSEMBLY_BPY funnel through {WALL_LOOPS} loops {RING_DEPTH} px apart, {RIDGES} brushed-metal ridges, dotted disc, road floor, dark-chrome scale bands r={} w={}, studio 0.35 + key {az}° at 38°, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}", BAND[0], BAND[1]),
+            &format!("blender:amg_mbux_superscreen::ASSEMBLY_BPY shallow funnel {DEPTH} px deep, {RINGS} thin ring lines, dotted disc r={} cut at the horizon y={HORIZON}, black veil below it, road lit from the horizon, plum-charcoal scale bands r={}..{} with polished rims, studio 0.30 + key {az}° at 38°, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}", DISC.2, BAND[0], BAND[1]),
             &format!("the tunnel and the side scales, x {:.0} .. {:.0}, y {:.0} .. {:.0}; cross-faded with the other light by lateral G", ASSEMBLY_RECT[0], ASSEMBLY_RECT[2], ASSEMBLY_RECT[1], ASSEMBLY_RECT[3]),
         )?);
     }
@@ -729,7 +778,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
     let plate = luminance_plate(&render);
     let bytes = img::save_png(&plate, &ctx.abs(&format!("{DIR}/crescents.png")), false, true)?;
     rows.push(format!(
-        "| `crescents.png` | white, light in straight alpha | {}x{} | {} KB | blender:amg_mbux_superscreen::CRESCENT_BPY two extruded, bevelled crescents r={} w={} ±{}°, halftone emission brightest at the outer edge, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}; luminance → alpha, peak at {PLATE_PEAK} | MIT (asset-forge) | the crescents, tinted by the primary and lit bottom to top with the rpm; x {:.0} .. {:.0}, y {:.0} .. {:.0} |",
+        "| `crescents.png` | white, light in straight alpha | {}x{} | {} KB | blender:amg_mbux_superscreen::CRESCENT_BPY two extruded, bevelled crescents r={} w={} ±{}°, solid halftone emission a little brighter at the outer edge, scale={SCALE} samples={SAMPLES} seed={BLENDER_SEED}; luminance → alpha, peak at {PLATE_PEAK} | MIT (asset-forge) | the crescents, always lit and tinted by the primary (the rpm runs up their outer edge as a drawn line); x {:.0} .. {:.0}, y {:.0} .. {:.0} |",
         plate.w,
         plate.h,
         bytes / 1024,
@@ -887,19 +936,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_wall_runs_from_the_lip_to_the_disc_and_the_ridges_sit_on_it() {
-        let t = wall_table();
-        assert_eq!(t.len(), WALL_LOOPS);
-        assert!((t[0][2] - LIP_R).abs() < 1e-3);
-        assert!(t.windows(2).all(|w| w[1][2] < w[0][2] && w[1][3] < w[0][3]));
-        let r = ridge_table();
-        assert_eq!(r.len(), RIDGES);
-        assert!(r.iter().all(|k| k[3] < 0.0 && k[2] < LIP_R && k[2] > DISC.2));
-        // The ridges stay inside the crescents' inner edge and the bands outside them.
-        assert!(r[0][2] + r[0][4] < CRESCENT.0 - CRESCENT.1);
-        const { assert!(BAND[0] > CRESCENT.0 + 40.0) };
-        // The bands fit their plate.
-        const { assert!(BAND[0] + BAND[1] <= -ASSEMBLY_RECT[0]) };
+    fn the_ring_lines_run_from_the_disc_to_the_crescents_and_the_bands_sit_outside() {
+        let t = ring_table();
+        assert_eq!(t.len(), RINGS);
+        assert!(t.windows(2).all(|w| w[1][2] > w[0][2]));
+        assert!(t[0][2] > DISC.2);
+        // The last ring line ends on the tunnel centre, inside the crescents' inner edge.
+        let last = t[RINGS - 1];
+        assert!((last[0] - TUNNEL.0).abs() < 1e-3 && (last[1] - TUNNEL.1).abs() < 1e-3);
+        assert!(last[2] < CRESCENT.0 - CRESCENT.1);
+        // The horizon cuts the disc below its top; the bands clear the crescents and fit the plate.
+        const { assert!(HORIZON > DISC.1 - DISC.2 && HORIZON < DISC.1 + DISC.2) };
+        const { assert!(BAND[0] > CRESCENT.0 && BAND[1] > BAND[0]) };
+        const { assert!(BAND[1] + 8.0 <= -ASSEMBLY_RECT[0]) };
+        const { assert!(FLOOR[2] <= ASSEMBLY_RECT[3]) };
     }
 
     #[test]
