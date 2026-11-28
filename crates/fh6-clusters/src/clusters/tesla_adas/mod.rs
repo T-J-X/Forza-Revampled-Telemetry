@@ -68,6 +68,10 @@ const JP_TEXT: &str = "トラックモード回転数出力止まれ";
 /// Label sizes (cap heights): the Japanese line, the Latin line under it (the tokens' floor).
 const JP_CAP: f32 = 16.0;
 const LATIN_CAP: f32 = 12.0;
+/// The figures move only past these changes: rpm in steps of 50 (so 1.5 steps), power in its
+/// unit. The limiter swings the revs by 50 and the power by about 3 every frame.
+const RPM_HOLD: f32 = 1.5;
+const POWER_HOLD: f32 = 4.0;
 /// Directions the G-meter's peak history keeps.
 const PEAK_BINS: usize = 24;
 
@@ -348,6 +352,9 @@ pub struct TeslaAdas {
     power_value: i64,
     power_unit: &'static str,
     rpm: i64,
+    /// The rpm figure in steps of 50: it moves only when the revs move by more than a step, so
+    /// the limiter's bounce does not flicker its last digits.
+    rpm_shown: Hysteresis,
     /// The engine's limiter and idle rpm: a change means another car, so the peaks start again.
     engine: (f32, f32),
     unit: &'static str,
@@ -388,10 +395,11 @@ impl TeslaAdas {
             power: Spring::new(t.springs.fast, 0.0),
             power_target: 0.0,
             power_top: POWER_FLOOR_W,
-            power_shown: Hysteresis::new(0.0, 1.0),
+            power_shown: Hysteresis::new(0.0, POWER_HOLD),
             power_value: 0,
             power_unit: PowerUnit::Hp.label(),
             rpm: 0,
+            rpm_shown: Hysteresis::new(0.0, RPM_HOLD),
             engine: (0.0, 0.0),
             unit: "MPH",
             tracking: t.type_scale.label_tracking,
@@ -418,11 +426,10 @@ impl Cluster for TeslaAdas {
         self.shift.update(&sig, &self.palette, input.t, dt, input.reduced_flash);
         self.cue.update(self.shift.over_shift(), 0.25, dt);
         self.rev = rev_progress(sig.rpm, sig.idle_rpm, self.palette.stages[0] * sig.shift_rpm);
-        self.rpm = if sig.rpm.is_finite() {
-            ((sig.rpm / 50.0).round() * 50.0).clamp(0.0, 99_950.0) as i64
-        } else {
-            0
-        };
+        let steps = self
+            .rpm_shown
+            .update(finite_or(sig.rpm, 0.0).clamp(0.0, 99_950.0) / 50.0);
+        self.rpm = steps * 50;
         self.speed.update(sig.speed);
         self.unit = sig.unit.label();
 
