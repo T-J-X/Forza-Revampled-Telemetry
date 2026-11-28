@@ -444,8 +444,9 @@ struct Loop {
     /// config), the car ordinal and the family.
     palette_cache: Option<(Arc<AppConfig>, i32, Family)>,
     palette: Palette,
-    /// The car's logo: its brand's dial, decoded on the `fh6-logos` worker thread and uploaded
-    /// over the next few frames. The zone is empty until it is in.
+    /// The car's logo: its brand's dial, decoded on the `fh6-logos` worker thread and uploaded a
+    /// step per drawn frame (11 to 19 steps). The zone is empty until it is in, or until a read
+    /// that hangs has taken `NAME_AFTER_FRAMES`, when the brand's name shows meanwhile.
     logo: CarLogo,
     last_update: Instant,
     refraction: Option<RefractionSource>,
@@ -658,7 +659,8 @@ impl Loop {
         self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family.key());
         // `ShowLogo: false` empties the logo zone (no image, wordmark or name) and loads nothing.
         // A brand seen for the first time leaves the zone empty until its dial is in
-        // (`poll_logos`), so it never flashes the name first.
+        // (`poll_logos`), so the name does not show first and the dial a moment later; only a
+        // read that hangs for `NAME_AFTER_FRAMES` shows the name meanwhile.
         let brand = cfg
             .show_logo
             .then(|| self.resources.logos.car_brand(&self.resources.cars, car_ordinal));

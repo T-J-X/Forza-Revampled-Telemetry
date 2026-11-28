@@ -33,15 +33,15 @@ pub const MAX_NAME_CHARS: usize = 14;
 pub const LOGO_DIR: &str = "logos";
 /// The logo index inside [`LOGO_DIR`].
 pub const INDEX_FILE: &str = "logos.json";
-/// The generic emblem's key in the index. It stands for "no known brand" and is never shown as
-/// a brand's logo.
-pub const GENERIC_BRAND: &str = "DEFAULT";
+/// The generic emblem's key in the index: the car list's own key for it. It stands for "no
+/// known brand" and is never shown as a brand's logo.
+pub const GENERIC_BRAND: &str = fh6_core::cars::DEFAULT_BRAND_KEY;
 /// The longest side a dial file may have. The shipped dials are 1024 px; a bigger file (one of
 /// the 4096 px full logos named by mistake) is refused from its header, before decoding.
 pub const MAX_DIAL_SIDE: u32 = 1024;
 /// The longest side of the largest dial level that is uploaded. The widest logo zone (Liquid
 /// Glass's 240 x 48, less its padding) draws a wide wordmark dial at most 320 px across at user
-/// scale 1.4 on a 4K target, and a square dial at most 102 px, so the 1024 px level is never
+/// scale 1.4 on a 4K target, and a square dial at most 51 px, so the 1024 px level is never
 /// sampled: the kit picks the level from the drawn size, and the levels kept are the same texels
 /// as in the full chain. A brand then costs at most 1.33 MiB of video memory instead of 5.33.
 pub const DIAL_TEXTURE_SIDE: u32 = 512;
@@ -76,7 +76,8 @@ impl LogoStyle {
 }
 
 /// The rectangle an image of `image_size` occupies inside `zone`: aspect kept, inside the
-/// brand-safe padding, lifted for optical centring.
+/// brand-safe padding, then lifted 2% of the zone's height for optical centring (so a
+/// height-limited image's top edge sits that much into the top padding).
 #[must_use]
 pub fn fit(zone: Rect, image_size: (u32, u32)) -> Rect {
     let pad = zone.width().min(zone.height()) * SAFE_PADDING;
@@ -92,7 +93,8 @@ pub fn fit(zone: Rect, image_size: (u32, u32)) -> Rect {
 }
 
 /// The wordmark text for a logo without an image: the brand name, else the custom name, upper
-/// case, at most [`MAX_NAME_CHARS`] characters. Writes into `buf` (no allocation).
+/// case, cut to [`MAX_NAME_CHARS`] characters before upper-casing (a letter such as "ß" can
+/// grow to two). Writes into `buf` (no allocation).
 #[must_use]
 pub fn wordmark<'b>(logo: &Logo, buf: &'b mut [u8; 64]) -> &'b str {
     let name = if logo.brand_name.trim().is_empty() {
@@ -797,7 +799,7 @@ pub struct CarLogo {
     dials: DialLoader,
     /// What the clusters get. It has the car's names from the moment the car shows, and is
     /// marked [`Logo::loading`] while the dial is on its way, so the zone does not show the
-    /// name first.
+    /// name first; only after [`NAME_AFTER_FRAMES`] of a read that hangs does the name show.
     shown: Logo,
     /// Whether the shown car's dial is still on its way.
     awaiting: bool,
@@ -987,6 +989,48 @@ mod tests {
             }
         }"#;
         LogoIndex::from_json(json, Path::new("logos")).expect("toy index parses")
+    }
+
+    /// `car_brand` against a small car list, beside the shipped one: keys as the car list may
+    /// write them, a key the index lacks with a make it knows, the generic key, and cars or
+    /// lists that are not there.
+    #[test]
+    fn a_car_brand_follows_its_key_then_its_make_then_names_nothing() {
+        let cars = CarDatabase::from_json_str(
+            r##"{
+                "BrandPalettes": {
+                    "NISSAN": {"DisplayName": "Nissan Motor", "PrimaryHex": "#C3002F"},
+                    "DEFAULT": {"DisplayName": "Standard Horizon", "PrimaryHex": "#00D2FF"}
+                },
+                "Cars": {
+                    " 1 ": {"BrandKey": " nissan ", "Manufacturer": "Nissan"},
+                    "2": {"BrandKey": "BOX_TRUCKS", "Manufacturer": "BOX"},
+                    "3": {"BrandKey": "DEFAULT", "Manufacturer": "Nissan"},
+                    "4": {"BrandKey": "DEFAULT", "Manufacturer": "Generic"}
+                }
+            }"##,
+        )
+        .expect("the small car list parses");
+        let ix = toy_index();
+        let shows = |ordinal| {
+            let brand = ix.car_brand(&cars, ordinal);
+            (key_of(&ix, brand.logo).map(str::to_string), brand.name)
+        };
+        let some = |key: &str, name: &str| (Some(key.to_string()), name.to_string());
+        // A lower-case, padded key under a padded ordinal: the key's logo, the palette's name.
+        assert_eq!(shows(1), some("NISSAN", "Nissan Motor"));
+        // A key the index lacks: the make's alias, and the index's name (no palette has it).
+        assert_eq!(shows(2), some("BOXCO", "Boxco"));
+        // The generic key: the make's alias, and not the generic palette's theme name.
+        assert_eq!(shows(3), some("NISSAN_NISMO", "Nismo"));
+        // A make that is an alias of the generic emblem: no logo and no name.
+        assert_eq!(shows(4), (None, String::new()));
+        // A car the list lacks, and a list that did not load.
+        assert_eq!(ix.car_brand(&cars, 999_999), CarBrand::default());
+        assert_eq!(ix.car_brand(&CarDatabase::default(), 1), CarBrand::default());
+        // An index that did not load: no logo, and the palette still names the brand.
+        let none = LogoIndex::default().car_brand(&cars, 1);
+        assert_eq!((none.logo, none.name.as_str()), (None, "Nissan Motor"));
     }
 
     fn key_of(index: &LogoIndex, id: Option<BrandId>) -> Option<&str> {

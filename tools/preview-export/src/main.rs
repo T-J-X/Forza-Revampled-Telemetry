@@ -18,7 +18,8 @@
 //!
 //! `--frames N` sets the warm-up length (default 30 frames at 60 Hz).
 //! `--car ORDINAL` picks the car whose brand logo every logo zone shows, loaded from
-//! `assets/logos/` as the app loads it (default 3667, the 2021 Porsche 911 GT3; 0 for no car,
+//! `assets/logos/` in one call (`LogoIndex::load_dial`; the app loads the same dial on a worker
+//! thread) (default 3667, the 2021 Porsche 911 GT3; 0 for no car,
 //! which shows the custom name).
 mod cluster;
 mod fit;

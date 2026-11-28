@@ -61,6 +61,11 @@ impl KitResources {
             let a = d.join("assets");
             a.join(BRANDS_FILE).is_file().then_some(a)
         });
+        if assets.is_none() {
+            tracing::warn!(
+                "assets folder not found (no assets/{BRANDS_FILE} beside the app or above it); every car gets its dash's own palette and the logo zone shows the custom name"
+            );
+        }
         let cars = match assets.as_ref().map(|a| CarDatabase::load(a.join(BRANDS_FILE))) {
             Some(Ok(cars)) => {
                 tracing::info!(cars = cars.len(), brands = cars.brand_count(), "car database loaded");
@@ -70,18 +75,25 @@ impl KitResources {
                 let cause = std::error::Error::source(&err)
                     .map(ToString::to_string)
                     .unwrap_or_default();
-                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette");
+                tracing::warn!(error = %err, %cause, "car database unreadable; every car gets its dash's own palette and no brand logo or name");
                 CarDatabase::default()
             }
             None => CarDatabase::default(),
         };
         let logos = match assets.as_deref().map(LogoIndex::load) {
             Some(Ok(index)) => {
-                tracing::info!(brands = index.len(), "brand logo index loaded");
+                if index.is_empty() {
+                    tracing::warn!("brand logo index lists no brands; the logo zone shows the car's brand name, or the custom name");
+                } else {
+                    tracing::info!(brands = index.len(), "brand logo index loaded");
+                }
                 index
             }
             Some(Err(err)) => {
-                tracing::warn!(error = %err, "brand logo index unreadable; the logo zone shows brand names");
+                tracing::warn!(
+                    error = %err,
+                    "brand logo index unreadable; the logo zone shows the car's brand name, or the custom name"
+                );
                 LogoIndex::default()
             }
             None => LogoIndex::default(),

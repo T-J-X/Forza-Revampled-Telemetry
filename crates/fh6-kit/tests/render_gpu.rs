@@ -402,8 +402,8 @@ fn a_cars_brand_logo_decodes_uploads_and_draws() {
     assert!(lit > 500, "the logo puts pixels on screen ({lit})");
 }
 
-/// A dial uploaded from 512 px down, a slice at a time, draws the same pixels as its full
-/// 1024 px chain uploaded a level at a time: the kit picks the mip level from the drawn size, so
+/// A dial uploaded from 512 px down, a slice at a time, draws within 1 of 255 per channel of its
+/// full 1024 px chain uploaded a level at a time: the kit picks the mip level from the drawn size, so
 /// the dropped level is never sampled, and the zone is laid out by the dial file's size, so a
 /// dial with an odd side keeps its shape. Checked in Liquid Glass's 240 x 48 zone at user scale
 /// 1.0 and 1.4 (the widest use) and PorscheAnalog's 160 x 20 zone, in 4K pixels; in a 500 px
