@@ -53,6 +53,18 @@ The Motorsport category asks for shift lights that behave like real hardware. Mo
 | L4 | Brightness is set by the driver, not by an ambient sensor. | Cited [S30, S31] | The pills follow the app's brightness; no auto-dimming of their own. |
 | L5 | No source read gives the flash rate at the shift point or the limiter behaviour. | Cited [S28 to S31] | The flash rate follows the house flash rules (WCAG 2.3.1 audit) and the kit's strobe; the outer pills stay steady while the middle ones strobe (lesson from the BoschDdu rebuild). |
 
+### 2.3 The second batch of photos
+
+Saved 2026-11-28 to the same Drive folder (files 13 to 21; sources in its `sources.md`).
+
+| # | Photo | What it shows | Our reading for DriftGlass |
+|---|---|---|---|
+| P6 | `13`, `14`, `15_fd_atl26_live_angle_*` (Formula Drift Atlanta 2026, live tandem broadcast) | The live overlay during a run: a round dark disc headed ANGLE, the two drivers' angles large side by side (28° and 38°; 49° and 45° four seconds earlier), labels LEAD in red and CHASE in blue under them, each speed in mph below (51, 36), a small vertical speed-delta bar per driver (green when gaining, red when losing), and an outer rim arc in each driver's colour. | **The benchmark's live angle display is a two-run comparison**, which is the ghost-lead idea (§7) in the real broadcast's own form: live angle beside the ghost's angle, each with its speed and a delta bar. The real overlay codes the cars red and blue; DriftGlass codes the live slide in primary and the ghost in a dimmer secondary, because red is reserved. |
+| P7 | `17_cockpit_yoshihara_brz_motec_cdl_shiftlight.jpg` (Formula Drift BRZ) | A MoTeC CDL Sport: a half-dome LCD with the gear as the largest glyph in the centre, an rpm arc across the top with ticks 1 to 8, segment readouts either side; a separate 8-LED MoTeC shift bar mounted above the display. | A pro drift car's own dash puts the gear in the middle and the shift lights in a straight bar above everything. That matches the brief's pills above the visor and gear at the centre line. |
+| P8 | `16_cockpit_essa_e46_motec_c125.jpg`, `18_cockpit_aasbo_corolla_aem_cd7.jpg` | Formula Drift cockpits with a MoTeC C125 and an AEM CD-7, each with a built-in LED shift row; all unlit (garage shots). | Same pattern: one row of shift LEDs across the top of a black display. |
+| P9 | `19`, `20_helmet_bell_hp7_evo4_*.jpg` (Bell HP7 EVO IV, product photos) | A carbon car-racing helmet. The visor follows the eyeport's curve and is clear with a **dark tinted band across its top**; at each side it ends in a pivot plate of clear polycarbonate with a round pivot screw, and a red PUSH lock button sits low at the front of the plate. | The real "smoked" part of a car-racing visor is often its top band. On the board: the visor's tint can be graded top to bottom as a dyed band (a varying absorption coefficient under Beer-Lambert, not an alpha ramp), which also keeps the lower visor clear over the game. The pivot plate with its screw and lock button is the hardware for the Blender part. |
+| P10 | `21_driftbox_mounted_in_car.jpg` | The DriftBox on its suction mount low on a windscreen. | The real meter sits at the edge of the driver's view, glanced at, not stared at: DriftGlass's readouts must read in a glance. |
+
 ## 3. The visor: what a smoked race visor is
 
 | # | Finding | Source |
