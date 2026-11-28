@@ -203,3 +203,25 @@ TJX answered in the thread, on `dc_board_before_after.png`: "i like what you mad
 ### The user-facing name
 
 The OSD's cold reviewer, through the coordinator (05:46Z), flagged "GT7 Hood Pro" as a release risk: the name the user sees names another game. The dash is now shown as **Bonnet Line** (the low band of instruments that floats over the bonnet): `registry.rs`, `catalog.rs` (`display`), the OSD's theme names (`fh6-osd/src/model.rs`), `docs/TELEMETRY_USAGE_MATRIX.md`, and this module's README, spec and doc. The internal identifier stays `Gt7HoodPro` (theme, config value `"Gt7HoodPro"`, folder, assets and Penpot page), so saved configs and other threads are unaffected, and RESEARCH.md still names GT7 as the reference. CATALOG.md is the chain's file and is not edited here; its row keeps the identifier.
+
+### The second and third materials passes
+
+The second plate rebuild (PC, cloud lane, $0.059) brought the plate's p95 to 0.021 (was 0.044) and the static p95 to 0.190 (was 0.355), fixed the boost scale (p95 0.14), and kept the lens glints, the domes and the slots. It left two defects, both from the same physics: in a top-down orthographic render a flat polished face mirrors only the zenith, and a light on the key diagonal lights only the rounded ends of a long bar. So the bar's long top and bottom edges carried no highlight band, and the trip window came out flat mid grey (#3D3D3F) instead of dark glass. The thousand marks, at full static ink over the plate, measured 0.206 to 0.210, just over the 0.20 cap.
+
+The third pass (commit `248cc98`) adds two thin strip lights straight up and straight down the screen (`TOP_STRIP`, `BOTTOM_STRIP` in the recipe, the bottom one dimmer so the bar keeps one key light), makes the trip window black glass, and draws the thousand marks at 0.8 of the static ink (`MARK_LIGHT`).
+
+## Shared places touched
+- The user-facing name only: `crates/fh6-clusters/src/registry.rs` and `crates/fh6-clusters/src/catalog.rs` ("Bonnet Line"), `crates/fh6-osd/src/model.rs` (the theme's display name), `docs/TELEMETRY_USAGE_MATRIX.md`. One line each.
+- Nothing in `fh6-kit`, `common/`, the hero library, `docs/specs/optics.md`, CATALOG.md (main's copy is kept on every merge) or the shared ledgers, which every build rewrites and the PC restored each time.
+
+## Requests for shared code
+1. **Hero library texture cache (RC-1):** the Blender cache keys a texture parameter on its path, so a changed texture at the same path does not reach the render. Hashing the file's bytes into the key would fix it.
+2. **ComfyUI master copy (RC-2):** the Drive master of a ComfyUI texture is not copied under its ledger name; it should be, so the ledger and the masters folder agree.
+3. **Review telemetry steering:** `steer` is 0 in every review state and sequence frame, so a steering indicator (this dash's dot) can never be checked from renders. A small steer value in `04_drift_braking` and a sweep in the sequence would let siblings check it.
+
+## What sibling dashes must know
+- **A flat polished face in a top-down ortho render mirrors only the zenith.** A bright overhead sky turns every flat black-glass face uniform grey; keep the zenith dark and light the faces from low angles.
+- **Long horizontal edges need lights straight up and down the screen.** A window light on the key diagonal lights only a bar's rounded ends; thin strips at the edges' own azimuth light the long sides.
+- **Bake nothing that a setting can move.** A red zone baked at a fixed LED ignores the driver's OSD shift point; draw it live from the shift point.
+- **Cross-fade the light swing so coverage sums to one:** draw the rest render at `1 - swing` and add each swing render with `BlendMode::Add`, or anti-aliased edges pop.
+- **A user-facing name must not name another game.** Keep the identifier, change only what the user reads.
