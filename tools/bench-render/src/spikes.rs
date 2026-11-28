@@ -5,10 +5,11 @@
 //! the same lens with backdrops suppressed (the optics shader, no copy, no new segment); the
 //! glass layer with a plain fill instead of glass (the copy and segment, no optics shader); the
 //! lens drawn only on its rim band under four clips; and the whole lens drawn as nine clipped
-//! tiles. Each runs in three pacings: back to back, with a 4K readback after every frame (as
-//! `preview-export` times), and with an 8 ms pause after every frame (as the 120 Hz overlay
-//! leaves the GPU idle). Variants and pacings are interleaved in blocks so clock and thermal
-//! drift fall on all of them alike.
+//! tiles. Each runs in four pacings: back to back, with a 4K readback after every frame (as
+//! `preview-export` times), with an 8 ms pause after every frame (as the 120 Hz overlay leaves
+//! the GPU idle), and with a new kit every five frames (the first frames after the work targets
+//! are allocated, as each `preview-export` run starts). Variants and pacings are interleaved in
+//! blocks so clock and thermal drift fall on all of them alike.
 //!
 //! Every frame records the kit's pass timeline (`Kit::set_gpu_timeline`). A spike is a frame
 //! more than [`SPIKE_MS`] over its variant's median; each spike is put down to the interval
@@ -69,19 +70,29 @@ enum Pacing {
     BackToBack,
     Readback,
     Paced8ms,
+    /// A new kit for every block of [`FRESH_FRAMES`], read back as `preview-export` does: the
+    /// frames after the work targets are first allocated. Its first frame is its own row.
+    FreshKit,
+    /// The first frame of each fresh kit (a row only, never run by itself).
+    FreshFirst,
 }
 
 impl Pacing {
-    const ALL: [Self; 3] = [Self::BackToBack, Self::Readback, Self::Paced8ms];
+    const ALL: [Self; 4] = [Self::BackToBack, Self::Readback, Self::Paced8ms, Self::FreshKit];
 
     fn name(self) -> &'static str {
         match self {
             Self::BackToBack => "back to back",
             Self::Readback => "4K readback each frame",
             Self::Paced8ms => "8 ms idle each frame",
+            Self::FreshKit => "fresh kit, frames 2 to 5",
+            Self::FreshFirst => "fresh kit, first frame",
         }
     }
 }
+
+/// Frames drawn with each fresh kit.
+const FRESH_FRAMES: usize = 5;
 
 /// One timed frame.
 struct Frame {
@@ -210,8 +221,17 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
         for pacing in Pacing::ALL {
             for variant in Variant::ALL {
                 // Block 0 is the warm-up, timed by nobody.
-                let count = if block == 0 { WARMUP } else { BLOCK };
-                for _ in 0..count {
+                let count = match (block, pacing) {
+                    (0, _) => WARMUP,
+                    (_, Pacing::FreshKit) => FRESH_FRAMES,
+                    _ => BLOCK,
+                };
+                if pacing == Pacing::FreshKit && block > 0 {
+                    kit = Kit::new(&ctx.device, &ctx.queue, tokens.clone())?;
+                    kit.set_gpu_timeline(true);
+                    kit.set_palette(palette);
+                }
+                for i in 0..count {
                     frame_no += 1;
                     {
                         let mut p = kit.begin_frame(&layout);
@@ -227,12 +247,13 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
                         (W, H),
                         1.0,
                     );
-                    if pacing == Pacing::Readback {
+                    let readback = matches!(pacing, Pacing::Readback | Pacing::FreshKit);
+                    if readback {
                         target.copy_out(&mut encoder);
                     }
                     ctx.queue.submit(Some(encoder.finish()));
                     kit.frame_submitted();
-                    if pacing == Pacing::Readback {
+                    if readback {
                         let _ = target.read(&ctx.device)?;
                     }
                     // One readback: the frame runs from the first pass's start to the resolve's end.
@@ -246,7 +267,12 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
                     }
                     work.insert(variant, stats.work_pixels);
                     if let (Some(total), Some(passes)) = (total, passes) {
-                        runs.entry((variant, pacing)).or_default().push(Frame {
+                        let row = if pacing == Pacing::FreshKit && i == 0 {
+                            Pacing::FreshFirst
+                        } else {
+                            pacing
+                        };
+                        runs.entry((variant, row)).or_default().push(Frame {
                             total_ms: total.as_secs_f64() * 1e3,
                             intervals: intervals(&passes),
                         });
@@ -267,11 +293,12 @@ pub fn run(frames: usize, out: Option<&Path>, csv: Option<&Path>) -> Result<()> 
     );
     let _ = writeln!(
         report,
-        "3840x2160, adapter {adapter}, {} frames per variant and pacing in blocks of {BLOCK}, \
-interleaved. GPU times from the kit's pass timeline, in ms. A spike is a frame more than {SPIKE_MS} ms \
+        "3840x2160, adapter {adapter}, {} frames per variant and pacing in blocks of {BLOCK} \
+(fresh-kit rows: {} kits of {FRESH_FRAMES} frames), interleaved. GPU times from the kit's pass timeline, in ms. A spike is a frame more than {SPIKE_MS} ms \
 over its row's median; \"spikes put down to\" names the interval that grew the most over its own median \
 in each spike.\n",
-        blocks * BLOCK
+        blocks * BLOCK,
+        blocks
     );
     let _ = writeln!(
         report,
