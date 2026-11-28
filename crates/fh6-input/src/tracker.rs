@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn bonnet_index_maps_to_bonnet_view() {
-        use fh6_core::config::CameraViewMode;
-        assert_eq!(CameraViewMode::from_index(4), CameraViewMode::Bonnet);
+        use fh6_core::FitView;
+        assert_eq!(FitView::from_camera_index(4), FitView::Hood);
     }
 }

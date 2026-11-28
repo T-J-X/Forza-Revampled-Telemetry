@@ -101,9 +101,13 @@ impl Gpu {
     /// Builds `entry`'s cluster, settles it on `state` in `view` and renders it at `W` x `H`,
     /// cropped to the view envelope plus a margin.
     pub fn render_cluster(&mut self, entry: &ClusterEntry, view: View, state: &ReviewState) -> RgbaImage {
-        let cfg = AppConfig::default();
+        // A set driver name, so PorscheAnalog's parked greeting does not follow the default.
+        let cfg = AppConfig {
+            custom_driver_name: "TJX".into(),
+            ..AppConfig::default()
+        };
         let layout = Layout::from_config(&cfg, &self.tokens, view, (W, H));
-        let palette = Palette::family(&self.tokens, entry.family);
+        let palette = Palette::family(&self.tokens, entry.family.key());
         self.kit.set_palette(palette);
         let assets = self.assets.clone();
         let mut cluster = {

@@ -184,7 +184,7 @@ pub fn run(
         custom_driver_name: "TJX".to_string(),
         ..Default::default()
     };
-    let palette = Palette::family(tokens, entry.family);
+    let palette = Palette::family(tokens, entry.family.key());
     kit.set_palette(palette);
     let fonts = kit.font_choice(None);
     let photo = background(root, "cockpit_with_wheel.jpg").ok();

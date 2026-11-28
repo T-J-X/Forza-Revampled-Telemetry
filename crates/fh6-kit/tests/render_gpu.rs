@@ -357,7 +357,7 @@ fn a_cars_brand_logo_decodes_uploads_and_draws() {
     let (ctx, mut kit) = setup();
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let index = LogoIndex::load(&assets).expect("assets/logos/logos.json");
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json")).expect("car_brands.json");
     // The 2021 Porsche 911 GT3, and the 2019 911 (992) of the same brand.
     let porsche = index.car_brand(&cars, 3667).logo.expect("the GT3 has a brand logo");
     assert_eq!(index.car_brand(&cars, 3123).logo, Some(porsche), "one brand");

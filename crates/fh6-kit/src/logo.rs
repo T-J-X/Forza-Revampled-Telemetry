@@ -293,7 +293,7 @@ impl LogoIndex {
     /// name: call it when the car changes, never per frame.
     #[must_use]
     pub fn car_brand(&self, cars: &CarDatabase, ordinal: i32) -> CarBrand {
-        let Some(car) = cars.get_car_entry(&ordinal.to_string()) else {
+        let Some(car) = cars.car(ordinal) else {
             return CarBrand::default();
         };
         let logo = self.resolve(&car.brand_key, &car.manufacturer);
@@ -303,7 +303,7 @@ impl LogoIndex {
         let palette_name = if key.is_empty() || key.eq_ignore_ascii_case(GENERIC_BRAND) {
             None
         } else {
-            cars.get_brand_palette(key)
+            cars.brand_palette(key)
                 .map(|p| p.display_name.trim())
                 .filter(|n| !n.is_empty())
         };
@@ -725,7 +725,7 @@ mod tests {
     }
 
     fn repo_cars() -> CarDatabase {
-        CarDatabase::load(repo_assets().join("car_brands/car_brands.json"))
+        CarDatabase::load(repo_assets().join("car_brands/car_brands.json")).expect("car_brands.json loads")
     }
 
     /// A small index for the lookup rules.
@@ -835,9 +835,9 @@ mod tests {
     fn every_car_in_the_database_resolves() {
         let ix = repo_index();
         let cars = repo_cars();
-        assert!(!cars.cars.is_empty(), "car_brands.json loads");
+        assert!(!cars.is_empty(), "car_brands.json loads");
         let mut generic = Vec::new();
-        for (ordinal, car) in &cars.cars {
+        for (ordinal, car) in cars.cars() {
             match ix.resolve(&car.brand_key, &car.manufacturer) {
                 // A branded car shows its own brand, never another.
                 Some(id) if !car.brand_key.eq_ignore_ascii_case(GENERIC_BRAND) => {
@@ -874,12 +874,10 @@ mod tests {
         assert_eq!(key_of(&ix, gt3.logo), Some("PORSCHE"));
         assert_eq!(gt3.name, "Porsche");
         // A car whose key is generic: by its make, named as the logo index names it.
-        let (ordinal, renault) = cars
-            .cars
-            .iter()
+        let (renault_ordinal, renault) = cars
+            .cars()
             .find(|(_, c)| c.brand_key == GENERIC_BRAND && c.manufacturer == "Renault")
             .expect("a generic-keyed Renault in car_brands.json");
-        let renault_ordinal: i32 = ordinal.parse().expect("numeric ordinal");
         let shown = ix.car_brand(&cars, renault_ordinal);
         assert_eq!(key_of(&ix, shown.logo), Some("RENAULT"), "{}", renault.model_name);
         assert_eq!(shown.name, "Renault");

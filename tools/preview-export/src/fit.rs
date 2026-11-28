@@ -18,7 +18,7 @@ use fh6_core::{AppConfig, ClusterTheme, FitView, ScrimFit};
 use fh6_gpu::GpuContext;
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::testing::{Offscreen, RgbaImage, OFFSCREEN_FORMAT};
-use fh6_kit::{FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
+use fh6_kit::{Family, FrameInput, Kit, Layout, Logo, Palette, SignalSmoother, Tokens, View};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -79,8 +79,8 @@ impl Ctx<'_> {
     fn frame(&mut self, cfg: &AppConfig, cluster: Option<ClusterTheme>, frames: u32) -> Result<RgbaImage> {
         let layout = Layout::from_config(cfg, self.tokens, View::Cockpit, (W, H));
         let fit = ScrimFit::from_config(cfg, FitView::Cockpit);
-        let family = cluster.map_or("liquidGlass", |t| registry::resolve(t).family);
-        let palette = Palette::family(self.tokens, family);
+        let family = cluster.map_or(Family::LiquidGlass, |t| registry::resolve(t).family);
+        let palette = Palette::family(self.tokens, family.key());
         self.kit.set_palette(palette);
         let wash = Wash::from_config(cfg, palette.primary);
         let mut built = match cluster {

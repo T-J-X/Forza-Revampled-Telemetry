@@ -5,7 +5,8 @@
 //! on. Text and thin lines use the text-safe variants (`*_text`), lifted to >= 7:1 on black.
 use crate::color::{Color, Oklab, Oklch};
 use crate::tokens::{Roles, Tokens};
-use fh6_core::{AppConfig, BrandPalette, CarDatabase};
+use fh6_core::cars::DEFAULT_BRAND_KEY;
+use fh6_core::{AppConfig, BrandPalette, CarDatabase, ColorMode};
 
 /// Where the palette came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,8 +102,8 @@ impl Palette {
     /// The factory palette for car `ordinal`: its brand, then `DEFAULT`, then the family.
     #[must_use]
     pub fn for_car(tokens: &Tokens, cars: &CarDatabase, ordinal: i32, family: &str) -> Self {
-        cars.get_brand_palette_for_ordinal(&ordinal.to_string())
-            .or_else(|| cars.get_brand_palette("DEFAULT"))
+        cars.car_palette(ordinal)
+            .or_else(|| cars.brand_palette(DEFAULT_BRAND_KEY))
             .map_or_else(|| Self::family(tokens, family), |b| Self::factory(tokens, b, family))
     }
 
@@ -153,8 +154,10 @@ impl Palette {
         Self::new(tokens, [primary, secondary, accent, shift], PaletteSource::Random(seed))
     }
 
-    /// The palette `config` asks for: `ColorMode` "Custom" uses the hex values, "Random" a seed
-    /// (`PaletteSeed`, else the car ordinal), anything else is factory for `car_ordinal`.
+    /// The palette `config` asks for: [`ColorMode::Custom`] uses the hex values,
+    /// [`ColorMode::Random`] a seed (`PaletteSeed`, else the car ordinal), [`ColorMode::Brand`]
+    /// the palette of `CustomBrandKey`, and [`ColorMode::AutoBrand`] (or `Brand` with the
+    /// `DEFAULT` key) the factory palette for `car_ordinal`.
     #[must_use]
     pub fn from_config(
         tokens: &Tokens,
@@ -163,9 +166,8 @@ impl Palette {
         car_ordinal: i32,
         family: &str,
     ) -> Self {
-        let mode = config.color_mode.trim().to_ascii_lowercase();
-        match mode.as_str() {
-            "custom" => {
+        match config.color_mode {
+            ColorMode::Custom => {
                 let base = Self::family(tokens, family);
                 let primary = Color::from_hex_or(&config.primary_hex, base.primary);
                 let accent = Color::from_hex_or(&config.accent_hex, base.accent);
@@ -173,18 +175,14 @@ impl Palette {
                 let secondary = Color::from_hex(&config.secondary_hex).ok();
                 Self::custom(tokens, primary, accent, shift, secondary)
             }
-            "random" => {
-                let seed = config
-                    .extra
-                    .get("PaletteSeed")
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(car_ordinal.unsigned_abs().into());
+            ColorMode::Random => {
+                let seed = config.palette_seed.unwrap_or(car_ordinal.unsigned_abs().into());
                 Self::random(tokens, seed)
             }
-            "brand" if !config.custom_brand_key.eq_ignore_ascii_case("DEFAULT") => cars
-                .get_brand_palette(&config.custom_brand_key)
+            ColorMode::Brand if !config.custom_brand_key.trim().eq_ignore_ascii_case(DEFAULT_BRAND_KEY) => cars
+                .brand_palette(&config.custom_brand_key)
                 .map_or_else(|| Self::family(tokens, family), |b| Self::factory(tokens, b, family)),
-            _ => Self::for_car(tokens, cars, car_ordinal, family),
+            ColorMode::Brand | ColorMode::AutoBrand => Self::for_car(tokens, cars, car_ordinal, family),
         }
     }
 
@@ -305,18 +303,67 @@ mod tests {
     #[test]
     fn repo_car_brands_load_by_ordinal() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/car_brands/car_brands.json");
-        let cars = CarDatabase::load(&path);
+        let cars = CarDatabase::load(&path).expect("assets/car_brands/car_brands.json loads");
         let t = tokens();
-        let any = cars.cars.keys().next().cloned().unwrap_or_default();
-        let ordinal: i32 = any.parse().unwrap_or(0);
-        let p = Palette::for_car(&t, &cars, ordinal, "modernDigital");
+        // 3595 is in the shipped database; 1 is not, and falls back to the DEFAULT brand.
+        assert!(cars.car(3595).is_some() && cars.car(1).is_none());
+        // The colours tell a hit (Ferrari) from the fallback (DEFAULT); the source cannot.
+        for (ordinal, primary) in [(3595, "#D40000"), (1, "#00E5FF")] {
+            let p = Palette::for_car(&t, &cars, ordinal, "modernDigital");
+            assert_eq!(p.source, PaletteSource::Factory, "car {ordinal}");
+            assert_eq!(p.primary.to_string(), primary, "car {ordinal}");
+        }
+    }
+
+    #[test]
+    fn from_config_follows_every_colour_mode() {
+        let cars = CarDatabase::from_json_str(
+            r##"{"BrandPalettes":{
+                    "FERRARI":{"PrimaryHex":"#D40000"},
+                    "PORSCHE":{"PrimaryHex":"#D5001C"},
+                    "DEFAULT":{"PrimaryHex":"#00E5FF"}},
+                "Cars":{"3595":{"BrandKey":"FERRARI"}}}"##,
+        )
+        .expect("valid");
+        let t = tokens();
+        let family = "modernDigital";
+        let with = |color_mode: ColorMode, brand: &str, seed: Option<u64>| AppConfig {
+            color_mode,
+            custom_brand_key: brand.into(),
+            palette_seed: seed,
+            ..AppConfig::default()
+        };
+        let pick = |cfg: &AppConfig| Palette::from_config(&t, cfg, &cars, 3595, family);
+        let primary = |p: Palette| p.primary.to_string();
+
+        let auto = pick(&with(ColorMode::AutoBrand, "DEFAULT", None));
         assert_eq!(
-            p.source,
-            if cars.cars.is_empty() {
-                PaletteSource::Family
-            } else {
-                PaletteSource::Factory
-            }
+            (auto.source, primary(auto).as_str()),
+            (PaletteSource::Factory, "#D40000")
+        );
+        let brand = pick(&with(ColorMode::Brand, " porsche ", None));
+        assert_eq!(
+            (brand.source, primary(brand).as_str()),
+            (PaletteSource::Factory, "#D5001C")
+        );
+        // Brand with the DEFAULT key means the car's own brand.
+        assert_eq!(pick(&with(ColorMode::Brand, " default ", None)), auto);
+        // A brand the database does not have falls back to the family palette.
+        assert_eq!(
+            pick(&with(ColorMode::Brand, "nosuch", None)),
+            Palette::family(&t, family)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Random, "DEFAULT", None)).source,
+            PaletteSource::Random(3595)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Random, "DEFAULT", Some(7))).source,
+            PaletteSource::Random(7)
+        );
+        assert_eq!(
+            pick(&with(ColorMode::Custom, "DEFAULT", None)).source,
+            PaletteSource::Custom
         );
     }
 }

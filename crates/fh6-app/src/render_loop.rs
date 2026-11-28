@@ -15,8 +15,8 @@ use fh6_kit::color::srgb_to_linear;
 use fh6_kit::logo::{Dial, DialLoader};
 use fh6_kit::scrim::{self, Wash};
 use fh6_kit::{
-    vec2, Affine, Align, BlendMode, Cluster, Color, FontId, FrameInput, FrameStats as KitFrameStats, Kit, Layout, Logo,
-    Painter, Palette, Rect, Shape, SignalSmoother, StackStr, TextStyle, VAlign, View,
+    vec2, Affine, Align, BlendMode, Cluster, Color, Family, FontId, FrameInput, FrameStats as KitFrameStats, Kit,
+    Layout, Logo, Painter, Palette, Rect, Shape, SignalSmoother, StackStr, TextStyle, VAlign, View,
 };
 use fh6_osd::nav::NavInput;
 use fh6_osd::{
@@ -419,7 +419,7 @@ struct Gpu {
 struct Active {
     theme: ClusterTheme,
     view: View,
-    family: &'static str,
+    family: Family,
     cluster: Box<dyn Cluster>,
     born: Instant,
 }
@@ -440,10 +440,9 @@ struct Loop {
     lost_since: Option<Instant>,
     active: Option<Active>,
     smoother: SignalSmoother,
-    /// Theme cache: the config it came from (pointer identity) and the view.
-    theme_cache: Option<(*const AppConfig, View, ClusterTheme)>,
-    /// Palette cache: config identity, car ordinal and family.
-    palette_cache: Option<(*const AppConfig, i32, &'static str)>,
+    /// Palette cache: the config it came from (held, so its address cannot be reused by a newer
+    /// config), the car ordinal and the family.
+    palette_cache: Option<(Arc<AppConfig>, i32, Family)>,
     palette: Palette,
     logo: Logo,
     /// Each brand's dial in the kit, decoded on the `fh6-logos` worker thread.
@@ -619,15 +618,7 @@ impl Loop {
 
     /// Makes sure the active cluster matches the config and view.
     fn ensure_cluster(&mut self, cfg: &Arc<AppConfig>, view: View) {
-        let ptr = Arc::as_ptr(cfg);
-        let theme = match self.theme_cache {
-            Some((p, v, t)) if p == ptr && v == view => t,
-            _ => {
-                let t = fh6_osd::theme_for_view(cfg, view);
-                self.theme_cache = Some((ptr, view, t));
-                t
-            }
-        };
+        let theme = cfg.theme(view.fit_view());
         if self.active.as_ref().is_some_and(|a| a.theme == theme && a.view == view) {
             return;
         }
@@ -654,15 +645,18 @@ impl Loop {
         let Some(family) = self.active.as_ref().map(|a| a.family) else {
             return;
         };
-        let key = (Arc::as_ptr(cfg), car_ordinal, family);
-        if self.palette_cache == Some(key) {
+        if self
+            .palette_cache
+            .as_ref()
+            .is_some_and(|(c, o, f)| Arc::ptr_eq(c, cfg) && *o == car_ordinal && *f == family)
+        {
             return;
         }
         let tokens = &self.resources.tokens;
-        self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family);
+        self.palette = Palette::from_config(tokens, cfg, &self.resources.cars, car_ordinal, family.key());
         // `ShowLogo: false` empties the logo zone (no image, wordmark or name) and loads nothing.
         self.logo_waiting = None;
-        self.logo = if model::show_logo(cfg) {
+        self.logo = if cfg.show_logo {
             let brand = self.resources.logos.car_brand(&self.resources.cars, car_ordinal);
             let named = Logo {
                 image: None,
@@ -687,14 +681,17 @@ impl Loop {
         };
         if let Some(kit) = self.gpu.as_mut().and_then(|g| g.kit.as_mut()) {
             kit.set_palette(self.palette);
-            self.font_override = model::cluster_font(cfg).and_then(|family| kit.fonts().find(family, 600, false));
+            self.font_override = cfg
+                .cluster_font
+                .as_deref()
+                .and_then(|family| kit.fonts().find(family, 600, false));
             // A face from the pack or the user folder is rasterised on first use: do it now, so
             // the first frame in the new font has every digit and letter.
             if let Some(font) = self.font_override {
                 kit.fonts_mut().ensure_preloaded(font);
             }
         }
-        self.palette_cache = Some(key);
+        self.palette_cache = Some((Arc::clone(cfg), car_ordinal, family));
     }
 
     /// Uploads the brand dials the worker has decoded (only while one is decoding, so most frames
@@ -731,11 +728,7 @@ impl Loop {
 
     /// Starts, polls or stops the optional refraction capture (`"GlassRefraction": true`).
     fn update_refraction(&mut self, cfg: &AppConfig, layout: &Layout, game_process: &str) {
-        let on = cfg
-            .extra
-            .get("GlassRefraction")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
+        let on = cfg.glass_refraction;
         let Some(gpu) = self.gpu.as_mut() else { return };
         let Some(kit) = gpu.kit.as_mut() else { return };
         if !on {
@@ -1004,7 +997,6 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
         lost_since: None,
         active: None,
         smoother: SignalSmoother::new(),
-        theme_cache: None,
         palette_cache: None,
         palette,
         logo: Logo::default(),
@@ -1238,7 +1230,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
                 fonts,
                 logo: &lp.logo,
                 view,
-                reduced_flash: model::reduced_flash(&cfg),
+                reduced_flash: cfg.reduced_flash,
             };
             active.cluster.update(&input_frame);
             if osd_open {
@@ -1254,7 +1246,7 @@ fn run(setup: RenderSetup, watch: PanicWatch) -> RenderSummary {
             .then(|| (scrim_fit, Wash::from_config(&cfg, lp.palette.primary)));
         let built = build_start.elapsed();
 
-        let stats_on = options.stats || model::show_stats(&cfg);
+        let stats_on = options.stats || cfg.show_stats;
         let fade = Fade {
             opacity: vis.opacity,
             care,
@@ -1381,8 +1373,8 @@ mod tests {
     fn theme_follows_the_view() {
         let theme_for = fh6_osd::theme_for_view;
         let mut cfg = AppConfig {
-            cockpit_hud_style: "LiquidGlass".into(),
-            bonnet_hud_style: "Gt7HoodPro".into(),
+            cockpit_hud_style: ClusterTheme::LiquidGlass,
+            bonnet_hud_style: ClusterTheme::Gt7HoodPro,
             ..AppConfig::default()
         };
         assert_eq!(theme_for(&cfg, View::Cockpit), ClusterTheme::LiquidGlass);
@@ -1390,19 +1382,16 @@ mod tests {
         assert_eq!(
             theme_for(&cfg, View::Chase),
             ClusterTheme::LiquidGlass,
-            "an empty ChaseHudStyle follows the cockpit"
+            "no ChaseHudStyle follows the cockpit"
         );
-        cfg.chase_hud_style = "RetroCyber".into();
+        cfg.chase_hud_style = Some(ClusterTheme::RetroCyber);
         assert_eq!(theme_for(&cfg, View::Chase), ClusterTheme::RetroCyber);
-        let empty = AppConfig {
-            cockpit_hud_style: String::new(),
-            hud_style: String::new(),
-            ..AppConfig::default()
-        };
-        assert_eq!(theme_for(&empty, View::Cockpit), ClusterTheme::LiquidGlass);
+        let defaults = AppConfig::default();
+        assert_eq!(theme_for(&defaults, View::Cockpit), ClusterTheme::BoschDdu);
+        assert_eq!(theme_for(&defaults, View::Hood), ClusterTheme::Gt7HoodPro);
         // The OSD writes the chase cluster to the typed Phase 8 key.
         fh6_osd::model::set_theme_for_view(&mut cfg, View::Chase, ClusterTheme::Gt7HoodPro);
-        assert_eq!(cfg.chase_hud_style, "Gt7HoodPro");
+        assert_eq!(cfg.chase_hud_style, Some(ClusterTheme::Gt7HoodPro));
         assert_eq!(theme_for(&cfg, View::Chase), ClusterTheme::Gt7HoodPro);
     }
 

@@ -14,7 +14,7 @@
 use crate::car_brands::{BindCarBrandError, BindOutcome, CarBinding};
 use crate::steam::camera_dir;
 use fh6_core::atomic_file::write_atomically;
-use fh6_core::config::AppConfig;
+use fh6_core::config::{AppConfig, FOV_RANGE};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -24,8 +24,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const SETTINGS_FILE: &str = "CameraSettings.ini";
 /// The physics file name.
 pub const PHYSICS_FILE: &str = "CameraPhysics.xml";
-/// The game's FOV limits (`MinFOV` / `MaxFOV` in the settings file).
-pub const FOV_RANGE: (f32, f32) = (40.0, 110.0);
 
 /// Why a patch, backup or restore did not happen. Files are never left half-written.
 #[derive(Debug, thiserror::Error)]

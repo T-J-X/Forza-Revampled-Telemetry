@@ -102,6 +102,11 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("preview-export failed: {e}");
+            let mut cause = e.source();
+            while let Some(c) = cause {
+                eprintln!("  caused by: {c}");
+                cause = c.source();
+            }
             ExitCode::FAILURE
         }
     }
@@ -156,7 +161,7 @@ fn run() -> Result<()> {
 
     for entry in REGISTRY {
         let name = entry.theme.to_string();
-        let palette = Palette::family(&tokens, entry.family);
+        let palette = Palette::family(&tokens, entry.family.key());
         for state in &STATES {
             let started = Instant::now();
             let mut cluster = {
@@ -278,14 +283,17 @@ fn car_logo(ctx: &GpuContext, kit: &mut Kit, assets: &Path, cfg: &AppConfig, car
             ..Logo::default()
         };
     }
-    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json"));
+    let cars = CarDatabase::load(assets.join("car_brands/car_brands.json")).unwrap_or_else(|e| {
+        eprintln!("cars: {e}; the logo zone shows the custom name");
+        CarDatabase::default()
+    });
     let index = LogoIndex::load(assets).unwrap_or_else(|e| {
         eprintln!("logos: {e}; the logo zone shows names");
         LogoIndex::default()
     });
     let brand = index.car_brand(&cars, car);
     let model = cars
-        .get_car_entry(&car.to_string())
+        .car(car)
         .map_or("not in car_brands.json", |c| c.model_name.as_str());
     let image = match brand.logo {
         Some(id) => match index.load_dial(kit.images_mut(), &ctx.device, &ctx.queue, id) {
