@@ -2,7 +2,7 @@
 
 Catalog row 12 · `ClusterTheme::BoschDdu` (config value `"BoschDdu"`) · Race Dash · cockpit · build #4 · ★ pattern-setter.
 
-**What it is:** the Bosch Motorsport DDU 10 as BMW fits it to the M4 GT3: one black glass face edge to edge in a bead-blasted anodised aluminium body with an arched top, ten shift LEDs across the brow in groups of 2, 6 and 2, five LEDs down each side, and a 7" screen with the round rev gauge in the middle, the gear in a beam of light under it and four quarter panels. It carries no Bosch marks: the chin shows the car's logo and the driver's name. Research and sources: [`RESEARCH.md`](RESEARCH.md). Board: Penpot page `07 · BoschDdu`.
+**What it is:** the Bosch Motorsport DDU 10 as BMW fits it to the M4 GT3: one black glass face edge to edge in a bead-blasted anodised aluminium body with an arched top, ten shift LEDs across the brow in groups of 2, 6 and 2, five LEDs down each side (brake on the left, body slip on the right), and a 7" screen with the round rev gauge in the middle, a horizon line under it, the gear in a beam of light from the horizon to the screen's foot, and four quarter panels. It carries no Bosch marks: the chin shows the car's logo and the driver's name. Research and sources: [`RESEARCH.md`](RESEARCH.md). Board: Penpot page `07 · BoschDdu`.
 
 ## Files
 - `mod.rs`: the zone table (`Geom`), the option, the brow LEDs' logic (`TopLeds`), the cluster (`update`, `draw`) and every lit part.
@@ -16,7 +16,7 @@ Catalog row 12 · `ClusterTheme::BoschDdu` (config value `"BoschDdu"`) · Race D
 |---|---|---|
 | `BoschDduPanels` | four entries, comma-separated, for the panels left top, left bottom, right top, right bottom: `Pedals`, `G`, `Engine`, `Speed`, `Off` | `Pedals,G,Engine,Speed` |
 
-Colours come from the palette (factory, custom or random): the screen uses `primary` as its one accent, the brow LEDs the rev stages and `shift`. The figures follow the user's display font. The logo zone shows the car's logo, else the brand or custom name. Power is shown in the user's power unit; boost follows the speed unit (psi with mph, bar with km/h).
+Colours come from the palette (factory, custom or random): the screen uses `primary` as its one accent, the brow LEDs the rev stages and, over the shift point, the shift lamp (`shift` lifted toward white until it is at least as bright as the amber stage). The figures follow the user's display font. The logo zone shows the car's logo, else the brand or custom name. Power is shown in the user's power unit; boost reads in psi, the packet's own unit, until the app has a pressure-unit setting.
 
 ## Commands
 ```

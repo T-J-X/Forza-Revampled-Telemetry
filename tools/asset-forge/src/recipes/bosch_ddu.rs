@@ -12,8 +12,10 @@
 //!   body (the macro above under a thin oxide coat) with the arched top edge, large top corners
 //!   and small bottom ones; one black glass face (IOR 1.5, near-black under it) set 6 px inside
 //!   the outline with a rounded edge that draws a crisp thin highlight; the ten smoked lenses
-//!   across the brow on the arch, five down each side, and the ambient light sensor's dark round
-//!   window in the right border. Seen from the driver's eye: the face is registered 1:1 to the
+//!   across the brow on the arch, five down each side (short horizontal pills, milky grey when
+//!   unlit), and the ambient light sensor's dark round window in the right border. No softbox
+//!   stands over the face ([`housing_rig`]), so the glass mirrors nothing: the screen stays OLED
+//!   black and the face reads by its rim line and its lenses. Seen from the driver's eye: the face is registered 1:1 to the
 //!   cluster's `GEOM`, and the body is drawn in an oblique projection (its depth sheared up the
 //!   screen by [`SLIVER`] px), so a band of its top surface shows above the face edge and the
 //!   side and bottom walls stay hidden. Rendered orthographic at 2 px per 4K px at the three key
@@ -37,7 +39,7 @@ use crate::hero::frame::Frame;
 use crate::hero::geom::{Mesh, Outline};
 use crate::hero::mat::Mat;
 use crate::hero::part::Part;
-use crate::hero::rig::SWING;
+use crate::hero::rig::{Light, Rig, SWING};
 use crate::hero::texture::{self, Recipe};
 use crate::hero::{Passes, Scene};
 use crate::img::{self, Img};
@@ -70,18 +72,18 @@ const ARCH: f32 = 10.0;
 const CORNER_TOP: f32 = 120.0;
 const CORNER_BOTTOM: f32 = 44.0;
 /// The screen (`x0, y0, x1, y1`): the glass over it stays essentially black.
-const SCREEN: [f32; 4] = [-312.0, -224.0, 312.0, 150.0];
+const SCREEN: [f32; 4] = [-312.0, -204.0, 312.0, 170.0];
 /// The ten brow lenses: centres x, the centre y at the middle (each follows the arch, see
 /// [`top_led_centre`]) and their size.
-const TOP_LED_X: [f32; 10] = [-250.0, -206.0, -110.0, -66.0, -22.0, 22.0, 66.0, 110.0, 206.0, 250.0];
-const TOP_LED_Y: f32 = -270.0;
-const TOP_LED: [f32; 2] = [38.0, 12.0];
+const TOP_LED_X: [f32; 10] = [-199.0, -161.0, -95.0, -57.0, -19.0, 19.0, 57.0, 95.0, 161.0, 199.0];
+const TOP_LED_Y: f32 = -284.0;
+const TOP_LED: [f32; 2] = [28.0, 10.0];
 /// The side lenses: five per side at ±x, from the bottom one up at the pitch, and their size.
 const SIDE_LED_X: f32 = 359.0;
 const SIDE_LED_Y0: f32 = -70.0;
 const SIDE_LED_PITCH: f32 = 38.0;
 const SIDE_LEDS: usize = 5;
-const SIDE_LED: [f32; 2] = [10.0, 26.0];
+const SIDE_LED: [f32; 2] = [28.0, 10.0];
 /// The ambient light sensor's window in the right border: centre and radius.
 const SENSOR: [f32; 2] = [359.0, 24.0];
 const SENSOR_R: f32 = 8.0;
@@ -131,29 +133,41 @@ const BODY_COLOR_SD: f32 = 0.08;
 const BODY_ROUGH_SD: f32 = 0.035;
 /// The faint bump of the macro (strength, distance in px).
 const BODY_BUMP: (f32, f32) = (0.12, 0.5);
-/// One repeat of the macro on the body (local px): about 156 mm, so it never repeats visibly,
-/// and the bead grain comes out about a pixel across.
-const BODY_TILE: f32 = 640.0;
+/// One repeat of the macro on the body (local px). The body shows only as the 6 px wall and the
+/// sliver of its top, so the macro's blobs (about 200 texture px) must come out a few px across,
+/// as a satin grain along the wall; at one repeat per 640 px they were 32 px blotches.
+const BODY_TILE: f32 = 80.0;
 /// The black glass: near-black absorbing body, its roughness (very low; just enough that the
 /// softbox's reflection has soft edges) and IOR.
-const GLASS_COLOR: [f32; 3] = [0.0015, 0.0015, 0.0018];
+const GLASS_COLOR: [f32; 3] = [0.0004, 0.0004, 0.0005];
 const GLASS_ROUGH: f32 = 0.07;
 const GLASS_IOR: f32 = 1.5;
-/// The smoked LED lenses (a touch lighter and less glossy than the glass, so they read off) and
-/// the sensor window (darker and glossier).
-const LENS_COLOR: [f32; 3] = [0.008, 0.008, 0.0088];
-const LENS_ROUGH: f32 = 0.14;
+/// The smoked LED lenses and the sensor window (darker and glossier than the glass). Nothing is
+/// mirrored in the face (see [`housing_rig`]), so an unlit lens reads by its own milky grey under
+/// the key, as on the press image (about sRGB 60 to 90 there), not by a reflection.
+const LENS_COLOR: [f32; 3] = [0.027, 0.027, 0.029];
+const LENS_ROUGH: f32 = 0.35;
 const SENSOR_COLOR: [f32; 3] = [0.0006, 0.0006, 0.0007];
 const SENSOR_ROUGH: f32 = 0.02;
-/// The hero rig's power over the housing: the static plate stays dark (the dash draws the lit
-/// parts on top of it). Estimated at full power, the body's front face comes out near 0.17
-/// relative luminance from the overhead softbox alone; here about 0.1, and the glass's broad
-/// reflection of the softbox about 0.017.
+/// The rig's power over the housing: the static plate stays dark (the dash draws the lit parts on
+/// top of it).
 const HOUSING_LIGHT: f32 = 0.6;
+/// The "wall" softbox that stands in for the hero rig's overhead sky: its elevation, its distance
+/// and size (as shares of the frame's span) and its power before [`HOUSING_LIGHT`]. In the
+/// top-down ortho view the flat glass mirrors only what is straight above each point, so a
+/// softbox over the face lays a flat grey veil on the screen (0.017 with the hero sky). This one
+/// stands to the side, clear of the screen at every swing azimuth: the satin body's wide lobe
+/// still catches it, the glass does not, and the face stays black with crisp rim lines.
+const WALL_EL: f32 = 66.0;
+const WALL_DIST: f32 = 2.0;
+const WALL_SIZE: f32 = 0.45;
+const WALL_POWER: f32 = 1.0;
+/// How far every overhead softbox's footprint stays from the screen (px), whatever the azimuth.
+const SCREEN_CLEAR: f32 = 40.0;
 /// The brightness limits the build checks the runtime files against (relative luminance): the
-/// sprite's 95th percentile, and the screen area's 99th.
+/// sprite's 95th percentile, and the screen area's 99th (the screen is OLED black: sRGB 12).
 const LIMIT_P95: f32 = 0.2;
-const LIMIT_SCREEN_P99: f32 = 0.04;
+const LIMIT_SCREEN_P99: f32 = 0.004;
 
 /// The ComfyUI macro. The prompt names only the surface finish.
 const BEAD_BLAST: Recipe = Recipe {
@@ -292,7 +306,7 @@ pub fn build(ctx: &mut Ctx) -> Result<()> {
             );
         }
         rows.push(format!(
-            "| `{name}` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at {az}° (sRGB, straight alpha) | {rw}x{rh} | {kb} KB | blender:hero (bosch_ddu::housing_scene, Cycles {SAMPLES} samples, ortho at {MASTER_SCALE} px per 4K px over x {fx0}..{fx1}, y {fy0}..{fy1}, box-filtered to 1:1; hero rig at {HOUSING_LIGHT} power; body sheared {SLIVER} px for the driver's eye) seed=0; luminance p95 {p95:.3}, screen p99 {sp:.4} | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/{master}` |",
+            "| `{name}` | the DDU 10 housing: anodised body, black glass face, 10 + 5 + 5 smoked lenses, light sensor; key at {az}° (sRGB, straight alpha) | {rw}x{rh} | {kb} KB | blender:hero (bosch_ddu::housing_scene, Cycles {SAMPLES} samples, ortho at {MASTER_SCALE} px per 4K px over x {fx0}..{fx1}, y {fy0}..{fy1}, box-filtered to 1:1; the housing's rig (no softbox over the face, no HDRI) at {HOUSING_LIGHT} power; body sheared {SLIVER} px for the driver's eye) seed=0; luminance p95 {p95:.3}, screen p99 {sp:.4} | MIT (asset-forge) | drawn at full strength under the live screen and LEDs; the cluster cross-fades the azimuths with the virtual light. Master `housing/{master}` |",
             az = key_azimuth(&scene, i),
             rw = w / k,
             rh = h / k,
@@ -476,7 +490,7 @@ fn housing_scene(texture: &Path) -> Scene {
         "bosch_ddu_housing",
         Frame::rect(x0, y0, x1 - x0, y1 - y0).scaled(MASTER_SCALE),
     );
-    s.rig = s.rig.clone().power(HOUSING_LIGHT);
+    s.rig = housing_rig();
     s.samples = SAMPLES;
     s.passes = Passes {
         beauty: true,
@@ -526,7 +540,7 @@ fn housing_scene(texture: &Path) -> Scene {
     for side in [-1.0_f32, 1.0] {
         for i in 0..SIDE_LEDS {
             let [cx, cy] = side_led_centre(side, i);
-            let pill = Outline::rrect(cx, cy, SIDE_LED[0], SIDE_LED[1], SIDE_LED[0] * 0.5, 8);
+            let pill = Outline::rrect(cx, cy, SIDE_LED[0], SIDE_LED[1], SIDE_LED[1] * 0.5, 8);
             let tag = if side < 0.0 { 'l' } else { 'r' };
             s.add(on_glass(&format!("led_{tag}{i}"), pill, lens.clone()));
         }
@@ -538,6 +552,22 @@ fn housing_scene(texture: &Path) -> Scene {
         glass("ddu_sensor", SENSOR_COLOR, SENSOR_ROUGH),
     ));
     s
+}
+
+/// The housing's rig: the hero rig's key, second sky, rim and kick, with the "wall" softbox (see
+/// [`WALL_EL`]) in place of its overhead sky and no studio HDRI, whose zenith the glass would
+/// mirror. Aimed at the frame's centre; the key leads, so the swing passes turn every light.
+fn housing_rig() -> Rig {
+    let span = (FRAME[2] - FRAME[0]).max(FRAME[3] - FRAME[1]);
+    let centre = [(FRAME[0] + FRAME[2]) * 0.5, (FRAME[1] + FRAME[3]) * 0.5];
+    let mut rig = Rig::hero(span, SWING[0]).at(centre[0], centre[1], 0.0);
+    for l in &mut rig.lights {
+        if l.name == "sky" {
+            *l = Light::soft("wall", l.az, WALL_EL, span * WALL_DIST, span * WALL_SIZE, WALL_POWER);
+        }
+    }
+    rig.hdri = 0.0;
+    rig.power(HOUSING_LIGHT)
 }
 
 /// The hero script with [`BPY_MATERIALS`] added before it builds the scene.
@@ -936,8 +966,8 @@ mod tests {
             assert!((y - (TOP - ARCH + arch_drop(x)) - (TOP_LED_Y - (TOP - ARCH))).abs() < EPS);
             assert!(x.abs() < span);
         }
-        // The middle pair sits 46 px under the crest, the outer pair a little lower.
-        assert!((top_led_centre(4)[1] - (-270.0 + arch_drop(22.0))).abs() < EPS);
+        // The middle pair sits 32 px under the crest, the outer pair a little lower.
+        assert!((top_led_centre(4)[1] - (-284.0 + arch_drop(19.0))).abs() < EPS);
         assert!(top_led_centre(0)[1] > top_led_centre(4)[1] + 3.0);
         assert!((top_led_centre(0)[1] - top_led_centre(9)[1]).abs() < EPS, "symmetric");
     }
@@ -1046,6 +1076,26 @@ mod tests {
             body.and_then(|m| m.v.get("texture").cloned()),
             Some(serde_json::json!("t.png"))
         );
+    }
+
+    #[test]
+    fn no_softbox_stands_over_the_screen_at_any_swing_azimuth() {
+        // The flat glass mirrors what is straight above it, so a softbox whose footprint reaches
+        // the screen veils it. Each light's footprint is taken as the circle round its softbox.
+        let s = housing_scene(Path::new("t.png"));
+        assert_eq!(s.rig.hdri, 0.0, "no studio HDRI: the glass would mirror its zenith");
+        assert!(s.rig.lights.iter().any(|l| l.name == "wall") && s.rig.lights.iter().all(|l| l.name != "sky"));
+        let rigs = s.rigs();
+        assert_eq!(rigs.len(), SWING.len());
+        for rig in &rigs {
+            for l in &rig.lights {
+                let (az, reach) = (l.az.to_radians(), l.dist * l.el.to_radians().cos());
+                let c = [rig.target[0] + reach * az.cos(), rig.target[1] + reach * az.sin()];
+                let near = [c[0].clamp(SCREEN[0], SCREEN[2]), c[1].clamp(SCREEN[1], SCREEN[3])];
+                let gap = (c[0] - near[0]).hypot(c[1] - near[1]) - l.size[0].hypot(l.size[1]) * 0.5;
+                assert!(gap >= SCREEN_CLEAR, "{} at {}°: {gap:.0} px from the screen", l.name, l.az);
+            }
+        }
     }
 
     #[test]
