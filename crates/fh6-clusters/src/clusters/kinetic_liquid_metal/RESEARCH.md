@@ -127,7 +127,7 @@ Ideas the research suggests for the telemetry (for the board to pick from, not a
 - Neutral and reverse: the void shows N or R. Reverse never drives a negative mode.
 - Rev-hanging on the limiter: the satellites accumulate. With volume conserved the main drop shrinks a little, and the satellites rejoin it within 300 ms after the shift. The pool can never empty.
 - Rapid shifts (under 100 ms apart): ring impulses add up but are clamped, so the numeral void always stays readable.
-- Drift at −1 g lateral: the drop leans 44° and slides about one radius, but stays inside its zone.
+- Drift at −1 g lateral: the drop leans 44° and slides about half a radius, clamped at 0.6 R so the glass boss under the gear never uncovers (see "The gear void, made physically honest").
 - Hostile telemetry (G5 in the dash gates): non-finite values are rejected by the decoder, and any zero still gets its own guard.
 - Menus and pause: the dash hides within a frame. On return the drop starts from rest, not from a stale state.
 - A car change: idle and max change, so the mapping is recomputed. The drop re-forms with one ring instead of snapping.
