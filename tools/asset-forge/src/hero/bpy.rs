@@ -162,6 +162,9 @@ def mat_guilloche(d):
     return m
 
 def mat_carbon(d):
+    tex = d.get('texture')
+    if tex and os.path.isfile(tex):
+        return mat_forged(d, tex)
     m, nt, bs = principled(d['name'])
     setin(bs, 'Base Color', d.get('color', (0.02, 0.02, 0.02)))
     setin(bs, 'Metallic', 0.6)
@@ -180,6 +183,40 @@ def mat_carbon(d):
     lk(nt, vec3(nt, o, M(nt, 'SUBTRACT', 1.0, o), 0.0), bs.inputs['Tangent'])
     setin(bs, 'Coat Weight', 1.0)
     setin(bs, 'Coat Roughness', 0.02)
+    return m
+
+def mat_forged(d, tex):
+    # Forged (chopped-fibre) carbon from a seamless texture: the chips' luminance sets the base
+    # colour between two dark levels, a little metallic sparkle and roughness, and a fine bump;
+    # a mirror clear coat on top, as on resin-cast forged composite.
+    m, nt, bs = principled(d['name'])
+    x, y, z, r, th = coords(nt)
+    im = node(nt, 'ShaderNodeTexImage', interpolation='Cubic', extension='REPEAT')
+    im.image = bpy.data.images.load(tex, check_existing=True)
+    im.image.colorspace_settings.name = 'Non-Color'
+    tile = d.get('tile_px', 512.0)
+    lk(nt, vec3(nt, M(nt, 'DIVIDE', x, tile), M(nt, 'DIVIDE', y, tile), 0.0), im.inputs['Vector'])
+    bw = node(nt, 'ShaderNodeRGBToBW')
+    lk(nt, im.outputs['Color'], bw.inputs[0])
+    lo, hi = d.get('dark', 0.006), d.get('light', 0.06)
+    col = node(nt, 'ShaderNodeMapRange', clamp=True)
+    lk(nt, bw.outputs[0], col.inputs['Value'])
+    col.inputs['To Min'].default_value = lo
+    col.inputs['To Max'].default_value = hi
+    lk(nt, col.outputs['Result'], bs.inputs['Base Color'])
+    met = node(nt, 'ShaderNodeMapRange', clamp=True)
+    lk(nt, bw.outputs[0], met.inputs['Value'])
+    met.inputs['To Min'].default_value = 0.2
+    met.inputs['To Max'].default_value = 0.85
+    lk(nt, met.outputs['Result'], bs.inputs['Metallic'])
+    ro = node(nt, 'ShaderNodeMapRange', clamp=True)
+    lk(nt, bw.outputs[0], ro.inputs['Value'])
+    ro.inputs['To Min'].default_value = d.get('rough', 0.42)
+    ro.inputs['To Max'].default_value = d.get('rough', 0.42) * 0.55
+    lk(nt, ro.outputs['Result'], bs.inputs['Roughness'])
+    bump(nt, bs, bw.outputs[0], 0.25, 0.8)
+    setin(bs, 'Coat Weight', 1.0)
+    setin(bs, 'Coat Roughness', d.get('coat_rough', 0.03))
     return m
 
 def mat_dielectric(d):

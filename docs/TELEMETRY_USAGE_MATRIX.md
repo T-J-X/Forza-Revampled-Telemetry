@@ -104,8 +104,9 @@ Dash scenarios (`DASH_SCENARIOS`):
 
 | Dash | Scenario | Makes reachable |
 |---|---|---|
-
-None today: every dash's inputs are reachable in the common scenarios.
+| Valkyrie LMP1 | threshold braking, brake off | `brake` (ABS: brake over 30% at 0.85 g deceleration) |
+| Valkyrie LMP1 | power oversteer, front drive | `drivetrain` (TC: throttle and growing body slip, not front drive) |
+| Valkyrie LMP1 | power on, rear drive, straight | `velocity` (TC: the body slip grows) |
 
 ## Dashes
 
@@ -128,7 +129,7 @@ limiter, gear and speed.
 | `LfaV10Nurburgring` | LFA V10 Nürburgring | `rpm`, `max_rpm`, `gear`, `speed` |
 | `KoenigseggGyro` | Koenigsegg Gyro | `rpm`, `max_rpm`, `gear`, `speed` |
 | `BoschDdu` | Bosch DDU | `race_on`, `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`, `power`, `boost` |
-| `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed` |
+| `ValkyrieLmp1` | Valkyrie LMP1 | `rpm`, `max_rpm`, `gear`, `speed`, `throttle`, `brake`, `steer`, `g_lat`, `g_long`, `velocity`, `drivetrain`, `car_ordinal`, `power` |
 | `Gt7ModularTripod` | GT7 Modular Tripod | `rpm`, `max_rpm`, `gear`, `speed` |
 | `TeslaAdas` | Tesla ADAS | `rpm`, `max_rpm`, `idle_rpm`, `gear`, `speed`, `brake`, `g_lat`, `g_long`, `velocity`, `power` |
 | `WindshieldHud` | Windshield HUD | `rpm`, `max_rpm`, `gear`, `speed` |

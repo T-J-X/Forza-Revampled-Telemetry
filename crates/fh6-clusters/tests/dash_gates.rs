@@ -447,7 +447,54 @@ const COMMON: &[Scenario] = &[
 /// Scenarios for inputs a dash reads only in combination with others (a lamp that needs two
 /// conditions). A dash adds its own here when its matrix row lists such an input; its probes
 /// then run in [`COMMON`] and in these. The matrix's `## Scenarios` table lists them.
-const DASH_SCENARIOS: &[(ClusterTheme, Scenario)] = &[];
+const DASH_SCENARIOS: &[(ClusterTheme, Scenario)] = &[
+    // ValkyrieLmp1's derived ABS lamp: braking harder than 30% while decelerating at 0.85 g or more.
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "threshold braking, brake off",
+            packet: |_| {
+                let mut t = base_packet();
+                t.acceleration_z = -0.95 * 9.806_65;
+                t.accel = 0;
+                t
+            },
+        },
+    ),
+    // Its derived TC lamp: throttle with the body slip growing faster than 8 deg/s, unless
+    // front-wheel drive.
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "power oversteer, front drive",
+            packet: |i| {
+                let mut t = base_packet();
+                t.speed_ms = 25.0;
+                t.accel = 230;
+                t.drivetrain_type = 0;
+                let (s, c) = (2.0 + 0.6 * i as f32).to_radians().sin_cos();
+                t.velocity_x = t.speed_ms * s;
+                t.velocity_z = t.speed_ms * c;
+                t
+            },
+        },
+    ),
+    (
+        ClusterTheme::ValkyrieLmp1,
+        Scenario {
+            name: "power on, rear drive, straight",
+            packet: |_| {
+                let mut t = base_packet();
+                t.speed_ms = 25.0;
+                t.accel = 230;
+                t.drivetrain_type = 1;
+                t.velocity_x = 0.0;
+                t.velocity_z = t.speed_ms;
+                t
+            },
+        },
+    ),
+];
 
 // --- Field coverage --------------------------------------------------------------------------
 
