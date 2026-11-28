@@ -162,8 +162,6 @@ const WALL_EL: f32 = 66.0;
 const WALL_DIST: f32 = 2.0;
 const WALL_SIZE: f32 = 0.45;
 const WALL_POWER: f32 = 1.0;
-/// How far every overhead softbox's footprint stays from the screen (px), whatever the azimuth.
-const SCREEN_CLEAR: f32 = 40.0;
 /// The brightness limits the build checks the runtime files against (relative luminance): the
 /// sprite's 95th percentile, and the screen area's 99th (the screen is OLED black: sRGB 12).
 const LIMIT_P95: f32 = 0.2;
@@ -1078,6 +1076,9 @@ mod tests {
         );
     }
 
+    /// How far every softbox's footprint stays from the screen (px), whatever the azimuth.
+    const SCREEN_CLEAR: f32 = 40.0;
+
     #[test]
     fn no_softbox_stands_over_the_screen_at_any_swing_azimuth() {
         // The flat glass mirrors what is straight above it, so a softbox whose footprint reaches
@@ -1093,7 +1094,12 @@ mod tests {
                 let c = [rig.target[0] + reach * az.cos(), rig.target[1] + reach * az.sin()];
                 let near = [c[0].clamp(SCREEN[0], SCREEN[2]), c[1].clamp(SCREEN[1], SCREEN[3])];
                 let gap = (c[0] - near[0]).hypot(c[1] - near[1]) - l.size[0].hypot(l.size[1]) * 0.5;
-                assert!(gap >= SCREEN_CLEAR, "{} at {}°: {gap:.0} px from the screen", l.name, l.az);
+                assert!(
+                    gap >= SCREEN_CLEAR,
+                    "{} at {}°: {gap:.0} px from the screen",
+                    l.name,
+                    l.az
+                );
             }
         }
     }

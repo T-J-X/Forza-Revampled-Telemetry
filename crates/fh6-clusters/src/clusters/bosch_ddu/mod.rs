@@ -1853,8 +1853,11 @@ impl BoschDdu {
             }
             return;
         }
+        // While the car's logo is still loading the logo zone stays empty, so no stand-in shows
+        // and then swaps; the name keeps its own zone.
+        let loading = self.logo.loading;
         // Without a logo image or brand the logo zone shows the custom name itself: never twice.
-        let zone_shows_name = self.logo.image.is_none() && self.logo.brand_name.trim().is_empty();
+        let zone_shows_name = !loading && self.logo.image.is_none() && self.logo.brand_name.trim().is_empty();
         if !zone_shows_name {
             p.scoped(|p| {
                 p.set_opacity(PRINT_SHARE);
@@ -1864,6 +1867,9 @@ impl BoschDdu {
                 };
                 fh6_kit::logo::draw(p, g.name, &self.name, &style);
             });
+        }
+        if loading {
+            return;
         }
         p.scoped(|p| {
             p.set_opacity(if self.logo.image.is_some() {
