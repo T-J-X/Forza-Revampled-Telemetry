@@ -210,6 +210,17 @@ Not read: pitch, roll, `yaw_rate` and per-tyre slip (unverified, section 6); `Wh
 
 **Plan.** Keep the curve. If the depth reads weak at the closing review, the cheap lever is a steeper curve only for the outer three rings (closer to 1/z at the near end, where it costs no rev resolution), not a different law.
 
+### 10.7 The plan for LIBRARY DONE, in order
+
+1. **Code fixes found here** (no assets needed, so first): thin the wing numerals when their pitch is under 1.2 × the numeral cap, with an 18 000 rpm test (10.5); streaks and clouds run backwards in R and freeze while `race_on` is false (10.5); a km/h and a 10th-gear fit test.
+2. **Penpot trials** (one board, two strips): the blade overlapping the pane's top by about 11 px and the puck's overlap cut to about 11 px (10.1). Keep the version that reads better in the blind glance.
+3. **Lens depth by size** (10.1): wings strongest, puck weakest; check V19 on `02` and `04`.
+4. **Library assets**: swap `cabin_env.png` for the library's 4K cabin/sky plate if it has a better match, and pull any glass-edge or caustic texture it offers into the rims; no new ComfyUI job unless the library lacks one.
+5. **Goldens twice** on lavapipe, then `dash_gates` and the workspace gates.
+6. **PC**: GPU timing and the live CPU bench on the real card (targets 0.3 ms CPU, 0.5 ms GPU).
+7. **Closing review**: V1–V26 with a new blind read, accessibility review and rust review; product page.
+8. **Merge** under rule 16 and post MERGED here and in the chain thread.
+
 ## 8. Sources
 
 Apple:
