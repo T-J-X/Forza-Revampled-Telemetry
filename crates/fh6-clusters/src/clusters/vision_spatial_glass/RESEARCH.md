@@ -221,6 +221,21 @@ Not read: pitch, roll, `yaw_rate` and per-tyre slip (unverified, section 6); `Wh
 7. **Closing review**: V1–V26 with a new blind read, accessibility review and rust review; product page.
 8. **Merge** under rule 16 and post MERGED here and in the chain thread.
 
+### 10.8 The newly decoded fields (main 60c99c9): what the dash could take
+
+The decoder now reads all 88 FH6 fields. None is confirmed until real-game check C has checked its offset and units, so each line below is a plan for after C, with today's fallback kept.
+
+| Field | Would drive | Today | Plan |
+|---|---|---|---|
+| `tyre_combined_slip` | The bead halo on the puck, the brief's original signal (the largest of the four tyres) | Body slip from velocity | Switch after C; keep body slip as the fallback when the values are not finite |
+| `orientation` (pitch, roll) | The puck's gimbal tilt and the horizon, from the car's real attitude instead of felt G | Felt G | Switch after C. The horizon then tilts with real roll on banked corners, which felt G cannot show |
+| `yaw_rate` | The wings' toe-in, directly | Derived a_lat / v | Switch after C; the derivation stays as the fallback below 3 m/s |
+| `puddle` (0/1 per wheel) | **New idea: rain on the glass.** When any wheel is in water, a few refracted droplets bead on the wings and slide outward with felt G, then dry off over 2 s | — | Board idea for Penpot after LIBRARY DONE (droplets as small glass domes, one `Piece::circle(...).dome(...)` each, so the same optics bend the tunnel through them). Pairs with [[fh6-weather-telemetry]]: there is no weather field, so the puddle flag is the only wet signal |
+| `rumble_strip` / `surface_rumble` | A 1 px shiver of the three nearest rings while a wheel is on a kerb | — | Small and data-driven (passes AGENTS rule 7); try it, drop it if the glance read gets worse |
+| `torque`, `power`, `boost`, `fuel`, lap and race data | — | — | Not taken: the cockpit stack stays rpm, gear and speed first; more numbers would muddy the pane |
+
+Note for the merge: main's matrix row for this dash still lists only `rpm`, `max_rpm`, `gear`, `speed`; this branch's row (with `race_on`, `idle_rpm`, `throttle`, `brake`, `g_lat`, `g_long`, `velocity`) replaces it, and `dash_gates` decides the final list.
+
 ## 8. Sources
 
 Apple:
