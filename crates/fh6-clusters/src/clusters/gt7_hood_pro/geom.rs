@@ -25,9 +25,6 @@ pub(super) struct Geom {
     pub bar_r: f32,
     /// The polished plinth shows this far round the light bar.
     pub plinth: f32,
-    /// The first LED of the alert zone, whose lenses are red in the plate: the head LED on the
-    /// frame the run takes the shift colour.
-    pub alert_from: usize,
     /// The thousand-rpm marks under the plinth: top and bottom.
     pub mark_y: [f32; 2],
     /// The steering dot: its height, radius and travel either side of the centre line.
@@ -119,7 +116,6 @@ pub(super) const HOOD: Geom = Geom {
     bar_size: vec2(788.0, 46.0),
     bar_r: 13.0,
     plinth: 8.0,
-    alert_from: 85,
     mark_y: [-12.0, -5.0],
     dot_y: -94.0,
     dot_r: 8.0,
@@ -515,7 +511,7 @@ mod tests {
     #[test]
     fn the_recipe_renders_the_same_band() {
         let g = &HOOD;
-        let pairs: [(&str, Vec<f32>); 29] = [
+        let pairs: [(&str, Vec<f32>); 28] = [
             ("PLATE", g.plate.to_vec()),
             ("REV_X", g.rev_x.to_vec()),
             ("TICK_Y", g.tick_y.to_vec()),
@@ -523,7 +519,6 @@ mod tests {
             ("TICK_W", vec![g.tick_w]),
             ("BAR", vec![g.bar_c.y, g.bar_size.x, g.bar_size.y, g.bar_r]),
             ("PLINTH", vec![g.plinth]),
-            ("ALERT_FROM", vec![g.alert_from as f32]),
             ("RAIL", g.rail.to_vec()),
             ("CAR_C", flat(&[g.car_c])),
             ("CAR_WH", flat(&[g.car_size])),
@@ -574,16 +569,8 @@ mod tests {
     }
 
     #[test]
-    fn the_alert_zone_starts_where_the_run_changes_colour() {
+    fn the_marks_sit_under_the_plinth_and_follow_the_limiter() {
         let g = &HOOD;
-        let t = Tokens::default();
-        // The run takes the shift colour at the warning stage of the shift point: the LED its
-        // head is on then is the first red lens.
-        let onset = t.rev_stages.stage3 * t.rev_stages.shift_pct;
-        let head = (onset * g.ticks as f32 + 0.5).floor() as usize - 1;
-        assert_eq!(g.alert_from, head, "onset at {onset} of the limiter");
-        assert!(g.alert_from < g.ticks);
-        // The marks sit between the plinth and the readout, and follow the car's limiter.
         assert!(g.mark_y[0] >= g.plinth_rect().max.y + 3.0 && g.mark_y[1] <= g.speed_top - 6.0);
         assert!((g.rev_x_at(4350.0, 8700.0)).abs() < 1e-3);
         assert_eq!(g.rev_x_at(f32::NAN, 8700.0), g.rev_x[0]);

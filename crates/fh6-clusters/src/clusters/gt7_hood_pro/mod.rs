@@ -107,6 +107,10 @@ const ALERT_BLOOM: Bloom = Bloom {
 /// makes the alert run brighter than the white run it replaces, as an LED driven harder is.
 const CORE_INSET: [f32; 2] = [1.5, 4.0];
 const CORE_LIGHT: f32 = 0.9;
+/// The alert zone: the unlit lenses from where the run takes the shift colour are tinted the
+/// warning red at this share of its light (a static part, under the tokens' cap). The zone
+/// follows the driver's shift point, so it is drawn live, not baked into the plate.
+const ZONE_LIGHT: f32 = 0.22;
 /// The thousand-rpm marks: their width, and the limiter range they are drawn for.
 const MARK_W: f32 = 2.0;
 const MARK_RPM: [f32; 2] = [1000.0, 20_000.0];
@@ -218,6 +222,9 @@ struct RevBar {
     /// Seconds since the shift point (wrapped at 1 s, a whole number of strobe and breath
     /// periods); `None` below it.
     since: Option<f32>,
+    /// The first LED of the alert zone (the LED the head is on when the run takes the shift
+    /// colour); `None` while the limiter is unknown.
+    zone: Option<usize>,
 }
 
 impl RevBar {
@@ -251,6 +258,7 @@ impl RevBar {
         self.over = known && shift >= if self.over { 1.0 - h } else { 1.0 };
         let stage = palette.stages[2];
         self.alert = known && (self.over || shift >= if self.alert { stage - h } else { stage });
+        self.zone = known.then(|| alert_zone(stage, sig.shift_rpm, sig.max_rpm, ticks));
         self.since = match (self.over, self.since) {
             (false, _) => None,
             (true, None) => Some(0.0),
@@ -566,6 +574,7 @@ impl Cluster for Gt7HoodPro {
             if !self.sprites.draw_plate(p, g, w) {
                 hardware::fallback_plate(p, g, &pal);
             }
+            self.draw_zone(p, g, &pal);
             self.draw_rev(p, g, &pal);
             self.draw_marks(p, g, &pal);
             self.draw_steer(p, g, &pal);
@@ -633,6 +642,16 @@ impl Gt7HoodPro {
                 }
             }
         });
+    }
+
+    /// The alert zone's unlit lenses, tinted red, so the bar shows where the run will change
+    /// colour before it gets there.
+    fn draw_zone(&self, p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
+        let Some(from) = self.rev.zone else { return };
+        let red = pal.roles.warning.intensity(ZONE_LIGHT);
+        for i in from.max(self.rev.count(g.ticks))..g.ticks {
+            p.fill(&Shape::round_rect(g.tick_rect(i), g.tick_r), red);
+        }
     }
 
     /// The thousand-rpm marks under the bar, placed by the car's limiter: they make the bar a
@@ -967,6 +986,18 @@ fn finite(v: f32) -> f32 {
     }
 }
 
+/// The first LED of the alert zone: the LED the run's head is on when the revs reach the alert
+/// `stage` of the shift point.
+fn alert_zone(stage: f32, shift_rpm: f32, max_rpm: f32, ticks: usize) -> usize {
+    let onset = stage * finite(shift_rpm) / finite(max_rpm).max(1.0);
+    let lit = (onset * ticks as f32 + 0.5).floor();
+    if lit.is_finite() && lit >= 1.0 {
+        (lit as usize - 1).min(ticks)
+    } else {
+        0
+    }
+}
+
 /// The steering dot's x for `steer` (−1 full left .. 1 full right).
 fn dot_x(g: &Geom, steer: f32) -> f32 {
     finite(steer).clamp(-1.0, 1.0) * g.dot_travel
@@ -1275,6 +1306,29 @@ mod tests {
         dark.update(&zero, &pal, 95, 1.0 / 60.0, true);
         dark.update(&zero, &pal, 95, 1.0 / 60.0, false);
         assert!(!dark.over && !dark.alert && dark.count(95) == 0 && dark.since.is_none());
+    }
+
+    #[test]
+    fn the_alert_zone_follows_the_shift_point() {
+        let pal = palette();
+        let t = Tokens::default();
+        // The tokens' shift point (0.97 of the limiter): the zone starts at LED 85.
+        let shift = 8700.0 * t.rev_stages.shift_pct;
+        assert_eq!(alert_zone(pal.stages[2], shift, 8700.0, 95), 85);
+        // A driver who shifts earlier moves it left; an unknown limiter has none.
+        assert!(alert_zone(pal.stages[2], 7800.0, 8700.0, 95) < 85);
+        assert_eq!(alert_zone(pal.stages[2], f32::NAN, 8700.0, 95), 0);
+        let mut rev = RevBar::default();
+        rev.update(&signals(3000.0), &pal, 95, 1.0 / 60.0, true);
+        assert!(rev.zone.is_some());
+        let zero = Signals {
+            max_rpm: 1.0,
+            ..Signals::default()
+        };
+        rev.update(&zero, &pal, 95, 1.0 / 60.0, false);
+        assert_eq!(rev.zone, None);
+        // The zone is a static part: under the cap.
+        assert!(pal.roles.warning.intensity(ZONE_LIGHT).luminance() < STATIC_LUMA);
     }
 
     #[test]

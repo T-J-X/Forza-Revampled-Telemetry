@@ -84,9 +84,6 @@ const BAR_H: f32 = 10.0;
 const BAR_BEVEL: f32 = 9.0;
 const LENS_H: f32 = 2.0;
 const LENS_BEVEL: f32 = 2.0;
-/// The first LED of the alert zone: from it the lenses are smoked red, so the bar shows where
-/// the run takes the shift colour even unlit (the cluster's `Geom::alert_from`).
-const ALERT_FROM: usize = 85;
 /// The steering rail the dot rides on: half length, centre y, height (the cluster's
 /// `Geom::rail`), with a notch at the centre and a stop at each end.
 const RAIL: [f32; 3] = [350.0, -94.0, 6.0];
@@ -278,15 +275,6 @@ fn band_rig(rest: &Rig) -> Rig {
     r.power(RIG_POWER)
 }
 
-/// An unlit LED lens of the alert zone: the smoked lens with a deep red tint.
-fn alert_lens() -> Mat {
-    Mat::new("dielectric", "gt_alert_lens")
-        .color([0.05, 0.004, 0.006])
-        .rough(0.05)
-        .set("coat", 1.0)
-        .set("coat_rough", 0.0)
-}
-
 /// The car seen from above, inside the chip's `half` size round `c` (front up): a narrower
 /// nose, mirrors, and hips over the rear wheels.
 fn car_outline(c: [f32; 2], half: [f32; 2], segs: usize) -> Outline {
@@ -422,7 +410,7 @@ fn plate(carbon: &Path) -> Scene {
     }
 
     // The rev bar: polished plinth, black-glass bar pillowed to a flat centre, 95 domed smoked
-    // lenses (red from the alert zone).
+    // lenses.
     let bar_c = [0.0, BAR.0];
     s.add(slab(
         "rev_plinth",
@@ -448,7 +436,6 @@ fn plate(carbon: &Path) -> Scene {
     let tick_cy = (TICK_Y[0] + TICK_Y[1]) * 0.5;
     for i in 0..TICKS {
         let cx = REV_X[0] + pitch * (i as f32 + 0.5);
-        let lens = if i >= ALERT_FROM { alert_lens() } else { smoked_lens() };
         s.add(slab(
             &format!("lens_{i:02}"),
             [cx, tick_cy],
@@ -457,7 +444,7 @@ fn plate(carbon: &Path) -> Scene {
             BAR_H,
             LENS_H,
             LENS_BEVEL,
-            lens,
+            smoked_lens(),
         ));
     }
 
@@ -807,7 +794,6 @@ mod tests {
         }
         let lenses = s.parts.iter().filter(|p| p.name.starts_with("lens_")).count();
         assert_eq!(lenses, TICKS);
-        const { assert!(ALERT_FROM < TICKS) };
         // The pillowed bar keeps a flat centre for the LED field.
         assert!(BAR.2 - 2.0 * BAR_BEVEL >= TICK_Y[1] - TICK_Y[0]);
         const { assert!(BAR_BEVEL <= BAR_H && LENS_BEVEL <= LENS_H) };

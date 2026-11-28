@@ -130,10 +130,8 @@ pub(super) fn fallback_plate(p: &mut Painter<'_>, g: &Geom, pal: &Palette) {
     p.stroke(&Shape::round_rect(plinth, g.bar_r + g.plinth), rim, rim_px);
     p.fill(&Shape::round_rect(g.bar_rect(), g.bar_r), face);
     let lens = hw(pal, FALLBACK_LENS);
-    let alert = pal.roles.warning.intensity(FALLBACK_LENS * 2.0).with_alpha(1.0);
     for i in 0..g.ticks {
-        let c = if i >= g.alert_from { alert } else { lens };
-        p.fill(&Shape::round_rect(g.tick_rect(i), g.tick_r), c);
+        p.fill(&Shape::round_rect(g.tick_rect(i), g.tick_r), lens);
     }
 
     // The steering rail the dot rides on.
