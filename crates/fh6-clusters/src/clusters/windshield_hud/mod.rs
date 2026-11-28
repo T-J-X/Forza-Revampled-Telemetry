@@ -1,7 +1,8 @@
-//! Windshield HUD (`ClusterTheme::WindshieldHud`), catalog row 16: ADAS & HUD, raised HUD, build #18.
+//! Windshield HUD (`ClusterTheme::WindshieldHud`), catalog row 16.
+//! Apple Vision category, ADAS & HUD family, raised HUD.
 //!
 //! **Scaffold.** Draws the shared Phase 7 under-construction frame (`common::scaffold`) until the
-//! cluster chat replaces this module with the cluster described in `spec.md`
+//! dash thread replaces this module with the dash described in `spec.md`
 //! (`program/phases/07-cluster-factory/CLUSTER_PROMPT.md`).
 use crate::common::scaffold::Scaffold;
 use fh6_core::ClusterTheme;

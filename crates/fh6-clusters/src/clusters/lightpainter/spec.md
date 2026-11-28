@@ -1,9 +1,11 @@
 # Lightpainter (`Lightpainter`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 41 (Lightpainter — build #40 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 41) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** new · **View:** cockpit+hood
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** new · **View:** cockpit+hood · **Build order:** 40
+
+**Category note.** The light trail is a volume floating in space, seen from a fixed camera; no glass panes.
 
 A long-exposure photograph whose shutter never closes. A fixed high three-quarter camera (pitch 38°) looks down on black, and the last 2 km of your path glows as a 3D light streak with true elevation: width ∝ speed, brightness ∝ throttle, and a warning taillight core wherever you braked. It fades by distance driven, never by time. The car is the streak's bright head. Z1: a 40 px shutter strip of nine 64 px blade pods, filling outside-in. Below it sits the rank-3 exposure-meter tach: 1/3-stop ticks from −3 to +3 EV, the shift rpm at 0 EV, the redline as overexposure, and a glowing cursor. Gear (Saira Condensed 800, cap 170) and speed (Saira Light, cap 112) form a centred couplet over the image, inside 1 px viewfinder corner marks (rank 5).
 

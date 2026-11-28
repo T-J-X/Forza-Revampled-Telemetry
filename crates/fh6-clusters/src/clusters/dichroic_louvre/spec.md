@@ -1,9 +1,9 @@
 # Dichroic Louvre (`DichroicLouvre`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 32 (DichroicLouvre — build #37 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 32) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Liquid Glass · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Liquid Glass (Design Council 3A), spec [docs/design/families/liquid-glass.md](../../../../../docs/design/families/liquid-glass.md), hero frames [docs/design/heroes/liquid-glass/](../../../../../docs/design/heroes/liquid-glass/)
-- **Kind:** new · **View:** cockpit · **Build order:** 37
 
 A kinetic arch of 28 vertical glass fins (18×96 px) on a 200° arc (semi-axes 560×200) around the gear. Each fin turns on its own axis. Edge-on it is a single 1 px rim line, so OLED pixels stay off; face-on it is a lit dichroic pane in primary, shading to accent only in a grazing fresnel sheen. Rank 3: fins turn face-on in order as rpm passes each fin's threshold. Rank 1: the gear (Saira Condensed 700, cap 200) on a dimming pad at the arch's centre, plus a 760×40 strip of 15 pods above the apex. Rank 2: speed left of the gear, Saira 300 cap 104, ghost 8s. Rank 4: four tyre fins in a car footprint under the gear and speed. Titillium Web labels.
 

@@ -1,9 +1,11 @@
 # Bugatti Tourbillon (`BugattiTourbillon`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 9 (BugattiTourbillon — build #14 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 9) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Hypercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Classic Analog (Design Council 3B), spec [docs/design/families/classic-analog.md](../../../../../docs/design/families/classic-analog.md), hero frames [docs/design/heroes/classic-analog/](../../../../../docs/design/heroes/classic-analog/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 14
+
+**Category note.** No Bugatti is in the game's car list, so no car selects this dash by itself: the driver picks it in the OSD, and its logo zone shows the driven car's logo.
 
 One Ø520 skeleton dial on X = 1920, with no satellites. The movement spills past the dial as openwork bridges reaching 300 px each side on the −4 px layer. They are linearly brushed at ≤20% luminance, with anglage bands that catch the G-driven light. Rank 1: a Ø210 tourbillon cage turns at the dial centre around a gear numeral that stays upright and still (Saira Condensed 800, cap 170). Eleven clear jewels set in the top bridge form the shift strip, 30 × 740 px. Rank 2: tabular Saira Condensed 600 speed, cap 90, in an aperture under the cage. Rank 3: there is no centre hand. A lume-tipped peripheral carriage rides a rail round the dial edge over Barlow Semi Condensed numerals and reaches 12 at the shift rpm. Rank 4: the road drives the movement, so wheelspin visibly overspeeds the cage against a ground-speed index. Rank 5: jewel bearings tinted with the palette accent, and the crest at 6.
 

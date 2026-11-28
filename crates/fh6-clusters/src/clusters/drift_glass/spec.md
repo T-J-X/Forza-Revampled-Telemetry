@@ -1,9 +1,11 @@
 # Drift Glass (`DriftGlass`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 5 (DriftGlass — build #10 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 5) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Motorsport · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Modern Digital 2027 (Design Council 3B), spec [docs/design/families/modern-digital.md](../../../../../docs/design/families/modern-digital.md), hero frames [docs/design/heroes/modern-digital/](../../../../../docs/design/heroes/modern-digital/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 10
+
+**Category note.** A drift scoring tool. The helmet visor is its housing and stays, built by absorption on the kit's glass and not by a flat alpha. From the Motorsport category it takes exact data and shift lights that behave like the real hardware; it keeps its own family's materials.
 
 'Smoked visor': one 1240×300 Tinted glass visor (alpha 56–64, glassTint) with a helmet-curved top and tapered flanks; its lower 40 px feather to zero. Two 1 px creases split it into three facets, so the G-driven light swaps brightness between them in corners. It has a polished 1 px top rim and a 2 px edge-glow lip. Rank 1: outsideIn15 pills (24 px) above the visor, and a Saira Condensed 800 gear, cap 200, in a faceted hexagonal smoked lozenge at X 1920. Rank 2: Saira Condensed 600 speed, cap 112, 300 px right. Rank 3: a 12 px light pipe inside the visor's top edge, primary→white meniscus. Rank 4: a 180° drift fan under the gear. Shy Titillium labels.
 

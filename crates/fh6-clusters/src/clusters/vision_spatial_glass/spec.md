@@ -1,9 +1,11 @@
 # Vision Spatial Glass (`VisionSpatialGlass`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 2 (VisionSpatialGlass — build #8 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 2) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Liquid Glass (Design Council 3A), spec [docs/design/families/liquid-glass.md](../../../../../docs/design/families/liquid-glass.md), hero frames [docs/design/heroes/liquid-glass/](../../../../../docs/design/heroes/liquid-glass/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 8
+
+**Category note.** It leads the Apple Vision category. Its panes are the kit's clear optical glass: where this brief gives a pane a tint, `docs/specs/optics.md` wins.
 
 A frameless spatial triptych at four depths. Front: a 480×330 squircle pane (tint 36) holding the gear (Saira Condensed 700, cap 180) above the speed (Saira 200, cap 96, ghost 8s). Behind it, two 420×200 wing panes are toed in 14° by a true homography, so their far edges are 12% shorter. Rank 3: a 10 px light ribbon crosses both wings left to right and passes behind the front pane, where it is visibly refracted (14 px offset, 1.5 px chromatic split at the rim). Rank 1: a 900×38 glass blade floats frontmost above the stack, with 15 pods filling outside-in. Rank 4: a hovering attitude puck under the front pane. The wings carry only Titillium Web nano labels. Every rim takes the one G-driven light.
 

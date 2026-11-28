@@ -1,10 +1,11 @@
 //! The Phase 7 scaffold every catalog cluster starts from: a quiet "under construction" frame
-//! drawn with the kit, so all 48 themes are selectable, render in `preview-export` and run live
+//! drawn with the kit, so all 72 dashes are selectable, render in `preview-export` and run live
 //! before their cluster chat builds them.
 //!
 //! It is still a working dash (live gear, tabular speed, rev bar and outside-in shift lights from
 //! the telemetry), never an opaque fill: corner brackets mark the view envelope, a hairline rim
-//! traces it, and the catalog name, family and build slot are set in the label inks.
+//! traces it, and the catalog name, family, catalog row and category are set in the label inks.
+//! It names no build number: the build order lives in CATALOG.md and changes there.
 use crate::catalog::{self, CatalogEntry, Kind};
 use crate::common::{GearGlyph, ShiftLights, SpeedReadout};
 use fh6_core::ClusterTheme;
@@ -52,15 +53,15 @@ impl Scaffold {
                     if e.pattern_setter {
                         "PATTERN-SETTER"
                     } else if e.kind == Kind::New {
-                        "NEW CONCEPT"
+                        "NEW DASH"
                     } else {
                         "REBUILD"
                     }
                 ),
                 format!(
-                    "BUILD #{}  ·  ROW {}  ·  {}",
-                    e.build_order,
+                    "ROW {}  ·  {}  ·  {}",
                     e.row,
+                    e.category.label().to_uppercase(),
                     e.views.label().to_uppercase()
                 ),
                 e.family.key(),
@@ -153,7 +154,7 @@ impl Scaffold {
             &pal,
         );
 
-        // 3. Name, family and build slot.
+        // 3. Name, family, catalog row and category.
         let title = TextStyle::new(self.fonts.wide, 26.0)
             .paint(roles.ink_muted)
             .tracking(0.28)

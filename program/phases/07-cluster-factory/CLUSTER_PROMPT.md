@@ -1,18 +1,17 @@
 # Cluster thread (CLUSTER PROMPT)
 
-The coordinator starts you with: *"You are the cluster thread for `<Name>` (catalog row `<n>`). Read the approved plan, then `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."* You own exactly one cluster:
+The coordinator starts you with: *"You are the dash thread for `<Name>` (build #`<n>`, catalog row `<r>`). Read the approved plan, then `ONBOARDING.md`, then follow `program/phases/07-cluster-factory/CLUSTER_PROMPT.md`."* You own exactly one cluster:
 - its module directory `crates/fh6-clusters/src/clusters/<snake_name>/` (`mod.rs`, private submodules, `spec.md`, `README.md`, `RESEARCH.md`, `HANDOVER.md`)
 - its goldens `tests/golden/images/<Name>_*.png` and `<Name>_hood_*.png`
 - its assets `assets/clusters/<snake_name>/` (with their own `ASSETS.md`) and its recipe `tools/asset-forge/src/recipes/<snake_name>.rs`
 - its design board: the Penpot page `07 · <Name>` (see "Design boards" in `CATALOG.md`), plus its product page `mockups/<Name>/index.html`
 - its masters folder `<snake_name>\` inside the Google Drive folder `FH6 WheelDash v2 - 4K Masters`
-- its own row in `CATALOG.md` (the status and design-board cells only)
+- never `CATALOG.md`: only the dash chain writes its table ("The auto-chain" in `CATALOG.md`). Your Penpot page and board IDs go in your own `README.md` and `HANDOVER.md`
 - its own row in `docs/TELEMETRY_USAGE_MATRIX.md`, and its entries in `DASH_SCENARIOS` in `crates/fh6-clusters/tests/dash_gates.rs` when an input it reads needs one (a lamp with two conditions)
 
 **Edit nothing outside them.** The catalog table (`catalog.rs`), the registry, `ClusterTheme`, `common/`, the golden harness, the kit and the tools are shared. If a shared helper or the kit needs a change, write it in your handover so the coordinator can schedule it.
 
-Five shared places are yours to touch in a small way, each noted in your handover:
-- the three lines that register your recipe in asset-forge (`tools/asset-forge/src/main.rs`, `src/recipes/mod.rs` and `src/sets/mod.rs`)
+Four shared places are yours to touch in a small way, each noted in your handover:
 - a missing part or material added to the hero library (`tools/asset-forge/src/hero/`)
 - an effect added to `docs/specs/optics.md`, with its source
 - your own crops in `docs/handover-shots/cluster-<snake_name>-*.png`
@@ -21,7 +20,7 @@ Five shared places are yours to touch in a small way, each noted in your handove
 `asset-forge build` also rewrites the shared ledger files (`assets/ASSETS.md`, `assets/assets.json`, `assets/forge.lock.json`, `assets/contact-sheet.html`) and `assets/_thumbs/`. Never commit those from a dash thread: the coordinator regenerates them on `main` after a merge.
 
 ## How every thread runs (TJX, 2026-11-27)
-- **Open with an introduction** to TJX in your thread: the task, the rule files that apply, and what done looks like.
+- **Open with an introduction** to TJX in your thread: its first line is `DASH <Name>`, then the task, the rule files that apply, and what done looks like. Open a draft pull request with your first commit, its title starting with your key.
 - **No scores, no critic loops.** Never score your own work, never ask a reviewer for a score, and never iterate "until the critic passes". Never rewrite a prompt to chase a score. The review is the fixed checklist at the end of this file, walked by you with the review skills and agents (steps 5 and 10). Renders, boards and the motion sequence are reviewed with the `fh6-visual-review` skill and its `visual-review` tool, which keep a self-review honest.
 - **TJX is hands-off (2026-11-27, AGENTS.md rule 12).** Your self-review stands in for TJX's direction check and sign-off: post its results and renders in your thread and carry on without waiting for an answer. Where TJX does answer, TJX's own words win and every change TJX lists is done. Only TJX's own message counts as TJX's; no other session answers for TJX.
 - **Close only after** the closing review has every line answered yes.
@@ -31,7 +30,7 @@ Five shared places are yours to touch in a small way, each noted in your handove
 ## Read first
 - The approved plan (the coordinator gives you the link).
 - Root `AGENTS.md` / `SKILLS.md`, this folder's `AGENTS.md` / `SKILLS.md`.
-- Your catalog row, your `spec.md` and `README.md`, your family spec in `docs/design/families/`, the matching hero frames in `docs/design/heroes/`, `docs/kit/README.md` (sections 12 and 13 cover the shared components and the first pilot's lessons) and `assets/ASSETS.md`.
+- Your brief in `CATALOG.md` (where it and `spec.md` differ, the catalog wins) and its "Rules for every dash": your Target (`recreation`, `inspired` or `concept`), the order of authority for the look, your category note, and your row in "Real geometry and maths" if you have one. Then your `spec.md` and `README.md`, your family spec in `docs/design/families/`, the matching hero frames in `docs/design/heroes/`, `docs/kit/README.md` (sections 12 and 13 cover the shared components and the first pilot's lessons) and `assets/ASSETS.md`.
 - `docs/specs/optics.md` before any glass, reflective or spectral effect. The pilot thread writes it, and it reaches `main` with the pilot's merge; if it is missing from your checkout, stop and tell the coordinator. A dash that needs an effect that is not in that document adds it there, with its source, before using it.
 - The Liquid Glass pilot was rebuilt to these rules on 2026-11-27 and is the reference dash: read `crates/fh6-clusters/src/clusters/liquid_glass/` (`mod.rs`, `README.md`, `RESEARCH.md`, `HANDOVER.md`) for the code conventions (file layout, the `Geom` zone table, tests), the order of work and a handover written to step 9. Its look belongs to the Liquid Glass family; other families take only its structure. The other merged clusters in `CATALOG.md` were built before the 2026-11-27 rules: don't copy their order of work, their critique rounds or their scored handovers. Your handover follows `program/HANDOVER_TEMPLATE.md` and step 9.
 - **Your `spec.md` is a starting point.** It says the catalog is the source of truth; for the look, this file wins. The real display leads (step 1). Where the brief or the family spec holds a finish to a low luminance, or asks for a change to shared code, follow this file and note the difference in your handover.
@@ -39,7 +38,8 @@ Five shared places are yours to touch in a small way, each noted in your handove
 - **Keep a "before".** Before you change anything, render the dash as it is on `main` (`cargo run --release -p preview-export -- --cluster <Name>`, a GPU job) and keep its `02_mid_cruise` full-frame render for the before and after pair in your handover.
 
 ## The bar
-- **It recreates a real dash.** These are modern sim dashes of specific cars, supercars and hypercars included, not generic designs. An owner should recognise it.
+- **It meets its Target.** A `recreation` rebuilds its real display as closely as the sources allow, and an owner recognises it. An `inspired` dash keeps the named parts of its car's display and lists every departure. A `concept` needs no real car (TJX, 2026-11-28: "it doesnt need a real car target take inspiration from my catagories"): it takes its idea from its brief and its category, and names one real benchmark. **Every dash searches the web first**, whatever its Target, and every AMG MBUX dash is "as close as possible" (TJX). The house rules (ranks, flash, OLED black, palette roles, the swappable font) outrank the real display, and each departure is listed in `RESEARCH.md`.
+- **Real maths.** A dash with a row in "Real geometry and maths" draws that model, driven by telemetry, and its unit tests assert that row's values without a GPU.
 - **It is the cluster.** It must look like it shipped in a 2027 car or a film's hero prop, on a 4K OLED, inside a real cockpit.
 - **Instant feel.** Telemetry drives everything live: RPM, speed, gear, throttle and brake, boost, G, slip, yaw and steer as the design needs. Springs carry the motion: no jitter, but no lag either.
 - **Signature moments.** The rev limiter / shift strobe and the gear change each need a specific, beautiful behaviour.
@@ -54,6 +54,7 @@ Five shared places are yours to touch in a small way, each noted in your handove
 
 ## Shared machine rules
 - **GPU jobs take turns on two lanes, across all threads.** The local 8 GB card runs one job at a time; the rented 24 GB pod runs two at once. Section 5 of root `SKILLS.md` is the rule: it lists the GPU jobs (the golden tests and every other `cargo test` that renders are among them) and gives the one command that takes a lane's lock and the one that releases it. Work on steps that need no GPU while you wait: research, Penpot, Rust code, review.
+- **Never sit waiting on one GPU** (TJX, 2026-11-28: "if theres any gpu space make others do the same"). Use whichever lane has room at that moment: the PC's card when its lock is free, the cloud pod's first or second slot (`gpu-cloud.lock`, `gpu-cloud-2.lock`) while the $50 budget lasts, or, for review renders only, a software render (lavapipe) in your own cloud container, which needs no lock. GPU timing counts only from the PC's card: queue that run there and carry on with the rest of the work in parallel instead of waiting for it. A render made on lavapipe or the pod says so wherever it is posted or cited.
 - **ComfyUI and Blender run on the cloud pod.** Put `--lane cloud` before every asset-forge command (TJX, 2026-11-27: cloud first); the local card keeps `preview-export`, the goldens and the live bench. Run `asset-forge cloud down` when your batch is done (it leaves the pod up while another run uses it), and put what your thread spent in your handover (`asset-forge cloud spend`). The lane has a budget of $50 of GPU time. The guide is `docs/cloud-gpu.md`.
 - **One Penpot tab serves every thread.** In each `execute_code` call: check the file ID, open your own page, check the page name, then write. Never touch another page and never call `closePlugin`.
 - **Threads can share one checkout.** Commit with explicit paths, never `git add -A`, and never switch the branch under another thread. If your thread shares the main checkout, ask the coordinator which branch or worktree to commit on before your first commit; a dash is never committed straight to `main`. Open a draft pull request with your branch's first push (AGENTS.md rule 17).
@@ -80,7 +81,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
 2. **Penpot: design on your board.**
    - In Penpot (the `penpot` MCP, see `SKILLS.md`): create your page `07 · <Name>` in the Penpot master file "FH6 WheelDash v2 — Design System" (file ID `e7ca6b81-c0d3-8029-8008-fd87488aab8f`, see `docs/design/PENPOT.md`) if it does not exist yet. Every write first checks `penpot.currentFile.id` equals that ID; if it doesn't, write nothing and ask TJX to reconnect the master file's tab. In one `execute_code` call, look for a page with exactly that name, create it only if it is missing, `openPage` it, check `penpot.currentPage.name`, then draw. Keep your shapes by stored ID.
    - Build it with a 3840×2160 board and the binnacle guide: cockpit anchor (1920, 1835), envelope 1440×560 from (1200, 1515); hood anchor (1920, 1760), envelope 1760×400 from (1040, 1540). Follow the family template and the tokens (Penpot tokens mirror `data/design_tokens.json`, which stays the source of truth).
-   - Make the 4 states per view at 4K, as separate pieces and not one slab, plus the motion notes. Write the page and board IDs into your row of `CATALOG.md`.
+   - Make the 4 states per view at 4K, as separate pieces and not one slab, plus the motion notes. Write the page and board IDs into your `README.md` and `HANDOVER.md`.
    - Also write the layout as a zone table at the top of your `mod.rs` (zones, sizes and positions in local 4K px, as the pilot's `Geom`).
    - **Detached elements, no forced backgrounds** (TJX, 2026-11-23). A cluster doesn't need a backing panel, or a single silhouette contorted to fill the binnacle gap. Speed, gear, rev, data and the other elements may float as separate pieces on true black, each sized and placed for glanceability. Don't invent odd dash outlines to fit the space. Use a housing or panel only where the real display has one (a real car's screen, motorsport hardware) and it reads as physical hardware.
    - Check the board against section C of the closing review before you move on.
@@ -116,7 +117,7 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
     - `design:accessibility-review` on contrast, the strobe and reduced-flash mode, colour-only cues and motion, as `fh6-visual-review` step 7 scopes it;
     - `rust-review` (with `rust-skills` as the rule reference) on your module and your recipe.
 
-    Write each finding into the handover with what you did about it. Fix every no and every finding you accept, then walk the whole list again. Commit as TJX with no co-author trailer, on your thread's branch, with your `CATALOG.md` row set to ✅ (both tables). Report the finished job to the coordinator: once its checks pass, the coordinator merges it into `main` and pushes (AGENTS.md rule 16). Then post the product page and the completed checklist in your thread. Don't wait for a sign-off; if TJX answers later, apply what TJX asks and add it to the handover.
+    Write each finding into the handover with what you did about it. Fix every no and every finding you accept, then walk the whole list again. Commit as TJX with no co-author trailer, on your thread's branch. Merge `origin/main` into it (keep main's `CATALOG.md` exactly as it is), run the tests again, and post `READY FOR MERGE <Name> · PR #<n> · head <sha>` in your thread for the coordinator: once its checks pass, the coordinator merges it into `main` and pushes (AGENTS.md rule 16), and whoever merges posts `MERGED <Name> · <sha>` in your thread and in the chain thread. Never name or start the next dash: the dash chain does that. Then post the product page and the completed checklist in your thread. Don't wait for a sign-off; if TJX answers later, apply what TJX asks and add it to the handover.
 
 ## Asset rules (TJX)
 - **Bespoke assets are mandatory.** Every cluster ships **at least one bespoke ComfyUI asset and at least one bespoke Blender asset**, both visibly used in the final cluster, not token. Procedural-only clusters are not accepted. The bar is the best, not acceptable.
@@ -130,14 +131,14 @@ Any later Penpot change loops back through ComfyUI and Blender. Blender is the l
   - Adaptive tint, depending on what's behind the glass.
   - Clear, not murky: almost no tint or frost, no texture painted inside the glass, thin crisp specular rims. It reads as glass because of how it bends and catches light, not because it is coloured. Separate floating pieces (capsules, pills, discs) that merge and split in motion, never one big slab with blobs stuck on (TJX rejected the first attempt for exactly that).
   ComfyUI and Blender only add to this (environment and caustic maps, normal detail); they never replace the optics. If the kit lacks an optic you need, stop and report it in your handover, because the coordinator schedules kit work.
-- **Race Dash and motorsport family: pure professional.** Benchmark real motorsport displays: MoTeC C1xx, Bosch DDU 10/11, AiM MXS, Cosworth, F1 and LMP steering-wheel displays, and the Gran Turismo 7 in-car multi-function meter (TJX: "an insane example"; local reference `mockups/references/gt7_multifunction_meter.webp`, never committed). The GT7 meter: detached floating round gauges and a central speed/gear pod with a dense tick rev bar, a D-pad-paged centre panel, thin precise white lines and one accent colour.
+- **Race Dash family: pure professional.** (A Motorsport-category dash of another family takes the exact data, strict grid and real shift-light behaviour, and keeps its own family's materials.) Benchmark real motorsport displays: MoTeC C1xx, Bosch DDU 10/11, AiM MXS, Cosworth, F1 and LMP steering-wheel displays, and the Gran Turismo 7 in-car multi-function meter (TJX: "an insane example"; local reference `mockups/references/gt7_multifunction_meter.webp`, never committed). The GT7 meter: detached floating round gauges and a central speed/gear pod with a dense tick rev bar, a D-pad-paged centre panel, thin precise white lines and one accent colour.
   - Black, high contrast, exact data, strict grid alignment and tabular figures.
   - The shift lights and limiter behave like the real hardware.
   - No ornamental glow or sci-fi effects.
   - ComfyUI and Blender serve material realism only: anti-glare LCD and matrix texture, the CNC housing, LED lens caps, carbon.
 - **Designs with 3D elements** (cars, mechanisms, gyros and tourbillons, spaceframes, origami, prisms, liquid volumes, anything that turns or has parallax) get real 3D from Blender. That means glTF meshes drawn by the kit's mesh pass, or pre-rendered sprite and flipbook sequences with matching normal maps, lit to match the cluster. A flat texture standing in for a 3D object does not pass.
-- "Real abstract fluidity" means baked Blender liquid flipbooks, flow and normal maps **plus** the kit's real-time GPU fluid driven by telemetry. Combine them.
-- Use the Phase 6 recipes and workflows, or add a recipe module for your cluster under `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too.
+- "Real abstract fluidity" means a named physical or mathematical model driven by telemetry (its row in "Real geometry and maths"), dressed by baked Blender and ComfyUI flipbooks, flow and normal maps that never draw the figure themselves.
+- Use the Phase 6 recipes and workflows, or fill your recipe module `tools/asset-forge/src/recipes/<snake_name>.rs`. That is your file too. The code re-cut (2026-11-28) registered an empty one for every dash in all three asset-forge lists (`tools/asset-forge/src/main.rs`, `src/recipes/mod.rs` and `src/sets/mod.rs`), so you never edit those lists: replace the body of its `build` and run `asset-forge build --set <snake_name>`.
 - **Where files go.** Compressed runtime assets (KTX2 or optimised PNG) go to `assets/clusters/<snake_name>/`, each with a row in `assets/clusters/<snake_name>/ASSETS.md` (recipe, seed, licence and the master's file name), written by your recipe. The uncompressed 4K masters go to your Drive folder.
 - Every textured look keeps a procedural fallback: `setup.assets` may be `None`.
 
@@ -197,7 +198,7 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 
 **D. Workflow and assets**
 30. The order was followed: `RESEARCH.md`, then the Penpot page, then ComfyUI, then Blender; every later Penpot change was followed by a ComfyUI and Blender pass. [AGENTS 14]
-31. The Penpot page `07 · <Name>` has 4 states per view, and its page and board IDs are in your `CATALOG.md` row and in the handover. [step 2]
+31. The Penpot page `07 · <Name>` has 4 states per view, and its page and board IDs are in your `README.md` and in the handover. [step 2]
 32. At least one bespoke ComfyUI asset and one bespoke Blender asset are visibly used, each with a row in your `ASSETS.md` (recipe, seed, licence and the master's file name). [Asset rules, TJX 2026-11-23]
 33. All assets are 4K as "The bar" defines it; the compressed runtime files are in git, and the masters are in the Drive folder under `<snake_name>\` and listed in the handover. [AGENTS 14]
 34. The lock of its lane was held for every GPU job that section 5 of `SKILLS.md` lists, and released after it. ComfyUI and Blender ran on the cloud pod through `asset-forge` (or the handover says why the pod could not start), `cloud down` was run when the batch ended, and the thread's cloud spend is in the handover. [AGENTS 15]
@@ -210,7 +211,7 @@ Answer every line **yes** or **no**, with the evidence (a command's real output,
 ## Exit criteria
 - The introduction was posted, and the thread is not archived.
 - `RESEARCH.md` is written, with sources.
-- The design board is the Penpot page `07 · <Name>` with 4 states per view; its page and board IDs are in your `CATALOG.md` row and in the handover. The HTML page alone is not enough.
+- The design board is the Penpot page `07 · <Name>` with 4 states per view; its page and board IDs are in your `README.md` and in the handover. The HTML page alone is not enough.
 - At least one bespoke ComfyUI asset and one bespoke Blender asset are in `assets/clusters/<snake_name>/`, used in the cluster, each with an `ASSETS.md` row (recipe, seed, licence and the master's file name), and the before and after pair is in the handover. The 4K masters are in the Drive folder.
 - The module is complete, with no TODOs, and goldens pass.
 - 4K renders plus the 60-frame sequence and the product page are in `mockups/<Name>/`.

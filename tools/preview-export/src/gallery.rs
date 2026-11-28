@@ -26,10 +26,31 @@ pub struct Badges {
     pub red_share: f32,
     /// Every pixel outside the cluster is fully transparent (OLED true black).
     pub black_outside: bool,
+    /// The shares above leave out the dash's rank-4 figure (a Psychedelic or Abstract dash that
+    /// names its figure zone: CATALOG.md, colour law point 4).
+    pub outside_figure: bool,
+}
+
+/// A pixel rect `[x0, y0, x1, y1)` of the render.
+pub type PixelRect = [u32; 4];
+
+/// The pixel rect of a local-px zone under `layout`, clamped to a `w` x `h` render.
+#[must_use]
+pub fn zone_pixels(layout: &fh6_kit::Layout, zone: fh6_kit::Rect, w: u32, h: u32) -> PixelRect {
+    let a = layout.to_target(zone.min);
+    let b = layout.to_target(zone.max);
+    let clamp = |v: f32, hi: u32| (v.max(0.0) as u32).min(hi);
+    [
+        clamp(a.x.min(b.x).floor(), w),
+        clamp(a.y.min(b.y).floor(), h),
+        clamp(a.x.max(b.x).ceil(), w),
+        clamp(a.y.max(b.y).ceil(), h),
+    ]
 }
 
 impl Badges {
-    /// Measures `img` (premultiplied sRGB, as presented).
+    /// Measures `img` (premultiplied sRGB, as presented). The colour shares leave out the pixels
+    /// of `figure` when it is given; `covered` counts every lit pixel.
     #[must_use]
     pub fn compute(
         img: &RgbaImage,
@@ -37,12 +58,24 @@ impl Badges {
         tokens: &Tokens,
         stats: &FrameStats,
         gpu_ms: Option<f64>,
+        figure: Option<PixelRect>,
     ) -> Self {
         let base_h = palette.primary.to_oklch().h;
         let red_h = tokens.roles.warning.to_oklch().h;
-        let (mut lit, mut base, mut white, mut red) = (0u64, 0u64, 0u64, 0u64);
-        for p in img.pixels.chunks_exact(4) {
+        let width = img.width.max(1) as usize;
+        let inside = |i: usize| {
+            figure.is_some_and(|[x0, y0, x1, y1]| {
+                let (x, y) = ((i % width) as u32, (i / width) as u32);
+                (x0..x1).contains(&x) && (y0..y1).contains(&y)
+            })
+        };
+        let (mut covered, mut lit, mut base, mut white, mut red) = (0u64, 0u64, 0u64, 0u64, 0u64);
+        for (i, p) in img.pixels.chunks_exact(4).enumerate() {
             if p[3] <= 8 {
+                continue;
+            }
+            covered += 1;
+            if inside(i) {
                 continue;
             }
             lit += 1;
@@ -71,13 +104,14 @@ impl Badges {
             cpu_ms: stats.cpu.as_secs_f64() * 1000.0,
             draws: stats.draw_calls,
             instances: stats.instances,
-            covered: lit,
+            covered,
             base_share: share(base),
             white_share: share(white),
             red_share: share(red),
             black_outside: corners
                 .iter()
                 .all(|(x, y)| img.pixel(*x, *y).is_some_and(|p| p == [0, 0, 0, 0])),
+            outside_figure: figure.is_some(),
         }
     }
 }
@@ -158,7 +192,7 @@ h1{{margin:0 0 4px;font-size:22px}} h2{{margin:28px 0 10px;font-size:16px;color:
             "<div class=\"card\"><a href=\"{full}\"><img src=\"{thumb}\" alt=\"{name} {state}\"></a><div class=\"cap\">{state}<br>\
 <span class=\"b\">{gpu}</span><span class=\"b\">CPU {cpu:.3} ms</span><span class=\"b\">{draws} draws</span><span class=\"b\">{inst} instances</span>\
 <span class=\"{bcls}\">base hue {base:.0}%</span><span class=\"{wcls}\">white {white:.0}%</span><span class=\"{rcls}\">red {red:.1}%</span>\
-<span class=\"{kcls}\">outside {kres}</span></div></div>\n",
+<span class=\"{kcls}\">outside {kres}</span>{figure}</div></div>\n",
             full = esc(&r.full),
             thumb = esc(&r.thumb),
             name = esc(&r.cluster),
@@ -174,6 +208,11 @@ h1{{margin:0 0 4px;font-size:22px}} h2{{margin:28px 0 10px;font-size:16px;color:
             red = b.red_share * 100.0,
             kcls = budget(b.black_outside),
             kres = if b.black_outside { "#000 transparent" } else { "NOT transparent" },
+            figure = if b.outside_figure {
+                "<span class=\"b\">hue shares outside the figure</span>"
+            } else {
+                ""
+            },
         );
     }
     if !current.is_empty() {
@@ -214,4 +253,48 @@ over a game capture when exported with <code>--backdrop</code>.</div><div class=
     );
     h.push_str("</body></html>\n");
     std::fs::write(out.join("index.html"), h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Four lit pixels in a row: white at x 0 and 3, saturated red at x 1 and 2.
+    fn strip() -> RgbaImage {
+        let mut pixels = Vec::new();
+        for px in [
+            [255, 255, 255, 255],
+            [255, 0, 0, 255],
+            [255, 0, 0, 255],
+            [255, 255, 255, 255],
+        ] {
+            pixels.extend_from_slice(&px);
+        }
+        RgbaImage {
+            width: 4,
+            height: 1,
+            pixels,
+        }
+    }
+
+    #[test]
+    fn the_figure_rect_is_left_out_of_the_shares_but_counted_as_lit() {
+        let tokens = Tokens::default();
+        let palette = Palette::family(&tokens, "fluidGenerative");
+        let stats = FrameStats::default();
+        let img = strip();
+        let whole = Badges::compute(&img, &palette, &tokens, &stats, None, None);
+        assert_eq!(whole.covered, 4);
+        assert!(whole.red_share > 0.4, "{}", whole.red_share);
+        assert!(!whole.outside_figure);
+        // [x0, x1) = [1, 3): both red pixels, neither white one.
+        let outside = Badges::compute(&img, &palette, &tokens, &stats, None, Some([1, 0, 3, 1]));
+        assert_eq!(outside.covered, 4);
+        assert!(outside.red_share.abs() < 1e-6, "{}", outside.red_share);
+        assert!((outside.white_share - 1.0).abs() < 1e-6, "{}", outside.white_share);
+        assert!(outside.outside_figure);
+        // One pixel narrower on the right keeps x 2 in the shares.
+        let narrow = Badges::compute(&img, &palette, &tokens, &stats, None, Some([1, 0, 2, 1]));
+        assert!((narrow.red_share - 1.0 / 3.0).abs() < 1e-6, "{}", narrow.red_share);
+    }
 }
