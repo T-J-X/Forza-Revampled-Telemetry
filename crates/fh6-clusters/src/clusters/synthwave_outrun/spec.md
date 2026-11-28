@@ -1,9 +1,9 @@
 # Synthwave Outrun (`SynthwaveOutrun`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 20 (SynthwaveOutrun — build #21 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 20) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Retro · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** Sci-Fi (Design Council 3C), spec [docs/design/families/sci-fi.md](../../../../../docs/design/families/sci-fi.md), hero frames [docs/design/heroes/sci-fi/](../../../../../docs/design/heroes/sci-fi/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 21
 
 A night-drive horizon in letterbox: 1700x400 on the hood, 1400x520 in the cockpit, split by a 1 px horizon line at y -40. Rank 3: a sliced half-sun (radius 170) behind the gear, its 14 horizontal slats lighting bottom-up with rpm, gaps narrowing toward the crown, accent at the base to secondary at the top, at 70% alpha. Rank 1: Saira Condensed 800 gear (cap 210, 10 deg MSDF shear) in ink over a feathered dimming pad, under a 36 px 16-pod crown strip. Rank 2: chrome-banded italic speed (cap 104) to the right, with a hard horizon cut inside each glyph aligned to the scene horizon. Rank 4: a perspective hairline grid below, at 20% luminance or less, unglowing. Rank 5: a wireframe ridge on the horizon.
 

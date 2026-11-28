@@ -1,9 +1,9 @@
 # Isochromatic Load Path (`IsochromaticLoadPath`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 46 (IsochromaticLoadPath — build #36 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 46) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** new · **View:** cockpit · **Build order:** 36
 
 A clear polycarbonate single-seater seen from above, set between crossed circular polarisers: unstressed material is optically black (off pixels), so light exists only where the car is loaded. Its front wing (1100×60, y −235) is the tach: a point-load puck rides it to the rpm position (rank 3, emissive) while a fan of fringes radiates beneath. Thirteen pills on the wing's leading edge form the shift strip (y −292). Gear (Exo 2 800, cap 200) sits in the tub at (0,−30) on a dimming pad; speed (Exo 2 300, cap 84) on the engine cover at (0,+165). Contact patches at (±400,−170) and (±400,+175) show load as monochrome isochromatics, sin²(πN) in primary only; chassis drawn in 1 px rims.
 

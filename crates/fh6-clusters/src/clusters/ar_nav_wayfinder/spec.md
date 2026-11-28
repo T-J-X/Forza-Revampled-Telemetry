@@ -1,9 +1,11 @@
 # AR Nav Wayfinder (`ArNavWayfinder`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 17 (ArNavWayfinder — build #20 · cockpit+hood) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 17) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Apple Vision · **Target:** `concept` · **Kind:** rebuild · **View:** cockpit+hood
 - **Family:** ADAS & HUD (Design Council 3D), spec [docs/design/families/adas-hud.md](../../../../../docs/design/families/adas-hud.md), hero frames [docs/design/heroes/adas-hud/](../../../../../docs/design/heroes/adas-hud/)
-- **Kind:** rebuild · **View:** cockpit+hood · **Build order:** 20
+
+**Category note.** Gates, chevrons and the road edges are placed in the world, which is the category's trait; no glass panes.
 
 A first-person 'through the glass' road inside the binnacle (eye 1.1 m, FOV 40°, no ego car), its vanishing point pinned on X=1920 at y −140 exactly where the hero gear stands (Saira Condensed 800, cap 170), so every line leads to the gear. Z1: ten 48×38 px wayfinder chevrons at y −292, five per side pointing inward, filling outside-in. Rank 3: the two road edges are the tach, 5 px light rails filling from the bottom corners toward the gear, parametrised by screen length. Speed sits on the horizon at left (Saira Light, cap 112), lap delta and next-gate distance at right (Titillium). Z4 between the rails: the remembered road as a 1.6 m driving-line ribbon with 1 px brake-gate arches and apex diamonds; uncharted road shows only a fading κ arc.
 

@@ -26,10 +26,31 @@ pub struct Badges {
     pub red_share: f32,
     /// Every pixel outside the cluster is fully transparent (OLED true black).
     pub black_outside: bool,
+    /// The shares above leave out the dash's rank-4 figure (a Psychedelic or Abstract dash that
+    /// names its figure zone: CATALOG.md, colour law point 4).
+    pub outside_figure: bool,
+}
+
+/// A pixel rect `[x0, y0, x1, y1)` of the render.
+pub type PixelRect = [u32; 4];
+
+/// The pixel rect of a local-px zone under `layout`, clamped to a `w` x `h` render.
+#[must_use]
+pub fn zone_pixels(layout: &fh6_kit::Layout, zone: fh6_kit::Rect, w: u32, h: u32) -> PixelRect {
+    let a = layout.to_target(zone.min);
+    let b = layout.to_target(zone.max);
+    let clamp = |v: f32, hi: u32| (v.max(0.0) as u32).min(hi);
+    [
+        clamp(a.x.min(b.x).floor(), w),
+        clamp(a.y.min(b.y).floor(), h),
+        clamp(a.x.max(b.x).ceil(), w),
+        clamp(a.y.max(b.y).ceil(), h),
+    ]
 }
 
 impl Badges {
-    /// Measures `img` (premultiplied sRGB, as presented).
+    /// Measures `img` (premultiplied sRGB, as presented). The colour shares leave out the pixels
+    /// of `figure` when it is given; `covered` counts every lit pixel.
     #[must_use]
     pub fn compute(
         img: &RgbaImage,
@@ -37,12 +58,24 @@ impl Badges {
         tokens: &Tokens,
         stats: &FrameStats,
         gpu_ms: Option<f64>,
+        figure: Option<PixelRect>,
     ) -> Self {
         let base_h = palette.primary.to_oklch().h;
         let red_h = tokens.roles.warning.to_oklch().h;
-        let (mut lit, mut base, mut white, mut red) = (0u64, 0u64, 0u64, 0u64);
-        for p in img.pixels.chunks_exact(4) {
+        let width = img.width.max(1) as usize;
+        let inside = |i: usize| {
+            figure.is_some_and(|[x0, y0, x1, y1]| {
+                let (x, y) = ((i % width) as u32, (i / width) as u32);
+                (x0..x1).contains(&x) && (y0..y1).contains(&y)
+            })
+        };
+        let (mut covered, mut lit, mut base, mut white, mut red) = (0u64, 0u64, 0u64, 0u64, 0u64);
+        for (i, p) in img.pixels.chunks_exact(4).enumerate() {
             if p[3] <= 8 {
+                continue;
+            }
+            covered += 1;
+            if inside(i) {
                 continue;
             }
             lit += 1;
@@ -71,13 +104,14 @@ impl Badges {
             cpu_ms: stats.cpu.as_secs_f64() * 1000.0,
             draws: stats.draw_calls,
             instances: stats.instances,
-            covered: lit,
+            covered,
             base_share: share(base),
             white_share: share(white),
             red_share: share(red),
             black_outside: corners
                 .iter()
                 .all(|(x, y)| img.pixel(*x, *y).is_some_and(|p| p == [0, 0, 0, 0])),
+            outside_figure: figure.is_some(),
         }
     }
 }

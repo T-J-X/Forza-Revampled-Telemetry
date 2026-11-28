@@ -1,9 +1,9 @@
 # Harmonograph Drive (`HarmonographDrive`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 48 (HarmonographDrive — build #47 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 48) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Psychedelic · **Target:** `concept` · **Kind:** new · **View:** cockpit
 - **Family:** Fluid / Generative (Design Council 3C), spec [docs/design/families/fluid-generative.md](../../../../../docs/design/families/fluid-generative.md), hero frames [docs/design/heroes/fluid-generative/](../../../../../docs/design/heroes/fluid-generative/)
-- **Kind:** new · **View:** cockpit · **Build order:** 47
 
 A pendulum drawing machine that reads the drivetrain. Two mirrored 90° arcs bracket the gear like parentheses (R 300 around (0,−60)) and fill bottom-to-top together with rpm (rank 3), Barlow Semi Condensed numerals outboard. Gear (Exo 2 800, cap 200) at (0,−60); speed (Exo 2 300, cap 112) at (0,+95). Fifteen Ø22 pendulum bobs form the shift strip at y −300. Under the speed, a 640×80 drawing table carries a 2 px harmonograph figure in primary whose frequency ratio is the current gear's learned overall ratio, so every gear draws its own figure; the stroke decays along its length like ink running dry. Arcs are G-lit steel channels; Michroma wordmark between the arc feet.
 

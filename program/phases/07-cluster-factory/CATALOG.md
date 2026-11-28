@@ -1296,7 +1296,7 @@ TJX, 2026-11-28: "the fluid ones i want real geomatry and maths going on". This 
 | `SynthwaveOutrun` (Retro) | Perspective of a ground-plane grid | A line at depth z sits f H_e ÷ z under the horizon. On a curve it shifts by κz² ÷ 2. | f = 900 px, eye height 1.2 m: lines at 5, 10, 20 and 40 m sit 216, 108, 54 and 27 px under the horizon. |
 
 ## Code re-cut
-This page is ahead of the code. The code still holds 48 dashes, no categories and the older build order. One Rust thread brings it level; the coordinator starts it, and it uses no dash slot. Until it merges, the 24 added dashes wait (⧖ in the table), because their modules do not exist. Dashes whose modules exist start and finish as usual meanwhile.
+The code re-cut brought the code level with this page on 2026-11-28: `catalog.rs` holds the 72 rows with their category, shelf, target and build number, and the 24 added dashes have their themes (48 to 71), scaffold modules, registry rows, goldens, telemetry-matrix rows and empty asset-forge recipes. It was one Rust thread, started by the coordinator, and used no dash slot. What it did, for the record:
 
 **The 24 added dashes.** Keys are final from the moment the re-cut is requested; afterwards only a display name or an OSD label may change. Theme values and catalog rows follow the build order of the added dashes.
 
@@ -1348,7 +1348,7 @@ This page is ahead of the code. The code still holds 48 dashes, no categories an
 
 ## What the setup chat (07-00) put in place
 - **Themes:** the 19 new concepts of Phase 3 are `ClusterTheme` variants 29–47, appended in the order of catalog rows 30–48 (`LumenEtch = 29` … `HarmonographDrive = 47`); the 29 existing values are unchanged. The 24 dashes of 2026-11-28 are appended as 48–71 by the [code re-cut](#code-re-cut).
-- **Catalog as data:** `crates/fh6-clusters/src/catalog.rs` mirrors the build-order table (module name, family, kind, views, build order, ★). The registry, the golden tests and the tools read it; tests keep it in step with `ClusterTheme` and the registry. Until the code re-cut merges it holds the first 48 in the older order.
+- **Catalog as data:** `crates/fh6-clusters/src/catalog.rs` mirrors the build-order table (module name, family, kind, views, build order, ★). The registry, the golden tests and the tools read it; tests keep it in step with `ClusterTheme` and the registry. Since the code re-cut it holds all 72 rows in this page's build order, with category, shelf and target.
 - **One directory per dash:** `crates/fh6-clusters/src/clusters/<snake_name>/` with `mod.rs` (the scaffold, replaced by the dash), `spec.md` (the brief, copied) and `README.md` (commands and ownership). The v1 tiny-skia originals moved to `src/legacy/`; Rust fix phase E removed them on 2026-11-27, so read one with `git show 21e8a06:crates/fh6-clusters/src/legacy/<snake_name>.rs`.
 - **Registry:** `registry::REGISTRY` has a row per catalog row, each pointing at `clusters::<snake_name>::make`. Only the code re-cut edits it.
 - **Shared components** (`crates/fh6-clusters/src/common/`, from [COMPONENTS.md](../../../docs/design/COMPONENTS.md)): HeroGear, TabularSpeed, ShiftLights pod optics and LimiterCue, GlassPlate (squircle, dimming pad, hood halo), the ribbon / light pipe, MicroLabel and LogoZone, the Tach variants (arc, bar, chevron), NeedleDial, Bezel, AdasRoad, GBall, TyreSlipQuad, SignedBar, AlarmColumn / DataTile, Seg7Digit, LiquidSurface, and the scaffold. Compose them; never fork them. A missing piece goes in your handover.

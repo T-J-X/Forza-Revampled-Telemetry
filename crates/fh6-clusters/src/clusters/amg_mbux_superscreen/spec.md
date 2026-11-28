@@ -1,9 +1,11 @@
 # AMG MBUX Superscreen (`AmgMbuxSuperscreen`): brief
 
-Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md) row 4 (AmgMbuxSuperscreen — build #9 · cockpit) by the Phase 7 setup chat. The catalog stays the source of truth; this copy is what the cluster chat builds against.
+Copied from [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#briefs) (catalog row 4) by the code re-cut of 2026-11-28. The catalog stays the source of truth: where this copy and the catalog differ, the catalog wins, and the thread's web search comes first ([Rules for every dash](../../../../../program/phases/07-cluster-factory/CATALOG.md#rules-for-every-dash)).
 
+- **Category:** Supercar · **Target:** `recreation` · **Kind:** rebuild · **View:** cockpit
 - **Family:** Modern Digital 2027 (Design Council 3B), spec [docs/design/families/modern-digital.md](../../../../../docs/design/families/modern-digital.md), hero frames [docs/design/heroes/modern-digital/](../../../../../docs/design/heroes/modern-digital/)
-- **Kind:** rebuild · **View:** cockpit · **Build order:** 9
+
+**Category note.** Recreates the Sporty style of the driver display that sits beside the MBUX Superscreen glass ([The five AMG dashes](../../../../../program/phases/07-cluster-factory/CATALOG.md#the-five-amg-dashes)). Where this older brief invents (the convex gear lens, the 3D trail map), the real display wins, and the driven-line map belongs to `AmgMbuxTrackPace`.
 
 'Pillar-to-pillar black glass': a 1400×320 curved superscreen with no fill, implied only by a light-driven 1 px top rim, a 40% bottom rim and a 60 px reflection band (alpha 10) that slides across the 'curved' sheet with lateral G. Rank 1: Saira Condensed 700 gear, cap 200, inside a Ø280 convex glass lens (fresnel rim, crescent) at X 1920, with modern11 diamonds above. Rank 2: Saira 200 light speed, cap 112, 360 px left, ghost 8s. Rank 3: a 1120×18 px extruded performance bar along the band top. Its bevelled glass cells are lit by the virtual light and fill in primary, with a phase-coloured end cap. Rank 4: a 640×180 3D trail map under the lens. Shy Titillium power/torque/boost tiles sit right.
 

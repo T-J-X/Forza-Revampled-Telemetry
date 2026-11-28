@@ -1,15 +1,15 @@
 # F-35 Helmet HMD
 
-Catalog row 18 · `ClusterTheme::F35HelmetHmd` (config value `"F35HelmetHmd"`) · ADAS & HUD · cockpit+hood · build #19.
+Catalog row 18 · `ClusterTheme::F35HelmetHmd` (config value `"F35HelmetHmd"`) · Sci-Fi category · target `recreation` · ADAS & HUD family · cockpit+hood.
 
-Status: **scaffold** (Phase 7 setup). `mod.rs` draws the shared under-construction frame from `common::scaffold` until the cluster chat replaces it.
+Status: **scaffold**. `mod.rs` draws the shared under-construction frame from `common::scaffold` until the dash thread replaces it. Its place in the build queue is in [CATALOG.md](../../../../../program/phases/07-cluster-factory/CATALOG.md#build-order), the only place that records it.
 
-## Files this cluster owns
+## Files this dash owns
 - `crates/fh6-clusters/src/clusters/f35_helmet_hmd/`: `mod.rs` (the `Cluster` impl and `make`), `spec.md` (the brief), this README, `HANDOVER.md`, and any private submodules.
-- `assets/clusters/f35_helmet_hmd/` (with its own `ASSETS.md`) and `tools/asset-forge/src/recipes/f35_helmet_hmd.rs`, if it needs bespoke assets.
-- `tests/golden/images/F35HelmetHmd_*.png` (its goldens).
+- `assets/clusters/f35_helmet_hmd/` (with its own `ASSETS.md`) and `tools/asset-forge/src/recipes/f35_helmet_hmd.rs` (registered, empty until the dash needs bespoke assets).
+- `tests/golden/images/F35HelmetHmd_*.png` (its goldens) and its row in `docs/TELEMETRY_USAGE_MATRIX.md`.
 
-Everything else (catalog, registry, theme enum, `common/`, the golden harness, the tools) is shared: ask the conductor in your handover.
+Everything else (catalog, registry, theme enum, `common/`, the golden harness, the tools) is shared: ask the coordinator in your handover.
 
 ## Commands
 ```
